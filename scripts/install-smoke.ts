@@ -1,7 +1,8 @@
 /**
  * Proves npm packaging end to end without publishing: packs every package, serves the
  * tarballs from a throwaway local registry (other packages are proxied to registry.npmjs.org),
- * installs `alisio` globally into a temporary prefix with npm and runs `alisio --help`.
+ * installs `@alisio/alisio-code` globally into a temporary prefix with npm and runs its
+ * `alisio` binary.
  * Usage: node --experimental-strip-types scripts/install-smoke.ts
  */
 import assert from "node:assert/strict";
@@ -88,7 +89,7 @@ try {
       registry,
       "--no-audit",
       "--no-fund",
-      "alisio@0.1.0-alpha.1",
+      "@alisio/alisio-code@0.1.0-alpha.1",
     ],
     { timeout: 600_000, env: { ...process.env, npm_config_cache: join(work, "cache") } },
   );
@@ -97,7 +98,7 @@ try {
   assert.match(help, /Usage: alisio/);
   assert.match(help, /--disable-plugin/);
   const installed = readdirSync(
-    join(prefix, "lib", "node_modules", "alisio", "node_modules", "@alisio"),
+    join(prefix, "lib", "node_modules", "@alisio", "alisio-code", "node_modules", "@alisio"),
   );
   console.log(
     JSON.stringify({

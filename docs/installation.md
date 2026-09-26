@@ -21,20 +21,20 @@ dependencies. Run `alisio doctor` after installing to see the detected runtime, 
 ::: code-group
 
 ```sh [npm]
-npm i -g alisio
+npm i -g @alisio/alisio-code
 ```
 
 ```sh [pnpm]
-pnpm add -g alisio
+pnpm add -g @alisio/alisio-code
 ```
 
 ```sh [bun]
-bun add -g alisio
+bun add -g @alisio/alisio-code
 ```
 
 :::
 
-This installs the `alisio` command.
+This installs the `alisio` command (the package name is scoped, the binary is `alisio`).
 
 ## Standalone binary
 

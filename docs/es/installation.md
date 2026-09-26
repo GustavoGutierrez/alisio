@@ -23,20 +23,20 @@ detectados.
 ::: code-group
 
 ```sh [npm]
-npm i -g alisio
+npm i -g @alisio/alisio-code
 ```
 
 ```sh [pnpm]
-pnpm add -g alisio
+pnpm add -g @alisio/alisio-code
 ```
 
 ```sh [bun]
-bun add -g alisio
+bun add -g @alisio/alisio-code
 ```
 
 :::
 
-Esto instala el comando `alisio`.
+Esto instala el comando `alisio` (el paquete tiene scope; el binario es `alisio`).
 
 ## Binario independiente
 

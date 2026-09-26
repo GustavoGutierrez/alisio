@@ -6,7 +6,8 @@ long conversations into structured checkpoints, remembers decisions across sessi
 Engram-style memory plugin, and exposes a typed plugin SDK.
 
 ```sh
-npm install -g alisio        # or: pnpm add -g alisio · bun add -g alisio
+npm install -g @alisio/alisio-code        # or: pnpm add -g @alisio/alisio-code · bun add -g @alisio/alisio-code
+alisio                                      # the CLI binary is installed as `alisio`
 export DEEPSEEK_API_KEY=...  # keys are read from environment variables only
 alisio --config ./alisio.json
 ```

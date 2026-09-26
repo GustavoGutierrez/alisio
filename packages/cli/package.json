@@ -1,5 +1,5 @@
 {
-  "name": "alisio",
+  "name": "@alisio/alisio-code",
   "version": "0.1.0-alpha.1",
   "description": "Alisio: an extensible, provider-agnostic coding-agent harness for your terminal. TUI, OpenAI-compatible providers, permissioned local tools, context compaction, persistent memory and a typed plugin SDK.",
   "author": "Gustavo Gutiérrez",
