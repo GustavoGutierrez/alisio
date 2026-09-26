@@ -20,6 +20,9 @@ const execFileAsync = promisify(execFile);
 const upstream = "https://registry.npmjs.org";
 const work = mkdtempSync(join(tmpdir(), "alisio-install-"));
 const packs = join(work, "packs");
+const manifestVersion = String(
+  JSON.parse(readFileSync(resolve("packages/cli/package.json"), "utf8")).version,
+);
 execFileSync(process.execPath, [
   "--experimental-strip-types",
   "--disable-warning=ExperimentalWarning",
@@ -89,7 +92,7 @@ try {
       registry,
       "--no-audit",
       "--no-fund",
-      "@alisio/alisio-code@0.1.0-alpha.1",
+      `@alisio/alisio-code@${manifestVersion}`,
     ],
     { timeout: 600_000, env: { ...process.env, npm_config_cache: join(work, "cache") } },
   );
