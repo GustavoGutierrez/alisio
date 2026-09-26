@@ -185,7 +185,7 @@ Los servidores MCP solo se inician o contactan con `--allow-mcp`. Consulte
 | `ALISIO_MODEL` | Reemplaza `provider.model` |
 | `ALISIO_API_MODE` | Reemplaza `provider.apiMode` |
 | `ALISIO_CONFIG_HOME` | Directorio de configuración global (por defecto `$XDG_CONFIG_HOME/alisio` o `~/.config/alisio`) |
-| `ALISIO_STATE_HOME` | Directorio de estado para `sessions.sqlite` y `memory.sqlite` (por defecto `$XDG_STATE_HOME/alisio` o `~/.local/state/alisio`) |
+| `ALISIO_STATE_HOME` | Directorio de estado para `sessions.sqlite`, `memory.sqlite` y `trust.json` (por defecto `$XDG_STATE_HOME/alisio` o `~/.local/state/alisio`) |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Directorios base XDG estándar, usados cuando las variables `ALISIO_*` no están definidas |
 | `CI` | Si está definida (y no vale `false` ni `0`), no se muestra la pantalla de inicio |
 | `NO_COLOR` | Desactiva el color en la pantalla de inicio |
@@ -233,7 +233,9 @@ Comandos:
 | `alisio run <prompt>` | Ejecución headless; `/name args` ejecuta una [plantilla de prompt](/es/prompt-templates) |
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
 | `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
-| `alisio doctor` | Diagnóstico del entorno y del proveedor |
+| `alisio doctor` | Diagnóstico del entorno y del proveedor; avisa cuando no hay modelo configurado |
+| `alisio trust list` | Lista los directorios con una decisión de confianza guardada |
+| `alisio trust revoke <path>` | Olvida la decisión de confianza de un directorio (vuelve a preguntar la próxima vez) |
 | `alisio sessions list` | Lista las sesiones |
 | `alisio sessions recover <session> --acknowledge` | Reconoce efectos inciertos de herramientas tras una caída |
 | `alisio context explain <path>` | Muestra qué archivos `AGENTS.md` se aplican a una ruta |

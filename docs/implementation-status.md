@@ -164,6 +164,36 @@ funcional, no solo interfaces o stubs.
   `process` existente. Se decidió deliberadamente **no** implementar una herramienta de navegador
   (browser): el usuario descartó esa pieza por ahora al no tener un navegador adjunto como el de
   opencode desktop.
+- Comando `alisio setup` (renombrado desde `alisio init`, sin alias): sigue escribiendo el mismo
+  `.alisio/config.json` de ejemplo; `alisio init` ahora se comporta como cualquier subcomando
+  desconocido (comportamiento propio de commander, sin trato especial).
+- Confianza de proyecto por directorio, de una sola vez: al iniciar la TUI (nunca en modo headless
+  `run`/`resume "prompt"`/`--json`, que siguen exigiendo `--trust-project`/`--config` explícitos
+  porque ahí no hay nadie a quien preguntar) en un directorio con recursos de proyecto
+  (`.alisio/config.json`, `.alisio/plugins`, `.alisio/agents`, `.agents/agents`, `.alisio/skills` o
+  `.alisio/prompts`) y sin `--trust-project`/`--config`, se pregunta una vez con una explicación
+  clara de lo que implica confiar (puede redirigir el endpoint/clave del proveedor y carga
+  plugins/agentes/skills). La decisión se guarda en `<ALISIO_STATE_HOME>/trust.json` por ruta de
+  workspace resuelta (`realpath`), junto con un hash SHA-256 del contenido de
+  `.alisio/config.json`; un archivo modificado desde la última decisión vuelve a preguntar en vez de
+  mantener la confianza en silencio. Un directorio sin ningún recurso de proyecto nunca recibe la
+  pregunta. `--trust-project`/`--config` de una ejecución nunca se persisten como si fueran una
+  concesión interactiva. Nuevos comandos `alisio trust list`/`alisio trust revoke <path>`.
+- Verificación en código (no solo lectura) de que **write/process/external ya preguntaban por
+  defecto en la TUI** antes de esta tarea (para write/process, desde una función previa; `external`
+  se añadió en la propia tarea anterior de esta sesión): la TUI siempre pasa un manejador `approve`
+  a `createApplication` salvo con `--read-only`, así que sin ningún flag el efecto ya se ofrece y
+  pregunta en cada llamada — no estaba «simplemente no disponible» como se asumió al plantear esta
+  tarea. Confirmado con una prueba de integración end-to-end
+  (`permission-truth-table` en `fixtures/scenarios.ts`) que ejercita las tres combinaciones
+  (preguntar / permitir sin preguntar / denegar sin ofrecer) para los tres efectos, y con una
+  verificación real en pseudo-terminal (ver más abajo) que muestra el selector «Allow write_file
+  (write): x.txt?» sin ningún flag. El trabajo funcional nuevo de esta tarea para permisos es,
+  por tanto, únicamente la confianza de proyecto y el aviso de modelo sin configurar; el
+  comportamiento de aprobación en sí no cambió.
+- `alisio doctor` y la pantalla de inicio avisan explícitamente cuando el modelo resuelto está
+  vacío o es el marcador `YOUR_MODEL_ID` que escribe `alisio setup`, en vez de dejar que el primer
+  turno real falle contra un modelo inexistente.
 
 ## Validación
 
@@ -414,6 +444,41 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   de herramienta nativa hacia la petición sí están cubiertos por el flujo normal de tipos y por
   inspección de código, no por una llamada real.
 
+## Confianza de proyecto y permisos por defecto: alcance de la verificación
+
+- Vitest (`fixtures/scenarios.ts`, escenario `project-trust`): un directorio sin recursos de
+  proyecto nunca necesita confianza; un directorio con `.alisio/config.json` fresco marca
+  `needsPrompt`; guardar una decisión de confianza hace que deje de pedirse; modificar el contenido
+  de `.alisio/config.json` fuerza `needsPrompt` de nuevo con un hash distinto; una decisión de
+  «no confiar» tampoco vuelve a preguntar; `listTrust`/`revokeTrust` reflejan y deshacen
+  correctamente el estado, y revocar hace que vuelva a pedirse.
+- Vitest (`fixtures/scenarios.ts`, escenario `permission-truth-table`): para `write_file`
+  (`write`), `run_process` (`process`) y `webfetch` (`external`) por separado, con `AgentRunner`
+  real ejecutando un turno completo contra un proveedor simulado — sin flag y con un manejador
+  `approve` (igual que la TUI real) el efecto se ofrece y el manejador es preguntado de verdad;
+  con el flag de permiso correspondiente, se permite sin preguntar nunca; sin manejador `approve`
+  y con la política en `false` (equivalente a `--read-only`), la herramienta no se ofrece en
+  absoluto.
+- `fixtures/cli-e2e.ts` (Node y binario Bun): `alisio doctor` sin `--trust-project` contra un
+  `.alisio/config.json` con una `baseURL` distintiva nunca la lee (usa el valor por defecto del
+  esquema) y no crea ninguna entrada en el almacén de confianza; con `--trust-project` sí la lee,
+  y tampoco persiste ninguna entrada (la confianza explícita de una ejecución sigue sin guardarse).
+- Pseudo-terminal (Linux, xterm-256color) con un servidor simulado real: primera ejecución en un
+  proyecto nuevo con `.alisio/config.json` muestra el aviso de confianza con el texto explicativo
+  completo; aceptar («y») carga la configuración del proyecto (la TUI arranca mostrando el modelo y
+  el host del servidor simulado del proyecto, y la cabecera muestra `write:ask process:ask`);
+  una segunda ejecución no vuelve a preguntar; editar `.alisio/config.json` sí fuerza una nueva
+  pregunta; declinar (tanto escribiendo «n» como pulsando Enter, que por defecto es «No») dejar
+  la configuración sin cargar, verificado porque la aplicación falla entonces con el mismo error
+  claro de siempre («Set ALISIO_MODEL, --model, or provider.model») en vez de usar el modelo del
+  proyecto; un directorio sin ningún recurso de proyecto arranca sin ninguna pregunta de confianza.
+- No verificado en pseudo-terminal de forma aislada (sí por inspección de código y por la prueba
+  `permission-truth-table`): el selector de aprobación real apareciendo para `run_process`/
+  `webfetch` específicamente sin ningún flag (se verificó explícitamente para `write_file`, que
+  comparte exactamente el mismo mecanismo genérico que los otros dos efectos).
+- No verificado: `alisio trust list`/`alisio trust revoke` en pseudo-terminal (sí se probó su
+  lógica de forma aislada en Vitest); comportamiento en Windows/macOS.
+
 ## Límites conocidos
 
 - Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
@@ -475,9 +540,21 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `limits.maxTokens`. Las estimaciones antes/después son aproximadas (≈4 caracteres/token).
   Los items opacos de Responses del tramo resumido se descartan; los conservados no cambian.
   Una sesión con resultados de herramientas inciertos no se compacta hasta recuperarla.
-- Aprobaciones: solo para efectos `write` y `process` y solo en la TUI; "permitir en la
-  sesión" dura mientras viva el proceso. La espera cuenta dentro de `limits.timeoutMs`.
-  El contrato `Policy` no cambió: la aprobación es una opción adicional de `RunnerOptions`.
+- Aprobaciones: para los efectos `write`, `process` y `external`, y solo en la TUI (la propia
+  TUI ya pasa siempre un manejador `approve` salvo con `--read-only`, así que sin ningún flag el
+  efecto se ofrece y se pregunta en cada llamada; ver la tabla de verdad en `docs/tools.md`); los
+  modos headless (`run`, `resume "prompt"`, `--json`) nunca tienen un manejador y por tanto nunca
+  preguntan — sin flag, el efecto simplemente no está disponible ahí. "Permitir en la sesión" dura
+  mientras viva el proceso. La espera cuenta dentro de `limits.timeoutMs`. El contrato `Policy` no
+  cambió: la aprobación es una opción adicional de `RunnerOptions`.
+- Confianza de proyecto: el hash guardado cubre solo el contenido de `.alisio/config.json`; si
+  cambia únicamente otro recurso de proyecto (por ejemplo se añade `.alisio/agents` sin tocar
+  `config.json`) no se vuelve a preguntar automáticamente — revóquelo con `alisio trust revoke` si
+  hace falta. El prompt de confianza es un `readline` simple antes de la pantalla alterna, no la
+  cola de `ask_user_question`: esta última se construye a partir de una `Application` ya creada, y
+  crear esa `Application` es exactamente lo que la decisión de confianza controla, así que no podía
+  usarse aquí. El almacén vive en `<ALISIO_STATE_HOME>/trust.json` con permisos 0600 (directorio
+  0700); no está pensado para compartirse entre máquinas ni usuarios.
 - `ask_user_question`/`/ask`: la cola interactiva compartida cubre aprobaciones, el `select` de
   plugins y las preguntas, pero deliberadamente NO incluye los selectores propios de `/model` ni
   `/resume` (siguen con su mecanismo previo sin cambios): son comandos que el usuario escribe él

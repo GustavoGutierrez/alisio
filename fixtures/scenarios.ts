@@ -34,6 +34,15 @@ import {
 } from "../packages/core/src/tools/search.ts";
 import { hash, objectSchema, registerStandard } from "../packages/core/src/tools/standard.ts";
 import { webfetch } from "../packages/core/src/tools/webfetch.ts";
+import {
+  getTrust,
+  hashProjectConfig,
+  hasProjectResources,
+  listTrust,
+  resolveTrust,
+  revokeTrust,
+  setTrust,
+} from "../packages/core/src/trust.ts";
 import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
 import {
   SQLiteMemoryStore as MemoryStoreOnPort,
@@ -2640,6 +2649,201 @@ const fixtures: Record<string, () => Promise<void>> = {
       hasFetch: "undefined",
       hasSetTimeout: "undefined",
     });
+  },
+  async "project-trust"() {
+    const previousStateHome = process.env.ALISIO_STATE_HOME;
+    process.env.ALISIO_STATE_HOME = join(root, "state");
+    try {
+      const bare = join(root, "bare");
+      await mkdir(bare, { recursive: true });
+      // Nothing to trust: no project resources at all.
+      assert.equal(await hasProjectResources(bare), false);
+      const bareResolution = await resolveTrust(bare);
+      assert.deepEqual(bareResolution, {
+        trusted: false,
+        hasProjectResources: false,
+        needsPrompt: false,
+        configHash: null,
+      });
+
+      const withConfig = join(root, "with-config");
+      await mkdir(join(withConfig, ".alisio"), { recursive: true });
+      await writeFile(join(withConfig, ".alisio", "config.json"), JSON.stringify({ a: 1 }));
+      assert.equal(await hasProjectResources(withConfig), true);
+      const hash1 = await hashProjectConfig(withConfig);
+      assert.equal(typeof hash1, "string");
+
+      // Fresh: needs a prompt (nothing stored yet).
+      const fresh = await resolveTrust(withConfig);
+      assert.equal(fresh.needsPrompt, true);
+      assert.equal(fresh.trusted, false);
+
+      // Store a "trusted" decision; it should now resolve without prompting.
+      await setTrust(withConfig, true, hash1);
+      const afterTrust = await resolveTrust(withConfig);
+      assert.deepEqual(afterTrust, {
+        trusted: true,
+        hasProjectResources: true,
+        needsPrompt: false,
+        configHash: hash1,
+      });
+      const stored = await getTrust(withConfig);
+      assert.equal(stored?.trusted, true);
+      assert.equal(stored?.configHash, hash1);
+
+      // Changing the config content must force a re-prompt, never silently keep trusting it.
+      await writeFile(join(withConfig, ".alisio", "config.json"), JSON.stringify({ a: 2 }));
+      const afterChange = await resolveTrust(withConfig);
+      assert.equal(afterChange.needsPrompt, true);
+      assert.equal(afterChange.trusted, false);
+      assert.notEqual(afterChange.configHash, hash1);
+
+      // Re-confirm trust for the new content; resolves cleanly again.
+      const hash2 = await hashProjectConfig(withConfig);
+      await setTrust(withConfig, true, hash2);
+      assert.equal((await resolveTrust(withConfig)).needsPrompt, false);
+
+      // A declined project (e.g. via a resource other than config.json) never re-prompts either.
+      const declinedWorkspace = join(root, "declined");
+      await mkdir(join(declinedWorkspace, ".alisio", "agents"), { recursive: true });
+      assert.equal(await hasProjectResources(declinedWorkspace), true);
+      await setTrust(declinedWorkspace, false, await hashProjectConfig(declinedWorkspace));
+      const declined = await resolveTrust(declinedWorkspace);
+      assert.equal(declined.needsPrompt, false);
+      assert.equal(declined.trusted, false);
+
+      // list/revoke.
+      const listed = await listTrust();
+      assert.ok(listed.some((e) => e.workspace === withConfig && e.trusted === true));
+      assert.ok(listed.some((e) => e.workspace === declinedWorkspace && e.trusted === false));
+      assert.equal(await revokeTrust(withConfig), true);
+      assert.equal(await getTrust(withConfig), undefined);
+      assert.equal(await revokeTrust(withConfig), false); // already gone
+      // Revoking makes it need a prompt again (exactly like a fresh, never-decided workspace).
+      assert.equal((await resolveTrust(withConfig)).needsPrompt, true);
+    } finally {
+      if (previousStateHome === undefined) delete process.env.ALISIO_STATE_HOME;
+      else process.env.ALISIO_STATE_HOME = previousStateHome;
+    }
+  },
+  async "permission-truth-table"() {
+    // Exercises the full write/process/external truth table end to end (not just
+    // `availableTools()`): flag absent + not read-only -> offered and asked each call; flag
+    // present -> allowed without asking; --read-only -> never offered, hard denied.
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    const store = db();
+    const cases: Array<{
+      tool: string;
+      effect: "write" | "process" | "external";
+      input: Record<string, unknown>;
+    }> = [
+      {
+        tool: "write_file",
+        effect: "write",
+        input: { path: "a.txt", content: "x", expectedHash: null },
+      },
+      {
+        tool: "run_process",
+        effect: "process",
+        input: { command: process.execPath, args: ["-e", "1"] },
+      },
+      { tool: "webfetch", effect: "external", input: { url: "http://127.0.0.1:1/unreachable" } },
+    ];
+    const providerFor = (toolCase: (typeof cases)[number]): ModelProvider => {
+      let answered = false;
+      return {
+        id: "fake",
+        model: "fake",
+        async *stream() {
+          if (!answered) {
+            answered = true;
+            yield {
+              type: "completed",
+              message: {
+                role: "assistant",
+                text: "",
+                calls: [
+                  { id: "c1", name: toolCase.tool, arguments: JSON.stringify(toolCase.input) },
+                ],
+              },
+            };
+          } else {
+            yield {
+              type: "completed",
+              message: { role: "assistant", text: "done", calls: [] },
+            };
+          }
+        },
+      };
+    };
+    try {
+      for (const toolCase of cases) {
+        // 1) Flag absent, not read-only, WITH an approve handler (matches the TUI's own
+        //    unconditional approve wiring): offered, and the handler is actually asked.
+        let asked = false;
+        const session1 = store.create(root, "fake", "fake").id;
+        const askRunner = new AgentRunner({
+          provider: providerFor(toolCase),
+          registry: reg,
+          store,
+          context: new ProjectContext(root),
+          workspace: root,
+          policy: { write: false, process: false, external: false },
+          approve: async (request) => {
+            asked = true;
+            assert.equal(request.effect, toolCase.effect);
+            return "deny";
+          },
+        });
+        await askRunner.run(session1, "go", signal());
+        assert.equal(asked, true, `${toolCase.tool}: approve handler must be asked`);
+        const messages1 = store.messages(session1);
+        const toolResult = messages1.find((m) => m.role === "tool");
+        assert.ok(toolResult?.role === "tool");
+        assert.match(JSON.stringify(toolResult?.result), /denied by the user/);
+
+        // 2) Flag present: allowed outright, never asks.
+        let askedWhenAllowed = false;
+        const session2 = store.create(root, "fake", "fake").id;
+        const allowRunner = new AgentRunner({
+          provider: providerFor(toolCase),
+          registry: reg,
+          store,
+          context: new ProjectContext(root),
+          workspace: root,
+          policy: {
+            write: toolCase.effect === "write",
+            process: toolCase.effect === "process",
+            external: toolCase.effect === "external",
+          },
+          approve: async () => {
+            askedWhenAllowed = true;
+            return "deny";
+          },
+        });
+        await allowRunner.run(session2, "go", signal());
+        assert.equal(askedWhenAllowed, false, `${toolCase.tool}: an allowed effect must not ask`);
+
+        // 3) --read-only equivalent: no approve handler at all, policy false -> hard denial,
+        //    never offered to the model in the first place.
+        const readOnlyRunner = new AgentRunner({
+          provider: providerFor(toolCase),
+          registry: reg,
+          store,
+          context: new ProjectContext(root),
+          workspace: root,
+          policy: { write: false, process: false, external: false },
+        });
+        assert.equal(
+          readOnlyRunner.availableTools().some((t) => t.name === toolCase.tool),
+          false,
+          `${toolCase.tool}: must not be offered under --read-only`,
+        );
+      }
+    } finally {
+      store.close();
+    }
   },
 };
 export const scenarioNames = Object.keys(fixtures);

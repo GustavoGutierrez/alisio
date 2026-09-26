@@ -167,23 +167,35 @@ clasificación nueva): ejecutar un fragmento JS es ejecución de código arbitra
 espíritu que `run_process`/`shell`, y `--allow-process` es lo que un usuario ya espera que controle
 "ejecutar cosas".
 
-## Flags de permisos
+## Flags de permisos {#permission-flags}
 
 | Flag | Efecto |
 | --- | --- |
-| (ninguno) | Solo herramientas de lectura y búsqueda |
-| `--allow-write` | Activa `write_file` y `edit_file` |
-| `--allow-process` | Activa `run_process`, `shell` y `execute` |
-| `--allow-external` | Activa `webfetch` y `websearch` |
+| (ninguno) | Solo lectura y búsqueda en modos headless; en la TUI, `write`/`process`/`external` también se ofrecen y **preguntan siempre** (véase la tabla de verdad abajo) |
+| `--allow-write` | Activa `write_file` y `edit_file` directamente, sin preguntar |
+| `--allow-process` | Activa `run_process`, `shell` y `execute` directamente, sin preguntar |
+| `--allow-external` | Activa `webfetch` y `websearch` directamente, sin preguntar |
 | `--allow-mcp` | Inicia/conecta los servidores MCP configurados y expone sus capacidades |
 | `--allow-agents` | Activa las herramientas de mensajería de Herdr |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y plugins ejecutables (externos) |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y plugins ejecutables (externos) — nunca se ofrecen, ni en la TUI ni en headless |
 
 `--read-only` prevalece sobre cualquier flag `--allow-*`. Los plugins integrados (por ejemplo
 `memory`) siguen activos con `--read-only` porque sus herramientas solo usan el efecto `internal`;
-use `--disable-plugin memory` para un modo estrictamente sin escrituras. Igual que `write`/`process`,
-una herramienta `external` no permitida se sigue ofreciendo en la TUI y pide aprobación interactiva
-en lugar de excluirse en silencio (los modos headless nunca preguntan, véase abajo).
+use `--disable-plugin memory` para un modo estrictamente sin escrituras.
+
+### Tabla de verdad de write/process/external
+
+| Estado | TUI | Headless (`run`, `resume <id> "prompt"`, `--json`) |
+| --- | --- | --- |
+| Sin flag, sin `--read-only` | **Pregunta siempre** que el modelo llama la herramienta (permitir una vez / permitir durante la sesión / denegar) | La herramienta simplemente **no está disponible** — no hay a quién preguntar |
+| `--allow-write` / `--allow-process` / `--allow-external` | **Permitida**, nunca pregunta | **Permitida**, nunca pregunta |
+| `--read-only` | **Nunca se ofrece**, denegada de forma dura | **Nunca se ofrece**, denegada de forma dura |
+
+El "pregunta siempre" por defecto de la TUI no necesita ningún flag adicional: es el propio flujo de
+aprobación siempre activo de la TUI (el mismo que ya usaban `write`/`process`) que ahora también
+cubre `external`. Los modos headless son no interactivos por diseño, así que un flag sin definir ahí
+significa que el efecto no está disponible, sin más — nunca se pregunta, nunca se permite en
+silencio.
 
 ## Aprobación interactiva
 
@@ -191,6 +203,16 @@ En la TUI, las herramientas `write`, `process` y `external` no permitidas median
 al modelo y Alisio pregunta antes de ejecutar cada llamada: permitir una vez, permitir ese efecto
 durante la sesión o denegar. Los modos headless (`run`, `resume <id> "prompt"`, `--json`) nunca
 preguntan. Consulte [Interfaz de terminal](/es/tui#interactive-approvals).
+
+## Confianza del proyecto {#project-trust}
+
+Aparte de las aprobaciones de llamadas a herramientas, abrir un repositorio no debe cargar en
+silencio *su* configuración de Alisio (que puede apuntar su clave de API a otro endpoint) ni
+ejecutar sus plugins. La TUI pregunta una vez por directorio antes de hacerlo; la decisión persiste
+y un `.alisio/config.json` modificado vuelve a preguntar. `alisio trust list`/
+`alisio trust revoke <path>` la inspeccionan o la deshacen. Consulte [Inicio
+rápido](/es/quick-start#configuration-trust-model) para el flujo completo y
+[Configuración](/es/configuration) para el comando `alisio trust`.
 
 ## No es un sandbox
 

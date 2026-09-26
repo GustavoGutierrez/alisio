@@ -85,6 +85,12 @@ export function startupInput(
           : `write:${state(app.runner.policy.write)} process:${state(app.runner.policy.process)}`,
       },
       { label: "memory", value: app.plugins.builtins.has("memory") ? "on" : "off" },
+      // `alisio setup` scaffolds this exact placeholder; a model can never be truly empty here
+      // (the provider throws before the app exists), so this is the one case worth flagging
+      // up front rather than letting the first real turn fail against a nonexistent model.
+      ...((options.model ?? app.provider.model) === "YOUR_MODEL_ID"
+        ? [{ label: "model", value: "⚠ placeholder — edit .alisio/config.json" }]
+        : []),
     ],
   };
 }

@@ -20,8 +20,11 @@ extend it without touching the core.
   bar, slash commands with autocomplete, model switching, interactive approvals and copy-on-select.
 - **Any OpenAI-compatible provider**: Chat Completions and Responses APIs, DeepSeek, local servers.
   Keys are read from environment variables only.
-- **Local tools with explicit permissions**: reads by default; `--allow-write`, `--allow-process`,
-  per-call approval in the TUI, or `--read-only`. Not a sandbox, and it says so.
+- **Local tools with explicit permissions**: reads by default; the TUI asks before every
+  write/process/network call unless you pass `--allow-write`/`--allow-process`/`--allow-external`
+  (skip asking) or `--read-only` (never even offered). Not a sandbox, and it says so. A repository's
+  own `.alisio/config.json` and plugins load only after a one-time per-directory trust prompt (or
+  `--trust-project`).
 - **Context compaction**: a structured checkpoint (goal, constraints, discoveries, state, next steps,
   files) that never splits tool calls from their results.
 - **Persistent memory**: SQLite FTS5 observations, topic-key upserts, memory-aware compaction and

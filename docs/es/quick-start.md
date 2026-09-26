@@ -75,21 +75,28 @@ configuración del proveedor, incluido si la variable de la clave está definida
 ## 4. Ejecutar
 
 ```sh
-# Interactive terminal UI
+# TUI interactiva: las herramientas de escritura/proceso/red se ofrecen y preguntan antes de cada llamada
 alisio --config ./my-api.json
 
-# Headless, read-only
+# Headless, read-only: las herramientas de escritura/proceso/red ni siquiera se ofrecen
 alisio run "Explain this repository" --config ./my-api.json --read-only
 
 # Headless with versioned JSONL events on stdout (diagnostics go to stderr)
 alisio run "Review the code" --config ./my-api.json --json
 
-# Allow edits (and processes, if needed)
+# Omitir la pregunta y permitir ediciones (y procesos, si hace falta) directamente
 alisio run "Implement the task in docs/task.md" --config ./my-api.json --allow-write
 ```
 
-`--allow-process` da acceso a procesos arbitrarios con sus privilegios de usuario; no es un sandbox.
-Consulte [Herramientas y permisos](/es/tools).
+Las herramientas de escritura/proceso/red de la TUI **preguntan siempre por defecto** —permitir una
+vez, permitir durante la sesión o denegar— sin necesitar ningún flag.
+`--allow-write`/`--allow-process`/`--allow-external` omiten esa pregunta y permiten directamente;
+`--read-only` las desactiva por completo, sin ofrecerlas nunca al modelo. Los modos headless
+`run`/`resume <id> "prompt"`/`--json` no tienen a nadie a quien preguntar, así que ahí esos mismos
+flags significan que la herramienta simplemente no está disponible sin ellos. `--allow-process` (o
+una respuesta de "permitir" a la pregunta) da acceso a procesos arbitrarios con sus privilegios de
+usuario; no es un sandbox. Consulte [Herramientas y permisos](/es/tools#permission-flags) para la
+tabla de verdad completa.
 
 ## 5. Sesiones
 
@@ -125,10 +132,31 @@ eso Alisio lee:
 | Origen | Cuándo |
 | --- | --- |
 | `--config <path>` | Siempre que se indique: un archivo de confianza explícita |
-| `<workspace>/.alisio/config.json` | Solo con `--trust-project` |
+| `<workspace>/.alisio/config.json` | Con `--trust-project`, o tras confiar en él interactivamente (véase abajo) |
 | `~/.config/alisio/config.json` (`ALISIO_CONFIG_HOME` o `XDG_CONFIG_HOME`) | En los demás casos |
 
-`--trust-project` también carga los plugins ejecutables del proyecto desde `.alisio/plugins`, que se
-ejecutan con todos los privilegios del proceso. Úselo solo en repositorios de confianza.
+Confiar en un proyecto también carga sus plugins ejecutables desde `.alisio/plugins` (todos los
+privilegios del proceso), y sus agentes/skills/prompts desde `.alisio/agents`, `.agents/agents`,
+`.alisio/skills` y `.alisio/prompts`.
+
+**Confianza interactiva de una sola vez.** Al iniciar la TUI (no en modo headless `run`/`--json`,
+que siguen exigiendo `--trust-project`/`--config` explícitamente — ahí no hay nadie a quien
+preguntar) en un directorio con alguno de esos recursos de proyecto, sin `--trust-project`/
+`--config`, se pregunta una vez:
+
+```
+This directory has Alisio project configuration: /path/to/repo
+Trusting it lets Alisio load that configuration for this and future runs — including a possibly
+different provider endpoint or API key — plus its plugins, agents, skills and prompt templates.
+Declining uses Alisio's own defaults instead; nothing here is read.
+Trust this project's Alisio configuration? [y/N]
+```
+
+La decisión se recuerda por directorio (`alisio trust list`/`alisio trust revoke <path>` la
+inspeccionan o la deshacen) junto con un hash del contenido de `.alisio/config.json`, así que editar
+ese archivo —incluso después de haber confiado una vez— vuelve a preguntar en lugar de mantener en
+silencio la confianza anterior. Un directorio sin ningún recurso de proyecto nunca recibe la
+pregunta. `--trust-project`/`--config` siguen siendo confianza explícita de una sola ejecución, como
+antes, y nunca se escriben en este almacén.
 
 Siguiente: [Interfaz de terminal](/es/tui) · [Plantillas de prompts](/es/prompt-templates) · [Configuración](/es/configuration).

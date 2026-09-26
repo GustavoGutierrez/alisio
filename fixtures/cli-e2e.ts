@@ -193,6 +193,30 @@ try {
     assert.match(unknownInit, /error:/i);
     const helpOutput = await execute(["--help"]);
     assert.match(helpOutput, /\bsetup\b/);
+
+    // Headless paths (doctor, and `run`/`--json` elsewhere) never prompt for trust and keep the
+    // exact pre-existing behavior: without --trust-project, a distinguishing custom baseURL in
+    // `.alisio/config.json` is never read, and no trust-store entry is ever created for it.
+    await writeFile(
+      join(setupDirectory, ".alisio", "config.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        provider: { baseURL: "https://headless-trust-marker.example/v1", model: "x" },
+      }),
+    );
+    const doctorUntrusted = JSON.parse(await execute(["doctor", "--cwd", setupDirectory]));
+    assert.equal(doctorUntrusted.provider.baseURL, "https://api.openai.com/v1");
+    const trustList = JSON.parse(await execute(["trust", "list"], false, 0).catch(() => "[]"));
+    assert.ok(
+      !trustList.some((e: { workspace: string }) => e.workspace.includes(setupDirectory)),
+      "headless doctor must never create a trust-store entry",
+    );
+    // With --trust-project (today's explicit, one-run trust), the custom baseURL DOES load, and
+    // that explicit flag still never persists a trust-store entry either.
+    const doctorTrusted = JSON.parse(
+      await execute(["doctor", "--cwd", setupDirectory, "--trust-project"]),
+    );
+    assert.equal(doctorTrusted.provider.baseURL, "https://headless-trust-marker.example/v1");
   } finally {
     await rm(setupDirectory, { recursive: true, force: true });
   }
@@ -210,6 +234,7 @@ try {
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
         "headless prompt template /init; --read-only refusal",
         "alisio setup scaffolds config; alisio init is now an unknown command",
+        "headless doctor never prompts/persists trust; --trust-project still loads project config",
       ],
     }),
   );

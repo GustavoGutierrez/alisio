@@ -153,23 +153,34 @@ in-process Alisio tool. See [Not a sandbox](#not-a-sandbox).
 classification): running a JS snippet is arbitrary code execution in the same spirit as
 `run_process`/`shell`, and `--allow-process` is what a user already expects to gate "run stuff".
 
-## Permission flags
+## Permission flags {#permission-flags}
 
 | Flag | Effect |
 | --- | --- |
-| (none) | Read and search tools only |
-| `--allow-write` | Enables `write_file` and `edit_file` |
-| `--allow-process` | Enables `run_process`, `shell` and `execute` |
-| `--allow-external` | Enables `webfetch` and `websearch` |
+| (none) | Read and search tools only in headless modes; in the TUI, `write`/`process`/`external` are also offered and **ask every time** (see the truth table below) |
+| `--allow-write` | Enables `write_file` and `edit_file` outright, no asking |
+| `--allow-process` | Enables `run_process`, `shell` and `execute` outright, no asking |
+| `--allow-external` | Enables `webfetch` and `websearch` outright, no asking |
 | `--allow-mcp` | Starts/connects configured MCP servers and exposes their capabilities |
 | `--allow-agents` | Enables Herdr messaging tools |
-| `--read-only` | Disables writes, arbitrary processes, network tools, MCP, agent messaging and executable (external) plugins |
+| `--read-only` | Disables writes, arbitrary processes, network tools, MCP, agent messaging and executable (external) plugins — never even offered, in the TUI or headless |
 
 `--read-only` wins over every `--allow-*` flag. Built-in plugins (for example `memory`) remain
 active under `--read-only` because their tools only use the `internal` effect; use
-`--disable-plugin memory` for a strictly write-free mode. Like `write`/`process`, an unallowed
-`external` tool is still offered in the TUI and asks for interactive approval instead of being
-silently excluded (headless modes never ask, see below).
+`--disable-plugin memory` for a strictly write-free mode.
+
+### The write/process/external truth table
+
+| State | TUI | Headless (`run`, `resume <id> "prompt"`, `--json`) |
+| --- | --- | --- |
+| No flag, not `--read-only` | **Asks every time** the model calls the tool (allow once / allow for the session / deny) | Tool is simply **unavailable** — there is no one to ask |
+| `--allow-write` / `--allow-process` / `--allow-external` | **Allowed**, never asks | **Allowed**, never asks |
+| `--read-only` | **Never offered**, hard denied | **Never offered**, hard denied |
+
+The TUI's "ask every time" default needs no extra flag: it is the TUI's own always-on approval
+flow (the same one write/process already used) now also covering `external`. Headless modes are
+non-interactive by design, so an unset flag there means the effect is unavailable, full stop —
+never asked, never silently allowed.
 
 ## Interactive approval
 
@@ -177,6 +188,15 @@ In the TUI, `write`, `process` and `external` tools that were not allowed by fla
 the model and Alisio asks before running each call: allow once, allow that effect for the session,
 or deny. Headless modes (`run`, `resume <id> "prompt"`, `--json`) never ask. See
 [Terminal UI](/tui#interactive-approvals).
+
+## Project trust {#project-trust}
+
+Separately from tool-call approvals, opening a repository must not silently load *its* Alisio
+configuration (which can point your API key at a different endpoint) or run its plugins. The TUI
+asks once per directory before doing that; the decision persists and a changed `.alisio/config.json`
+asks again. `alisio trust list`/`alisio trust revoke <path>` inspect or undo it. See [Quick
+start](/quick-start#configuration-trust-model) for the full flow and [Configuration](/configuration)
+for the `alisio trust` command.
 
 ## Not a sandbox
 

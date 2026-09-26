@@ -181,7 +181,7 @@ MCP servers are only started or contacted with `--allow-mcp`. See [Tools & permi
 | `ALISIO_MODEL` | Overrides `provider.model` |
 | `ALISIO_API_MODE` | Overrides `provider.apiMode` |
 | `ALISIO_CONFIG_HOME` | Global configuration directory (default `$XDG_CONFIG_HOME/alisio` or `~/.config/alisio`) |
-| `ALISIO_STATE_HOME` | State directory for `sessions.sqlite` and `memory.sqlite` (default `$XDG_STATE_HOME/alisio` or `~/.local/state/alisio`) |
+| `ALISIO_STATE_HOME` | State directory for `sessions.sqlite`, `memory.sqlite` and `trust.json` (default `$XDG_STATE_HOME/alisio` or `~/.local/state/alisio`) |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Standard XDG base directories used when the `ALISIO_*` variables are unset |
 | `CI` | When set (and not `false` or `0`), the startup screen is not shown |
 | `NO_COLOR` | Disables color in the startup screen |
@@ -228,7 +228,9 @@ Commands:
 | `alisio run <prompt>` | Headless run; `/name args` runs a [prompt template](/prompt-templates) |
 | `alisio resume <session> [prompt]` | Resume a session (TUI without prompt, headless with prompt) |
 | `alisio setup` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
-| `alisio doctor` | Environment and provider diagnostics |
+| `alisio doctor` | Environment and provider diagnostics; warns when no model is configured |
+| `alisio trust list` | List directories with a stored project-trust decision |
+| `alisio trust revoke <path>` | Forget a directory's trust decision (re-prompts next time) |
 | `alisio sessions list` | List sessions |
 | `alisio sessions recover <session> --acknowledge` | Acknowledge uncertain tool effects after a crash |
 | `alisio context explain <path>` | Show which `AGENTS.md` files apply to a path |

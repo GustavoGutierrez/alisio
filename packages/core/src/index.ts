@@ -114,3 +114,16 @@ export {
   welcomeSection,
 } from "./startup/index.ts";
 export { hash, objectSchema, registerStandard } from "./tools/standard.ts";
+export {
+  getTrust,
+  hashProjectConfig,
+  hasProjectResources,
+  listTrust,
+  resolveTrust,
+  revokeTrust,
+  setTrust,
+  type TrustEntry,
+  type TrustListing,
+  type TrustResolution,
+  trustStorePath,
+} from "./trust.ts";

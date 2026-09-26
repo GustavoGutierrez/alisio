@@ -67,6 +67,50 @@ const options = (cmd: Command) => {
       : {}),
   } as import("@alisio/core").AppOptions & { json?: boolean; quiet?: boolean; banner?: boolean };
 };
+/**
+ * A one-time, plain (pre-alt-screen) yes/no prompt. It must run before the TUI (and before
+ * `createApplication`, which is what actually reads `.alisio/config.json`) exists, since the
+ * decision made here controls whether that read happens at all — the TUI's own interactive
+ * question queue is built from an already-created Application, too late for this.
+ */
+async function promptTrust(workspace: string): Promise<boolean> {
+  const { createInterface } = await import("node:readline/promises");
+  process.stderr.write(
+    `\nThis directory has Alisio project configuration: ${workspace}\n` +
+      "Trusting it lets Alisio load that configuration for this and future runs — including a " +
+      "possibly different provider endpoint or API key — plus its plugins, agents, skills and " +
+      "prompt templates. Declining uses Alisio's own defaults instead; nothing here is read.\n",
+  );
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await rl.question("Trust this project's Alisio configuration? [y/N] "))
+      .trim()
+      .toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+/**
+ * Resolves the effective `trustProject` for an interactive TUI run: an explicit
+ * `--trust-project`/`--config` is untouched (that is already one-run, explicit trust, never
+ * persisted here as though it were an interactive grant). Otherwise, a workspace with project
+ * resources to trust gets a one-time prompt (re-asked only when `.alisio/config.json` changes),
+ * persisted in the trust store; a workspace with nothing to trust is never prompted at all.
+ */
+async function withProjectTrust<
+  T extends { trustProject?: boolean; config?: string; cwd?: string },
+>(opts: T): Promise<T> {
+  if (opts.trustProject || opts.config) return opts;
+  const { findWorkspace, resolveTrust, setTrust } = await import("@alisio/core");
+  const workspace = await findWorkspace(opts.cwd ?? process.cwd());
+  const resolution = await resolveTrust(workspace);
+  if (!resolution.hasProjectResources) return opts;
+  if (!resolution.needsPrompt) return { ...opts, trustProject: resolution.trusted };
+  const trusted = await promptTrust(workspace);
+  await setTrust(workspace, trusted, resolution.configHash);
+  return { ...opts, trustProject: trusted };
+}
 async function run(cmd: Command, prompt?: string, sessionId?: string) {
   const opts = options(cmd);
   if (
@@ -77,7 +121,8 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     process.stdout.isTTY
   ) {
     const { runTui } = await import("./tui/app.ts");
-    return runTui({ ...opts, ...(sessionId ? { session: sessionId } : {}) });
+    const trusted = await withProjectTrust(opts);
+    return runTui({ ...trusted, ...(sessionId ? { session: sessionId } : {}) });
   }
   const { createApplication } = await import("@alisio/core");
   const app = await createApplication({
@@ -248,13 +293,41 @@ program.command("doctor").action(async (_opts, cmd) => {
     provider: {
       baseURL: config.provider.baseURL,
       apiMode: config.provider.apiMode,
-      model: config.provider.model || "not configured",
+      model: !config.provider.model
+        ? "not configured"
+        : config.provider.model === "YOUR_MODEL_ID"
+          ? "not configured (placeholder from `alisio setup` — edit .alisio/config.json)"
+          : config.provider.model,
       auth: config.provider.auth,
       keyConfigured: config.provider.auth === "none" || !!process.env[config.provider.apiKeyEnv],
     },
   };
   console.log(JSON.stringify(status, null, 2));
+  if (!config.provider.model || config.provider.model === "YOUR_MODEL_ID")
+    console.error(
+      "\nNo model configured yet: set provider.model in your config, --model, or ALISIO_MODEL " +
+        "before starting a real conversation (it will otherwise fail on the first turn).",
+    );
 });
+const trust = program.command("trust").description("Inspect or revoke per-directory project trust");
+trust.command("list").action(async () => {
+  const { listTrust } = await import("@alisio/core");
+  console.log(JSON.stringify(await listTrust(), null, 2));
+});
+trust
+  .command("revoke")
+  .argument("<path>")
+  .description("Revoke a workspace's stored trust decision (re-prompts next time)")
+  .action(async (path) => {
+    const { revokeTrust } = await import("@alisio/core");
+    const { resolve } = await import("node:path");
+    const { realpath } = await import("node:fs/promises");
+    const workspace = await realpath(resolve(path)).catch(() => resolve(path));
+    const removed = await revokeTrust(workspace);
+    console.log(
+      removed ? `Revoked trust for ${workspace}` : `No stored trust decision for ${workspace}`,
+    );
+  });
 const sessions = program.command("sessions");
 async function openStore(cmd: Command) {
   const { SQLiteStore } = await import("@alisio/core");

@@ -75,21 +75,26 @@ settings, including whether the key variable is set. It never prints the key.
 ## 4. Run
 
 ```sh
-# Interactive terminal UI
+# Interactive terminal UI: write/process/external tools are offered and ask before each call
 alisio --config ./my-api.json
 
-# Headless, read-only
+# Headless, read-only: writes/processes/network tools are never even offered
 alisio run "Explain this repository" --config ./my-api.json --read-only
 
 # Headless with versioned JSONL events on stdout (diagnostics go to stderr)
 alisio run "Review the code" --config ./my-api.json --json
 
-# Allow edits (and processes, if needed)
+# Skip asking and allow edits (and processes, if needed) outright
 alisio run "Implement the task in docs/task.md" --config ./my-api.json --allow-write
 ```
 
-`--allow-process` gives access to arbitrary processes with your user privileges; it is not a
-sandbox. See [Tools & permissions](/tools).
+The TUI's write/process/external tools **ask by default** — allow once, allow for the session, or
+deny — every time, with no flag needed. `--allow-write`/`--allow-process`/`--allow-external` skip
+that question and allow outright; `--read-only` disables them completely, never even offering them
+to the model. Headless `run`/`resume <id> "prompt"`/`--json` have no one to ask, so there the exact
+same flags mean the tool is simply unavailable without them. `--allow-process` (or an "allow"
+answer to the prompt) gives access to arbitrary processes with your user privileges; it is not a
+sandbox. See [Tools & permissions](/tools#permission-flags) for the full truth table.
 
 ## 5. Sessions
 
@@ -125,10 +130,29 @@ that reason Alisio reads:
 | Source | When |
 | --- | --- |
 | `--config <path>` | Always, when given: an explicitly trusted file |
-| `<workspace>/.alisio/config.json` | Only with `--trust-project` |
+| `<workspace>/.alisio/config.json` | With `--trust-project`, or after trusting it interactively (below) |
 | `~/.config/alisio/config.json` (`ALISIO_CONFIG_HOME` or `XDG_CONFIG_HOME`) | Otherwise |
 
-`--trust-project` also loads the project's executable plugins from `.alisio/plugins`, which run with
-full process privileges. Only use it for repositories you trust.
+Trusting a project also loads its executable plugins from `.alisio/plugins` (full process
+privileges), and its agents/skills/prompts from `.alisio/agents`, `.agents/agents`,
+`.alisio/skills` and `.alisio/prompts`.
+
+**Interactive one-time trust.** Starting the TUI (not headless `run`/`--json`, which always keep
+requiring `--trust-project`/`--config` explicitly — there is no one there to ask) in a directory
+that has any of those project resources, without `--trust-project`/`--config`, asks once:
+
+```
+This directory has Alisio project configuration: /path/to/repo
+Trusting it lets Alisio load that configuration for this and future runs — including a possibly
+different provider endpoint or API key — plus its plugins, agents, skills and prompt templates.
+Declining uses Alisio's own defaults instead; nothing here is read.
+Trust this project's Alisio configuration? [y/N]
+```
+
+The decision is remembered per directory (`alisio trust list`/`alisio trust revoke <path>` inspect
+or undo it) together with a hash of `.alisio/config.json`'s content, so editing that file — even
+after trusting it once — asks again rather than silently keeping the old trust. A directory with no
+project resources at all is never prompted. `--trust-project`/`--config` remain explicit, one-run
+trust exactly as before and are never written to this store.
 
 Next: [Terminal UI](/tui) · [Prompt templates](/prompt-templates) · [Configuration](/configuration).
