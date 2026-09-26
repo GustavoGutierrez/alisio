@@ -9,6 +9,8 @@ import { definePlugin, textResult } from "@alisio/sdk";
 
 export default definePlugin({
   id: "acme.hello",
+  name: "Acme Hello",
+  description: "Adds a friendly greeting tool",
   version: "0.1.0",
   apiVersion: 1,
   setup(api) {
@@ -38,11 +40,30 @@ código en el que confíe.
 | `id` | ID único que cumple `^[a-z0-9][a-z0-9.-]{0,63}$`, por ejemplo `acme.hello` |
 | `version` | SemVer, por ejemplo `0.1.0` o `0.1.0-beta.1` |
 | `apiVersion` | Siempre `1` |
+| `name`, `description` | Texto opcional y legible para el catálogo de `/plugins` |
+| `categories` | Capacidades opcionales como `model-provider`; el host también deriva esta categoría de los registros de proveedores |
 | `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
 | `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
 | `dispose()` | Opcional; libera recursos cuando Alisio se cierra |
 
 `definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de plugin duplicados.
+
+## Gestionar plugins en la TUI
+
+Ejecute `/plugins` (o `/plugin`) para abrir el catálogo filtrable. `[x]`, `[ ]`, `[!]` y `[*]`
+significan activo, inactivo, fallido y reinicio necesario; las filas también distinguen los plugins
+integrados de etiquetas de origen externas seguras. Seleccione una fila para ver la descripción
+completa, la categoría y la acción disponible.
+
+Los cambios actualizan atómicamente `.alisio/config.json` del proyecto actual y conservan los campos
+JSON no relacionados. Se aplican deliberadamente al iniciar Alisio de nuevo: los registros, hooks,
+almacenamiento y clientes de proveedor vivos no se eliminan parcialmente. Devolver un cambio al
+estado original del runtime elimina `restart-required`. Los plugins externos requieren un proyecto
+de confianza y confirmación explícita porque se ejecutan con todos los privilegios del proceso.
+Alisio impide desactivar un plugin de proveedor mientras lo retenga el proveedor activo o cualquier
+sesión enrutada viva, y también bloquea plugins con recursos de la sesión actual. Cambie de proveedor
+y cierre las sesiones retenidas, o reinicie Alisio, primero. Los perfiles y credenciales siguen
+siendo ajustes globales y nunca se copian a la configuración de plugins.
 
 ## Referencia de `PluginAPI`
 
@@ -65,6 +86,8 @@ plugin se elimina automáticamente cuando se descarga.
 | `session.onStart(handler)` | El texto devuelto se inyecta una vez al comienzo de una sesión nueva y vacía (persistido en la sesión) |
 | `session.onEnd(handler)` | Se llama cuando termina una sesión interactiva (`/clear`, `/exit`, salida) |
 | `model.complete(request)` | Completado de texto agnóstico del proveedor: `{ system, messages, maxTokens?, model?, signal? }` → `Promise<string>` |
+| `models.list()` / `models.resolve(reference)` | Lista modelos configurados sin credenciales y resuelve `proveedor/modelo` o un ID único sin proveedor |
+| `providers.register(provider)` | Añade metadatos, campos de configuración/autenticación, capacidades y una factoría. Los registros coexisten; `/connect` selecciona uno |
 | `extensions.register(point, provider, options?)` | Proporciona una implementación para un [punto de extensión](#extension-points) (`mascot`, `startup-screen`); `options`: `{ priority? }` |
 | `ui.status(key, text, detail?)` | Texto breve en la barra de estado de la TUI; `detail` aparece en `/stats`; `text: undefined` lo elimina |
 | `ui.panel(id, provider)` | Un panel en árbol plegable (`PanelProvider`), solo en interfaces interactivas |
@@ -72,6 +95,11 @@ plugin se elimina automáticamente cuando se descarga.
 | `ui.open(sessionId)` | Abre una sesión en una vista de solo lectura; devuelve `false` sin interfaz interactiva |
 | `ui.interactive()` | `true` cuando una interfaz interactiva puede responder a `select` |
 | `sessions.*` | Sesiones hijas, ver [más abajo](#child-sessions) |
+
+Los plugins de proveedores dependen solo de `@alisio/sdk`. Su factoría recibe por separado el
+`profile` sin secretos, las `credentials` secretas y valores heredados opcionales. El núcleo controla
+la persistencia y la activación. La limpieza del registro participa en el rollback del plugin; si
+falla la creación de un proveedor, el proveedor activo permanece intacto.
 
 ### Herramientas
 
@@ -177,6 +205,7 @@ servicio.
 | Miembro | Descripción |
 | --- | --- |
 | `spawn(spec)` | Crea una sesión hija (`ChildSessionSpec`) y devuelve `ChildSessionInfo` |
+| `create(spec)` | Resuelve `spec.model`, si existe, y crea un hijo vinculado al proveedor; úselo para reemplazos de modelo |
 | `run(id, prompt, { signal? })` | Ejecuta un turno en el hijo; resuelve un `ChildRunResult` (`status`, `text`, `usage`, `error?`) |
 | `get(id)`, `children(parentId)` | Información de la sesión (`id`, `parentId`, `depth`, `agent`, `title`, `status`, `model`, `workspace`, `usage`, `capabilities`, marcas de tiempo) |
 | `ancestors(id)` | IDs de los ancestros, del más cercano al más lejano |

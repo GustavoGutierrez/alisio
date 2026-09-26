@@ -1,7 +1,52 @@
 # Configuración
 
-Alisio lee un único archivo JSON, validado de forma estricta (se rechazan las claves desconocidas).
-Qué archivo se lee se describe en el
+## Selección global del proveedor
+
+En la TUI, `/connect` escribe los perfiles no secretos y el proveedor/modelo activo en
+`<config home>/providers.json`. Los secretos se guardan por separado en
+`<config home>/credentials.json`, escrito atómicamente con modo `0600`; el directorio usa `0700`
+donde se admiten permisos POSIX. Es protección del sistema de archivos, **no cifrado**. Las claves
+nunca aparecen en `doctor`, el inicio, los eventos ni el estado de plugins.
+
+`/model` y `/models` abren el mismo selector global. Agrupa por título de proveedor todos los
+perfiles creados mediante `/connect`, marca la pareja proveedor/modelo activa y mantiene disponibles
+los perfiles sanos si falla otro catálogo. Elegir una pareja distinta la persiste e inicia una sesión
+nueva; elegir la pareja activa no hace nada. La configuración raíz `provider` heredada se conserva
+para compatibilidad de inicio y modos headless, pero no aparece en este selector.
+
+Los selectores usan `proveedor/modelo` como forma canónica, por ejemplo
+`deepseek/deepseek-chat`. Un ID sin proveedor solo se acepta cuando coincide exactamente con un
+perfil configurado mediante `/connect`. Cero coincidencias falla con opciones disponibles; varias
+fallan por ambigüedad. La pareja global activa es el valor por defecto de las sesiones nuevas, no
+estado mutable compartido: un hijo o reemplazo programático queda vinculado sin modificar al padre.
+
+Los integradores pueden usar `app.listAvailableModels()`, `app.resolveModel(reference)`,
+`app.createSession(reference?)` y `app.switchModel(reference)`. Solo participan en la resolución
+cruzada los perfiles globales de `/connect`; la configuración raíz heredada `provider` sigue siendo
+compatibilidad de arranque/headless. Los metadatos y errores nunca exponen credenciales.
+
+La configuración raíz `provider`, las variables de entorno y los flags heredados siguen admitidos y
+no se reescriben. Las fuentes explícitas seleccionan el proveedor compatible con OpenAI para esa
+ejecución; `--model` reemplaza el modelo. `AppOptions.provider` tiene máxima prioridad. Los modos
+headless nunca preguntan.
+
+Hay cuatro proveedores integrados y activados por defecto:
+
+| Proveedor | Alcance |
+| --- | --- |
+| DeepSeek | Descubre modelos desde `https://api.deepseek.com`; admite Chat Completions y Responses. `/connect` también muestra una URL base opcional, etiquetada para proxies compatibles con DeepSeek. |
+| OpenCode Console (Zen) | Descubre entradas `opencode/<id-del-modelo>` desde `https://opencode.ai/zen/v1/models`. Los modelos documentados GPT/Grok/Muse usan Responses; DeepSeek/GLM/Kimi/MiMo/MiniMax y los compatibles documentados usan Chat Completions; Claude y los Qwen documentados usan Anthropic Messages. Se ocultan Gemini nativo y System One. |
+| OpenCode Go | Descubre entradas `opencode-go/<id-del-modelo>` desde `https://opencode.ai/zen/go/v1/models`. Su mapa independiente envía GPT/Grok/Muse a Responses, familias abiertas compatibles a Chat Completions y MiniMax/Qwen a Anthropic Messages. |
+| Compatible con OpenAI | Endpoint genérico y configurable de Chat Completions o Responses. |
+
+Las peticiones de modelos de OpenCode Console y Go envían `user-agent: alisio/<versión>` y un identificador opaco y
+estable de conversación `x-opencode-session`. Ninguna cabecera contiene rutas, prompts ni credenciales.
+Sus catálogos no requieren autenticación. Ambos fallan de forma cerrada: ocultan cualquier entrada
+ausente del mapa de protocolos documentado, en lugar de adivinar su endpoint.
+
+Alisio combina la configuración global con una capa seleccionada y valida cada archivo de forma
+estricta (se rechazan las claves desconocidas). La precedencia se describe en
+[Servidores MCP](#servidores-mcp) y el
 [modelo de confianza de la configuración](/es/quick-start#configuration-trust-model).
 
 ```json
@@ -92,7 +137,8 @@ Consulte [Contexto: AGENTS.md y skills](/es/context).
 ## `builtinPlugins`
 
 Opciones de los plugins integrados, indexadas por ID de plugin. Cada entrada acepta `enabled`; cada
-plugin valida el resto de su sección. Los plugins integrados son `memory` y `subagents`; las
+plugin valida el resto de su sección. Los plugins integrados son `deepseek`, `opencode`, `opencode-go`,
+`openai-compatible`, `memory` y `subagents`; las
 opciones de `subagents` se detallan en [Subagentes](/es/subagents#limits). Opciones de `memory`:
 
 | Campo | Por defecto | Descripción |
@@ -122,6 +168,17 @@ paquetes npm. Consulte [Escribir plugins](/es/plugins#loading-plugins).
 { "plugins": ["alisio-plugin-foo", "./plugins/local.js"] }
 ```
 
+`/plugins` guarda por separado las anulaciones externas del proyecto, indexadas por el ID estable
+del plugin:
+
+```json
+{ "pluginOverrides": { "acme.hello": { "enabled": false } } }
+```
+
+Los cambios de plugins integrados usan el campo existente `builtinPlugins.<id>.enabled`. Ambas
+formas se aplican tras reiniciar. No modifican los perfiles globales de proveedores ni el almacén
+separado de credenciales.
+
 ## `skills`
 
 Raíces adicionales de Agent Skills, resueltas respecto al archivo de configuración.
@@ -139,18 +196,29 @@ en proyectos de confianza), las raíces de usuario y las skills de plugins. Cons
 No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en
 proyectos de confianza, de `.alisio/prompts/`. Consulte [Plantillas de prompts](/es/prompt-templates).
 
-## `mcp.servers`
+## Servidores MCP
 
-Servidores MCP, indexados por nombre. Nunca escriba secretos literales: indique nombres de variables
-de entorno.
+Alisio siempre lee `<ALISIO_CONFIG_HOME>/config.json` (por defecto
+`~/.config/alisio/config.json`). La configuración de un proyecto de confianza se superpone desde
+`<workspace>/.alisio/config.json`. Un `--config <archivo>` explícito y de confianza se superpone a la
+configuración global y reemplaza la capa del proyecto. Un archivo de proyecto sin confianza nunca se
+lee. Los ajustes superiores de la capa seleccionada reemplazan los globales; las listas ejecutables
+de plugins y skills no se concatenan. Los servidores MCP son la excepción definida: se combinan por
+nombre y gana la capa seleccionada. Las rutas relativas se resuelven respecto al archivo que las
+definió.
+
+La forma canónica es `mcp.servers`, indexada por nombre. `transport` puede ser explícito o inferirse
+de `command`/`url`.
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `transport` | obligatorio | `stdio` o `http` (Streamable HTTP) |
+| `transport` | inferido | `stdio` o `http` (Streamable HTTP) |
+| `enabled` | `true` | Estado persistido que gestiona `/mcp` |
 | `command` | ninguno | stdio: ejecutable |
 | `args` | `[]` | stdio: argumentos; `./` y `../` se resuelven respecto al archivo de configuración |
 | `url` | ninguno | http: URL del servidor |
 | `envAllow` | `[]` | Variables de entorno que se pasan al servidor stdio |
+| `env` | `{}` | Valores literales que se pasan solo a este subproceso; prevalecen sobre el mismo nombre de `envAllow` |
 | `bearerTokenEnv` | ninguno | Variable de entorno que contiene un token bearer HTTP |
 
 ```json
@@ -163,6 +231,13 @@ de entorno.
         "args": ["./mcp/server.js"],
         "envAllow": ["MY_SERVER_TOKEN"]
       },
+      "local-no-secreto": {
+        "command": "./bin/local-mcp",
+        "env": { "LOG_LEVEL": "info" }
+      },
+      "remoto-publico": {
+        "url": "https://example.com/public-mcp"
+      },
       "remote": {
         "transport": "http",
         "url": "https://example.com/mcp",
@@ -173,8 +248,31 @@ de entorno.
 }
 ```
 
-Los servidores MCP solo se inician o contactan con `--allow-mcp`. Consulte
-[Herramientas y permisos](/es/tools#mcp).
+También se acepta la forma común superior `mcpServers`. Infiere `stdio` si existe `command` y `http`
+si existe `url`:
+
+```json
+{
+  "mcpServers": {
+    "devforge": {
+      "command": "/ruta/a/devforge-mcp",
+      "args": [],
+      "env": { "DEV_FORGE_CONFIG": "/ruta/a/devforge/config.json" }
+    }
+  }
+}
+```
+
+No defina el mismo nombre en `mcp.servers` y `mcpServers` dentro de un archivo. Se validan de forma
+estricta nombres, transportes, URL, comandos, argumentos y valores de entorno. Los diagnósticos nunca
+muestran esos valores. Los valores directos de `env` se pasan solo a ese subproceso y prevalecen
+sobre una variable del mismo nombre reenviada con `envAllow`; úselos para opciones no secretas o
+rutas locales protegidas. Los secretos HTTP no pueden escribirse literalmente:
+`bearerTokenEnv` nombra la variable de entorno que contiene el token. Un servidor configurado
+permanece desconectado hasta que se solicita y solo
+está disponible con `--allow-mcp`; `--read-only` siempre prohíbe MCP. Un servidor stdio es un
+subproceso con sus privilegios de usuario, **no un sandbox**. Confíe únicamente en la configuración y
+el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
 
 ## Variables de entorno
 

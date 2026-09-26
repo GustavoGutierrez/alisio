@@ -9,6 +9,7 @@ import type {
   ChildSessionInfo,
   ChildSessionSpec,
   PluginAPI,
+  ResolvedProviderModel,
   SessionStatus,
   ToolDefinition,
 } from "@alisio/sdk";
@@ -28,7 +29,9 @@ interface StoredSpec {
 export interface ChildSessionsOptions {
   store: SessionStore;
   runner: AgentRunner;
-  providerId: string;
+  providerId: () => string;
+  resolveModel?: (reference: string, signal?: AbortSignal) => Promise<ResolvedProviderModel>;
+  bindProvider?: (sessionId: string, target: ResolvedProviderModel) => Promise<string>;
   /** The root policy (the runner's; it may widen after "allow for session" approvals). */
   rootPolicy: () => Policy;
   rootApprovals: boolean;
@@ -56,6 +59,7 @@ export class ChildSessions implements SessionsAPI {
       title: session.title ?? "",
       status: session.status ?? "queued",
       model: session.model,
+      provider: session.provider,
       workspace: session.workspace,
       usage: session.usage ?? { input: 0, output: 0 },
       capabilities: (({ readOnly: _r, ...caps }) => caps)(this.capabilities(session.id)),
@@ -126,7 +130,7 @@ export class ChildSessions implements SessionsAPI {
       ...(spec.id ? { id: spec.id } : {}),
       parentId: parent.id,
       workspace: spec.workspace ?? parent.workspace,
-      provider: this.o.providerId,
+      provider: parent.provider,
       model: spec.model ?? parent.model,
       agent: spec.agent,
       title: spec.title,
@@ -134,6 +138,21 @@ export class ChildSessions implements SessionsAPI {
       options: stored as Record<string, unknown>,
     });
     return this.info(child);
+  }
+  async create(spec: ChildSessionSpec): Promise<ChildSessionInfo> {
+    if (!spec.model) return this.spawn(spec);
+    if (!this.o.resolveModel || !this.o.bindProvider)
+      throw new Error("Cross-provider model resolution is not available");
+    const target = await this.o.resolveModel(spec.model);
+    const child = this.spawn({ ...spec, model: target.model.id });
+    try {
+      const provider = await this.o.bindProvider(child.id, target);
+      this.o.store.updateBinding(child.id, provider, target.model.id);
+      return this.info(this.o.store.get(child.id));
+    } catch (error) {
+      this.o.store.updateSession(child.id, { status: "failed" });
+      throw error;
+    }
   }
   /** Agent path from the top-level child down, e.g. "general › explore". */
   private label(id: string): string {

@@ -17,24 +17,35 @@ import type {
   ResponseInputContent,
   ResponseInputItem,
 } from "openai/resources/responses/responses";
-import type { Config } from "../config.ts";
+
+export interface OpenAICompatibleConfig {
+  baseURL: string;
+  apiKey?: string;
+  apiKeyEnv: string;
+  model: string;
+  apiMode: "chat" | "responses";
+  auth: "bearer" | "none";
+  tokenParameter: "max_tokens" | "max_completion_tokens" | "omit";
+  streamUsage: boolean;
+  contextWindow?: number;
+}
 
 const dataUrl = (a: Attachment) => `data:${a.mimeType};base64,${a.data}`;
 export class OpenAICompatibleProvider implements ModelProvider {
   readonly id: string;
   readonly model: string;
-  private client: OpenAI;
-  constructor(
-    private config: Config["provider"],
-    client?: OpenAI,
-  ) {
+  #client: OpenAI;
+  #config: Omit<OpenAICompatibleConfig, "apiKey">;
+  constructor(config: OpenAICompatibleConfig, client?: OpenAI) {
     this.model = config.model;
-    if (!this.model) throw new Error("Set ALISIO_MODEL, --model, or provider.model");
-    const key = config.auth === "none" ? "unused" : process.env[config.apiKeyEnv];
+    const { apiKey: _apiKey, ...safeConfig } = config;
+    this.#config = safeConfig;
+    const key =
+      config.auth === "none" ? "unused" : (config.apiKey ?? process.env[config.apiKeyEnv]);
     if (!client && !key)
       throw new Error(`Missing API key environment variable: ${config.apiKeyEnv}`);
     this.id = `openai-compatible:${config.apiMode}:${config.baseURL.replace(/\/$/, "")}`;
-    this.client =
+    this.#client =
       client ??
       new OpenAI({
         baseURL: config.baseURL,
@@ -47,7 +58,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   /** Lists models from GET /models. Context window fields are provider extensions. */
   async listModels(signal: AbortSignal): Promise<ModelInfo[]> {
     const models: ModelInfo[] = [];
-    for await (const m of this.client.models.list({ signal })) {
+    for await (const m of this.#client.models.list({ signal })) {
       const extra = m as unknown as Record<string, unknown>;
       const window = [extra.context_window, extra.context_length, extra.max_context_length].find(
         (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0,
@@ -58,7 +69,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     return models;
   }
   async *stream(request: Parameters<ModelProvider["stream"]>[0]): AsyncIterable<ProviderEvent> {
-    if (this.config.apiMode === "responses") {
+    if (this.#config.apiMode === "responses") {
       yield* this.responses(request);
       return;
     }
@@ -92,16 +103,16 @@ export class OpenAICompatibleProvider implements ModelProvider {
         });
     }
     const limit =
-      this.config.tokenParameter === "omit"
+      this.#config.tokenParameter === "omit"
         ? {}
-        : { [this.config.tokenParameter]: request.maxOutputTokens };
-    const stream = await this.client.chat.completions.create(
+        : { [this.#config.tokenParameter]: request.maxOutputTokens };
+    const stream = await this.#client.chat.completions.create(
       {
         model: request.model || this.model,
         messages,
         stream: true,
         ...limit,
-        ...(this.config.streamUsage ? { stream_options: { include_usage: true } } : {}),
+        ...(this.#config.streamUsage ? { stream_options: { include_usage: true } } : {}),
         ...(request.tools.length || request.nativeTools?.length
           ? {
               tools: [
@@ -179,7 +190,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       else if (m.providerData) input.push(...(m.providerData as ResponseInputItem[]));
       else throw new Error("Missing provider continuation data for Responses session");
     }
-    const stream = await this.client.responses.create(
+    const stream = await this.#client.responses.create(
       {
         model: request.model || this.model,
         instructions: request.instructions,

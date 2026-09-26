@@ -1,7 +1,8 @@
+import { chmod, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
-import { readJson } from "./runtime/fs.ts";
+import { exists, readJson } from "./runtime/fs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 
 const providerSchema = z
@@ -17,29 +18,86 @@ const providerSchema = z
     contextWindow: z.number().int().positive().optional(),
   })
   .strict();
-const serverSchema = z
+const safeUrl = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+    },
+    { message: "must be an HTTP(S) URL without credentials" },
+  );
+const environment = z.record(z.string(), z.string());
+const stdioServerSchema = z
   .object({
-    transport: z.enum(["stdio", "http"]),
-    command: z.string().optional(),
+    transport: z.literal("stdio"),
+    enabled: z.boolean().default(true),
+    command: z.string().trim().min(1),
     args: z.array(z.string()).default([]),
-    url: z.url().optional(),
     envAllow: z.array(z.string()).default([]),
-    bearerTokenEnv: z.string().optional(),
+    env: environment.default({}),
   })
   .strict();
-export const configSchema = z
+const httpServerSchema = z
+  .object({
+    transport: z.literal("http"),
+    enabled: z.boolean().default(true),
+    url: safeUrl,
+    bearerTokenEnv: z.string().trim().min(1).optional(),
+  })
+  .strict();
+const serverSchema = z.discriminatedUnion("transport", [stdioServerSchema, httpServerSchema]);
+const compatibleServerSchema = z.union([
+  serverSchema,
+  z
+    .object({
+      command: z.string().trim().min(1),
+      enabled: z.boolean().default(true),
+      args: z.array(z.string()).default([]),
+      envAllow: z.array(z.string()).default([]),
+      env: environment.default({}),
+    })
+    .strict()
+    .transform((server) => ({ ...server, transport: "stdio" as const })),
+  z
+    .object({
+      url: safeUrl,
+      enabled: z.boolean().default(true),
+      bearerTokenEnv: z.string().trim().min(1).optional(),
+    })
+    .strict()
+    .transform((server) => ({ ...server, transport: "http" as const })),
+]);
+const serverName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const serversSchema = <T extends z.ZodType>(value: T) =>
+  z.record(z.string(), value).superRefine((servers, context) => {
+    for (const name of Object.keys(servers))
+      if (!serverName.test(name))
+        context.addIssue({
+          code: "custom",
+          path: [name],
+          message: "MCP server names may contain only letters, numbers, dot, underscore and dash",
+        });
+  });
+const configObjectSchema = z
   .object({
     schemaVersion: z.literal(1).default(1),
     provider: providerSchema.default(() => providerSchema.parse({})),
     plugins: z.array(z.string()).default([]),
     skills: z.array(z.string()).default([]),
     mcp: z
-      .object({ servers: z.record(z.string(), serverSchema).default({}) })
+      .object({ servers: serversSchema(compatibleServerSchema).default({}) })
+      .strict()
       .default({ servers: {} }),
+    /** Compatibility with the common MCP client configuration shape. */
+    mcpServers: serversSchema(compatibleServerSchema).optional(),
     /** Built-in plugin options keyed by id; each plugin validates its own section. */
     builtinPlugins: z
       .record(z.string(), z.object({ enabled: z.boolean().optional() }).passthrough())
       .default({}),
+    /** Project-local enable/disable overrides for configured external plugins, keyed by plugin id. */
+    pluginOverrides: z.record(z.string(), z.object({ enabled: z.boolean() }).strict()).default({}),
     /** Host-enforced timeouts for plugin hooks. */
     pluginHooks: z
       .object({
@@ -98,16 +156,37 @@ export const configSchema = z
         maxOutputTokens: 4096,
       })),
   })
-  .strict();
+  .strict()
+  .superRefine((config, context) => {
+    if (!config.mcpServers) return;
+    for (const name of Object.keys(config.mcpServers))
+      if (name in config.mcp.servers)
+        context.addIssue({
+          code: "custom",
+          path: ["mcpServers", name],
+          message: `MCP server "${name}" is defined in both mcp.servers and mcpServers`,
+        });
+  });
+export const configSchema = configObjectSchema.transform(({ mcpServers, ...config }) => ({
+  ...config,
+  mcp: { servers: { ...config.mcp.servers, ...mcpServers } },
+}));
 export type Config = z.infer<typeof configSchema>;
 export type ServerConfig = z.infer<typeof serverSchema>;
+export type McpServerSourceKind = "global" | "project" | "explicit" | "builtin" | "plugin";
+export interface McpServerSource {
+  kind: McpServerSourceKind;
+  file?: string;
+  form: "canonical" | "alias";
+}
+export type LoadedConfig = Config & { mcpSources: Record<string, McpServerSource> };
 export const configHome = () =>
   process.env.ALISIO_CONFIG_HOME ??
   join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "alisio");
 export const stateHome = () =>
   process.env.ALISIO_STATE_HOME ??
   join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "alisio");
-/** Configuration file selected for a workspace (it may not exist). */
+/** Highest-priority configuration file selected for a workspace (it may not exist). */
 export function configFile(
   workspace: string,
   options: { file?: string; trustProject?: boolean } = {},
@@ -128,18 +207,67 @@ export async function loadConfig(
     model?: string;
     apiMode?: string;
   } = {},
-): Promise<Config> {
-  const file = configFile(workspace, options);
-  const raw = (await readJson(file)) ?? {};
-  const config = configSchema.parse(raw);
-  config.skills = config.skills.map((p) => resolve(file, "..", p));
-  // Plugin entries are paths (relative to the config file) or npm package names.
-  config.plugins = config.plugins.map((p) => (isPathSpec(p) ? resolve(file, "..", p) : p));
-  for (const server of Object.values(config.mcp.servers))
-    if (server.transport === "stdio")
-      server.args = server.args.map((a) =>
-        a.startsWith("./") || a.startsWith("../") ? resolve(file, "..", a) : a,
-      );
+): Promise<LoadedConfig> {
+  const globalFile = join(configHome(), "config.json");
+  const selectedFile = options.file
+    ? resolve(options.file)
+    : options.trustProject
+      ? join(workspace, ".alisio", "config.json")
+      : undefined;
+  const parseLayer = async (file: string, kind: McpServerSourceKind) => {
+    const raw = (await readJson(file)) ?? {};
+    const config = configSchema.parse(raw);
+    config.skills = config.skills.map((p) => resolve(file, "..", p));
+    // Plugin entries are paths (relative to the config file) or npm package names.
+    config.plugins = config.plugins.map((p) => (isPathSpec(p) ? resolve(file, "..", p) : p));
+    for (const server of Object.values(config.mcp.servers))
+      if (server.transport === "stdio") {
+        if (server.command.startsWith("./") || server.command.startsWith("../"))
+          server.command = resolve(file, "..", server.command);
+        server.args = server.args.map((argument) =>
+          argument.startsWith("./") || argument.startsWith("../")
+            ? resolve(file, "..", argument)
+            : argument,
+        );
+      }
+    const object = raw as Record<string, unknown>;
+    const canonical =
+      object.mcp && typeof object.mcp === "object" && !Array.isArray(object.mcp)
+        ? ((object.mcp as Record<string, unknown>).servers as Record<string, unknown> | undefined)
+        : undefined;
+    const alias = object.mcpServers as Record<string, unknown> | undefined;
+    const sources = Object.fromEntries(
+      Object.keys(config.mcp.servers).map((name) => [
+        name,
+        {
+          kind,
+          file,
+          form: canonical && name in canonical ? "canonical" : "alias",
+        } as McpServerSource,
+      ]),
+    );
+    return { config, keys: new Set(Object.keys(object)), sources };
+  };
+  const global = await parseLayer(globalFile, "global");
+  let config = global.config;
+  let mcpSources = global.sources;
+  if (selectedFile && selectedFile !== globalFile) {
+    const selected = await parseLayer(selectedFile, options.file ? "explicit" : "project");
+    const overlaid = { ...config };
+    for (const key of selected.keys) {
+      if (key === "mcp" || key === "mcpServers") continue;
+      if (key in selected.config)
+        (overlaid as unknown as Record<string, unknown>)[key] = (
+          selected.config as unknown as Record<string, unknown>
+        )[key];
+    }
+    if (selected.keys.has("mcp") || selected.keys.has("mcpServers"))
+      overlaid.mcp = {
+        servers: { ...config.mcp.servers, ...selected.config.mcp.servers },
+      };
+    mcpSources = { ...mcpSources, ...selected.sources };
+    config = overlaid;
+  }
   config.provider = providerSchema.parse({
     ...config.provider,
     ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
@@ -152,5 +280,116 @@ export async function loadConfig(
   const url = new URL(config.provider.baseURL);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("baseURL must be an HTTP(S) URL without credentials");
-  return config;
+  return { ...config, mcpSources };
+}
+
+/** Atomically toggles one MCP server in the form and file that defined it. */
+export async function setMcpServerEnabled(input: {
+  source: McpServerSource;
+  name: string;
+  enabled: boolean;
+}): Promise<string> {
+  if (!input.source.file) throw new Error("This MCP server is managed by its registering plugin");
+  const file = input.source.file;
+  const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("Alisio configuration must be a JSON object");
+  const raw = parsed as Record<string, unknown>;
+  const container =
+    input.source.form === "alias"
+      ? raw.mcpServers
+      : raw.mcp && typeof raw.mcp === "object" && !Array.isArray(raw.mcp)
+        ? (raw.mcp as Record<string, unknown>).servers
+        : undefined;
+  if (!container || typeof container !== "object" || Array.isArray(container))
+    throw new Error(
+      `MCP server "${input.name}" is no longer present in its defining configuration`,
+    );
+  const current = (container as Record<string, unknown>)[input.name];
+  if (!current || typeof current !== "object" || Array.isArray(current))
+    throw new Error(
+      `MCP server "${input.name}" is no longer present in its defining configuration`,
+    );
+  (container as Record<string, unknown>)[input.name] = {
+    ...(current as Record<string, unknown>),
+    enabled: input.enabled,
+  };
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, file);
+    await chmod(file, 0o600);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return file;
+}
+
+/** Atomically updates one project plugin override while preserving every unrelated JSON field. */
+export async function setProjectPluginEnabled(input: {
+  workspace: string;
+  id: string;
+  enabled: boolean;
+  builtin: boolean;
+  trusted: boolean;
+}): Promise<string> {
+  const file = join(input.workspace, ".alisio", "config.json");
+  let raw: Record<string, unknown> = {};
+  if (await exists(file)) {
+    if (!input.trusted)
+      throw new Error("Trust this project before changing its existing Alisio configuration");
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("Project Alisio configuration must be a JSON object");
+    raw = parsed as Record<string, unknown>;
+  }
+  if (input.builtin) {
+    const current =
+      raw.builtinPlugins &&
+      typeof raw.builtinPlugins === "object" &&
+      !Array.isArray(raw.builtinPlugins)
+        ? (raw.builtinPlugins as Record<string, unknown>)
+        : {};
+    const entry =
+      current[input.id] &&
+      typeof current[input.id] === "object" &&
+      !Array.isArray(current[input.id])
+        ? (current[input.id] as Record<string, unknown>)
+        : {};
+    raw.builtinPlugins = { ...current, [input.id]: { ...entry, enabled: input.enabled } };
+  } else {
+    const current =
+      raw.pluginOverrides &&
+      typeof raw.pluginOverrides === "object" &&
+      !Array.isArray(raw.pluginOverrides)
+        ? (raw.pluginOverrides as Record<string, unknown>)
+        : {};
+    raw.pluginOverrides = { ...current, [input.id]: { enabled: input.enabled } };
+  }
+  raw.schemaVersion ??= 1;
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, file);
+    await chmod(file, 0o600);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return file;
 }

@@ -1,6 +1,8 @@
 # Architecture
 
-Alisio is a pnpm monorepo with five packages.
+Alisio is a pnpm monorepo with nine publishable packages. The OpenAI SDK adapter lives in
+`@alisio/plugin-openai-compatible`; core contains only provider contracts, the additive registry,
+activation and persistence.
 
 ```text
                          ┌──────────────────────────────┐
@@ -31,10 +33,14 @@ Alisio is a pnpm monorepo with five packages.
 | Package | Role | Depends on |
 | --- | --- | --- |
 | `@alisio/sdk` | Public plugin contract: types plus `definePlugin` and `textResult`. No runtime or provider imports | Nothing |
-| `@alisio/core` | Agent runner and tool loop, compaction, OpenAI-compatible provider, standard tools, runtime adapters (`node:sqlite`, `fs`, `child_process`), plugin host, child sessions service, extension registry, startup rendering, configuration, MCP client, Herdr bridge and `createApplication` | `@alisio/sdk`, `openai`, MCP client, `ajv`, `yaml`, `zod` |
+| `@alisio/core` | Provider-neutral runner, provider registry/activation/persistence, tools, runtime adapters, plugin host, child sessions, configuration and MCP | `@alisio/sdk`, MCP client, `ajv`, `yaml`, `zod` |
+| `@alisio/plugin-openai-compatible` | Built-in Chat Completions/Responses adapter and model discovery | `@alisio/sdk` (peer), `openai` |
+| `@alisio/plugin-deepseek` | Dedicated DeepSeek Chat/Responses adapter and metadata-rich discovery | `@alisio/sdk` (peer), `openai` |
+| `@alisio/plugin-opencode` | OpenCode Console (Zen) Responses/Chat/Messages transport and fail-closed model map | `@alisio/sdk` (peer) |
+| `@alisio/plugin-opencode-go` | Independent OpenCode Go Responses/Chat/Messages transport and fail-closed model map | `@alisio/sdk` (peer) |
 | `@alisio/plugin-memory` | Built-in persistent memory plugin | `@alisio/sdk` (peer), `zod` |
 | `@alisio/plugin-subagents` | Built-in [subagents](/subagents) plugin: agent definitions, delegation tools, limits, git worktrees and the agent tree | `@alisio/sdk` (peer), `yaml`, `zod` |
-| `alisio` | CLI: `bin`, TUI, clipboard adapter and the built-in plugin registry that wires `plugin-memory` and `plugin-subagents` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/plugin-subagents`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+| `alisio` | CLI, TUI and built-in registry wiring the provider, memory and subagents plugins | `@alisio/core`, all built-in plugins, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
 
 Provider SDKs and runtime-specific imports stay out of the public SDK and the agent-core contracts.
 

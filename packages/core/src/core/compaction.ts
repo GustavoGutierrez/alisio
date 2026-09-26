@@ -190,6 +190,7 @@ export async function summarize(
     model?: string;
     maxOutputTokens: number;
     signal: AbortSignal;
+    sessionId?: string;
   },
 ): Promise<string> {
   const focus = request.focus?.trim()
@@ -206,6 +207,7 @@ export async function summarize(
     maxTokens: request.maxOutputTokens,
     signal: request.signal,
     ...(request.model ? { model: request.model } : {}),
+    ...(request.sessionId ? { sessionId: request.sessionId } : {}),
   });
   if (!text) throw new Error("Summarizer returned an empty summary");
   return text;
@@ -214,7 +216,7 @@ export async function summarize(
 /** Narrow provider-agnostic completion used by compaction and the plugin model service. */
 export async function completeText(
   provider: ModelProvider,
-  request: CompletionRequest & { signal: AbortSignal },
+  request: CompletionRequest & { signal: AbortSignal; sessionId?: string },
 ): Promise<string> {
   let text = "",
     completed = false;
@@ -229,6 +231,7 @@ export async function completeText(
     maxOutputTokens: request.maxTokens ?? 2048,
     signal: request.signal,
     ...(request.model ? { model: request.model } : {}),
+    ...(request.sessionId ? { sessionId: request.sessionId } : {}),
   })) {
     request.signal.throwIfAborted();
     if (event.type === "completed") {

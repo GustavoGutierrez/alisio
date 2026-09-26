@@ -1,7 +1,9 @@
 # Inicio rápido
 
-Alisio no incluye un modelo predeterminado ni credenciales. Configure un endpoint y un modelo antes de
-ejecutar tareas. El modelo debe soportar streaming y tool calling en el protocolo seleccionado.
+Alisio incluye activado el plugin de proveedor compatible con OpenAI, pero no un modelo ni
+credenciales predeterminados. Inicie la TUI y ejecute `/connect`: elija el proveedor, introduzca sus
+ajustes y clave, y seleccione un modelo descubierto. La selección se aplica globalmente en inicios
+posteriores.
 
 ## 1. Crear un archivo de configuración
 

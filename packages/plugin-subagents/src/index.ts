@@ -47,6 +47,8 @@ export function createSubagentsPlugin(
   let warnings: string[] = [];
   return definePlugin({
     id: "subagents",
+    name: "Subagents",
+    description: "Delegation to specialized agents in isolated child sessions",
     version: "0.1.0",
     apiVersion: 1,
     async setup(api) {
@@ -79,7 +81,7 @@ export function createSubagentsPlugin(
         name: "task",
         effect: "internal",
         concurrent: true,
-        description: `Delegate a task to a specialized subagent that works in a separate conversation (it does not see this conversation) and returns only its final report. Launch several in one turn to work in parallel. Use background=true for long work: you will get a <task-notification> when it finishes (do not poll). Pass task_id to continue an earlier task with its full history.\nAvailable subagent_type values:\n${describeAgents(found.agents)}`,
+        description: `Delegate a task to a specialized subagent that works in a separate conversation (it does not see this conversation) and returns only its final report. Launch several in one turn to work in parallel. Use model to select a configured provider/model for only the child. Use background=true for long work: you will get a <task-notification> when it finishes (do not poll). Pass task_id to continue an earlier task with its full history.\nAvailable subagent_type values:\n${describeAgents(found.agents)}`,
         inputSchema: schema(
           {
             description: { type: "string", minLength: 1, maxLength: 120 },
@@ -87,6 +89,7 @@ export function createSubagentsPlugin(
             subagent_type: str,
             task_id: str,
             background: { type: "boolean" },
+            model: { type: "string", minLength: 1 },
           },
           ["description", "prompt", "subagent_type"],
         ),
@@ -100,6 +103,7 @@ export function createSubagentsPlugin(
               prompt: String(input.prompt),
               ...(typeof input.task_id === "string" ? { taskId: input.task_id } : {}),
               ...(typeof input.background === "boolean" ? { background: input.background } : {}),
+              ...(typeof input.model === "string" ? { model: input.model } : {}),
               signal: ctx.signal,
             });
             return textResult(result.text, result.isError);

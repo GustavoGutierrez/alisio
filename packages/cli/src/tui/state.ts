@@ -2,7 +2,7 @@
  * Pure presentation logic for the TUI: formatting, command parsing and the reduction of
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
-import type { Message, RunEvent } from "@alisio/sdk";
+import type { Message, ModelInfo, RunEvent } from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
 
@@ -15,6 +15,168 @@ export function formatTokens(n: number): string {
     return `${k < 100 ? trimZero(k.toFixed(1)) : Math.round(k)}k`;
   }
   return `${trimZero((n / 1_000_000).toFixed(1))}M`;
+}
+
+/** Prefixes every model with its owning provider so identical model ids are never ambiguous. */
+export function providerModelItems(provider: string, models: ModelInfo[], current?: string) {
+  return models.map((model) => ({
+    value: model.id,
+    label: `${provider} · ${model.name ?? model.id}${model.id === current ? " (current)" : ""}`,
+    ...(model.contextWindow
+      ? { description: `${model.id} · ${formatTokens(model.contextWindow)} context` }
+      : model.name
+        ? { description: model.id }
+        : {}),
+  }));
+}
+export interface ProviderCatalogView {
+  profile: string;
+  provider: string;
+  title: string;
+  configuredModel: string;
+  models: ModelInfo[];
+  unavailable: boolean;
+}
+export interface ConfiguredProviderModelItem {
+  value: string;
+  label: string;
+  description: string;
+  unavailable: boolean;
+}
+export interface PluginCatalogView {
+  id: string;
+  name: string;
+  description: string;
+  categories: string[];
+  builtin: boolean;
+  source: string;
+  status: "active" | "inactive" | "failed" | "restart-required";
+  enabled: boolean;
+  manageable: boolean;
+  diagnostic?: string;
+}
+/** Text markers remain meaningful without color: [x] active, [ ] inactive, [!] failed, [*] pending. */
+export function pluginCatalogItems(entries: PluginCatalogView[]) {
+  const marker = (entry: PluginCatalogView) =>
+    entry.status === "active"
+      ? "[x]"
+      : entry.status === "inactive"
+        ? "[ ]"
+        : entry.status === "failed"
+          ? "[!]"
+          : "[*]";
+  return entries.map((entry) => ({
+    value: entry.id,
+    label: `${marker(entry)} ${entry.name} · ${entry.builtin ? "built-in" : entry.source}`,
+    description: `${entry.status}${entry.categories.length ? ` · ${entry.categories.join(", ")}` : ""} · ${entry.description}`,
+  }));
+}
+export const pluginToggleNeedsConfirmation = (entry: PluginCatalogView): boolean => !entry.builtin;
+export interface McpServerView {
+  name: string;
+  displayName: string;
+  source: { kind: "global" | "project" | "explicit" | "builtin" | "plugin" };
+  status:
+    | "disabled"
+    | "disconnected"
+    | "connecting"
+    | "connected"
+    | "failed"
+    | "needs-authentication"
+    | "restart-required";
+  counts: { tools: number };
+}
+const mcpSourceTitle = (kind: McpServerView["source"]["kind"]) =>
+  ({
+    global: "User",
+    project: "Project",
+    explicit: "Explicit",
+    builtin: "Built-in",
+    plugin: "Plugin",
+  })[kind];
+/** Group headings are generated only for sources that actually registered servers. */
+export function mcpServerItems(entries: McpServerView[]) {
+  const marker = (status: McpServerView["status"]) =>
+    ({
+      disabled: "[ ]",
+      disconnected: "[-]",
+      connecting: "[…]",
+      connected: "[x]",
+      failed: "[!]",
+      "needs-authentication": "[?]",
+      "restart-required": "[*]",
+    })[status];
+  const grouped = new Map<string, McpServerView[]>();
+  for (const entry of entries) {
+    const title = mcpSourceTitle(entry.source.kind);
+    grouped.set(title, [...(grouped.get(title) ?? []), entry]);
+  }
+  return [...grouped].flatMap(([title, servers]) =>
+    servers.map((entry, index) => ({
+      value: entry.name,
+      label: `${index === 0 ? `${title} · ` : ""}${marker(entry.status)} ${entry.displayName}`,
+      description: `${entry.status}${entry.status === "connected" ? ` · ${entry.counts.tools} tool${entry.counts.tools === 1 ? "" : "s"}` : ""}`,
+    })),
+  );
+}
+export interface McpToolView {
+  name: string;
+  title?: string;
+  description?: string;
+  annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean };
+}
+export function mcpToolItems(tools: McpToolView[]) {
+  return tools.map((tool) => {
+    const flags = [
+      tool.annotations?.readOnly === true ? "read-only" : undefined,
+      tool.annotations?.destructive === true ? "destructive" : undefined,
+      tool.annotations?.openWorld === true ? "open-world" : undefined,
+    ].filter(Boolean);
+    return {
+      value: tool.name,
+      label: tool.title ? `${tool.title} · ${tool.name}` : tool.name,
+      description: [...flags, tool.description].filter(Boolean).join(" · ") || "No description",
+    };
+  });
+}
+/** Builds one filterable list while retaining provider/profile ownership in each opaque value. */
+export function configuredProviderModelItems(
+  catalogs: ProviderCatalogView[],
+  current?: { provider: string; model: string },
+): ConfiguredProviderModelItem[] {
+  const items: ConfiguredProviderModelItem[] = [];
+  for (const catalog of catalogs) {
+    if (catalog.unavailable) {
+      items.push({
+        value: JSON.stringify({ profile: catalog.profile }),
+        label: `${catalog.title} · unavailable`,
+        description: `${catalog.provider} · catalog refresh failed`,
+        unavailable: true,
+      });
+      continue;
+    }
+    const models = catalog.models.length
+      ? catalog.models
+      : catalog.configuredModel
+        ? [{ id: catalog.configuredModel }]
+        : [];
+    for (const model of models)
+      items.push({
+        value: JSON.stringify({
+          profile: catalog.profile,
+          provider: catalog.provider,
+          model: model.id,
+        }),
+        label: `${catalog.title} · ${model.name ?? model.id}${
+          catalog.provider === current?.provider && model.id === current.model ? " (current)" : ""
+        }`,
+        description: `${model.id.startsWith(`${catalog.provider}/`) ? model.id : `${catalog.provider}/${model.id}`}${
+          model.contextWindow ? ` · ${formatTokens(model.contextWindow)} context` : ""
+        }`,
+        unavailable: false,
+      });
+  }
+  return items;
 }
 export function contextLevel(pct: number): Level {
   return pct < 60 ? "ok" : pct < 85 ? "warn" : "danger";
@@ -98,13 +260,24 @@ export interface CommandSpec {
 }
 export const COMMANDS: CommandSpec[] = [
   { name: "help", description: "Show commands and keys" },
-  { name: "model", description: "Switch model (list or set directly)", argumentHint: "[id]" },
+  { name: "connect", description: "Configure a provider and choose its active model" },
+  {
+    name: "model",
+    description: "Switch provider and model",
+    aliases: ["models"],
+  },
   { name: "compact", description: "Summarize older history", argumentHint: "[focus]" },
   { name: "stats", description: "Session statistics" },
   { name: "clear", description: "Start a new session", aliases: ["new"] },
   { name: "sessions", description: "List recent sessions" },
   { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
   { name: "tools", description: "List tools and permission state" },
+  {
+    name: "plugins",
+    description: "Browse and manage project plugins",
+    aliases: ["plugin"],
+  },
+  { name: "mcp", description: "Browse and manage MCP servers" },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   {
     name: "ask",

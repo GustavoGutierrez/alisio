@@ -9,6 +9,8 @@ import { definePlugin, textResult } from "@alisio/sdk";
 
 export default definePlugin({
   id: "acme.hello",
+  name: "Acme Hello",
+  description: "Adds a friendly greeting tool",
   version: "0.1.0",
   apiVersion: 1,
   setup(api) {
@@ -38,11 +40,28 @@ trust.
 | `id` | Unique ID matching `^[a-z0-9][a-z0-9.-]{0,63}$`, for example `acme.hello` |
 | `version` | SemVer, for example `0.1.0` or `0.1.0-beta.1` |
 | `apiVersion` | Always `1` |
+| `name`, `description` | Optional human-friendly catalog text used by `/plugins` |
+| `categories` | Optional capabilities such as `model-provider`; the host also derives this category from provider registrations |
 | `setup(api)` | Registers everything; may be async. If it fails, partial registrations are rolled back |
 | `extensions` | Optional; declarative providers for [extension points](#extension-points), registered at priority 0 |
 | `dispose()` | Optional; releases resources when Alisio closes |
 
 `definePlugin` is an identity function that only adds typing. Duplicate plugin IDs are rejected.
+
+## Managing plugins in the TUI
+
+Run `/plugins` (or `/plugin`) to open the filterable catalog. `[x]`, `[ ]`, `[!]` and `[*]` mean
+active, inactive, failed and restart required; rows also distinguish built-ins from safe external
+source labels. Select a row for its full description, category and available action.
+
+Toggles update the current project's `.alisio/config.json` atomically and preserve unrelated JSON
+fields. They deliberately take effect on the next Alisio start: live registrations, hooks, storage
+and provider clients are not partially removed. Returning a toggle to its original runtime state
+clears `restart-required`. External plugins require a trusted project and an explicit confirmation
+because they execute with full process privileges. Alisio blocks disabling a model-provider plugin
+while the active provider or any live routed session retains it, and blocks plugins that own current
+session resources. Switch provider and close retained sessions, or restart Alisio, first. Provider
+profiles and credentials remain global settings and are never copied into plugin configuration.
 
 ## `PluginAPI` reference
 
@@ -65,6 +84,8 @@ removed automatically when it is unloaded.
 | `session.onStart(handler)` | Returned text is injected once at the start of a new, empty session (persisted in the session) |
 | `session.onEnd(handler)` | Called when an interactive session ends (`/clear`, `/exit`, quit) |
 | `model.complete(request)` | Provider-agnostic text completion: `{ system, messages, maxTokens?, model?, signal? }` → `Promise<string>` |
+| `models.list()` / `models.resolve(reference)` | Lists credential-free configured models and resolves canonical `provider/model` or a unique bare ID |
+| `providers.register(provider)` | Adds provider metadata, configuration/auth fields, capabilities and a factory. Registrations coexist; `/connect` selects one |
 | `extensions.register(point, provider, options?)` | Provides an implementation for an [extension point](#extension-points) (`mascot`, `startup-screen`); `options`: `{ priority? }` |
 | `ui.status(key, text, detail?)` | Short status text in the TUI status bar; `detail` appears in `/stats`; `text: undefined` clears it |
 | `ui.panel(id, provider)` | A collapsible tree panel (`PanelProvider`), interactive UIs only |
@@ -72,6 +93,10 @@ removed automatically when it is unloaded.
 | `ui.open(sessionId)` | Opens a session in a read-only view; returns `false` without an interactive UI |
 | `ui.interactive()` | `true` when an interactive UI can answer `select` |
 | `sessions.*` | Child sessions, see [below](#child-sessions) |
+
+Provider plugins depend only on `@alisio/sdk`. Their factory receives separate non-secret `profile`,
+secret `credentials`, and optional legacy values. Core owns persistence and activation. Registration
+cleanup participates in plugin rollback; failed provider creation leaves the active provider intact.
 
 ### Tools
 
@@ -175,6 +200,7 @@ parent run aborts its running descendants. The core contains no agent logic; the
 | Member | Description |
 | --- | --- |
 | `spawn(spec)` | Creates a child session (`ChildSessionSpec`) and returns `ChildSessionInfo` |
+| `create(spec)` | Resolves `spec.model`, if present, then creates a provider-bound child; use this for model overrides |
 | `run(id, prompt, { signal? })` | Runs a turn in the child; resolves a `ChildRunResult` (`status`, `text`, `usage`, `error?`) |
 | `get(id)`, `children(parentId)` | Session info (`id`, `parentId`, `depth`, `agent`, `title`, `status`, `model`, `workspace`, `usage`, `capabilities`, timestamps) |
 | `ancestors(id)` | Ancestor IDs, nearest first |

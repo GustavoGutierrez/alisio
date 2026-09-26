@@ -41,7 +41,7 @@ style, run only the affected tests and report what you added and the results.
 | `description` | Obligatorio. Se muestra al modelo en la herramienta `task`, así que indique cuándo usar el agente |
 | `tools` | Lista de herramientas permitidas; `*` significa todas las herramientas del padre, incluida la delegación |
 | `disallowedTools` | Herramientas que se retiran al agente |
-| `model` | Un ID de modelo, o `inherit` (por defecto). Los alias de Claude `sonnet`, `opus` y `haiku` heredan el modelo del padre con una advertencia |
+| `model` | Un selector configurado `proveedor/modelo` (recomendado), un ID sin proveedor que sea único, o `inherit` (por defecto). Los alias de Claude `sonnet`, `opus` y `haiku` heredan el modelo del padre con una advertencia |
 | `mode` | `subagent` (por defecto), `primary` o `all`. Los agentes `primary` no pueden usarse mediante `task` |
 | `maxTurns` | Límite de turnos (alias `steps`, `maxSteps`); por defecto `builtinPlugins.subagents.maxTurns` |
 | `color` | Color en el árbol de agentes |
@@ -85,7 +85,7 @@ agentes; los lectores de compatibilidad cubren los formatos habituales de Claude
 
 | Herramienta | Entrada | Comportamiento |
 | --- | --- | --- |
-| `task` | `description`, `prompt`, `subagent_type`, y opcionalmente `task_id`, `background` | Inicia un agente (o continúa `task_id` con todo su historial) y devuelve su informe final. Varias llamadas `task` en un mismo turno se ejecutan en paralelo |
+| `task` | `description`, `prompt`, `subagent_type`, y opcionalmente `model`, `task_id`, `background` | Inicia un agente (o continúa `task_id` con todo su historial) y devuelve su informe final. `model` reemplaza la definición solo para ese hijo. Varias llamadas `task` en un mismo turno se ejecutan en paralelo |
 | `task_status` | `task_id` | Estado, agente, indicador de segundo plano y tokens; no espera |
 | `task_wait` | `task_id`, opcionalmente `timeout_ms` | Espera un resultado, acotado por `waitMaxMs`; devuelve el estado si vence el tiempo |
 | `send_message` | `task_id`, `text` | Mensaje unidireccional: se encola para el siguiente turno de un hijo en ejecución, o reanuda en segundo plano un hijo terminado |
@@ -101,6 +101,11 @@ Si el padre está inactivo, se entrega junto con su próximo mensaje.
 
 No hay bloqueos mutuos: un agente solo puede dirigirse a sus propios descendientes, nunca a sí mismo
 ni a un ancestro, y todas las esperas están acotadas.
+
+Los selectores de agente y `task.model` usan el mismo resolvedor que `/model`. Un destino no
+disponible falla antes de llamar al modelo. Un ID sin proveedor ambiguo muestra alternativas seguras
+`proveedor/modelo`; nunca hay selección aleatoria. El hijo obtiene su propia vinculación de
+proveedor/sesión y continuación opaca, sin modificar al padre ni al valor global por defecto.
 
 ## Límites {#limits}
 

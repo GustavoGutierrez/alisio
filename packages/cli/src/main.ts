@@ -273,7 +273,7 @@ program
     );
   });
 program.command("doctor").action(async (_opts, cmd) => {
-  const { findWorkspace, loadConfig, which } = await import("@alisio/core");
+  const { findWorkspace, loadConfig, ProviderSettingsStore, which } = await import("@alisio/core");
   const o = options(cmd);
   const workspace = await findWorkspace(o.cwd ?? process.cwd());
   const config = await loadConfig(workspace, {
@@ -283,6 +283,19 @@ program.command("doctor").action(async (_opts, cmd) => {
     baseURL: o.baseURL,
     apiMode: o.apiMode,
   });
+  const saved = await new ProviderSettingsStore().active();
+  const useSaved =
+    !!saved &&
+    !o.baseURL &&
+    !o.apiMode &&
+    !o.config &&
+    !o.trustProject &&
+    !process.env.OPENAI_BASE_URL &&
+    !process.env.ALISIO_API_MODE;
+  const model =
+    o.model?.trim() ||
+    process.env.ALISIO_MODEL?.trim() ||
+    (useSaved ? saved.profile.model : config.provider.model);
   const status = {
     version: "0.1.0-alpha.1",
     runtime: process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.versions.node}`,
@@ -291,19 +304,22 @@ program.command("doctor").action(async (_opts, cmd) => {
     git: (await which("git")) ?? null,
     ripgrep: (await which("rg")) ?? null,
     provider: {
-      baseURL: config.provider.baseURL,
-      apiMode: config.provider.apiMode,
-      model: !config.provider.model
+      id: useSaved ? saved.profile.provider : "openai-compatible",
+      baseURL: useSaved ? saved.profile.values.baseURL : config.provider.baseURL,
+      apiMode: useSaved ? saved.profile.values.apiMode : config.provider.apiMode,
+      model: !model
         ? "not configured"
-        : config.provider.model === "YOUR_MODEL_ID"
+        : model === "YOUR_MODEL_ID"
           ? "not configured (placeholder from `alisio setup` — edit .alisio/config.json)"
-          : config.provider.model,
-      auth: config.provider.auth,
-      keyConfigured: config.provider.auth === "none" || !!process.env[config.provider.apiKeyEnv],
+          : model,
+      auth: useSaved ? saved.profile.values.auth : config.provider.auth,
+      keyConfigured: useSaved
+        ? !!saved.credentials.apiKey || saved.profile.values.auth === "none"
+        : config.provider.auth === "none" || !!process.env[config.provider.apiKeyEnv],
     },
   };
   console.log(JSON.stringify(status, null, 2));
-  if (!config.provider.model || config.provider.model === "YOUR_MODEL_ID")
+  if (!model || model === "YOUR_MODEL_ID")
     console.error(
       "\nNo model configured yet: set provider.model in your config, --model, or ALISIO_MODEL " +
         "before starting a real conversation (it will otherwise fail on the first turn).",

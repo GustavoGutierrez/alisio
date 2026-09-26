@@ -53,8 +53,42 @@ export type ProviderEvent =
     };
 export interface ModelInfo {
   id: string;
+  name?: string;
+  /** Organization that owns the model, when required by the provider catalog. */
+  ownedBy?: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
+  /** Modalities accepted by the model, as reported by its catalog. */
+  inputModalities?: string[];
+  /** Modalities produced by the model, as reported by its catalog. */
+  outputModalities?: string[];
+  /** Provider-declared, per-protocol API metadata. Preserved without flattening. */
+  apiCapabilities?: Record<string, JsonValue>;
+  /** Provider-declared reasoning effort levels. */
+  effort?: { supportedLevels: string[]; defaultLevel?: string };
+  /** Legacy combined modality metadata from OpenAI-compatible catalogs. */
+  modalities?: string[];
+  /** Provider-declared API/capability metadata; informational and never contains credentials. */
+  capabilities?: Record<string, boolean | string | number>;
 }
+/** Credential-free model target exposed by the host resolver. */
+export interface AvailableProviderModel {
+  /** Canonical selector, always `<provider>/<model>` (the model may itself contain `/`). */
+  reference: string;
+  provider: string;
+  profile: string;
+  providerName: string;
+  model: ModelInfo;
+}
+/** A validated model target. Credentials remain inside the host. */
+export interface ResolvedProviderModel extends AvailableProviderModel {}
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 export interface ModelProvider {
   id: string;
   /** Default model; a request may override it for one call. */
@@ -66,6 +100,8 @@ export interface ModelProvider {
     maxOutputTokens: number;
     signal: AbortSignal;
     model?: string;
+    /** Opaque persisted conversation id. Providers may use it for cache affinity only. */
+    sessionId?: string;
     /**
      * Raw provider-native tool definitions (for example a hosted `web_search` tool), appended to
      * the request's `tools` array verbatim, alongside the function tools built from `tools`. Only
@@ -76,6 +112,38 @@ export interface ModelProvider {
   }): AsyncIterable<ProviderEvent>;
   /** Optional model catalog. Implementations must not expose credentials. */
   listModels?(signal: AbortSignal): Promise<ModelInfo[]>;
+  /** Releases provider-owned clients or transports. */
+  dispose?(): void | Promise<void>;
+}
+export type ProviderConfigurationValue = string | boolean | number;
+export interface ProviderConfigurationField {
+  key: string;
+  label: string;
+  kind: "text" | "secret" | "url" | "select" | "boolean";
+  required?: boolean;
+  description?: string;
+  defaultValue?: ProviderConfigurationValue;
+  options?: Array<{ value: string; label: string }>;
+}
+export interface ProviderCapabilities {
+  nativeWebSearch?: boolean | { field: string; values: ProviderConfigurationValue[] };
+}
+export interface ProviderCreateRequest {
+  /** Non-secret, globally persisted profile values. */
+  profile: Record<string, ProviderConfigurationValue>;
+  /** Secret values loaded from the dedicated credentials store. */
+  credentials: Record<string, string>;
+  /** Legacy root provider configuration, supplied without rewriting it. */
+  legacy?: Record<string, unknown>;
+}
+/** Additive model-provider contribution. Multiple registrations coexist in the host registry. */
+export interface ProviderRegistration {
+  id: string;
+  name: string;
+  description?: string;
+  fields: ProviderConfigurationField[];
+  capabilities?: ProviderCapabilities;
+  create(request: ProviderCreateRequest): ModelProvider | Promise<ModelProvider>;
 }
 export interface ToolContext {
   signal: AbortSignal;
@@ -167,6 +235,8 @@ export interface CompletionRequest {
   messages: Array<{ role: "user" | "assistant"; text: string }>;
   maxTokens?: number;
   model?: string;
+  /** Session whose provider binding should be used when model is omitted. */
+  sessionId?: string;
   signal?: AbortSignal;
 }
 export type SqlValue = string | number | bigint | null | Uint8Array;
@@ -208,10 +278,15 @@ export interface MascotProvider {
   id: string;
   render(ctx: MascotContext): string | string[];
 }
+export type PluginCategory = "model-provider";
 export interface PluginMetadata {
   id: string;
   version: string;
   builtin: boolean;
+  name?: string;
+  description?: string;
+  /** Categories are derived by the host from registrations made by this plugin. */
+  categories?: PluginCategory[];
 }
 export interface StartupFact {
   label: string;
@@ -279,7 +354,7 @@ export interface ChildSessionSpec {
   instructions?: string;
   /** Tool names; `*` allows every tool the parent has. Applied on top of the parent's tools. */
   tools?: { allow?: string[]; deny?: string[] };
-  /** Child model; defaults to the parent's current model. */
+  /** Child model selector (`provider/model` or an unambiguous model id); inherits when omitted. */
   model?: string;
   readOnly?: boolean;
   permission?: { write?: PermissionLevel; process?: PermissionLevel };
@@ -297,6 +372,7 @@ export interface ChildSessionInfo {
   title: string;
   status: SessionStatus;
   model: string;
+  provider: string;
   workspace: string;
   usage: { input: number; output: number };
   /** Effective capabilities after narrowing. */
@@ -408,6 +484,13 @@ export interface PluginAPI {
   };
   /** Provider-agnostic text completion; plugins never import provider SDKs. */
   model: { complete(request: CompletionRequest): Promise<string> };
+  /** Credential-free access to configured `/connect` provider models. */
+  models: {
+    list(signal?: AbortSignal): Promise<AvailableProviderModel[]>;
+    resolve(reference: string, signal?: AbortSignal): Promise<ResolvedProviderModel>;
+  };
+  /** Register a selectable model provider; unlike extensions, registrations do not compete. */
+  providers: { register(provider: ProviderRegistration): () => void };
   /** Opens a private (0600) SQLite file, creating parent directories (0700). */
   storage: { sqlite(path: string): SqlDatabase };
   /** Provide an implementation for a named extension point (e.g. mascot, startup-screen). */
@@ -424,6 +507,8 @@ export interface PluginAPI {
    */
   sessions: {
     spawn(spec: ChildSessionSpec): ChildSessionInfo;
+    /** Resolves an optional model selector before creating the child. */
+    create(spec: ChildSessionSpec): Promise<ChildSessionInfo>;
     run(id: string, prompt: string, options?: { signal?: AbortSignal }): Promise<ChildRunResult>;
     get(id: string): ChildSessionInfo | undefined;
     children(parentId: string): ChildSessionInfo[];
@@ -469,6 +554,10 @@ export interface Plugin {
   id: string;
   version: string;
   apiVersion: 1;
+  /** Provider-neutral catalog metadata. Hosts may derive additional categories from registrations. */
+  name?: string;
+  description?: string;
+  categories?: PluginCategory[];
   /** Declarative sugar for `api.extensions.register(point, provider)` at priority 0. */
   extensions?: { [K in keyof ExtensionPoints]?: ExtensionPoints[K] };
   setup(api: PluginAPI): void | Promise<void>;

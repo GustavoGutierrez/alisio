@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { Message, ProviderEvent } from "@alisio/sdk";
 import { configSchema } from "../packages/core/src/config.ts";
-import { OpenAICompatibleProvider } from "../packages/core/src/providers/openai-compatible.ts";
+import { OpenAICompatibleProvider } from "../packages/plugin-openai-compatible/src/index.ts";
 import { isMain, serve } from "./http.ts";
 
 export async function runProviderTest(mode: string): Promise<{ mode: string; ok: boolean }> {

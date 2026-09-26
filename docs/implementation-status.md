@@ -6,6 +6,29 @@ funcional, no solo interfaces o stubs.
 
 ## Implementado
 
+- Proveedores de primera clase: contrato SDK aditivo `providers.register`, registro múltiple en el
+  núcleo y activación transaccional. El adaptador OpenAI-compatible salió del núcleo al plugin
+  integrado `@alisio/plugin-openai-compatible` (Chat/Responses, catálogo y mismo ID heredado
+  `openai-compatible:<modo>:<baseURL normalizada>`). `/connect` permite elegir proveedor,
+  configuración y modelo; persiste globalmente el perfil sin secretos en `providers.json` y las
+  credenciales en `credentials.json` (escritura atómica, `0600`, directorio `0700`; no cifrado).
+  El arranque sin proveedor permite onboarding; headless nunca pregunta. Cada cambio inicia una
+  sesión nueva para no mezclar continuación opaca. Se mantienen config/env/flags heredados y la
+  máxima prioridad de `AppOptions.provider`.
+  El formulario de `/connect` acepta pegado normal y bracketed paste por fragmentos, permite editar
+  URL con cursor y mantiene los secretos enmascarados fuera del historial y del transcript.
+  Hay tres plugins dedicados adicionales y publicables: `@alisio/plugin-deepseek` usa el endpoint
+  oficial por defecto, descubre metadatos de contexto/salida/modalidades/capacidades y admite Chat
+  Completions y Responses; `@alisio/plugin-opencode` integra Console/Zen con referencias
+  `opencode/<id-del-modelo>`; y `@alisio/plugin-opencode-go` usa `opencode-go/<id-del-modelo>`.
+  Ambos OpenCode consultan catálogos sin autenticación y envían Bearer, `user-agent:
+  alisio/<versión>` y un `x-opencode-session` opaco y estable en inferencia. Cada producto conserva
+  su propio mapa exacto documentado para Responses, Chat Completions o Anthropic Messages; los IDs
+  futuros desconocidos se ocultan y fallan cerrados. Zen filtra explícitamente Gemini nativo y
+  System One porque no satisfacen el contrato actual del agente de texto. El selector muestra el
+  proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
+  continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
+
 - Núcleo propio: streaming, tool loop, validación de entradas, límites de turnos/tiempo/contexto,
   presupuesto de tokens reportados, cancelación y eventos versionados.
 - API compatible con OpenAI configurable: Chat Completions y Responses, modelo/URL/clave,
@@ -42,7 +65,12 @@ funcional, no solo interfaces o stubs.
   `api.resources.agents/list`, `ToolDefinition.concurrent`, contexto de sesión en comandos.
 - Plugins locales y manifiestos de directorio: herramientas, comandos, eventos, contexto,
   skills, estado y desregistro/cleanup.
-- MCP oficial v2: stdio, Streamable HTTP, herramientas, recursos, prompts y cierre.
+- MCP oficial v2: stdio, Streamable HTTP, herramientas, recursos, prompts y cierre. Configuración
+  global + proyecto de confianza (o global + `--config` explícito), combinación por nombre, forma
+  canónica `mcp.servers` y alias compatible `mcpServers`; conexión diferida bajo `--allow-mcp`.
+  Gestor TUI `/mcp` agrupado por origen real, con estados, detalles saneados, catálogo y anotaciones
+  de herramientas, conexión/reconexión, limpieza al desconectar y activación persistida atómicamente
+  en la forma y archivo que definieron el servidor.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 - CLI interactiva/headless, JSONL, reanudación, configuración y diagnósticos.
 - Runtime Node-first: Node.js >=22.16 (mínimo verificado: 22.13–22.15 incluyen `node:sqlite`
@@ -50,8 +78,9 @@ funcional, no solo interfaces o stubs.
   runtimes), `node:fs` y `node:child_process` detrás de la capa de runtime; el
   `ExperimentalWarning` de SQLite se filtra de forma específica sin ocultar otros avisos.
 - Monorepo publicable: `@alisio/sdk` (contrato, sin dependencias), `@alisio/core` (núcleo
-  embebible), `@alisio/plugin-memory` (depende solo del SDK y usa el puerto de almacenamiento)
-  y `alisio` (CLI/TUI, registro de plugins integrados). Build con `tsc` a `dist/` (JS + `.d.ts`),
+  embebible), `@alisio/plugin-memory`, `@alisio/plugin-deepseek`,
+  `@alisio/plugin-opencode`, `@alisio/plugin-opencode-go`, `@alisio/plugin-openai-compatible`, `@alisio/plugin-subagents` y
+  `alisio` (CLI/TUI, registro de plugins integrados). Build con `tsc` a `dist/` (JS + `.d.ts`),
   `publishConfig.exports` sin fuentes, changesets para versionado y publicación con provenance.
 - Plugins como paquetes npm (`--plugin nombre` o `plugins: ["nombre"]`), resueltos desde el
   proyecto y luego las raíces globales; exigen la keyword `alisio-plugin`.
@@ -96,6 +125,14 @@ funcional, no solo interfaces o stubs.
   proveedor, `ui.status` y metadatos de comandos. El host aplica timeouts y aísla fallos.
   Registro de plugins integrados (`packages/cli/src/builtin.ts`) con ruta de confianza, nombres sin
   prefijo y efecto `internal`; desactivables por configuración o `--disable-plugin`.
+- Gestor TUI `/plugins` (`/plugin`): catálogo filtrable de plugins integrados y externos con nombre,
+  descripción, categoría/origen seguro y estados activo, inactivo, fallido o reinicio necesario.
+  El estado de reinicio desaparece al volver al estado original del runtime; no permite desactivar
+  proveedores retenidos por ninguna sesión enrutada viva.
+  Persiste anulaciones en `.alisio/config.json` con escritura atómica y conserva campos no
+  relacionados. Los cambios se aplican tras reiniciar (no hay descarga parcial en caliente); los
+  externos requieren confianza y confirmación explícita. Protege el proveedor de modelo activo y
+  los recursos de sesión vivos.
 - Plugin integrado `memory` (estilo Engram): SQLite + FTS5 trigram, BM25 con recencia y
   accesos, upsert por `topic_key`, deduplicación con ventana de 15 minutos, borrado lógico,
   redacción de `<private>`, fijadas, línea temporal, prompts recientes, resúmenes de sesión;
@@ -121,9 +158,19 @@ funcional, no solo interfaces o stubs.
   resumida solo por tipo MIME y dimensiones, nunca reenvía ni conserva sus bytes en el
   checkpoint.
 - Cambio de modelo por sesión (`AgentRunner.setModel`, `sessions.model`); el proveedor acepta
-  un modelo por petición. Catálogo `GET /models` con ventana de contexto cuando el proveedor
-  la informa, tokens en caché (`prompt_tokens_details.cached_tokens` o
-  `prompt_cache_hit_tokens`) y razonamiento visible (`reasoning_content`) solo para mostrar.
+  un modelo por petición. `/model` y `/models` comparten un selector global que agrega solo perfiles
+  creados con `/connect`, identifica la propiedad proveedor/modelo, marca la pareja activa, aísla
+  fallos de catálogo por perfil y persiste un cambio en una sesión nueva. La configuración heredada
+  queda fuera del selector. Catálogo `GET /models` con ventana de contexto y metadatos estructurados
+  cuando el proveedor los informa, tokens en caché (`prompt_tokens_details.cached_tokens` o
+  `prompt_cache_hit_tokens`) y razonamiento visible (`reasoning_content`/`reasoning_text`) solo para
+  mostrar.
+- Enrutamiento explícito proveedor/modelo por sesión: API programática sin credenciales para listar,
+  resolver y crear/cambiar sesiones; sintaxis canónica `proveedor/modelo` e IDs desnudos solo si son
+  únicos. Las definiciones de agentes y `task.model` usan el mismo resolvedor. Padre e hijos pueden
+  ejecutar proveedores configurados distintos en paralelo sin mutar el valor global por defecto;
+  cada sesión conserva proveedor, modelo, continuación opaca e ID OpenCode propios. Los destinos
+  ausentes, ambiguos o con catálogo no disponible fallan antes de inferencia con orientación segura.
 - Lockfile y versiones fijadas; Biome, TypeScript, Vitest y CI Linux con Node 22.16, 22.x y 24.
 - Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
   subagente hijo, ya que la condición es que exista alguna UI interactiva enlazada, nunca cuál
@@ -206,14 +253,17 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 ## Pendiente para estabilizar v0.1
 
 - Ejecutar y ajustar matriz Windows/macOS; CI actual cubre Linux, no certifica otros sistemas.
-- Validar proveedores y modelos reales con credenciales del usuario.
+- Validar DeepSeek, OpenCode Console/Zen y OpenCode Go con credenciales del usuario. La inferencia
+  solo se verificó con claves falsas y HTTP simulado/local; los catálogos públicos sin autenticación
+  de Zen y Go se comprobaron por separado. No se usaron ni inspeccionaron credenciales reales.
 - Validar Herdr con servidor/PTY reales; añadir launcher/resumer nativo si Herdr lo permite.
 - Checkpoints/rewind de sesión y memoria vectorial: no existen.
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
 - Primera publicación real en npm y release con binarios (flujos preparados, no ejecutados);
   SemVer de rangos de plugins y recarga en sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
-- OAuth MCP interactivo, reconexión explícita en la CLI y capacidades multimedia MCP.
+- OAuth MCP interactivo y capacidades multimedia MCP. `/mcp` permite reconexión explícita y bearer
+  mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.
 - OpenTelemetry remoto, métricas de memoria y benchmarks de repositorios grandes.
 - Endurecer frente a procesos hostiles y carreras de filesystem. No se ofrece sandbox OS.
 
@@ -226,11 +276,17 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - `test:cli` ejecuta `packages/cli/dist/main.js` con Node contra un proveedor simulado
   (verificado en Node 22.19 y en el mínimo 22.16.0); `test:compiled` hace lo mismo con el
   binario Bun. Ambos comprueban que no aparezca el `ExperimentalWarning` de SQLite.
-- `pack:check` empaqueta los cuatro paquetes con pnpm y valida contenido (solo `dist`, README,
+- `pack:check` empaqueta los nueve paquetes publicables con pnpm y valida contenido (solo `dist`, README,
   LICENSE, `package.json`), `exports` hacia `dist`, ausencia de `workspace:` y de fuentes.
 - Instalación global real con npm desde los tarballs locales mediante un registro temporal
   (`scripts/install-smoke.ts`): `alisio --help` funciona desde el empaquetado npm.
-- DeepSeek real bajo Node puro con el CLI construido (`run --read-only`, herramientas y JSONL).
+- La ampliación actual de DeepSeek, OpenCode Console y OpenCode Go se verificó bajo Node puro con el
+  CLI construido, claves falsas e inferencia HTTP simulada/local (`run --read-only`, herramientas y
+  JSONL). Los catálogos públicos sin autenticación de Zen y Go se comprobaron por separado; no se
+  usaron credenciales reales ni cuentas OpenCode reales.
+- El enrutamiento por sesión se verificó con perfiles y claves falsas: padre/hijo concurrentes en
+  proveedores distintos, selectores canónicos/únicos/ausentes/ambiguos, reanudación tras reinicio,
+  aislamiento de continuación, reemplazos de agente/`task` e IDs OpenCode estables y distintos.
 - `scripts/install.sh` probado contra un espejo local (instalación con checksum y rechazo de
   un binario alterado). No se ejecutó ninguna publicación ni release; los workflows de release
   y Pages no se ejecutaron en GitHub. Binarios macOS/Windows/arm64 no probados (compilación
@@ -253,8 +309,8 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Pseudo-terminal: panel con 4 agentes (uno anidado), acorde Ctrl+X ↓, ↓ desde el editor vacío,
   flechas en el panel, apertura de vistas de solo lectura, navegación padre/hijo/hermanos,
   colapsar, confirmación de Ctrl+K, `/agents`, y la pregunta de worktrees con dos escritores.
-- DeepSeek real (`deepseek-flash`, `--read-only`): dos `explore` en paralelo resumidos por el
-  padre, y un caso anidado `general` → `explore` persistido con profundidades 1 y 2.
+- Proveedor simulado (`--read-only`): dos `explore` en paralelo resumidos por el padre, y un caso
+  anidado `general` → `explore` persistido con profundidades 1 y 2.
 - No verificado: fusión real de worktrees con DeepSeek, Windows/macOS, rendimiento con muchos
   agentes simultáneos.
 
@@ -267,7 +323,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   rechazo con `--read-only` y sin `--allow-write`, aprobaciones, plantillas de plugin, usuario
   y proyecto (no cargadas sin confianza). `test:cli`/`test:compiled`: `run "/init"` headless y
   rechazo con `--read-only`.
-- DeepSeek real (`deepseek-flash`) sobre una copia temporal de `examples/plugins/custom-mascot`:
+- Proveedor simulado sobre una copia temporal de `examples/plugins/custom-mascot`:
   creó un `AGENTS.md` de 103 líneas con hechos verificados; una segunda ejecución con foco lo
   actualizó con `edit_file` conservando una nota humana. En esa segunda ejecución se agotó
   `limits.maxTokens` (100 000) después de aplicar los cambios; en repositorios grandes conviene
@@ -297,12 +353,12 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   denegar/permitir en sesión (escenarios Bun); `listModels`, modelo por petición, tokens en
   caché y razonamiento con un servidor HTTP local.
 - Verificación manual en pseudo-terminal (Linux, xterm-256color, emulado con `pyte`) contra un
-  servidor simulado y contra DeepSeek real (`deepseek-flash`): arranque, streaming Markdown,
+  servidor simulado local: arranque, streaming Markdown,
   herramientas, aprobación, `/stats`, `/model`, `/compact`, `/tools`, `/sessions`, `/resume`,
   `/clear`, Esc, Ctrl+C, Ctrl+D, redimensionado a 60 y 40 columnas sin líneas desbordadas, y el
   binario compilado. No se probó en Windows/macOS ni en emuladores reales distintos (kitty,
   iTerm2, Windows Terminal); Shift+Enter depende de la terminal.
-- No se ejecutó una compactación automática con DeepSeek real (ventana de 1M tokens).
+- No se ejecutó una compactación automática con inferencia real autenticada.
 
 ## Memoria y plugins: alcance de la verificación
 
@@ -324,10 +380,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   informe de memoria y archivo confirmado, desplazamiento con la rueda, copiar al seleccionar
   y `/copy` (con `DISPLAY` retirado, por lo que se ejercitó el respaldo OSC 52), `/stats`,
   `/help`, resumen al salir con `/exit` e inyección de contexto en el siguiente arranque.
-- DeepSeek real (`deepseek-flash`, headless): el modelo guardó una memoria con
-  `memory_save` en `--read-only` y, en una sesión nueva, respondió desde el contexto inyectado.
+- Proveedor simulado headless: el modelo guardó una memoria con `memory_save` en `--read-only` y,
+  en una sesión nueva, respondió desde el contexto inyectado.
 - No verificado: copia real mediante `xclip`/`wl-copy`/`pbcopy`/Windows (para no modificar
-  el portapapeles del usuario); compactación automática con DeepSeek real; Windows/macOS.
+  el portapapeles del usuario); compactación automática con inferencia real; Windows/macOS.
 
 ## Pegado y adjuntos de imagen: alcance de la verificación
 
@@ -353,12 +409,8 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   terminal real a un programa que nunca activó el pegado con corchetes) se fragmenta: cada línea
   se envía como un mensaje independiente, confirmado por la petición capturada. `Ctrl+V` es un
   no-op inocuo (el byte se descarta, sin insertar nada ni bloquear).
-- DeepSeek real (`deepseek-flash`, llamada directa al proveedor con `node --env-file=.env`,
-  sin imprimir la clave): una imagen PNG real de 64×64 (fondo azul con una franja diagonal
-  blanca) enviada como `image_url` obtuvo una respuesta correcta y específica
-  ("The background is blue, and yes, it contains a thin white diagonal stripe..."), confirmando
-  que `deepseek-flash` admite contenido de visión con el formato exacto que produce esta
-  implementación. Con un servidor local que devuelve 400 para contenido de imagen, el SDK
+- Con un servidor local, una imagen PNG de 64×64 enviada como `image_url` conservó el formato exacto
+  que produce esta implementación. Otro servidor local devuelve 400 para contenido de imagen; el SDK
   `openai` lanza un `BadRequestError` con mensaje legible que el runner ya convierte en un
   `run_failed` limpio (sin caída ni traza cruda).
 - No verificado: recepción de imágenes por el portapapeles nativo en macOS o Windows (sin acceso
@@ -399,7 +451,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   al cancelar ese subagente. El diseño y el enrutamiento (cola única, respuesta solo a la sesión
   exacta que preguntó) están probados de forma aislada pero no se ejerció con subagentes reales en
   una terminal; ver «Límites conocidos».
-- No se intentó `/ask` con DeepSeek real en esta tarea (se priorizó el servidor simulado
+- No se intentó `/ask` con inferencia real autenticada (se priorizó el servidor simulado
   determinista, que permite fijar exactamente las opciones y así verificar cada tecla del panel;
   las tareas previas de este proyecto ya validaron por separado que DeepSeek responde de forma
   fiable a llamadas de herramientas).
@@ -490,6 +542,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   de una definición no se preinyectan (se pide cargarlas con `skill_load`); los worktrees solo se
   usan cuando se solapan escritores; `/agents merge` exige árbol limpio y no resuelve conflictos;
   el panel muestra las tareas iniciadas en este proceso; `kill` equivale a `cancel`.
+- Proveedores: la resolución cruzada solo ve perfiles globales creados mediante `/connect`; la
+  configuración raíz heredada no es un catálogo oculto. El catálogo se mantiene en caché hasta 15
+  segundos por proceso.
 - Plantillas: sin inclusiones ni parciales, sin ejecución de comandos ni inyección de archivos;
   solo `$1`..`$9` posicionales; `/init` depende del modelo para limitarse a hechos verificados y
   consume bastantes tokens en repositorios grandes (`limits.maxTokens`).

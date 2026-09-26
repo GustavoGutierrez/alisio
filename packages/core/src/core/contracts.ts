@@ -42,6 +42,8 @@ export interface SessionStore {
       usage?: { input: number; output: number };
     },
   ): void;
+  /** Updates a queued session after its provider/model selector has resolved. */
+  updateBinding(id: string, provider: string, model: string): void;
   /** Marks queued/running child sessions not locked by a live process as interrupted. */
   interruptStale(): number;
   /** Record the model used for subsequent turns of the session. */

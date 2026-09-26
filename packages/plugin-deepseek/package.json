@@ -1,0 +1,45 @@
+{
+  "name": "@alisio/plugin-deepseek",
+  "version": "0.1.0-alpha.1",
+  "description": "Built-in DeepSeek model provider for Alisio.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "alisio-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "openai": "7.23.0"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "workspace:^"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
+}

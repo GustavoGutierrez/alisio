@@ -41,7 +41,7 @@ style, run only the affected tests and report what you added and the results.
 | `description` | Required. Shown to the model in the `task` tool, so say when to use the agent |
 | `tools` | Allowlist of tool names; `*` means every tool the parent has, including delegation |
 | `disallowedTools` | Tools removed from the agent |
-| `model` | A model ID, or `inherit` (default). The Claude aliases `sonnet`, `opus` and `haiku` inherit the parent's model with a warning |
+| `model` | A configured `provider/model` selector (recommended), a unique bare model ID, or `inherit` (default). The Claude aliases `sonnet`, `opus` and `haiku` inherit the parent's model with a warning |
 | `mode` | `subagent` (default), `primary` or `all`. `primary` agents cannot be used through `task` |
 | `maxTurns` | Turn limit (aliases `steps`, `maxSteps`); default `builtinPlugins.subagents.maxTurns` |
 | `color` | Color in the agent tree |
@@ -85,7 +85,7 @@ the common Claude Code and opencode formats.
 
 | Tool | Input | Behavior |
 | --- | --- | --- |
-| `task` | `description`, `prompt`, `subagent_type`, optional `task_id`, `background` | Starts an agent (or continues `task_id` with its full history) and returns its final report. Several `task` calls in one turn run in parallel |
+| `task` | `description`, `prompt`, `subagent_type`, optional `model`, `task_id`, `background` | Starts an agent (or continues `task_id` with its full history) and returns its final report. `model` overrides the definition for this child only. Several `task` calls in one turn run in parallel |
 | `task_status` | `task_id` | Status, agent, background flag and tokens; does not wait |
 | `task_wait` | `task_id`, optional `timeout_ms` | Waits for a result, bounded by `waitMaxMs`; returns the status on timeout |
 | `send_message` | `task_id`, `text` | One-way message: queued for a running child's next turn, or resumes a finished child in the background |
@@ -101,6 +101,11 @@ the parent is idle, it is delivered with your next message.
 
 There are no deadlocks: an agent can only address its own descendants, never itself or an ancestor,
 and every wait is bounded.
+
+Agent and `task.model` selectors use the same resolver as `/model`. Unavailable targets fail before
+the child calls a model. Ambiguous bare IDs list safe `provider/model` choices; there is no random
+fallback. The child gets its own provider/session binding and opaque continuation data, while the
+parent and global default stay unchanged.
 
 ## Limits
 

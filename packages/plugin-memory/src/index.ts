@@ -66,6 +66,8 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
   };
   return definePlugin({
     id: "memory",
+    name: "Memory",
+    description: "Persistent memory and memory-aware context compaction",
     version: "0.1.0",
     apiVersion: 1,
     async setup(api) {
@@ -183,7 +185,7 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
               { role: "user", text: `<transcript>\n${transcript(info.messages)}\n</transcript>` },
             ],
             maxTokens: 2048,
-            model: info.model,
+            sessionId: info.sessionId,
             signal: info.signal,
           });
           const parsed = parseSessionSummary(raw);

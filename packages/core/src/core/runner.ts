@@ -32,7 +32,9 @@ export interface CompactionSettings {
   keepTurns?: number;
 }
 export interface RunnerOptions {
+  /** Provider bound to this persisted session. */
   provider: ModelProvider;
+  providerFor?: (session: import("./contracts.ts").Session) => Promise<ModelProvider>;
   registry: ToolRegistry;
   store: SessionStore;
   context: ContextSource;
@@ -281,13 +283,15 @@ export class AgentRunner {
       const fields = Object.fromEntries(
         Object.entries(contribution.fields).map(([name, f]) => [name, f.description]),
       );
-      const raw = await summarize(o.provider, {
+      const provider = await (o.providerFor?.(o.store.get(sessionId)) ?? o.provider);
+      const raw = await summarize(provider, {
         instructions: checkpointInstructions(contribution.instructions, fields),
         messages: plan.summarized,
         focus,
         model,
         maxOutputTokens: o.maxOutputTokens ?? 4096,
         signal,
+        sessionId,
       });
       const output = parseCheckpointOutput(raw, Object.keys(fields));
       let after: Awaited<ReturnType<RunnerExtensions["afterCompact"]>> = {
@@ -369,7 +373,8 @@ export class AgentRunner {
       acquired = true;
       o.store.reconcile(sessionId);
       const session = o.store.get(sessionId);
-      if (session.provider !== o.provider.id || session.workspace !== workspace)
+      const provider = await (o.providerFor?.(session) ?? o.provider);
+      if (session.provider !== provider.id || session.workspace !== workspace)
         throw new Error("Session provider/workspace mismatch");
       // The session records the model; switching models is explicit via setModel.
       const model = session.model;
@@ -449,13 +454,14 @@ export class AgentRunner {
           );
         let completion: Extract<Message, { role: "assistant" }> | undefined;
         let usage: { input: number; output: number; cachedInput?: number } | undefined;
-        for await (const e of o.provider.stream({
+        for await (const e of provider.stream({
           instructions,
           messages,
           tools,
           maxOutputTokens: o.maxOutputTokens ?? 4096,
           signal: combined,
           model,
+          sessionId,
           ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
         })) {
           combined.throwIfAborted();

@@ -1,6 +1,7 @@
 import type { RunEvent } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
 import {
+  configuredProviderModelItems,
   contextLevel,
   editSummary,
   fitSegments,
@@ -11,7 +12,12 @@ import {
   initialViewState,
   itemsFromHistory,
   lastAssistantText,
+  mcpServerItems,
+  mcpToolItems,
   parseCommand,
+  pluginCatalogItems,
+  pluginToggleNeedsConfirmation,
+  providerModelItems,
   reduceEvent,
   reservedCommandNames,
   resolveCommand,
@@ -31,6 +37,81 @@ const ev = (type: string, data: unknown, at = "2026-01-01T00:00:00.000Z"): RunEv
 });
 
 describe("formatters", () => {
+  it("makes model ownership explicit in selector items", () => {
+    expect(
+      providerModelItems(
+        "OpenCode Go",
+        [{ id: "opencode-go/kimi-k3", name: "Kimi K3", contextWindow: 128000 }],
+        "opencode-go/kimi-k3",
+      ),
+    ).toEqual([
+      {
+        value: "opencode-go/kimi-k3",
+        label: "OpenCode Go · Kimi K3 (current)",
+        description: "opencode-go/kimi-k3 · 128k context",
+      },
+    ]);
+  });
+
+  it("groups configured provider models, marks the active pair, and keeps failures visible", () => {
+    expect(
+      configuredProviderModelItems(
+        [
+          {
+            profile: "deepseek",
+            provider: "deepseek",
+            title: "DeepSeek",
+            configuredModel: "shared",
+            models: [{ id: "shared", name: "Shared" }],
+            unavailable: false,
+          },
+          {
+            profile: "opencode",
+            provider: "opencode",
+            title: "OpenCode Console",
+            configuredModel: "shared",
+            models: [{ id: "shared", name: "Shared" }],
+            unavailable: false,
+          },
+          {
+            profile: "broken",
+            provider: "broken",
+            title: "Broken Provider",
+            configuredModel: "broken-model",
+            models: [],
+            unavailable: true,
+          },
+          {
+            profile: "manual",
+            provider: "manual",
+            title: "Manual Provider",
+            configuredModel: "manual-model",
+            models: [],
+            unavailable: false,
+          },
+        ],
+        { provider: "opencode", model: "shared" },
+      ).map(({ label, description, unavailable }) => ({ label, description, unavailable })),
+    ).toEqual([
+      { label: "DeepSeek · Shared", description: "deepseek/shared", unavailable: false },
+      {
+        label: "OpenCode Console · Shared (current)",
+        description: "opencode/shared",
+        unavailable: false,
+      },
+      {
+        label: "Broken Provider · unavailable",
+        description: "broken · catalog refresh failed",
+        unavailable: true,
+      },
+      {
+        label: "Manual Provider · manual-model",
+        description: "manual/manual-model",
+        unavailable: false,
+      },
+    ]);
+  });
+
   it("formats token counts compactly", () => {
     expect(formatTokens(0)).toBe("0");
     expect(formatTokens(999)).toBe("999");
@@ -114,6 +195,54 @@ describe("commands", () => {
     expect(resolveCommand("new")).toBe("clear");
     expect(resolveCommand("nope")).toBeUndefined();
     expect(resolveCommand("copy")).toBe("copy");
+    expect(resolveCommand("connect")).toBe("connect");
+    expect(resolveCommand("models")).toBe("model");
+    expect(resolveCommand("plugin")).toBe("plugins");
+    expect(resolveCommand("mcp")).toBe("mcp");
+    expect(reservedCommandNames()).toContain("mcp");
+  });
+});
+
+describe("MCP manager presentation", () => {
+  it("groups only real sources and exposes accessible lifecycle markers", () => {
+    const items = mcpServerItems([
+      {
+        name: "global",
+        displayName: "Global server",
+        source: { kind: "global" },
+        status: "connected",
+        counts: { tools: 2 },
+      },
+      {
+        name: "project",
+        displayName: "Project server",
+        source: { kind: "project" },
+        status: "needs-authentication",
+        counts: { tools: 0 },
+      },
+    ]);
+    expect(items.map((item) => item.label)).toEqual([
+      "User · [x] Global server",
+      "Project · [?] Project server",
+    ]);
+    expect(JSON.stringify(items)).not.toContain("Built-in");
+  });
+
+  it("shows declared annotations without inventing destructive status", () => {
+    const items = mcpToolItems([
+      { name: "plain", description: "No hints" },
+      {
+        name: "delete",
+        title: "Delete item",
+        annotations: { destructive: true, openWorld: true },
+      },
+    ]);
+    expect(items[0]?.description).toBe("No hints");
+    expect(items[0]?.description).not.toContain("destructive");
+    expect(items[1]).toMatchObject({
+      label: "Delete item · delete",
+      description: "destructive · open-world",
+    });
   });
 });
 
@@ -289,7 +418,41 @@ describe("event reduction", () => {
       { kind: "user", text: "/init focus" },
       { kind: "user", text: "plain" },
     ]);
-    expect(reservedCommandNames()).toEqual(expect.arrayContaining(["help", "quit", "new", "copy"]));
+    expect(reservedCommandNames()).toEqual(
+      expect.arrayContaining(["help", "quit", "new", "copy", "plugins", "plugin"]),
+    );
     expect(reservedCommandNames()).not.toContain("init");
+  });
+
+  it("formats plugin navigation with non-color status and source markers", () => {
+    const builtin = {
+      id: "memory",
+      name: "Memory",
+      description: "Persistent memory",
+      categories: [],
+      builtin: true,
+      source: "built-in",
+      status: "active" as const,
+      enabled: true,
+      manageable: true,
+    };
+    const external = {
+      ...builtin,
+      id: "acme",
+      name: "Acme",
+      builtin: false,
+      source: "project package: @acme/plugin",
+      status: "inactive" as const,
+      enabled: false,
+    };
+    expect(pluginCatalogItems([builtin, external])).toEqual([
+      expect.objectContaining({
+        label: "[x] Memory · built-in",
+        description: expect.stringContaining("Persistent memory"),
+      }),
+      expect.objectContaining({ label: "[ ] Acme · project package: @acme/plugin" }),
+    ]);
+    expect(pluginToggleNeedsConfirmation(builtin)).toBe(false);
+    expect(pluginToggleNeedsConfirmation(external)).toBe(true);
   });
 });

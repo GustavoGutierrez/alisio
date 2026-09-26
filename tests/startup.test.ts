@@ -10,9 +10,11 @@ import { bannerPolicy, terminalCapabilities } from "../packages/cli/src/banner.t
 import { ToolRegistry } from "../packages/core/src/core/registry.ts";
 import { ExtensionRegistry } from "../packages/core/src/extensions/registry.ts";
 import { PluginHost } from "../packages/core/src/plugins/host.ts";
+import { ProviderRegistry } from "../packages/core/src/providers/registry.ts";
 import {
   DefaultAlisioMascot,
   DefaultStartupScreen,
+  pluginsSection,
   renderStartup,
   startupTips,
 } from "../packages/core/src/startup/index.ts";
@@ -40,7 +42,7 @@ const base = {
 };
 const state = () => ({ getState: () => undefined, setState: () => {} });
 const hostWith = async (...plugins: Plugin[]) => {
-  const host = new PluginHost(new ToolRegistry(), state());
+  const host = new PluginHost(new ToolRegistry(), state(), {}, new ProviderRegistry());
   for (const p of plugins) await host.activate(p, ".");
   return host;
 };
@@ -138,6 +140,71 @@ describe("default startup screen", () => {
     expect(startupTips(3)).toEqual(startupTips(3));
     expect(startupTips(0)).not.toEqual(startupTips(1));
     expect(startupTips(0).join(" ")).toMatch(/\/help/);
+  });
+});
+
+describe("startup plugin summary", () => {
+  const context = (plugins: StartupContext["plugins"]): StartupContext => ({
+    ...base,
+    terminal: terminal(),
+    plugins,
+    mascot: DefaultAlisioMascot,
+    tips: [],
+  });
+
+  it("groups model providers without expanding their names", () => {
+    const line = pluginsSection(
+      context([
+        ...["deepseek", "openai-compatible", "opencode", "opencode-go"].map((id) => ({
+          id,
+          version: "1",
+          builtin: true,
+          categories: ["model-provider" as const],
+        })),
+        { id: "memory", version: "1", builtin: true },
+        { id: "subagents", version: "1", builtin: true },
+      ]),
+    )[0];
+    expect(line).toBe("with 4 model providers, memory (builtin), subagents (builtin)");
+    expect(line).not.toMatch(/deepseek|openai-compatible|opencode/);
+  });
+
+  it("uses singular grammar for one registered model-provider plugin", () => {
+    expect(
+      pluginsSection(
+        context([
+          {
+            id: "future-provider",
+            version: "1",
+            builtin: true,
+            categories: ["model-provider"],
+          },
+        ]),
+      ),
+    ).toEqual(["with 1 model provider"]);
+  });
+
+  it("derives the model-provider category from plugin registrations", async () => {
+    const host = await hostWith(
+      plugin("future-provider", (api) => {
+        api.providers.register({
+          id: "future-provider",
+          name: "Future Provider",
+          fields: [],
+          create: () => ({ id: "future", model: "m", async *stream() {} }),
+        });
+      }),
+      plugin("utility", () => {}),
+    );
+    expect(host.metadata()).toEqual([
+      {
+        id: "future-provider",
+        version: "1.0.0",
+        builtin: false,
+        categories: ["model-provider"],
+      },
+      { id: "utility", version: "1.0.0", builtin: false },
+    ]);
   });
 });
 

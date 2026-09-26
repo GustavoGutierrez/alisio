@@ -15,7 +15,17 @@ const out =
     ? resolve(process.argv[keepIndex + 1] ?? "packs")
     : mkdtempSync(join(tmpdir(), "alisio-pack-"));
 mkdirSync(out, { recursive: true });
-const packages = ["sdk", "core", "plugin-memory", "plugin-subagents", "cli"];
+const packages = [
+  "sdk",
+  "core",
+  "plugin-memory",
+  "plugin-deepseek",
+  "plugin-openai-compatible",
+  "plugin-opencode",
+  "plugin-opencode-go",
+  "plugin-subagents",
+  "cli",
+];
 const rows: string[] = [];
 try {
   for (const name of packages) {

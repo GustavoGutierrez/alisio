@@ -6,13 +6,19 @@ export {
   type BuiltinPlugin,
   createApplication,
   enabledBuiltins,
+  type PluginCatalogEntry,
+  type PluginCatalogStatus,
 } from "./application.ts";
 export {
   type Config,
   configFile,
   configHome,
   configSchema,
+  type LoadedConfig,
   loadConfig,
+  type McpServerSource,
+  setMcpServerEnabled,
+  setProjectPluginEnabled,
   stateHome,
 } from "./config.ts";
 export {
@@ -46,14 +52,29 @@ export {
 } from "./core/runner.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
-export { McpConnector } from "./mcp/connector.ts";
+export {
+  McpConnector,
+  type McpServerInfo,
+  type McpStatus,
+  type McpToolInfo,
+} from "./mcp/connector.ts";
 export {
   discoverPlugins,
   PluginHost,
   type PluginHostOptions,
   pluginPrefix,
 } from "./plugins/host.ts";
-export { OpenAICompatibleProvider } from "./providers/openai-compatible.ts";
+export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
+export {
+  availableProviderModels,
+  type ProviderModelCatalog,
+  resolveProviderModel,
+} from "./providers/routing.ts";
+export {
+  type ProviderProfile,
+  type ProviderSettings,
+  ProviderSettingsStore,
+} from "./providers/settings.ts";
 export {
   type InstructionFile,
   ProjectContext,

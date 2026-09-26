@@ -225,13 +225,18 @@ privilegios; ni un manifiesto de plugin ni un subproceso son una frontera de ais
 
 ## MCP
 
-Los servidores MCP se configuran en [`mcp.servers`](/es/configuration#mcp-servers) y solo se inician
-o contactan con `--allow-mcp` (y nunca con `--read-only`).
+Los servidores MCP usan la configuración canónica `mcp.servers` o la compatible `mcpServers`.
+Permanecen desconectados hasta que se solicitan y solo están disponibles con `--allow-mcp` (nunca con
+`--read-only`). Los servidores stdio son subprocesos sin sandbox; los valores `env` directos quedan
+limitados a ese proceso hijo y no aparecen en diagnósticos.
 
 - `mcp_connect` conecta bajo demanda y registra las herramientas del servidor; `mcp_resource` y
   `mcp_prompt` permiten listar y consultar recursos y prompts.
+- `/mcp` muestra los estados desactivado, desconectado, conectando, conectado, fallido, requiere
+  autenticación y requiere reinicio cuando correspondan. Presenta las anotaciones declaradas de solo
+  lectura, destructiva y mundo abierto; una herramienta sin anotaciones no se considera destructiva.
 - Las herramientas expuestas deben usar esquemas soportados por el registro. Los cambios de esquema
-  exigen reiniciar; nunca se ejecuta una llamada con un esquema obsoleto.
+  exigen reconectar; nunca se ejecuta una llamada con un esquema obsoleto.
 - No hay OAuth interactivo ni reintentos automáticos de operaciones con efectos.
 
 ```sh

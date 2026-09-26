@@ -1,6 +1,8 @@
 # Arquitectura
 
-Alisio es un monorepo pnpm con cinco paquetes.
+Alisio es un monorepo pnpm con nueve paquetes publicables. El adaptador del SDK de OpenAI vive en
+`@alisio/plugin-openai-compatible`; el núcleo solo contiene contratos, el registro aditivo, la
+activación y la persistencia de proveedores.
 
 ```text
                          ┌──────────────────────────────┐
@@ -31,10 +33,14 @@ Alisio es un monorepo pnpm con cinco paquetes.
 | Paquete | Función | Depende de |
 | --- | --- | --- |
 | `@alisio/sdk` | Contrato público de plugins: tipos más `definePlugin` y `textResult`. Sin imports de runtime ni de proveedores | Nada |
-| `@alisio/core` | Runner del agente y ciclo de herramientas, compactación, proveedor compatible con OpenAI, herramientas estándar, adaptadores de runtime (`node:sqlite`, `fs`, `child_process`), host de plugins, servicio de sesiones hijas, registro de extensiones, renderizado de inicio, configuración, cliente MCP, puente Herdr y `createApplication` | `@alisio/sdk`, `openai`, cliente MCP, `ajv`, `yaml`, `zod` |
+| `@alisio/core` | Runner agnóstico del proveedor, registro/activación/persistencia de proveedores, herramientas, adaptadores de runtime, host de plugins, sesiones hijas, configuración y MCP | `@alisio/sdk`, cliente MCP, `ajv`, `yaml`, `zod` |
+| `@alisio/plugin-openai-compatible` | Adaptador integrado Chat Completions/Responses y descubrimiento de modelos | `@alisio/sdk` (peer), `openai` |
+| `@alisio/plugin-deepseek` | Adaptador dedicado DeepSeek Chat/Responses y descubrimiento con metadatos | `@alisio/sdk` (peer), `openai` |
+| `@alisio/plugin-opencode` | Transporte Responses/Chat/Messages de OpenCode Console (Zen) y mapa de modelos cerrado | `@alisio/sdk` (peer) |
+| `@alisio/plugin-opencode-go` | Transporte independiente Responses/Chat/Messages de OpenCode Go y mapa de modelos cerrado | `@alisio/sdk` (peer) |
 | `@alisio/plugin-memory` | Plugin integrado de memoria persistente | `@alisio/sdk` (peer), `zod` |
 | `@alisio/plugin-subagents` | Plugin integrado de [subagentes](/es/subagents): definiciones de agentes, herramientas de delegación, límites, worktrees de git y el árbol de agentes | `@alisio/sdk` (peer), `yaml`, `zod` |
-| `alisio` | CLI: `bin`, TUI, adaptador de portapapeles y el registro de plugins integrados que conecta `plugin-memory` y `plugin-subagents` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/plugin-subagents`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+| `alisio` | CLI, TUI y registro que conecta los plugins integrados de proveedor, memoria y subagentes | `@alisio/core`, todos los plugins integrados, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
 
 Los SDKs de proveedores y los imports específicos de un runtime quedan fuera del SDK público y de los
 contratos del núcleo del agente.

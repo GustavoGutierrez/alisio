@@ -18,7 +18,10 @@ it is not a statement that all of its release criteria are met.
 - First real npm publication and release with binaries (workflows prepared, not executed); SemVer
   ranges for plugins and reload in an idle session.
 - Automatic discovery of Pi paths and incremental watch.
-- Interactive MCP OAuth, explicit reconnection in the CLI and MCP multimedia capabilities.
+- Interactive MCP OAuth and MCP multimedia capabilities. `/mcp` supports explicit reconnect and
+  environment-referenced bearer tokens, but not browser authentication flows.
+  Configured servers connect lazily and stdio runs with the user's privileges; neither MCP nor its
+  subprocess transport is a sandbox.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
 - Hardening against hostile processes and filesystem races. No OS sandbox is offered.
 
@@ -28,6 +31,12 @@ it is not a statement that all of its release criteria are met.
   `node --env-file=.env`. Local `.ts` plugins require Bun or Node >= 22.18; npm plugin packages must
   be published as JavaScript. The `alisio-source` export condition is only used in development
   inside the monorepo and is not published.
+- **Provider credentials**: `credentials.json` is local plaintext protected with mode `0600`, not
+  encrypted and not an OS keychain. Provider/model changes start a fresh session; compatible old
+  sessions remain stored, but opaque continuation state is never transplanted across providers.
+  Cross-provider selectors only see global profiles created through `/connect`; legacy root
+  configuration is not a hidden catalog. Catalog discovery is cached for up to 15 seconds per
+  process.
 - Provisional MIT license (holder: Gustavo Gutiérrez), pending confirmation.
 - **Memory**: search uses the trigram tokenizer, so terms shorter than 3 characters are ignored. No
   semantic search. The automatic end-of-session summary only runs in the TUI (not in headless `run`)
@@ -47,6 +56,11 @@ it is not a statement that all of its release criteria are met.
 - **Plugins**: `model.complete` uses the configured provider (the session model when the plugin passes
   it) and does not count against the `limits.maxTokens` budget. Hooks run in-process: the timeout
   aborts the wait and signals the `AbortSignal`, but it cannot stop blocking synchronous code.
+  `/plugins` persists enable/disable overrides but intentionally requires a restart; reverting the
+  desired state to the original runtime state clears that requirement. Hot removal cannot yet
+  guarantee cleanup of every live registration and provider/session resource. External management
+  requires project trust. A model-provider retained by the active provider or any live routed
+  session, and plugins with live session-owned resources, are protected from disable actions.
 - **Startup screen**: the TUI chrome itself (header, bars) still uses Unicode glyphs under
   `TERM=dumb`; only the startup screen falls back to ASCII. Width counting treats every code point as
   one column, so wide East Asian or emoji glyphs in custom mascots may misalign.
@@ -98,20 +112,27 @@ it is not a statement that all of its release criteria are met.
 - The Herdr integration allows exchanges through terminals; it does not promise full multi-agent
   autonomy or distributed planning.
 
+Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
+including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
+overrides and stable/distinct OpenCode session headers. No real credentials were used.
+
 ## Verification scope
 
 Runtime and packaging: unit and integration tests run under Node (a subset also on Bun); `test:cli`
 runs the built CLI on Node (verified on 22.19 and the 22.16.0 minimum) and `test:compiled` runs the
-Bun binary, both against a simulated provider; `pack:check` validates the four packages; a real
+Bun binary, both against a simulated provider; `pack:check` validates the nine publishable packages; a real
 global npm install from local tarballs was smoke-tested; `scripts/install.sh` was tested against a
 local mirror (checksum install and rejection of a tampered binary). No npm publication or release
 was executed, the release and Pages workflows were not run on GitHub, and macOS/Windows/arm64
 binaries (Bun cross-compilation) were not tested.
 
-Provider tests use a deterministic local HTTP server, not an external account. MCP is tested with the
+The expanded DeepSeek/OpenCode Console/OpenCode Go integrations were verified with fake keys and
+mocked/local inference only; no live credential inference or live OpenCode account was used. The
+public unauthenticated Zen and Go catalogs were checked separately. Provider tests use a
+deterministic local HTTP server, not an external account. MCP is tested with the
 real server SDK over local processes/HTTP. The Linux binary runs a full cycle, loads an external
 plugin with a dependency and keeps the session. The TUI was verified manually in a pseudo-terminal on
-Linux (and against a real DeepSeek model), but not on Windows/macOS or in other real terminal
+Linux against a simulated provider, but not on Windows/macOS or in other real terminal
 emulators (kitty, iTerm2, Windows Terminal). Real copies through `xclip`/`wl-copy`/`pbcopy`/Windows
 and an automatic compaction with a real provider were not verified. The full detail is in the
 source file linked above.

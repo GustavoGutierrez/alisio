@@ -136,6 +136,13 @@ export class SQLiteStore implements SessionStore {
         .prepare("UPDATE sessions SET usage=?, updated_at=? WHERE id=?")
         .run(JSON.stringify(patch.usage), Date.now(), id);
   }
+  updateBinding(id: string, provider: string, model: string): void {
+    if (!provider.trim() || !model.trim()) throw new Error("Provider and model must not be empty");
+    this.get(id);
+    this.db
+      .prepare("UPDATE sessions SET provider=?, model=?, updated_at=? WHERE id=?")
+      .run(provider, model, Date.now(), id);
+  }
   interruptStale(): number {
     let count = 0;
     const rows = this.db

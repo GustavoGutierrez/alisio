@@ -47,7 +47,7 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
 | Status bar | Context used versus the window, `used / total (pct%)`, with a green (< 60 %), yellow (< 85 %) or red bar; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
-| Pickers | Selectable lists for `/model`, `/resume` and approvals |
+| Pickers | Selectable lists for `/model`, `/plugins`, `/resume` and approvals |
 
 Errors appear in red inside the conversation without closing the TUI.
 
@@ -63,13 +63,16 @@ Typing `/` opens autocompletion.
 | Command | Purpose |
 | --- | --- |
 | `/help` | Commands and keys |
-| `/model [id]` | Without an argument: selectable list from `GET /models` (or the configured model). With an argument: switch directly. Applies to the next turn and is saved in the session |
+| `/connect` | Open a focused provider form with paste-friendly URL input, masked secret input, cursor editing and explicit submit/cancel help; then show that provider's titled, provider-prefixed model list, persist the choice globally and start a fresh session |
+| `/model`, `/models` | Open the global provider/model selector. Entries are grouped and prefixed by provider title, the active pair is marked, and unavailable catalogs remain visible without hiding healthy profiles. A different pair is persisted and starts a fresh session; the active pair is a no-op. Legacy root provider configuration is not listed |
 | `/compact [focus]` | Summarize older history with the current model, with optional focus instructions |
 | `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context and plugin details |
 | `/clear` (`/new`) | Start a new session with the current model |
 | `/sessions` | Recent sessions of the workspace |
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
+| `/plugins` (`/plugin`) | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled |
+| `/mcp` | Browse a filterable server list grouped by its real source (User, Project, Explicit, plugin or built-in), inspect status/config location/capability counts, view tool annotations, connect or reconnect, and persist enable/disable in the defining file. Process/network actions require `--allow-mcp`; all MCP actions are blocked by `--read-only` |
 | `/copy` | Copy the last assistant response to the clipboard |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
@@ -85,7 +88,7 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+is running, prompts and the `/model`, `/plugins`, `/mcp`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
 interrupt first.
 
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and

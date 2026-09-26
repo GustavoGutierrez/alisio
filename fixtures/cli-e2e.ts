@@ -88,6 +88,34 @@ try {
       },
     }),
   );
+  const mcpConfig = join(directory, "mcp-config.json");
+  await writeFile(
+    mcpConfig,
+    JSON.stringify({
+      mcpServers: {
+        devforge: {
+          command: process.execPath,
+          args: [
+            "--experimental-strip-types",
+            "--disable-warning=ExperimentalWarning",
+            resolve("fixtures/mcp-server.ts"),
+          ],
+          env: { DEV_FORGE_CONFIG: "/fixture/not-a-real-credential.json" },
+        },
+      },
+    }),
+  );
+  assert.deepEqual(JSON.parse(await execute(["mcp", "list", "--config", mcpConfig])), ["devforge"]);
+  const mcpDoctor = await execute([
+    "mcp",
+    "doctor",
+    "devforge",
+    "--config",
+    mcpConfig,
+    "--allow-mcp",
+  ]);
+  assert.equal(JSON.parse(mcpDoctor).length, 2);
+  assert.doesNotMatch(mcpDoctor, /not-a-real-credential/);
   const stdout = await execute([
     "run",
     "Read note.txt",
@@ -153,7 +181,14 @@ try {
   );
   assert.equal(plugins.tools.length, 1);
   assert.deepEqual(plugins.commands, ["compiled:hi"]);
-  assert.deepEqual(plugins.builtin, ["memory", "subagents"]);
+  assert.deepEqual(plugins.builtin, [
+    "deepseek",
+    "opencode",
+    "opencode-go",
+    "openai-compatible",
+    "memory",
+    "subagents",
+  ]);
   // Headless prompt template: `run "/init"` renders the built-in template as the user turn.
   firstUserMessages.length = 0;
   await execute([
@@ -226,6 +261,7 @@ try {
       runtime: mode,
       checks: [
         "CLI HTTP tool loop",
+        "compatible MCP config list/doctor with fake stdio server and redacted direct env",
         "JSONL output",
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
         "built-in memory plugin loaded",

@@ -255,6 +255,7 @@ export class SubagentManager {
     title: string;
     prompt: string;
     taskId?: string;
+    model?: string;
     background?: boolean;
     signal?: AbortSignal;
   }): Promise<{ text: string; isError: boolean }> {
@@ -320,7 +321,7 @@ export class SubagentManager {
     }
     const grants = this.grantsDelegation(agent, childDepth);
     const deny = [...(agent.disallowedTools ?? []), ...(grants ? [] : DELEGATION_TOOLS)];
-    const info = this.api.sessions.spawn({
+    const info = await this.api.sessions.create({
       parentId: input.caller,
       id,
       title: input.title,
@@ -332,7 +333,7 @@ export class SubagentManager {
           : {}),
         deny,
       },
-      ...(agent.model ? { model: agent.model } : {}),
+      ...((input.model ?? agent.model) ? { model: input.model ?? agent.model } : {}),
       ...(agent.readOnly ? { readOnly: true } : {}),
       ...(agent.permission ? { permission: agent.permission } : {}),
       ...(worktree ? { workspace: worktree.path } : {}),

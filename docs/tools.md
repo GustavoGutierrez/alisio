@@ -208,12 +208,17 @@ subprocess is not an isolation boundary, and the `effect` field does not isolate
 
 ## MCP
 
-MCP servers are configured in [`mcp.servers`](/configuration#mcp-servers) and are only started or
-contacted with `--allow-mcp` (and never with `--read-only`).
+MCP servers use canonical `mcp.servers` or compatible `mcpServers` configuration. They remain
+disconnected until requested and are only available with `--allow-mcp` (never with `--read-only`).
+Stdio servers are unsandboxed subprocesses; direct `env` values are scoped to that child and are not
+shown in diagnostics.
 
 - `mcp_connect` connects on demand and registers the server's tools; `mcp_resource` and `mcp_prompt`
   list and read resources and prompts.
-- Exposed tools must use schemas supported by the registry. Schema changes require a restart; a
+- `/mcp` shows disabled, disconnected, connecting, connected, failed, needs authentication and
+  restart-required states where applicable. It displays declared read-only, destructive and
+  open-world tool annotations; missing annotations are not treated as destructive.
+- Exposed tools must use schemas supported by the registry. Schema changes require a reconnect; a
   call is never executed with a stale schema.
 - There is no interactive OAuth and no automatic retry of operations with effects.
 

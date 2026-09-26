@@ -1,7 +1,8 @@
 # Quick start
 
-Alisio ships with no default model and no credentials. Configure an endpoint and a model before
-running tasks. The model must support streaming and tool calling in the selected protocol.
+Alisio ships with the OpenAI-compatible provider plugin enabled, but no default model or credentials.
+Start the TUI and run `/connect` for the quickest setup: choose the provider, enter its settings and
+key, then choose a discovered model. The selection applies globally on later launches.
 
 ## 1. Create a configuration file
 

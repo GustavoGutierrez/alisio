@@ -48,7 +48,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
 | Barra de estado | Contexto usado frente a la ventana, `used / total (pct%)`, con barra verde (< 60 %), amarilla (< 85 %) o roja; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
-| Selectores | Listas seleccionables para `/model`, `/resume` y las aprobaciones |
+| Selectores | Listas seleccionables para `/model`, `/plugins`, `/resume` y las aprobaciones |
 
 Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
@@ -64,13 +64,16 @@ Al escribir `/` se abre el autocompletado.
 | Comando | Función |
 | --- | --- |
 | `/help` | Comandos y teclas |
-| `/model [id]` | Sin argumento: lista seleccionable de `GET /models` (o el modelo configurado). Con argumento: cambia directamente. Aplica al siguiente turno y queda guardado en la sesión |
+| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva |
+| `/model`, `/models` | Abre el selector global de proveedor/modelo. Las entradas se agrupan y prefijan con el título del proveedor, se marca la pareja activa y los catálogos no disponibles siguen visibles sin ocultar perfiles sanos. Una pareja distinta se persiste e inicia una sesión nueva; la pareja activa no hace nada. No se lista la configuración raíz heredada |
 | `/compact [focus]` | Resume la historia antigua con el modelo actual, con instrucciones de foco opcionales |
 | `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto y detalles de plugins |
 | `/clear` (`/new`) | Inicia una sesión nueva con el modelo actual |
 | `/sessions` | Sesiones recientes del workspace |
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
+| `/plugins` (`/plugin`) | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo |
+| `/mcp` | Explora una lista filtrable agrupada por su origen real (Usuario, Proyecto, Explícito, plugin o integrado), muestra estado, ubicación de configuración, capacidades y conteos, permite ver anotaciones de herramientas, conectar/reconectar y persistir la activación en el archivo que lo definió. Las acciones de proceso/red requieren `--allow-mcp`; `--read-only` bloquea todas las acciones MCP |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
@@ -86,7 +89,7 @@ Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una secció
 en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
-autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/compact`,
+autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/mcp`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero.
 
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y

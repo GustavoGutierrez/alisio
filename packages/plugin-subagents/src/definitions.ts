@@ -15,7 +15,7 @@ export interface AgentDefinition {
   /** Allowlist; `*` means every tool the parent has (including `task`). */
   tools?: string[];
   disallowedTools?: string[];
-  /** Model id; undefined inherits the parent's current model. */
+  /** Model selector (`provider/model` or a unique model id); undefined inherits the parent. */
   model?: string;
   mode: "subagent" | "primary" | "all";
   maxTurns?: number;

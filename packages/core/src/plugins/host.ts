@@ -23,6 +23,7 @@ import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
+import type { ProviderRegistry } from "../providers/registry.ts";
 import { readJson } from "../runtime/fs.ts";
 import { resolvePluginSpec } from "../runtime/modules.ts";
 import { inside } from "../runtime/paths.ts";
@@ -55,6 +56,7 @@ export class PluginHost implements RunnerExtensions {
   private endHandlers: Array<{ plugin: string; handler: EndHandler }> = [];
   private fieldOwners = new Map<string, Map<string, string>>();
   private completer?: (request: CompletionRequest & { signal: AbortSignal }) => Promise<string>;
+  private modelsImpl?: PluginAPI["models"];
   observers = new Set<(event: Readonly<RunEvent>) => void>();
   contexts: Array<() => Promise<string>> = [];
   skillRoots: string[] = [];
@@ -116,16 +118,29 @@ export class PluginHost implements RunnerExtensions {
       setState(plugin: string, key: string, value: unknown): void;
     },
     private options: PluginHostOptions = {},
+    private providers?: ProviderRegistry,
   ) {}
   /** Binds the provider-agnostic completion service once a provider exists. */
   setCompleter(fn: (request: CompletionRequest & { signal: AbortSignal }) => Promise<string>) {
     this.completer = fn;
+  }
+  /** Binds credential-free model discovery/resolution after provider startup is complete. */
+  setModels(models: PluginAPI["models"]) {
+    this.modelsImpl = models;
   }
   /**
    * Loads an explicitly trusted plugin: a file/directory path, or an npm package name resolved
    * from `from` (project) upwards and then global roots. Never called for untrusted input.
    */
   async load(spec: string, options: { from?: string; globalRoots?: string[] } = {}): Promise<void> {
+    const candidate = await this.inspect(spec, options);
+    await this.activate(candidate.plugin, candidate.base);
+  }
+  /** Imports and validates a trusted plugin without running setup, for cataloging disabled entries. */
+  async inspect(
+    spec: string,
+    options: { from?: string; globalRoots?: string[] } = {},
+  ): Promise<{ plugin: Plugin; base: string }> {
     let path = await resolvePluginSpec(spec, {
       from: options.from ?? process.cwd(),
       ...(options.globalRoots ? { globalRoots: options.globalRoots } : {}),
@@ -150,7 +165,22 @@ export class PluginHost implements RunnerExtensions {
         );
       throw error;
     }
-    await this.activate(module.default as Plugin, dirname(path));
+    const plugin = module.default as Plugin;
+    this.validate(plugin);
+    return { plugin, base: dirname(path) };
+  }
+  private validate(plugin: Plugin): void {
+    z.object({
+      id: z.string().regex(/^[a-z0-9][a-z0-9.-]{0,63}$/),
+      version: z.string().regex(/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/),
+      apiVersion: z.literal(1),
+      name: z.string().min(1).optional(),
+      description: z.string().min(1).optional(),
+      categories: z.array(z.literal("model-provider")).optional(),
+      setup: z.function(),
+    })
+      .passthrough()
+      .parse(plugin);
   }
   /**
    * `builtin` is reserved for first-party plugins from the built-in registry: their tools and
@@ -158,14 +188,7 @@ export class PluginHost implements RunnerExtensions {
    */
   async activate(plugin: Plugin, base: string, options: { builtin?: boolean } = {}): Promise<void> {
     const builtin = !!options.builtin;
-    z.object({
-      id: z.string().regex(/^[a-z0-9][a-z0-9.-]{0,63}$/),
-      version: z.string().regex(/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/),
-      apiVersion: z.literal(1),
-      setup: z.function(),
-    })
-      .passthrough()
-      .parse(plugin);
+    this.validate(plugin);
     if (this.loaded.has(plugin.id)) throw new Error(`Duplicate plugin: ${plugin.id}`);
     const undo: Array<() => void> = [];
     const statusKeys = new Set<string>();
@@ -300,6 +323,22 @@ export class PluginHost implements RunnerExtensions {
           });
         },
       },
+      models: {
+        list: (signal) => {
+          if (!this.modelsImpl) throw new Error("Model resolution is not available yet");
+          return this.modelsImpl.list(signal);
+        },
+        resolve: (reference, signal) => {
+          if (!this.modelsImpl) throw new Error("Model resolution is not available yet");
+          return this.modelsImpl.resolve(reference, signal);
+        },
+      },
+      providers: {
+        register: (provider) => {
+          if (!this.providers) throw new Error("Provider registry is not available");
+          return track(this.providers.register(provider, { plugin: plugin.id, builtin }));
+        },
+      },
       extensions: {
         register: (point, provider, options) =>
           track(
@@ -311,6 +350,7 @@ export class PluginHost implements RunnerExtensions {
       },
       sessions: {
         spawn: (spec) => this.sessions.spawn(spec),
+        create: (spec) => this.sessions.create(spec),
         run: (id, prompt, options) => this.sessions.run(id, prompt, options),
         get: (id) => this.sessions.get(id),
         children: (parentId) => this.sessions.children(parentId),
@@ -481,11 +521,38 @@ export class PluginHost implements RunnerExtensions {
   /** Loaded plugins (id, version, built-in flag), ordered by id. */
   metadata(): PluginMetadata[] {
     return [...this.loaded.values()]
-      .map(({ plugin, builtin }) => ({ id: plugin.id, version: plugin.version, builtin }))
+      .map(({ plugin, builtin }) => ({
+        id: plugin.id,
+        version: plugin.version,
+        builtin,
+        ...(plugin.name ? { name: plugin.name } : {}),
+        ...(plugin.description ? { description: plugin.description } : {}),
+        ...((plugin.categories?.length ?? 0) > 0 ||
+        this.providers?.list().some((provider) => provider.plugin === plugin.id)
+          ? {
+              categories: [
+                ...new Set([
+                  ...(plugin.categories ?? []),
+                  ...(this.providers?.list().some((provider) => provider.plugin === plugin.id)
+                    ? (["model-provider"] as const)
+                    : []),
+                ]),
+              ],
+            }
+          : {}),
+      }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
   get hasSessionEndHooks(): boolean {
     return this.endHandlers.length > 0;
+  }
+  /** Conservative ownership check used to protect a live session from plugin removal. */
+  ownsSessionResources(plugin: string): boolean {
+    return (
+      this.startHandlers.some((entry) => entry.plugin === plugin) ||
+      this.endHandlers.some((entry) => entry.plugin === plugin) ||
+      [...this.panels.values()].some((entry) => entry.plugin === plugin)
+    );
   }
   emit(event: RunEvent): void {
     for (const observer of this.observers) {

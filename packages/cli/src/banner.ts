@@ -46,6 +46,11 @@ interface AppLike {
   workspace: string;
   config: { provider: { baseURL: string } };
   provider: { model: string };
+  providerInfo?: {
+    id: string;
+    profile: Record<string, string | number | boolean>;
+    persisted: boolean;
+  };
   plugins: Parameters<typeof import("@alisio/core").renderStartup>[0] & {
     builtins: Set<string>;
   };
@@ -58,7 +63,7 @@ export function startupInput(
 ): StartupInput {
   let host = "unknown";
   try {
-    host = new URL(app.config.provider.baseURL).host;
+    host = new URL(String(app.providerInfo?.profile.baseURL ?? app.config.provider.baseURL)).host;
   } catch {
     /* keep unknown */
   }
@@ -85,12 +90,11 @@ export function startupInput(
           : `write:${state(app.runner.policy.write)} process:${state(app.runner.policy.process)}`,
       },
       { label: "memory", value: app.plugins.builtins.has("memory") ? "on" : "off" },
-      // `alisio setup` scaffolds this exact placeholder; a model can never be truly empty here
-      // (the provider throws before the app exists), so this is the one case worth flagging
-      // up front rather than letting the first real turn fail against a nonexistent model.
-      ...((options.model ?? app.provider.model) === "YOUR_MODEL_ID"
-        ? [{ label: "model", value: "⚠ placeholder — edit .alisio/config.json" }]
-        : []),
+      ...(!(options.model ?? app.provider.model)
+        ? [{ label: "model", value: "⚠ not configured — use /connect" }]
+        : (options.model ?? app.provider.model) === "YOUR_MODEL_ID"
+          ? [{ label: "model", value: "⚠ placeholder — edit .alisio/config.json" }]
+          : []),
     ],
   };
 }

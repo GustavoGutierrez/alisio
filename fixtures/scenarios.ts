@@ -19,7 +19,6 @@ import { AgentRunner } from "../packages/core/src/core/runner.ts";
 import { HerdrBridge } from "../packages/core/src/integrations/herdr.ts";
 import { McpConnector } from "../packages/core/src/mcp/connector.ts";
 import { PluginHost, pluginPrefix } from "../packages/core/src/plugins/host.ts";
-import { OpenAICompatibleProvider } from "../packages/core/src/providers/openai-compatible.ts";
 import { ProjectContext } from "../packages/core/src/resources/context.ts";
 import { Skills } from "../packages/core/src/resources/skills.ts";
 import { safePath } from "../packages/core/src/runtime/paths.ts";
@@ -48,6 +47,7 @@ import {
   SQLiteMemoryStore as MemoryStoreOnPort,
   projectId,
 } from "../packages/plugin-memory/src/store.ts";
+import { OpenAICompatibleProvider } from "../packages/plugin-openai-compatible/src/index.ts";
 import { isMain, serve } from "./http.ts";
 
 /** Memory store over the same SQLite adapter the host provides through the storage port. */

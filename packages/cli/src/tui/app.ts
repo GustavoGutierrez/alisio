@@ -46,12 +46,14 @@ import {
   TranscriptSync,
   TreePanel,
 } from "./components.ts";
+import { ConnectInputPrompt } from "./connect-input.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
 import {
   addItem,
   COMMANDS,
+  configuredProviderModelItems,
   formatContext,
   formatDuration,
   formatTokens,
@@ -59,7 +61,12 @@ import {
   initialViewState,
   itemsFromHistory,
   lastAssistantText,
+  mcpServerItems,
+  mcpToolItems,
   parseCommand,
+  pluginCatalogItems,
+  pluginToggleNeedsConfirmation,
+  providerModelItems,
   reduceEvent,
   reservedCommandNames,
   resolveCommand,
@@ -83,6 +90,7 @@ class Picker implements Component {
     onSelect: (item: SelectItem) => void,
     onCancel: () => void,
     private filterable = false,
+    private detail?: string,
   ) {
     this.list = new SelectList(items, Math.min(10, Math.max(1, items.length)), selectListTheme);
     this.list.onSelect = onSelect;
@@ -106,6 +114,24 @@ class Picker implements Component {
       : "  ↑↓ · Enter · Esc";
     return [
       truncateToWidth(style.bold(style.yellow(this.title)), width),
+      ...(this.detail
+        ? this.detail
+            .split("\n")
+            .flatMap((line) => {
+              const words = line.split(/\s+/);
+              const rows: string[] = [];
+              let row = "";
+              for (const word of words) {
+                if (row && [...`${row} ${word}`].length > width) {
+                  rows.push(row);
+                  row = word;
+                } else row = row ? `${row} ${word}` : word;
+              }
+              if (row) rows.push(row);
+              return rows;
+            })
+            .map((line) => truncateToWidth(style.dim(line), width))
+        : []),
       ...this.list.render(width),
       truncateToWidth(style.dim(hint), width),
     ];
@@ -133,6 +159,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     onEvent: (event) => dispatch(event),
     approve: (request) => approve(request),
   });
+  let activeProvider = app.providerInfo;
   let session =
     options.session ?? app.store.create(app.workspace, app.provider.id, app.provider.model).id;
   if (options.session && options.model && app.store.get(session).model !== options.model)
@@ -142,7 +169,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   let pendingAttachments: PendingAttachment[] = [];
 
   let modelList: Promise<ModelInfo[]> | undefined;
-  /** Cached GET /models; a failure clears the cache so a later call can retry. */
+  /** Cached active-provider catalog for completion and context-window discovery. */
   const models = (): Promise<ModelInfo[]> =>
     (modelList ??= app.loadModels(AbortSignal.timeout(10_000)).catch((e) => {
       modelList = undefined;
@@ -193,8 +220,9 @@ export async function runTui(options: TuiOptions): Promise<void> {
       ask = app.runner.approvals;
     return {
       version: VERSION,
-      host: hostOf(app.config.provider.baseURL),
-      apiMode: app.config.provider.apiMode,
+      host: hostOf(String(activeProvider?.profile.baseURL ?? app.config.provider.baseURL)),
+      apiMode: String(activeProvider?.profile.apiMode ?? app.config.provider.apiMode),
+      provider: app.providers.get(activeProvider?.id ?? "")?.name,
       cwd: shortenPath(app.workspace, homedir()),
       session: shortId(session),
       write: policy.write ? "on" : ask ? "ask" : "off",
@@ -571,44 +599,402 @@ export async function runTui(options: TuiOptions): Promise<void> {
     resolveExit();
   };
 
-  const setModel = (model: string) => {
-    try {
-      app.runner.setModel(session, model);
-      if (view.model !== model) view = { ...view, model };
-      refreshEstimate();
-    } catch (e) {
-      error(e);
+  const askInput = (input: {
+    provider: string;
+    label: string;
+    initial?: string;
+    secret?: boolean;
+    placeholder: string;
+    hint?: string;
+    step: number;
+    steps: number;
+  }): Promise<string | undefined> =>
+    new Promise((resolve) => {
+      showPicker(
+        new ConnectInputPrompt({
+          ...input,
+          initial: input.initial ?? "",
+          secret: input.secret ?? false,
+          onSubmit: (value) => {
+            closePicker();
+            resolve(value);
+          },
+          onCancel: () => {
+            closePicker();
+            resolve(undefined);
+          },
+        }),
+      );
+    });
+  const askChoice = (
+    title: string,
+    choices: Array<{ value: string; label: string; description?: string }>,
+  ): Promise<string | undefined> =>
+    new Promise((resolve) => {
+      showPicker(
+        new Picker(
+          title,
+          choices,
+          (item) => {
+            closePicker();
+            resolve(item.value);
+          },
+          () => {
+            closePicker();
+            resolve(undefined);
+          },
+        ),
+      );
+    });
+  const connect = async () => {
+    const registrations = app.providers.list();
+    if (!registrations.length) return notice("No provider plugins are registered");
+    const providerId = await askChoice(
+      "Select provider",
+      registrations.map((p) => ({
+        value: p.id,
+        label: p.name,
+        ...(p.description ? { description: p.description } : {}),
+      })),
+    );
+    if (!providerId) return;
+    const registration = app.providers.get(providerId);
+    if (!registration) return error(`Provider disappeared: ${providerId}`);
+    const prior = await app.providerSettings.resolve(providerId);
+    const profile: Record<string, string | boolean | number> = { ...(prior?.profile.values ?? {}) };
+    const credentials: Record<string, string> = { ...(prior?.credentials ?? {}) };
+    const inputFields = registration.fields.filter(
+      (field) => field.kind !== "select" && field.kind !== "boolean",
+    );
+    let inputStep = 0;
+    for (const field of registration.fields) {
+      if (field.kind === "secret") {
+        inputStep++;
+        const entered = await askInput({
+          provider: registration.name,
+          label: field.label,
+          secret: true,
+          placeholder: credentials[field.key] ? "Leave empty to keep saved value" : "Paste API key",
+          hint: field.description ?? "Input is masked and never added to command history",
+          step: inputStep,
+          steps: inputFields.length,
+        });
+        if (entered === undefined) return;
+        if (entered) credentials[field.key] = entered;
+        if (field.required && !credentials[field.key]) return error(`${field.label} is required`);
+        continue;
+      }
+      if (field.kind === "select" || field.kind === "boolean") {
+        const options =
+          field.kind === "boolean"
+            ? [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ]
+            : (field.options ?? []);
+        const current = String(profile[field.key] ?? field.defaultValue ?? "");
+        const selected = await askChoice(
+          field.label,
+          [...options].sort((a, b) => Number(b.value === current) - Number(a.value === current)),
+        );
+        if (selected === undefined) return;
+        profile[field.key] = field.kind === "boolean" ? selected === "true" : selected;
+        continue;
+      }
+      const current = String(profile[field.key] ?? field.defaultValue ?? "");
+      inputStep++;
+      const entered = await askInput({
+        provider: registration.name,
+        label: field.label,
+        initial: current,
+        placeholder: field.kind === "url" ? "https://api.example.com/v1" : `Enter ${field.label}`,
+        hint:
+          field.description ??
+          (field.kind === "url" ? "Paste the complete HTTP(S) URL" : undefined),
+        step: inputStep,
+        steps: inputFields.length,
+      });
+      if (entered === undefined) return;
+      if (field.required && !entered.trim()) return error(`${field.label} is required`);
+      profile[field.key] = entered.trim();
     }
+    flashHint("Validating connection and loading models…", 60_000);
+    let discovered: ModelInfo[];
+    try {
+      discovered = await app.probeProvider(
+        providerId,
+        profile,
+        credentials,
+        AbortSignal.timeout(20_000),
+      );
+    } catch (cause) {
+      return error(cause);
+    }
+    let model: string | undefined;
+    if (discovered.length)
+      model = await askChoice(
+        `${registration.name} · Select model`,
+        providerModelItems(registration.name, discovered, prior?.profile.model),
+      );
+    else
+      model = await askInput({
+        provider: registration.name,
+        label: "Model ID",
+        initial: prior?.profile.model ?? "",
+        placeholder: "provider-model-id",
+        hint: "The provider returned no model catalog",
+        step: inputFields.length + 1,
+        steps: inputFields.length + 1,
+      });
+    if (!model) return;
+    await app.activateProvider(providerId, profile, credentials, model);
+    activeProvider = app.providerInfo;
+    modelList = undefined;
+    session = app.store.create(app.workspace, app.provider.id, model).id;
+    reset(initialViewState(model));
+    notice(`Connected to ${registration.name} with model ${model}. Started a fresh session.`);
+    refreshEstimate();
   };
   const chooseModel = async () => {
-    let items: SelectItem[] = [];
-    try {
-      const list = await models();
-      items = list.map((m) => ({
-        value: m.id,
-        label: m.id === view.model ? `${m.id} (current)` : m.id,
-        ...(m.contextWindow ? { description: `${formatTokens(m.contextWindow)} context` } : {}),
-      }));
-    } catch (e) {
-      notice(`Could not list models: ${e instanceof Error ? e.message : String(e)}`);
-    }
-    if (!items.length)
-      items = [...new Set([view.model, app.config.provider.model])].filter(Boolean).map((id) => ({
-        value: id,
-        label: id === view.model ? `${id} (current)` : id,
-      }));
+    const catalogs = await app.configuredProviderCatalogs(AbortSignal.timeout(20_000));
+    const choices = configuredProviderModelItems(
+      catalogs,
+      activeProvider?.persisted ? { provider: activeProvider.id, model: view.model } : undefined,
+    );
+    if (!choices.length) return notice("No plugin provider profiles are configured. Use /connect.");
+    const items: SelectItem[] = choices;
     showPicker(
       new Picker(
-        "Select model",
+        "Select provider and model",
         items,
         (item) => {
           closePicker();
-          if (item.value !== view.model) setModel(item.value);
+          const choice = choices.find((candidate) => candidate.value === item.value);
+          if (!choice || choice.unavailable) return flashHint("That provider is unavailable");
+          const selected = JSON.parse(choice.value) as {
+            profile: string;
+            provider: string;
+            model: string;
+          };
+          void app
+            .switchModel(`${selected.provider}/${selected.model}`)
+            .then((created) => {
+              if (!created) return;
+              activeProvider = app.providerInfo;
+              modelList = undefined;
+              session = created.id;
+              reset(initialViewState(selected.model));
+              notice(
+                `Provider changed to ${app.providers.get(selected.provider)?.name ?? selected.provider} with model ${selected.model}. Started a fresh session.`,
+              );
+              refreshEstimate();
+            })
+            .catch(error);
         },
         closePicker,
         true,
       ),
     );
+  };
+  const managePlugins = () => {
+    const catalog = app.pluginCatalog();
+    const openCatalog = () => {
+      const entries = app.pluginCatalog();
+      showPicker(
+        new Picker(
+          "Plugins",
+          pluginCatalogItems(entries),
+          (item) => {
+            const selected = entries.find((entry) => entry.id === item.value);
+            if (!selected) return openCatalog();
+            const action = selected.enabled ? "Disable" : "Enable";
+            const detail = [
+              selected.description,
+              `Status: ${selected.status} · Source: ${selected.builtin ? "built-in" : selected.source}`,
+              `Category: ${selected.categories.join(", ") || "general"}`,
+              selected.diagnostic ?? "Changes are saved for the next Alisio start.",
+            ].join("\n");
+            showPicker(
+              new Picker(
+                selected.name,
+                [
+                  ...(selected.manageable
+                    ? [
+                        {
+                          value: "toggle",
+                          label: `${action} ${selected.name}`,
+                          description: "Persist project override (restart required)",
+                        },
+                      ]
+                    : []),
+                  { value: "back", label: "Back to plugin list" },
+                ],
+                (choice) => {
+                  if (choice.value === "back") return openCatalog();
+                  const apply = async () => {
+                    try {
+                      const updated = await app.setPluginEnabled(selected.id, !selected.enabled, {
+                        liveSession: view.stats.runs > 0 || view.streaming,
+                      });
+                      notice(`${updated.name}: ${updated.diagnostic ?? "restart required"}.`);
+                    } catch (cause) {
+                      error(cause);
+                    }
+                    openCatalog();
+                  };
+                  if (!pluginToggleNeedsConfirmation(selected)) return void apply();
+                  showPicker(
+                    new Picker(
+                      `${action} external plugin?`,
+                      [
+                        {
+                          value: "confirm",
+                          label: `Yes, ${action.toLowerCase()} ${selected.name}`,
+                          description:
+                            "External plugins execute with full process privileges in trusted projects",
+                        },
+                        { value: "cancel", label: "Cancel" },
+                      ],
+                      (confirmation) => {
+                        if (confirmation.value === "confirm") void apply();
+                        else openCatalog();
+                      },
+                      openCatalog,
+                      false,
+                      detail,
+                    ),
+                  );
+                },
+                openCatalog,
+                false,
+                detail,
+              ),
+            );
+          },
+          closePicker,
+          true,
+        ),
+      );
+    };
+    if (!catalog.length) return notice("No plugins are available");
+    openCatalog();
+  };
+  const manageMcp = () => {
+    const openCatalog = () => {
+      const entries = app.mcp.list();
+      if (!entries.length) return notice("No MCP servers are configured");
+      showPicker(
+        new Picker(
+          `MCP servers (${entries.length})`,
+          mcpServerItems(entries),
+          (item) => {
+            const selected = app.mcp.info(item.value);
+            const source =
+              selected.source.kind === "global"
+                ? "User"
+                : selected.source.kind[0]?.toUpperCase() + selected.source.kind.slice(1);
+            const endpoint =
+              selected.transport === "stdio"
+                ? `Command: ${selected.command}`
+                : `URL: ${selected.url}`;
+            const detail = [
+              `Status: ${selected.status} · Source: ${source}`,
+              endpoint,
+              selected.source.file
+                ? `Config: ${shortenPath(selected.source.file, homedir(), 72)}`
+                : "Config: managed by registration source",
+              `Capabilities: ${selected.capabilities.join(", ") || "unknown until connected"}`,
+              `Tools: ${selected.counts.tools} · Resources: ${selected.counts.resources} · Prompts: ${selected.counts.prompts}`,
+              selected.diagnostic,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            const connected = selected.status === "connected";
+            showPicker(
+              new Picker(
+                selected.displayName,
+                [
+                  ...(selected.counts.tools
+                    ? [
+                        {
+                          value: "tools",
+                          label: "View tools",
+                          description: `${selected.counts.tools} available`,
+                        },
+                      ]
+                    : []),
+                  ...(selected.status !== "disabled"
+                    ? [
+                        {
+                          value: "connect",
+                          label: connected ? "Reconnect" : "Connect",
+                          description: "Start a process or network connection",
+                        },
+                      ]
+                    : []),
+                  {
+                    value: "toggle",
+                    label: selected.status === "disabled" ? "Enable" : "Disable",
+                    description: `Persist in ${source.toLowerCase()} configuration`,
+                  },
+                  { value: "back", label: "Back" },
+                ],
+                (action) => {
+                  if (action.value === "back") return openCatalog();
+                  if (action.value === "tools") {
+                    const tools = app.mcp.tools(selected.name);
+                    return showPicker(
+                      new Picker(
+                        `${selected.displayName} tools (${tools.length})`,
+                        mcpToolItems(tools),
+                        () => {},
+                        () => manageMcp(),
+                        true,
+                        "Annotations are server-declared. Unannotated tools are not assumed destructive.",
+                      ),
+                    );
+                  }
+                  if (action.value === "connect") {
+                    if (!options.allowMcp) {
+                      error("Restart with --allow-mcp before connecting to an MCP server");
+                      return openCatalog();
+                    }
+                    if (options.readOnly) {
+                      error("MCP is unavailable under --read-only");
+                      return openCatalog();
+                    }
+                    void app.mcp
+                      .reconnect(selected.name, AbortSignal.timeout(15_000))
+                      .then(() => notice(`${selected.displayName} connected.`))
+                      .catch(error)
+                      .finally(openCatalog);
+                    return;
+                  }
+                  void app
+                    .setMcpEnabled(
+                      selected.name,
+                      selected.status === "disabled",
+                      !!options.allowMcp,
+                    )
+                    .then((updated) =>
+                      notice(`${updated.displayName}: ${updated.status.replace("-", " ")}.`),
+                    )
+                    .catch(error)
+                    .finally(openCatalog);
+                },
+                openCatalog,
+                false,
+                detail,
+              ),
+            );
+          },
+          closePicker,
+          true,
+          "[x] connected · [-] disconnected · [ ] disabled · [!] failed · [?] needs authentication · [*] restart required",
+        ),
+      );
+    };
+    openCatalog();
   };
   const workspaceSessions = () =>
     app.store.list().filter((s) => s.workspace === app.workspace && s.provider === app.provider.id);
@@ -724,7 +1110,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
-  const mutating = new Set(["model", "compact", "clear", "resume"]);
+  const mutating = new Set(["connect", "model", "plugins", "mcp", "compact", "clear", "resume"]);
   const handleSubmit = async (raw: string) => {
     const text = raw.trim();
     if (!text) return;
@@ -765,8 +1151,14 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return info(statsReport());
         case "tools":
           return info(toolsReport());
+        case "connect":
+          return await connect();
         case "model":
-          return parsed.args ? setModel(parsed.args) : await chooseModel();
+          return await chooseModel();
+        case "plugins":
+          return managePlugins();
+        case "mcp":
+          return manageMcp();
         case "compact":
           return await task((signal) =>
             app.runner.compact(session, { focus: parsed.args || undefined, signal }),
@@ -870,27 +1262,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
         name: c.name,
         description: c.description,
         ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
-        ...(c.name === "model"
+        ...(c.name === "resume"
           ? {
               getArgumentCompletions: (prefix: string) =>
-                models()
-                  .then((list) =>
-                    list
-                      .filter((m) => m.id.startsWith(prefix))
-                      .slice(0, 50)
-                      .map((m) => ({ value: m.id, label: m.id })),
-                  )
-                  .catch(() => null),
+                workspaceSessions()
+                  .filter((s) => s.id.startsWith(prefix))
+                  .slice(0, 20)
+                  .map((s) => ({ value: s.id, label: shortId(s.id), description: s.model })),
             }
-          : c.name === "resume"
-            ? {
-                getArgumentCompletions: (prefix: string) =>
-                  workspaceSessions()
-                    .filter((s) => s.id.startsWith(prefix))
-                    .slice(0, 20)
-                    .map((s) => ({ value: s.id, label: shortId(s.id), description: s.model })),
-              }
-            : {}),
+          : {}),
       })),
       app.workspace,
     ),

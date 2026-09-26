@@ -50,7 +50,11 @@
   },
   "dependencies": {
     "@alisio/core": "workspace:*",
+    "@alisio/plugin-deepseek": "workspace:*",
     "@alisio/plugin-memory": "workspace:*",
+    "@alisio/plugin-openai-compatible": "workspace:*",
+    "@alisio/plugin-opencode": "workspace:*",
+    "@alisio/plugin-opencode-go": "workspace:*",
     "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
     "@earendil-works/pi-tui": "0.87.1",

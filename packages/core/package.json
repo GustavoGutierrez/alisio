@@ -1,7 +1,7 @@
 {
   "name": "@alisio/core",
   "version": "0.1.0-alpha.1",
-  "description": "Embeddable Alisio agent core: tool loop, context compaction, OpenAI-compatible provider, local tools with explicit permissions, MCP client, plugin host and SQLite session store. Runs on Node >=22.16 and Bun.",
+  "description": "Embeddable provider-agnostic Alisio agent core: tool loop, context compaction, local tools, MCP, plugin host and SQLite session store. Runs on Node >=22.16 and Bun.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
   "repository": {
@@ -49,7 +49,6 @@
     "@mixmark-io/domino": "2.2.0",
     "@modelcontextprotocol/client": "2.1.0",
     "ajv": "8.20.0",
-    "openai": "7.23.0",
     "turndown": "7.2.4",
     "yaml": "2.9.1",
     "zod": "4.6.5"

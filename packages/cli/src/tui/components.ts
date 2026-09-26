@@ -49,6 +49,7 @@ export interface HeaderInfo {
   version: string;
   host: string;
   apiMode: string;
+  provider?: string;
   cwd: string;
   session: string;
   write: PermissionState;
@@ -81,7 +82,12 @@ export class Header implements Component {
       [
         { text: "◆ alisio", priority: 8, paint: (t) => style.bold(style.brightCyan(t)) },
         { text: `v${i.version}`, priority: 1, paint: style.gray },
-        { text: v.model, priority: 10, paint: style.bold },
+        {
+          text: v.model || "not connected",
+          priority: 10,
+          paint: v.model ? style.bold : style.yellow,
+        },
+        ...(i.provider ? [{ text: i.provider, priority: 6, paint: style.cyan }] : []),
         { text: i.host, priority: 5, paint: style.gray },
         { text: i.apiMode, priority: 2, paint: style.gray },
       ],

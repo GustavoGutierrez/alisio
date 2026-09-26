@@ -70,7 +70,15 @@ export function infoSection(ctx: StartupContext, width: number): string[] {
 export function pluginsSection(ctx: StartupContext): string[] {
   if (!ctx.plugins.length) return [];
   const t = ctx.terminal;
-  const names = ctx.plugins.map((p) => `${p.id}${p.builtin ? " (builtin)" : ""}`);
+  const modelProviders = ctx.plugins.filter((p) => p.categories?.includes("model-provider"));
+  const names = [
+    ...(modelProviders.length
+      ? [`${modelProviders.length} model provider${modelProviders.length === 1 ? "" : "s"}`]
+      : []),
+    ...ctx.plugins
+      .filter((p) => !p.categories?.includes("model-provider"))
+      .map((p) => `${p.id}${p.builtin ? " (builtin)" : ""}`),
+  ];
   return [`${sgr(t.color, "2")("with")} ${names.join(", ")}`];
 }
 export function tipsSection(ctx: StartupContext): string[] {
