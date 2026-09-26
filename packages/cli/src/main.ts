@@ -37,10 +37,14 @@ program
   .option("--api-mode <mode>", "chat or responses")
   .option("--allow-write", "Allow file writes")
   .option("--allow-process", "Allow arbitrary subprocesses; not sandboxed")
+  .option("--allow-external", "Allow network tools: webfetch, websearch and provider-native search")
   .option("--allow-mcp", "Allow configured MCP servers and remote tool calls")
   .option("--allow-agents", "Allow messaging neighboring agents through Herdr")
   .option("--no-herdr", "Disable automatic Herdr lifecycle reports")
-  .option("--read-only", "Disable writes, arbitrary processes, executable plugins and MCP")
+  .option(
+    "--read-only",
+    "Disable writes, arbitrary processes, network tools, executable plugins and MCP",
+  )
   .option("--db <path>", "Session database")
   .option("--json", "Emit versioned JSONL events")
   .option("--no-tui", "Use the plain readline interactive mode instead of the TUI")
@@ -203,7 +207,7 @@ program
   .action((id, prompt, _opts, cmd) => run(cmd, prompt, id));
 program.action((_opts, cmd) => run(cmd));
 program
-  .command("init")
+  .command("setup")
   .description("Write an example configuration without secrets (for AGENTS.md use /init)")
   .action(async (_opts, cmd) => {
     const { resolve, join } = await import("node:path");

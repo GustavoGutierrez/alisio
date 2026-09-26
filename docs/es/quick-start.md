@@ -5,11 +5,11 @@ ejecutar tareas. El modelo debe soportar streaming y tool calling en el protocol
 
 ## 1. Crear un archivo de configuración
 
-`alisio init` escribe un `.alisio/config.json` de ejemplo en el directorio actual, sin secretos.
+`alisio setup` escribe un `.alisio/config.json` de ejemplo en el directorio actual, sin secretos.
 También puede escribir el archivo usted mismo en cualquier ubicación.
 
 ```sh
-alisio init
+alisio setup
 ```
 
 Endpoint compatible con OpenAI (`my-api.json`):

@@ -1,6 +1,12 @@
 import { homedir } from "node:os";
 import type { AppOptions, ApprovalDecision, ApprovalRequest } from "@alisio/core";
-import type { ModelInfo, PanelNode, RunEvent } from "@alisio/sdk";
+import type {
+  AskQuestionsRequest,
+  AskQuestionsResult,
+  ModelInfo,
+  PanelNode,
+  RunEvent,
+} from "@alisio/sdk";
 import {
   CombinedAutocompleteProvider,
   type Component,
@@ -35,11 +41,14 @@ import {
   Footer,
   Header,
   type HeaderInfo,
+  QuestionPanel,
   Switch,
   TranscriptSync,
   TreePanel,
 } from "./components.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
+import { summarizeAnswers } from "./questions.ts";
+import { InteractiveQueue } from "./queue.ts";
 import {
   addItem,
   COMMANDS,
@@ -198,7 +207,14 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const panelEntry = () => [...app.plugins.panels.values()][0];
   const panelNodes = (): PanelNode[] => {
     try {
-      return panelEntry()?.provider.nodes({ sessionId: session }) ?? [];
+      const nodes = panelEntry()?.provider.nodes({ sessionId: session }) ?? [];
+      // Display-only override: a session blocked on ask_user_question or an approval prompt shows
+      // as "waiting" rather than "running", so the tree panel explains why it looks stalled.
+      return nodes.map((n) =>
+        n.status === "running" && n.sessionId && interactiveQueue.isWaiting(n.sessionId)
+          ? { ...n, status: "waiting" }
+          : n,
+      );
     } catch {
       return [];
     }
@@ -357,8 +373,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
   let busy = false,
     controller: AbortController | undefined,
     pending: Promise<unknown> | undefined,
-    picker: Picker | undefined;
-  const showPicker = (next: Picker) => {
+    picker: Component | undefined;
+  const showPicker = (next: Component) => {
     picker = next;
     pickerSlot.clear();
     pickerSlot.addChild(next);
@@ -371,31 +387,123 @@ export async function runTui(options: TuiOptions): Promise<void> {
     tui.setFocus(editor);
     tui.requestRender();
   };
+  /**
+   * Single serialized queue for every cross-session interactive prompt: write/process approvals,
+   * `/model`'s `select`, and `ask_user_question`/`/ask`'s question panel — at most one of these is
+   * ever on screen, regardless of how many sessions (root or nested subagents) ask at once. FIFO by
+   * arrival (no root-over-subagent priority): simple, fair, and deterministic. `/model` and
+   * `/resume`'s own command-triggered pickers are intentionally NOT routed through this queue: they
+   * are user-command-driven (never concurrent with a subagent) and `chooseModel()` does not await
+   * picker resolution today, so folding them in would need an unrelated restructuring.
+   */
+  const interactiveQueue = new InteractiveQueue();
   approve = (request) =>
-    new Promise<ApprovalDecision>((resolve) => {
-      let settled = false;
-      const finish = (decision: ApprovalDecision) => {
-        if (settled) return;
-        settled = true;
-        request.signal.removeEventListener("abort", onAbort);
-        closePicker();
-        resolve(decision);
-      };
-      const onAbort = () => finish("deny");
-      request.signal.addEventListener("abort", onAbort, { once: true });
-      showPicker(
-        new Picker(
-          `${request.label ? `[${request.label}] ` : ""}Allow ${request.call.name} (${request.effect}): ${summarizeToolArgs(request.call.name, request.call.arguments)}?`,
-          [
-            { value: "once", label: "Allow once" },
-            { value: "session", label: `Always allow ${request.effect} in this session` },
-            { value: "deny", label: "Deny" },
-          ],
-          (item) => finish(item.value as ApprovalDecision),
-          () => finish("deny"),
-        ),
-      );
+    interactiveQueue.submit<ApprovalDecision>({
+      sessionId: request.session,
+      label: request.label,
+      signal: request.signal,
+      onWithdrawn: () => "deny",
+      run: () =>
+        new Promise<ApprovalDecision>((resolve) => {
+          let settled = false;
+          const finish = (decision: ApprovalDecision) => {
+            if (settled) return;
+            settled = true;
+            request.signal.removeEventListener("abort", onAbort);
+            closePicker();
+            resolve(decision);
+          };
+          const onAbort = () => finish("deny");
+          request.signal.addEventListener("abort", onAbort, { once: true });
+          showPicker(
+            new Picker(
+              `${request.label ? `[${request.label}] ` : ""}Allow ${request.call.name} (${request.effect}): ${summarizeToolArgs(request.call.name, request.call.arguments)}?`,
+              [
+                { value: "once", label: "Allow once" },
+                { value: "session", label: `Always allow ${request.effect} in this session` },
+                { value: "deny", label: "Deny" },
+              ],
+              (item) => finish(item.value as ApprovalDecision),
+              () => finish("deny"),
+            ),
+          );
+        }),
     });
+
+  /**
+   * `ask_user_question` / `/ask`: routed through the same `interactiveQueue` as `approve`/`select`,
+   * so a root or subagent question never races another prompt for the screen. A question withdrawn
+   * while queued or displayed (its session cancelled) resolves every question undefined and prints
+   * a notice; it never leaves a stale prompt on screen or blocks the next queued item.
+   */
+  const askQuestions = (request: AskQuestionsRequest): Promise<AskQuestionsResult> => {
+    const specs = request.questions.map((q) => ({
+      header: q.header,
+      question: q.question,
+      ...(q.multiSelect ? { multiSelect: true } : {}),
+      options: q.options.map((o) => ({
+        label: o.label,
+        ...(o.description ? { description: o.description } : {}),
+        ...(o.recommended ? { recommended: true } : {}),
+      })),
+    }));
+    const withdrawnResult = (): AskQuestionsResult =>
+      Object.fromEntries(request.questions.map((q) => [q.id, undefined]));
+    const toResult = (
+      answers: Array<{ skipped: boolean; indices: number[] } | undefined>,
+    ): AskQuestionsResult => {
+      const result: AskQuestionsResult = {};
+      request.questions.forEach((q, i) => {
+        const a = answers[i];
+        if (!a || a.skipped) {
+          result[q.id] = undefined;
+          return;
+        }
+        const values = a.indices.map((idx) => q.options[idx]?.value ?? "");
+        result[q.id] = q.multiSelect ? values : values[0];
+      });
+      return result;
+    };
+    return interactiveQueue.submit<AskQuestionsResult>({
+      sessionId: request.session,
+      label: request.label,
+      signal: request.signal,
+      onWithdrawn: () => {
+        notice(
+          `${request.label ? `[${request.label}] ` : ""}Question withdrawn: the asking agent was cancelled.`,
+        );
+        return withdrawnResult();
+      },
+      run: () =>
+        new Promise<AskQuestionsResult>((resolve) => {
+          let settled = false;
+          const finish = (result: AskQuestionsResult) => {
+            if (settled) return;
+            settled = true;
+            request.signal?.removeEventListener("abort", onAbort);
+            closePicker();
+            resolve(result);
+          };
+          const onAbort = () => {
+            notice(
+              `${request.label ? `[${request.label}] ` : ""}Question withdrawn: the asking agent was cancelled.`,
+            );
+            finish(withdrawnResult());
+          };
+          request.signal?.addEventListener("abort", onAbort, { once: true });
+          showPicker(
+            new QuestionPanel(
+              specs,
+              (answers) => {
+                info(summarizeAnswers(specs, answers));
+                finish(toResult(answers));
+              },
+              request.label,
+            ),
+          );
+        }),
+    });
+  };
 
   const task = async (work: (signal: AbortSignal) => Promise<unknown>) => {
     busy = true;
@@ -609,7 +717,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
           ]
         : []),
       "- `/skill:name request` — load a skill and send the request",
-      "- `/init` (above) writes AGENTS.md; the shell command `alisio init` only scaffolds `.alisio/config.json`",
+      "- `/init` (above) writes AGENTS.md; the shell command `alisio setup` only scaffolds `.alisio/config.json`",
       "- `/command plugin.id:name args` — run a plugin command",
       "",
       "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents",
@@ -670,6 +778,19 @@ export async function runTui(options: TuiOptions): Promise<void> {
           const message = copyMessage(result);
           tui.flash(message);
           return result.ok ? undefined : notice(message);
+        }
+        case "ask": {
+          if (!parsed.args) return notice("Usage: /ask <question>");
+          return await runPrompt(
+            `/ask ${parsed.args}`,
+            `The user has a question of their own and wants help turning it into a multiple-choice ` +
+              `question: "${parsed.args}"\n\nPropose 2-4 concrete, mutually distinct options that ` +
+              `would resolve it. Mark at most one option "recommended" only if you have a clear, ` +
+              `well-justified opinion; it is a suggestion, never forced on the user. Then ` +
+              `immediately call ask_user_question with exactly one question built from this ` +
+              `(reuse the user's own wording for the question text). Do not answer in plain text ` +
+              `first; call the tool right away.`,
+          );
         }
         case "clear": {
           await endSession("clear");
@@ -777,27 +898,35 @@ export async function runTui(options: TuiOptions): Promise<void> {
 
   // Interactive services for plugins: choices (e.g. worktree isolation) and session views.
   app.plugins.setInteractiveUI({
+    // No session/label/signal on SelectRequest: queued FIFO like everything else, never withdrawn
+    // early. Routed through the same queue as approve/askQuestions since plugin-subagents can call
+    // `select` concurrently with an approval, which previously raced on the shared picker slot.
     select: (request) =>
-      new Promise<string | undefined>((resolve) => {
-        showPicker(
-          new Picker(
-            request.title,
-            request.options.map((o) => ({
-              value: o.value,
-              label: o.label,
-              ...(o.description ? { description: o.description } : {}),
-            })),
-            (item) => {
-              closePicker();
-              resolve(item.value);
-            },
-            () => {
-              closePicker();
-              resolve(undefined);
-            },
-          ),
-        );
+      interactiveQueue.submit<string | undefined>({
+        onWithdrawn: () => undefined,
+        run: () =>
+          new Promise<string | undefined>((resolve) => {
+            showPicker(
+              new Picker(
+                request.title,
+                request.options.map((o) => ({
+                  value: o.value,
+                  label: o.label,
+                  ...(o.description ? { description: o.description } : {}),
+                })),
+                (item) => {
+                  closePicker();
+                  resolve(item.value);
+                },
+                () => {
+                  closePicker();
+                  resolve(undefined);
+                },
+              ),
+            );
+          }),
       }),
+    askQuestions: (request) => askQuestions(request),
     open: (sessionId) => {
       const node = panelNodes().find((n) => n.sessionId === sessionId);
       panelState = {
@@ -912,7 +1041,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     if (matchesKey(data, Key.ctrl("c"))) {
       if (tui.hasActiveSelection()) return undefined;
       if (picker) {
-        picker.handleInput("\x1b");
+        picker.handleInput?.("\x1b");
         return { consume: true };
       }
       if (editor.getText()) {

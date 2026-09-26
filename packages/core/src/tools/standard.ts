@@ -1,13 +1,31 @@
 import { createHash } from "node:crypto";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
-import { type JsonSchema, type ToolDefinition, textResult } from "@alisio/sdk";
+import {
+  type AskQuestionsRequest,
+  type AskQuestionsResult,
+  type JsonSchema,
+  type Question,
+  type SearchProvider,
+  type ToolDefinition,
+  textResult,
+} from "@alisio/sdk";
+import type { Policy } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import type { ProjectContext } from "../resources/context.ts";
 import type { Skills } from "../resources/skills.ts";
 import { fileSize, readHead, readText } from "../runtime/fs.ts";
 import { safePath } from "../runtime/paths.ts";
 import { runProcess } from "../runtime/process.ts";
+import { EXECUTE_TIMEOUT_MS, MAX_NESTED_CALLS, runExecute } from "./execute.ts";
+import { searchWithFallback, type WebsearchConfig } from "./search.ts";
+import {
+  DEFAULT_TIMEOUT_SECONDS,
+  MAX_RESPONSE_BYTES,
+  MAX_TIMEOUT_SECONDS,
+  type WebfetchFormat,
+  webfetch,
+} from "./webfetch.ts";
 
 const str = { type: "string" },
   integer = { type: "integer", minimum: 0 };
@@ -50,6 +68,16 @@ export function registerStandard(
   workspace: string,
   skills: Skills,
   context: ProjectContext,
+  ui?: {
+    interactive(): boolean;
+    askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
+  },
+  /** Live policy accessor for `execute`'s nested tool calls (bound once the runner exists). */
+  execCtx?: { policy(): Policy },
+  websearchCtx?: {
+    config?: WebsearchConfig;
+    resolveExtension?: () => { provider: SearchProvider; plugin: string } | undefined;
+  },
 ): void {
   const register = (tool: ToolDefinition) => registry.register(tool);
   const filePaths = (input: Record<string, unknown>) =>
@@ -306,6 +334,193 @@ export function registerStandard(
     paths: filePaths,
     async execute(i) {
       return textResult(JSON.stringify(await context.explain(String(i.path))));
+    },
+  });
+  register({
+    name: "ask_user_question",
+    effect: "read",
+    description:
+      "Ask the user one or more multiple-choice questions when there is a real fork in the " +
+      "approach and their preference genuinely changes what you do next. Each question needs 2-4 " +
+      "concrete options; mark at most one `recommended` when you have a clear opinion, but it is " +
+      "only a suggestion, never forced on the user. Prefer a single round: only ask a follow-up " +
+      "batch afterward if the answers create a genuinely new fork. Only usable in an interactive " +
+      "session; if it is not, this call fails and you should ask the question in plain text instead " +
+      "and wait for the user's normal reply.",
+    inputSchema: objectSchema(
+      {
+        questions: {
+          type: "array",
+          minItems: 1,
+          maxItems: 4,
+          items: {
+            type: "object",
+            properties: {
+              header: { type: "string", minLength: 1, maxLength: 40 },
+              question: { type: "string", minLength: 1 },
+              multiSelect: { type: "boolean" },
+              options: {
+                type: "array",
+                minItems: 2,
+                maxItems: 4,
+                items: objectSchema(
+                  {
+                    label: { type: "string", minLength: 1 },
+                    description: str,
+                    recommended: { type: "boolean" },
+                  },
+                  ["label"],
+                ),
+              },
+            },
+            required: ["header", "question", "options"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ["questions"],
+    ),
+    async execute(i, c) {
+      if (!ui?.interactive())
+        return textResult(
+          JSON.stringify({
+            error:
+              "ask_user_question is unavailable: this session is not interactive (headless or " +
+              "--json). Ask the question in plain text in your reply instead and wait for the " +
+              "user's normal answer; never rely on this tool here.",
+          }),
+          true,
+        );
+      const specs = i.questions as Array<{
+        header: string;
+        question: string;
+        multiSelect?: boolean;
+        options: Array<{ label: string; description?: string; recommended?: boolean }>;
+      }>;
+      for (const spec of specs) {
+        const recommended = spec.options.filter((o) => o.recommended).length;
+        if (recommended > 1)
+          throw new Error(`At most one option may be recommended (question "${spec.header}")`);
+        const labels = new Set(spec.options.map((o) => o.label));
+        if (labels.size !== spec.options.length)
+          throw new Error(`Option labels must be unique within a question ("${spec.header}")`);
+      }
+      const questions: Question[] = specs.map((spec, index) => ({
+        id: `q${index}`,
+        header: spec.header,
+        question: spec.question,
+        multiSelect: spec.multiSelect,
+        options: spec.options.map((o) => ({
+          value: o.label,
+          label: o.label,
+          ...(o.description ? { description: o.description } : {}),
+          ...(o.recommended ? { recommended: true } : {}),
+        })),
+      }));
+      const result = await ui.askQuestions({
+        questions,
+        ...(c.session ? { session: c.session } : {}),
+        ...(c.label ? { label: c.label } : {}),
+        signal: c.signal,
+      });
+      const answers = specs.map((spec, index) => {
+        const value = result[`q${index}`];
+        if (value === undefined) return { header: spec.header, skipped: true, selected: [] };
+        return {
+          header: spec.header,
+          skipped: false,
+          selected: Array.isArray(value) ? value : [value],
+        };
+      });
+      return textResult(JSON.stringify({ answers }));
+    },
+  });
+  register({
+    name: "webfetch",
+    effect: "external",
+    description:
+      "Fetch a URL as text, markdown or HTML (default markdown). Follows redirects; refuses " +
+      `binary/image responses; capped at ${MAX_RESPONSE_BYTES} bytes. Long pages are truncated ` +
+      "in the result with a `fullTextPath` you can read in full with read_file.",
+    inputSchema: objectSchema(
+      {
+        url: str,
+        format: { type: "string", enum: ["markdown", "text", "html"] },
+        timeout: {
+          type: "integer",
+          minimum: 1,
+          maximum: MAX_TIMEOUT_SECONDS,
+          description: "Seconds, default 30, capped at 120",
+        },
+      },
+      ["url"],
+    ),
+    async execute(i, c) {
+      const result = await webfetch(
+        c.workspace,
+        String(i.url),
+        (i.format as WebfetchFormat | undefined) ?? "markdown",
+        Number(i.timeout ?? DEFAULT_TIMEOUT_SECONDS),
+        c.signal,
+      );
+      return textResult(JSON.stringify(result));
+    },
+  });
+  // In "native" mode the provider answers search server-side (see application.ts); registering
+  // this tool too would just confuse the model with a second, redundant search path.
+  if (websearchCtx?.config?.provider !== "native")
+    register({
+      name: "websearch",
+      effect: "external",
+      description:
+        "Search the web and return {title, url, snippet} results. Uses a configured provider " +
+        "(websearch.provider in config), or a public SearXNG instance by default; check the " +
+        "result's `limitation` field, since some providers (e.g. duckduckgo-instant) only answer " +
+        "direct factual queries, not general search.",
+      inputSchema: objectSchema({ query: { type: "string", minLength: 1 } }, ["query"]),
+      async execute(i, c) {
+        const outcome = await searchWithFallback(
+          String(i.query),
+          websearchCtx?.config,
+          websearchCtx?.resolveExtension,
+          c.signal,
+        );
+        return textResult(
+          JSON.stringify({
+            results: outcome.results,
+            source: outcome.source,
+            ...(outcome.limitation ? { limitation: outcome.limitation } : {}),
+            ...(outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}),
+          }),
+        );
+      },
+    });
+  register({
+    name: "execute",
+    effect: "process",
+    description:
+      "Run a short JavaScript snippet (Code Mode) that can call other tools via " +
+      "`await callTool(name, input)` and return one final JSON-serializable value, so " +
+      "intermediate tool results never re-enter your context — only the return value does. " +
+      "The snippet runs in an isolated context with no filesystem, network, imports or timers " +
+      "of its own; every nested callTool still goes through this session's normal permission " +
+      `gate (an effect not already allowed is denied, never newly approved). Bounded to ` +
+      `${EXECUTE_TIMEOUT_MS}ms wall-clock and ${MAX_NESTED_CALLS} nested tool calls. This is a ` +
+      "correctness sandbox, not an OS security boundary. Prefer plain sequential tool calls " +
+      "unless you are combining several read-only calls or post-processing their output.",
+    inputSchema: objectSchema({ code: { type: "string", minLength: 1 } }, ["code"]),
+    async execute(i, c) {
+      const policy = execCtx?.policy() ?? { write: false, process: false, external: false };
+      const result = await runExecute(String(i.code), {
+        registry,
+        policy,
+        workspace: c.workspace,
+        signal: c.signal,
+        emit: c.emit,
+        ...(c.session ? { session: c.session } : {}),
+        ...(c.label ? { label: c.label } : {}),
+      });
+      return textResult(JSON.stringify({ result: result ?? null }));
     },
   });
 }

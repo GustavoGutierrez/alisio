@@ -244,6 +244,7 @@ Extension points let a plugin replace a piece of the host with its own provider.
 | --- | --- | --- |
 | `mascot` | `MascotProvider`: `{ id, render(ctx: MascotContext) }` returning a `string` or `string[]` | `DefaultAlisioMascot` (`alisio.default`) |
 | `startup-screen` | `StartupScreenProvider`: `{ id, render(ctx: StartupContext): string[] }` | `DefaultStartupScreen` (`alisio.default`) |
+| `websearch` | `SearchProvider`: `{ id, search(query, options?: { signal? }): Promise<SearchResult[]> }`, `SearchResult = { title, url, snippet }` | The built-in chain: a configured `websearch.provider`, else a public SearXNG instance (see [Tools & permissions](/tools#websearch)) |
 
 Register a provider imperatively, or declare it on the plugin object:
 
@@ -273,7 +274,9 @@ export const declarative = definePlugin({
 ```
 
 - `api.extensions.register(point, provider, { priority })` returns a disposer that unregisters it.
-  `priority` is a finite number, default `0`; a provider needs an `id` and a `render` function.
+  `priority` is a finite number, default `0`; a provider needs an `id` (that is the one thing every
+  point shares — a renderable point like `mascot` additionally needs a working `render`, checked
+  when the host actually calls it, the same way a throwing `render` already falls back today).
 - The declarative `Plugin.extensions` field is sugar for `api.extensions.register(point, provider)`
   at priority `0`, applied before `setup` runs.
 
@@ -374,6 +377,55 @@ export default definePlugin({
 ```sh
 npm run build
 alisio --plugin ./examples/plugins/custom-mascot/dist/index.js
+```
+
+### Example: custom websearch provider
+
+[`examples/plugins/custom-websearch`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-websearch)
+(`alisio-plugin-brave-websearch`, plugin `id` `brave-websearch`) wraps
+[Brave Search](https://api.search.brave.com/) with a user-supplied API key behind the `websearch`
+extension point — a copyable reference for "bring your own search engine":
+
+```ts
+import { definePlugin, type SearchProvider, type SearchResult } from "@alisio/sdk";
+
+export function braveSearchProvider(apiKey: string): SearchProvider {
+  return {
+    id: "brave-example",
+    async search(query, options): Promise<SearchResult[]> {
+      const url = new URL("https://api.search.brave.com/res/v1/web/search");
+      url.searchParams.set("q", query);
+      const res = await fetch(url, {
+        headers: { "X-Subscription-Token": apiKey, Accept: "application/json" },
+        signal: options?.signal,
+      });
+      if (!res.ok) throw new Error(`Brave Search request failed: HTTP ${res.status}`);
+      const body = await res.json();
+      return (body.web?.results ?? []).map((r: { title?: string; url?: string; description?: string }) => ({
+        title: r.title ?? "",
+        url: r.url ?? "",
+        snippet: r.description ?? "",
+      }));
+    },
+  };
+}
+
+export default definePlugin({
+  id: "brave-websearch",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+    if (!apiKey) throw new Error("brave-websearch: set BRAVE_SEARCH_API_KEY");
+    api.extensions.register("websearch", braveSearchProvider(apiKey), { priority: 10 });
+  },
+});
+```
+
+```sh
+npm run build
+export BRAVE_SEARCH_API_KEY=...
+alisio --plugin ./examples/plugins/custom-websearch/dist/index.js --allow-external
 ```
 
 ## Loading plugins {#loading-plugins}

@@ -71,6 +71,7 @@ Typing `/` opens autocompletion.
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
 | `/copy` | Copy the last assistant response to the clipboard |
+| `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
@@ -78,8 +79,9 @@ Typing `/` opens autocompletion.
 | `/memory …` | Command of the built-in memory plugin; see [Persistent memory](/memory) |
 | `/agents …` | Command of the built-in subagents plugin: list, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; see [Subagents](/subagents#in-the-tui) |
 
-`/init` is a prompt template, not the `alisio init` command: `alisio init` only writes an example
-`.alisio/config.json`. Other [prompt templates](/prompt-templates) appear in their own section of
+`/init` is a prompt template that generates or updates `AGENTS.md` from the repository; it is
+unrelated to the `alisio setup` command, which only scaffolds an example `.alisio/config.json`.
+Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
@@ -110,8 +112,15 @@ In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name requ
 ## Agent panel {#agent-panel}
 
 When [subagents](/subagents) run, a collapsible tree panel appears under the editor. Its header shows
-how many agents are running, queued and finished; each row shows a status icon, the agent name and
-color, the elapsed time, tokens and a one-line live summary. Indentation shows parent → child.
+how many agents are running, queued, **waiting** and finished; each row shows a status icon, the
+agent name and color, the elapsed time, tokens and a one-line live summary. Indentation shows
+parent → child.
+
+A row shows **waiting** (◆, distinct from the running spinner) instead of running while that agent
+is blocked on `ask_user_question` or a write/process approval — currently shown, or queued behind
+another prompt. This is a display-only status computed from the same
+[interactive queue](#ask-user-question) that serializes prompts; it is never persisted, so it
+disappears again as soon as the agent's prompt is answered or withdrawn.
 
 | Focus | Key | Action |
 | --- | --- | --- |
@@ -201,6 +210,53 @@ embedded newline is treated as its own Enter, submitting one message per line in
 combined message. Use the full TUI (the default on an interactive terminal) for multi-line or
 image paste.
 
+## Asking the user (ask_user_question) {#ask-user-question}
+
+The model can ask one or more multiple-choice questions with the `ask_user_question` tool (see
+[Tools & permissions](/tools#ask-user-question)) — for example when there is a real fork in the
+approach and the user's preference changes what happens next. You can also start this yourself with
+`/ask <question>`: the agent proposes 2-4 concrete options for your own question (marking one
+`recommended` only when it has a clear opinion) and calls the tool immediately.
+
+Questions are shown **one at a time** (stepped), not as a single panel holding every question's
+options at once — a narrow terminal cannot fit several questions' options legibly in one screen, and
+a step reflows independently on resize. The header line shows `Question i/N`; a `recommended` option
+is tagged and colored, not only described, so it stands out even when descriptions are truncated.
+
+| Key | Action |
+| --- | --- |
+| ↑ / ↓ | Move the highlighted option (wraps at the ends) |
+| → / Space | Toggle an option (multi-select questions only) |
+| Enter | Confirm the current question and advance; submits on the last question |
+| ← / Backspace | Back up to change an earlier answer (only offered once you have advanced) |
+| Esc | Skip the **current question only** |
+
+**Esc skips only the current question**, not the whole batch: it records that question as skipped
+(shown as `_Skipped_` in the summary) and moves on to the next one exactly like Enter would, so an
+earlier or later question in the same batch is never affected. This was a deliberate choice (Claude
+Code's own exact behavior here was not independently verifiable at the time): whole-batch cancellation
+would throw away answers already given, which is more surprising than skipping one question.
+
+After the last question is confirmed or skipped, a compact summary is added to the conversation:
+one line per question with its header and chosen option(s), or `_Skipped_` / `_None selected_`
+(an explicit empty multi-select answer, distinct from a skip); long option labels are truncated
+with a trailing `…` rather than wrapped, to keep the summary short.
+
+### One prompt at a time
+
+Write/process approvals, `/model`'s picker and `ask_user_question` all share **one interactive
+queue**: at most one of them is ever on screen, in the order they were asked (plain first-in,
+first-out — there is no root-over-subagent priority, since a subagent can also call
+`ask_user_question` through the same tool). A [subagent](/subagents)'s question shows a breadcrumb
+of who is asking (its agent path, e.g. `general › explore asks:`) and its answer is delivered back
+only to that exact subagent, never broadcast. If a subagent is cancelled while its question is
+queued or currently displayed, it is withdrawn cleanly — a notice says so, and the next queued
+prompt (if any) takes its place — rather than leaving a stale prompt for a dead session. The [agent
+panel](#agent-panel) shows that agent as **waiting** for as long as it is queued or displayed.
+
+`/model` and `/resume`'s own pickers are not part of this shared queue: they are commands you type
+yourself, never concurrent with a subagent's question.
+
 ## Interactive approvals
 
 In the TUI, when `write` or `process` are not allowed by flags, the corresponding tools are still
@@ -211,4 +267,6 @@ offered to the model, and Alisio asks before running them:
 - **Deny**
 
 With `--read-only` nothing is asked and those tools stay disabled. Headless modes never ask. The time
-spent waiting for an approval counts toward `limits.timeoutMs`. See [Tools & permissions](/tools).
+spent waiting for an approval counts toward `limits.timeoutMs`. Approvals share the same
+[interactive queue](#ask-user-question) as `ask_user_question`, so a subagent's approval prompt and a
+subagent's question never race each other for the screen. See [Tools & permissions](/tools).

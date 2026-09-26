@@ -52,6 +52,12 @@ export interface RunnerOptions {
   approve?: ApprovalHandler;
   /** Generic hooks (implemented by the plugin host) for compaction and session start. */
   extensions?: RunnerExtensions;
+  /**
+   * Provider-native tool definitions (for example a hosted `web_search` tool) appended to every
+   * request's `tools` alongside the registry's function tools. Opt-in, set once for the whole
+   * runner; only meaningful for a provider that documents an equivalent server-side tool.
+   */
+  nativeTools?: Array<Record<string, unknown>>;
 }
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
@@ -142,7 +148,7 @@ export class AgentRunner {
       if (run.toolFilter && !run.toolFilter(t)) return false;
       const effect = t.effect ?? "external";
       if (allowed(policy, effect)) return true;
-      return approvals && (effect === "write" || effect === "process");
+      return approvals && (effect === "write" || effect === "process" || effect === "external");
     });
   }
   /** Abort signal of the session's active run, if any (used to cascade cancellation). */
@@ -450,6 +456,7 @@ export class AgentRunner {
           maxOutputTokens: o.maxOutputTokens ?? 4096,
           signal: combined,
           model,
+          ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
         })) {
           combined.throwIfAborted();
           if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
@@ -524,7 +531,11 @@ export class AgentRunner {
             if (options.toolFilter && !options.toolFilter(p.tool))
               throw new Error(`Tool ${call.name} is not available in this session`);
             if (!allowed(policy, effect)) {
-              if (!o.approve || !approvals || (effect !== "write" && effect !== "process"))
+              if (
+                !o.approve ||
+                !approvals ||
+                (effect !== "write" && effect !== "process" && effect !== "external")
+              )
                 throw new Error(`Capability denied: ${effect}`);
               emit("approval_requested", {
                 id: call.id,
@@ -552,6 +563,7 @@ export class AgentRunner {
               workspace,
               session: sessionId,
               emit: (data) => emit("tool_progress", { id: call.id, data }),
+              ...(options.label ? { label: options.label } : {}),
             });
             if (JSON.stringify(result).length > 48_000)
               result = textResult(

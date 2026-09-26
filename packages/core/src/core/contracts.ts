@@ -76,11 +76,11 @@ export interface ApprovalRequest {
   session?: string;
   /** Who is asking, e.g. an agent path such as "general › explore". */
   label?: string;
-  effect: "write" | "process";
+  effect: "write" | "process" | "external";
   input: Record<string, unknown>;
   signal: AbortSignal;
 }
-/** Optional interactive approval for write/process tools not pre-allowed by the Policy. */
+/** Optional interactive approval for write/process/external tools not pre-allowed by the Policy. */
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalDecision>;
 export interface HookFailure {
   source: string;

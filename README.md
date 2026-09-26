@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/GustavoGutierrez/alisio/main/script
 ## Quick start
 
 ```sh
-alisio init                                  # writes .alisio/config.json without secrets
+alisio setup                                 # writes .alisio/config.json without secrets
 export DEEPSEEK_API_KEY='...'                # keys come from the environment
 alisio --config .alisio/config.json          # TUI
 alisio run "Explain this repository" --config .alisio/config.json --read-only

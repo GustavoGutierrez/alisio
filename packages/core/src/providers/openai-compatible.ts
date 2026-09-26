@@ -10,8 +10,13 @@ import OpenAI from "openai";
 import type {
   ChatCompletionContentPart,
   ChatCompletionMessageParam,
+  ChatCompletionTool,
 } from "openai/resources/chat/completions";
-import type { ResponseInputContent, ResponseInputItem } from "openai/resources/responses/responses";
+import type {
+  ResponseCreateParams,
+  ResponseInputContent,
+  ResponseInputItem,
+} from "openai/resources/responses/responses";
 import type { Config } from "../config.ts";
 
 const dataUrl = (a: Attachment) => `data:${a.mimeType};base64,${a.data}`;
@@ -97,12 +102,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
         stream: true,
         ...limit,
         ...(this.config.streamUsage ? { stream_options: { include_usage: true } } : {}),
-        ...(request.tools.length
+        ...(request.tools.length || request.nativeTools?.length
           ? {
-              tools: request.tools.map((t) => ({
-                type: "function" as const,
-                function: { name: t.name, description: t.description, parameters: t.inputSchema },
-              })),
+              tools: [
+                ...request.tools.map((t) => ({
+                  type: "function" as const,
+                  function: { name: t.name, description: t.description, parameters: t.inputSchema },
+                })),
+                ...(request.nativeTools ?? []),
+              ] as unknown as ChatCompletionTool[],
             }
           : {}),
       },
@@ -180,13 +188,16 @@ export class OpenAICompatibleProvider implements ModelProvider {
         store: false,
         include: ["reasoning.encrypted_content"],
         max_output_tokens: request.maxOutputTokens,
-        tools: request.tools.map((t) => ({
-          type: "function",
-          name: t.name,
-          description: t.description,
-          parameters: t.inputSchema,
-          strict: false,
-        })),
+        tools: [
+          ...request.tools.map((t) => ({
+            type: "function" as const,
+            name: t.name,
+            description: t.description,
+            parameters: t.inputSchema,
+            strict: false,
+          })),
+          ...(request.nativeTools ?? []),
+        ] as unknown as ResponseCreateParams["tools"],
       },
       { signal: request.signal },
     );

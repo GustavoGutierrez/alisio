@@ -46,9 +46,11 @@
   },
   "dependencies": {
     "@alisio/sdk": "workspace:*",
+    "@mixmark-io/domino": "2.2.0",
     "@modelcontextprotocol/client": "2.1.0",
     "ajv": "8.20.0",
     "openai": "7.23.0",
+    "turndown": "7.2.4",
     "yaml": "2.9.1",
     "zod": "4.6.5"
   },
@@ -60,5 +62,8 @@
         "import": "./dist/index.js"
       }
     }
+  },
+  "devDependencies": {
+    "@types/turndown": "5.0.6"
   }
 }

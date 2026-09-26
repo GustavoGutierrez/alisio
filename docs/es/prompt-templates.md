@@ -186,8 +186,9 @@ El argumento opcional es un foco adicional que se añade al final (`$ARGUMENTS`)
 alisio run "/init focus on the plugin SDK" --allow-write
 ```
 
-`/init` no es `alisio init`: el comando `alisio init` escribe un `.alisio/config.json` de ejemplo y
-ahora muestra una sugerencia que remite a `/init`.
+`/init` genera o actualiza `AGENTS.md` a partir del repositorio; `alisio setup` es un comando
+distinto que solo escribe un `.alisio/config.json` de ejemplo y muestra una sugerencia que remite a
+`/init`.
 
 ::: tip Repositorios grandes
 La exploración reenvía el contexto creciente en cada turno, y `limits.maxTokens` es un presupuesto

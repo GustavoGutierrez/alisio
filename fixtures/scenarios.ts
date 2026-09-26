@@ -3,7 +3,12 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { type ModelProvider, type ProviderEvent, textResult } from "@alisio/sdk";
+import {
+  type ModelProvider,
+  type ProviderEvent,
+  type SearchProvider,
+  textResult,
+} from "@alisio/sdk";
 import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
 import { BUILTIN_PROMPTS } from "../packages/cli/src/prompts/index.ts";
 import { createApplication } from "../packages/core/src/application.ts";
@@ -21,13 +26,20 @@ import { safePath } from "../packages/core/src/runtime/paths.ts";
 import { runProcess } from "../packages/core/src/runtime/process.ts";
 import { openDatabase } from "../packages/core/src/runtime/sqlite.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
+import { runExecute } from "../packages/core/src/tools/execute.ts";
+import {
+  duckDuckGoInstantProvider,
+  searchWithFallback,
+  validateSearxngUrl,
+} from "../packages/core/src/tools/search.ts";
 import { hash, objectSchema, registerStandard } from "../packages/core/src/tools/standard.ts";
+import { webfetch } from "../packages/core/src/tools/webfetch.ts";
 import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
 import {
   SQLiteMemoryStore as MemoryStoreOnPort,
   projectId,
 } from "../packages/plugin-memory/src/store.ts";
-import { isMain } from "./http.ts";
+import { isMain, serve } from "./http.ts";
 
 /** Memory store over the same SQLite adapter the host provides through the storage port. */
 class SQLiteMemoryStore extends MemoryStoreOnPort {
@@ -2086,6 +2098,548 @@ const fixtures: Record<string, () => Promise<void>> = {
     } finally {
       store.close();
     }
+  },
+  async "ask-user-question"() {
+    const ctx = (extra?: Record<string, unknown>) => ({
+      signal: signal(),
+      workspace: root,
+      emit: () => {},
+      ...extra,
+    });
+    const questions = [
+      {
+        header: "Style",
+        question: "Which formatting style?",
+        options: [{ label: "Tabs" }, { label: "Spaces", recommended: true }, { label: "Mixed" }],
+      },
+      {
+        header: "Tools",
+        question: "Which tools should run?",
+        multiSelect: true,
+        options: [{ label: "Lint" }, { label: "Tests" }],
+      },
+    ];
+    // Headless: no `ui` at all never hangs and fails fast with a guidance message.
+    {
+      const reg = new ToolRegistry();
+      registerStandard(reg, root, new Skills(), new ProjectContext(root));
+      const result = await reg.get("ask_user_question").execute({ questions }, ctx());
+      assert.equal(result.isError, true);
+      assert.match(result.content[0]?.text ?? "", /not interactive|headless/);
+    }
+    // Headless: `ui.interactive()` returning false also fails fast, never calls askQuestions.
+    {
+      const reg = new ToolRegistry();
+      let called = false;
+      registerStandard(reg, root, new Skills(), new ProjectContext(root), {
+        interactive: () => false,
+        askQuestions: async () => {
+          called = true;
+          return {};
+        },
+      });
+      const result = await reg.get("ask_user_question").execute({ questions }, ctx());
+      assert.equal(result.isError, true);
+      assert.equal(called, false);
+    }
+    // Interactive: the request forwards session/label/signal, and answers map back in array order.
+    {
+      const reg = new ToolRegistry();
+      let captured: unknown;
+      registerStandard(reg, root, new Skills(), new ProjectContext(root), {
+        interactive: () => true,
+        askQuestions: async (request) => {
+          captured = request;
+          return { q0: "Spaces", q1: ["Lint", "Tests"] };
+        },
+      });
+      const callSignal = signal();
+      const result = await reg
+        .get("ask_user_question")
+        .execute(
+          { questions },
+          ctx({ session: "child-1", label: "general › explore", signal: callSignal }),
+        );
+      assert.equal(result.isError, undefined);
+      const parsed = JSON.parse(result.content[0]?.text ?? "{}");
+      assert.deepEqual(parsed.answers, [
+        { header: "Style", skipped: false, selected: ["Spaces"] },
+        { header: "Tools", skipped: false, selected: ["Lint", "Tests"] },
+      ]);
+      const req = captured as {
+        session?: string;
+        label?: string;
+        signal?: AbortSignal;
+        questions: Array<{ id: string; header: string }>;
+      };
+      assert.equal(req.session, "child-1");
+      assert.equal(req.label, "general › explore");
+      assert.equal(req.signal, callSignal);
+      assert.equal(req.questions[0]?.id, "q0");
+    }
+    // Skipped question maps to undefined selected, not an empty selection.
+    {
+      const reg = new ToolRegistry();
+      registerStandard(reg, root, new Skills(), new ProjectContext(root), {
+        interactive: () => true,
+        askQuestions: async () => ({ q0: undefined, q1: [] }),
+      });
+      const result = await reg.get("ask_user_question").execute({ questions }, ctx());
+      const parsed = JSON.parse(result.content[0]?.text ?? "{}");
+      assert.deepEqual(parsed.answers, [
+        { header: "Style", skipped: true, selected: [] },
+        { header: "Tools", skipped: false, selected: [] },
+      ]);
+    }
+    // Schema-level validation (through the registry's ajv-backed parse, like a real tool call).
+    {
+      const reg = new ToolRegistry();
+      registerStandard(reg, root, new Skills(), new ProjectContext(root), {
+        interactive: () => true,
+        askQuestions: async () => ({}),
+      });
+      const valid = JSON.stringify({ questions });
+      assert.deepEqual(reg.parse("ask_user_question", valid), { questions });
+      const tooFew = JSON.stringify({ questions: [] });
+      assert.throws(() => reg.parse("ask_user_question", tooFew));
+      const fiveQuestions = JSON.stringify({
+        questions: Array.from({ length: 5 }, (_, i) => ({
+          header: `Q${i}`,
+          question: "?",
+          options: [{ label: "A" }, { label: "B" }],
+        })),
+      });
+      assert.throws(() => reg.parse("ask_user_question", fiveQuestions));
+      const oneOption = JSON.stringify({
+        questions: [{ header: "Q", question: "?", options: [{ label: "A" }] }],
+      });
+      assert.throws(() => reg.parse("ask_user_question", oneOption));
+      const fiveOptions = JSON.stringify({
+        questions: [
+          {
+            header: "Q",
+            question: "?",
+            options: [
+              { label: "A" },
+              { label: "B" },
+              { label: "C" },
+              { label: "D" },
+              { label: "E" },
+            ],
+          },
+        ],
+      });
+      assert.throws(() => reg.parse("ask_user_question", fiveOptions));
+    }
+    // Runtime business-rule validation (beyond what the JSON Schema alone can express).
+    {
+      const reg = new ToolRegistry();
+      registerStandard(reg, root, new Skills(), new ProjectContext(root), {
+        interactive: () => true,
+        askQuestions: async () => ({}),
+      });
+      await assert.rejects(
+        () =>
+          reg.get("ask_user_question").execute(
+            {
+              questions: [
+                {
+                  header: "Q",
+                  question: "?",
+                  options: [
+                    { label: "A", recommended: true },
+                    { label: "B", recommended: true },
+                  ],
+                },
+              ],
+            },
+            ctx(),
+          ),
+        /one option may be recommended/,
+      );
+      await assert.rejects(
+        () =>
+          reg.get("ask_user_question").execute(
+            {
+              questions: [
+                { header: "Q", question: "?", options: [{ label: "Same" }, { label: "Same" }] },
+              ],
+            },
+            ctx(),
+          ),
+        /unique/,
+      );
+    }
+  },
+  async webfetch() {
+    const server = await serve(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/redirect")
+        return new Response(null, { status: 302, headers: { Location: "/page" } });
+      if (url.pathname === "/page")
+        return new Response(
+          "<html><head><style>.x{color:red}</style></head><body><h1>Hi</h1><p>World</p></body></html>",
+          { headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      if (url.pathname === "/image")
+        return new Response(new Uint8Array([137, 80, 78, 71]), {
+          headers: { "Content-Type": "image/png" },
+        });
+      if (url.pathname === "/big")
+        return new Response(`${"line of fetched content\n".repeat(1200)}`, {
+          headers: { "Content-Type": "text/plain" },
+        });
+      return new Response("not found", { status: 404 });
+    });
+    try {
+      // Redirect handling + HTML-to-markdown (script/style stripped, headings/paragraphs kept).
+      const page = await webfetch(
+        root,
+        `http://127.0.0.1:${server.port}/redirect`,
+        "markdown",
+        10,
+        signal(),
+      );
+      assert.match(page.content, /# Hi/);
+      assert.match(page.content, /World/);
+      assert.doesNotMatch(page.content, /color:red/);
+      assert.equal(page.truncated, false);
+      // Binary/image content is refused, not returned as garbage.
+      await assert.rejects(
+        () => webfetch(root, `http://127.0.0.1:${server.port}/image`, "markdown", 10, signal()),
+        /textual content/,
+      );
+      // Non-http(s) schemes are refused outright.
+      await assert.rejects(
+        () => webfetch(root, "ftp://example.com/file", "text", 10, signal()),
+        /http\(s\)/,
+      );
+      // Size/embedding cap: the result is truncated but the full text is written to a workspace
+      // cache file, so it stays retrievable in full (not just the embedded slice).
+      const big = await webfetch(root, `http://127.0.0.1:${server.port}/big`, "text", 10, signal());
+      assert.equal(big.truncated, true);
+      assert.ok(big.fullTextPath);
+      const onDisk = await readFile(join(root, big.fullTextPath as string), "utf8");
+      assert.equal(onDisk, "line of fetched content\n".repeat(1200));
+      assert.ok(onDisk.length > big.content.length);
+    } finally {
+      await server.close();
+    }
+  },
+  async "webfetch-permission-gate"() {
+    // A `read`-only policy (no --allow-external, no approvals) never offers `webfetch` at all.
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    const fakeProvider: ModelProvider = {
+      id: "fake",
+      model: "fake",
+      async *stream() {
+        throw new Error("must not be called");
+        yield undefined as never;
+      },
+    };
+    const store = db();
+    try {
+      const denied = new AgentRunner({
+        provider: fakeProvider,
+        registry: reg,
+        store,
+        context: new ProjectContext(root),
+        workspace: root,
+        policy: { write: false, process: false, external: false },
+      });
+      assert.equal(
+        denied.availableTools().some((t) => t.name === "webfetch"),
+        false,
+      );
+      // With interactive approvals available, an unallowed `external` effect is still OFFERED
+      // (approval-eligible), matching write/process instead of a hard, silent exclusion.
+      const withApprovals = new AgentRunner({
+        provider: fakeProvider,
+        registry: reg,
+        store,
+        context: new ProjectContext(root),
+        workspace: root,
+        policy: { write: false, process: false, external: false },
+        approve: async () => "deny",
+      });
+      assert.equal(
+        withApprovals.availableTools().some((t) => t.name === "webfetch"),
+        true,
+      );
+    } finally {
+      store.close();
+    }
+  },
+  async "websearch-searxng-default-chain"() {
+    const server = await serve(async (req) => {
+      const url = new URL(req.url);
+      assert.equal(url.pathname, "/search");
+      assert.equal(url.searchParams.get("format"), "json");
+      assert.equal(url.searchParams.get("q"), "bun runtime");
+      return new Response(
+        JSON.stringify({
+          results: [{ title: "Bun", url: "https://bun.sh", content: "A fast runtime" }],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    try {
+      const outcome = await searchWithFallback(
+        "bun runtime",
+        { searxngUrl: `http://127.0.0.1:${server.port}` },
+        undefined,
+        signal(),
+      );
+      assert.deepEqual(outcome.results, [
+        { title: "Bun", url: "https://bun.sh", snippet: "A fast runtime" },
+      ]);
+      assert.equal(outcome.source, `searxng (http://127.0.0.1:${server.port})`);
+      assert.equal(outcome.limitation, undefined);
+    } finally {
+      await server.close();
+    }
+  },
+  async "websearch-duckduckgo-instant"() {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL) => {
+      assert.match(String(input), /api\.duckduckgo\.com/);
+      return new Response(
+        JSON.stringify({
+          Heading: "Bun",
+          AbstractText: "Bun is a fast JavaScript runtime",
+          AbstractURL: "https://bun.sh",
+          RelatedTopics: [],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+    try {
+      const direct = await duckDuckGoInstantProvider().search("bun");
+      assert.equal(direct[0]?.title, "Bun");
+      const outcome = await searchWithFallback(
+        "bun",
+        { provider: "duckduckgo-instant" },
+        undefined,
+        signal(),
+      );
+      assert.equal(outcome.results[0]?.snippet, "Bun is a fast JavaScript runtime");
+      assert.match(outcome.limitation ?? "", /Instant Answer/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+  async "websearch-searxng-ssrf-guard"() {
+    assert.throws(() => validateSearxngUrl("ftp://evil.example.com"), /http or https/);
+    assert.throws(() => validateSearxngUrl("http://evil.example.com"), /https/);
+    assert.doesNotThrow(() => validateSearxngUrl("http://localhost:8080"));
+    assert.doesNotThrow(() => validateSearxngUrl("http://127.0.0.1:8080"));
+    assert.doesNotThrow(() => validateSearxngUrl("https://evil.example.com"));
+  },
+  async "websearch-extension-point"() {
+    const reg = new ToolRegistry();
+    const host = new PluginHost(reg, { getState: () => undefined, setState: () => {} });
+    const custom: SearchProvider = {
+      id: "custom",
+      search: async (q) => [{ title: `custom:${q}`, url: "https://example.com", snippet: "s" }],
+    };
+    await host.activate(
+      {
+        id: "acme.search",
+        version: "1.0.0",
+        apiVersion: 1,
+        setup(api) {
+          api.extensions.register("websearch", custom, { priority: 10 });
+        },
+      },
+      root,
+    );
+    const outcome = await searchWithFallback(
+      "q",
+      undefined,
+      () => host.extensions.resolve("websearch"),
+      signal(),
+    );
+    assert.equal(outcome.results[0]?.title, "custom:q");
+    assert.equal(outcome.source, "plugin:acme.search");
+    // Disposal restores the built-in chain (there is nothing left to resolve).
+    await host.close();
+    assert.equal(host.extensions.resolve("websearch"), undefined);
+  },
+  async "websearch-extension-point-broken-provider-falls-back"() {
+    const reg = new ToolRegistry();
+    const host = new PluginHost(reg, { getState: () => undefined, setState: () => {} });
+    const broken: SearchProvider = {
+      id: "broken",
+      async search() {
+        throw new Error("boom");
+      },
+    };
+    await host.activate(
+      {
+        id: "acme.broken",
+        version: "1.0.0",
+        apiVersion: 1,
+        setup(api) {
+          api.extensions.register("websearch", broken);
+        },
+      },
+      root,
+    );
+    const server = await serve(
+      async () =>
+        new Response(
+          JSON.stringify({ results: [{ title: "fallback", url: "https://x", content: "s" }] }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    );
+    try {
+      const outcome = await searchWithFallback(
+        "q",
+        { searxngUrl: `http://127.0.0.1:${server.port}` },
+        () => host.extensions.resolve("websearch"),
+        signal(),
+      );
+      assert.equal(outcome.results[0]?.title, "fallback");
+      assert.match(outcome.diagnostic ?? "", /acme\.broken/);
+    } finally {
+      await server.close();
+    }
+  },
+  async "execute-basic"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    await writeFile(join(root, "note.txt"), "hello world");
+    const result = await runExecute(
+      `const r = await callTool("read_file", { path: "note.txt" });
+       return r.content;`,
+      {
+        registry: reg,
+        policy: { write: false, process: false, external: false },
+        workspace: root,
+        signal: signal(),
+        emit: () => {},
+      },
+    );
+    assert.match(String(result), /hello world/);
+  },
+  async "execute-denied-effect"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    await assert.rejects(
+      () =>
+        runExecute(
+          `return await callTool("write_file", { path: "x.txt", content: "y", expectedHash: null });`,
+          {
+            registry: reg,
+            policy: { write: false, process: false, external: false },
+            workspace: root,
+            signal: signal(),
+            emit: () => {},
+          },
+        ),
+      /capability denied/i,
+    );
+    assert.equal(existsSync(join(root, "x.txt")), false);
+  },
+  async "execute-allowed-when-policy-grants-it"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    const result = await runExecute(
+      `await callTool("write_file", { path: "granted.txt", content: "ok", expectedHash: null });
+       return "done";`,
+      {
+        registry: reg,
+        policy: { write: true, process: false, external: false },
+        workspace: root,
+        signal: signal(),
+        emit: () => {},
+      },
+    );
+    assert.equal(result, "done");
+    assert.equal(await readFile(join(root, "granted.txt"), "utf8"), "ok");
+  },
+  async "execute-timeout"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    await assert.rejects(
+      () =>
+        runExecute(`await new Promise(() => {}); return 1;`, {
+          registry: reg,
+          policy: { write: false, process: false, external: false },
+          workspace: root,
+          signal: signal(),
+          emit: () => {},
+          timeoutMs: 150,
+        }),
+      /timed out|exceeded/i,
+    );
+  },
+  async "execute-call-count-bound"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    await writeFile(join(root, "note.txt"), "x");
+    await assert.rejects(
+      () =>
+        runExecute(
+          `for (let i = 0; i < 25; i++) { await callTool("read_file", { path: "note.txt" }); }
+           return "done";`,
+          {
+            registry: reg,
+            policy: { write: false, process: false, external: false },
+            workspace: root,
+            signal: signal(),
+            emit: () => {},
+          },
+        ),
+      /exceeded the limit/,
+    );
+  },
+  async "execute-cannot-call-itself"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    await assert.rejects(
+      () =>
+        runExecute(`return await callTool("execute", { code: "return 1" });`, {
+          registry: reg,
+          policy: { write: false, process: false, external: false },
+          workspace: root,
+          signal: signal(),
+          emit: () => {},
+        }),
+      /cannot call itself/,
+    );
+  },
+  async "execute-no-direct-fs-or-network"() {
+    const reg = new ToolRegistry();
+    registerStandard(reg, root, new Skills(), new ProjectContext(root));
+    // Returned as a JSON string (a primitive) rather than an object: an object literal built
+    // inside the vm sandbox belongs to that separate realm's own Object.prototype, which a
+    // cross-realm deepEqual would (rightly) refuse to treat as identical to a host-realm object —
+    // itself a real, positive proof of the isolation this test is trying to demonstrate.
+    const result = await runExecute(
+      `return JSON.stringify({
+         hasRequire: typeof require,
+         hasProcess: typeof process,
+         hasFetch: typeof fetch,
+         hasSetTimeout: typeof setTimeout,
+       });`,
+      {
+        registry: reg,
+        policy: { write: false, process: false, external: false },
+        workspace: root,
+        signal: signal(),
+        emit: () => {},
+      },
+    );
+    assert.deepEqual(JSON.parse(String(result)), {
+      hasRequire: "undefined",
+      hasProcess: "undefined",
+      hasFetch: "undefined",
+      hasSetTimeout: "undefined",
+    });
   },
 };
 export const scenarioNames = Object.keys(fixtures);

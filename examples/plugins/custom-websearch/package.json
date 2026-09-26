@@ -1,0 +1,38 @@
+{
+  "name": "alisio-plugin-brave-websearch",
+  "version": "0.1.0",
+  "description": "Example Alisio plugin: a custom websearch provider (Brave Search) built on the websearch extension point.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "keywords": [
+    "alisio-plugin",
+    "alisio",
+    "websearch",
+    "search"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1",
+    "@types/node": "^22.16.0",
+    "typescript": "5.9.3"
+  }
+}

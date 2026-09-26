@@ -4,7 +4,9 @@ import {
   Container,
   getCapabilities,
   Image,
+  Key,
   Markdown,
+  matchesKey,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
@@ -14,6 +16,13 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   type PendingAttachment,
 } from "./attachments.ts";
+import {
+  initialQuestionState,
+  type QuestionAction,
+  type QuestionPanelState,
+  type QuestionSpec,
+  reduceQuestions,
+} from "./questions.ts";
 import {
   contextLevel,
   contextPercent,
@@ -375,6 +384,9 @@ const STATUS_ICON: Record<string, [string, (t: string) => string]> = {
   failed: ["✗", style.red],
   cancelled: ["⊘", style.yellow],
   interrupted: ["⚠", style.yellow],
+  /** Display-only status: a session (root or subagent) is blocked on an `ask_user_question` or
+   * approval prompt. Never persisted; overlaid by the display layer over "running" nodes. */
+  waiting: ["◆", style.magenta],
 };
 export interface TreePanelView {
   title: string;
@@ -394,9 +406,10 @@ export class TreePanel implements Component {
     const count = (s: string) => v.total.filter((n) => n.status === s).length;
     const running = count("running"),
       queued = count("queued"),
-      done = v.total.filter((n) => !["running", "queued"].includes(n.status)).length;
-    const expanded = v.focused || running + queued > 0;
-    const head = `${expanded ? "▾" : "▸"} ${style.bold(v.title)} ${v.total.length} ${style.gray("·")} ${style.cyan(`▶ ${running} running`)} ${style.gray("·")} ${style.gray(`◷ ${queued} queued`)} ${style.gray("·")} ${style.green(`✓ ${done} finished`)}${v.focused ? "" : style.dim("  (Ctrl+X to navigate)")}`;
+      waiting = count("waiting"),
+      done = v.total.filter((n) => !["running", "queued", "waiting"].includes(n.status)).length;
+    const expanded = v.focused || running + queued + waiting > 0;
+    const head = `${expanded ? "▾" : "▸"} ${style.bold(v.title)} ${v.total.length} ${style.gray("·")} ${style.cyan(`▶ ${running} running`)}${waiting ? ` ${style.gray("·")} ${style.magenta(`◆ ${waiting} waiting`)}` : ""} ${style.gray("·")} ${style.gray(`◷ ${queued} queued`)} ${style.gray("·")} ${style.green(`✓ ${done} finished`)}${v.focused ? "" : style.dim("  (Ctrl+X to navigate)")}`;
     const lines = [head];
     if (expanded) {
       const selectedIndex = Math.max(
@@ -465,6 +478,79 @@ export class AttachmentsBar implements Component {
         `Ctrl+V paste image · Ctrl+R remove last (${items.length}/${MAX_ATTACHMENTS_PER_MESSAGE})`,
       ),
     );
+    return fit(lines, width);
+  }
+}
+
+/**
+ * Interactive multiple-choice question panel (`ask_user_question` / `/ask`). Shows one question at
+ * a time (stepped), for legibility in narrow terminals — a single scrollable panel holding every
+ * question's options at once would overflow or force heavy truncation below ~60 columns, whereas a
+ * step keeps each question fully readable and reflows independently on resize.
+ *
+ * Keys: ↑↓ move (wraps), →/Space toggle a multi-select option, Enter confirms the current question
+ * and advances (submits on the last one), ←/Backspace goes back to change an earlier answer (only
+ * offered when there is one), Esc skips the CURRENT question only (marks it undefined) and still
+ * advances — it never aborts the whole batch, so an earlier or later question is unaffected.
+ */
+export class QuestionPanel implements Component {
+  private state: QuestionPanelState;
+  constructor(
+    questions: QuestionSpec[],
+    private onSubmit: (answers: QuestionPanelState["answers"]) => void,
+    private label?: string,
+  ) {
+    this.state = initialQuestionState(questions);
+  }
+  invalidate(): void {}
+  private dispatch(action: QuestionAction): void {
+    const { state, effect } = reduceQuestions(this.state, action);
+    this.state = state;
+    if (effect) this.onSubmit(effect.answers);
+  }
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.up)) return this.dispatch({ type: "up" });
+    if (matchesKey(data, Key.down)) return this.dispatch({ type: "down" });
+    if (matchesKey(data, Key.right) || matchesKey(data, Key.space))
+      return this.dispatch({ type: "toggle" });
+    if (matchesKey(data, Key.enter)) return this.dispatch({ type: "confirm" });
+    if (matchesKey(data, Key.left) || matchesKey(data, Key.backspace))
+      return this.dispatch({ type: "back" });
+    if (matchesKey(data, Key.escape)) return this.dispatch({ type: "skip" });
+  }
+  render(width: number): string[] {
+    const s = this.state;
+    const spec = s.questions[s.index] as QuestionSpec;
+    const lines: string[] = [];
+    const breadcrumb = this.label ? style.dim(`${this.label} asks:`) : undefined;
+    if (breadcrumb) lines.push(truncateToWidth(breadcrumb, width));
+    lines.push(
+      truncateToWidth(
+        `${style.bold(style.yellow(spec.header))} ${style.dim(`Question ${s.index + 1}/${s.questions.length}`)}`,
+        width,
+      ),
+    );
+    lines.push(...wrap(spec.question, Math.max(1, width - 2)).map((l) => `  ${l}`));
+    spec.options.forEach((option, i) => {
+      const focused = i === s.cursor;
+      const cursor = focused ? style.cyan("❯ ") : "  ";
+      const box = spec.multiSelect ? (s.toggled.has(i) ? "[x] " : "[ ] ") : "";
+      const label = focused ? style.bold(style.cyan(option.label)) : option.label;
+      const tag = option.recommended ? ` ${style.green("(recommended)")}` : "";
+      lines.push(truncateToWidth(`${cursor}${box}${label}${tag}`, width));
+      if (option.description)
+        lines.push(
+          ...wrap(option.description, Math.max(1, width - 4)).map((l) => `    ${style.gray(l)}`),
+        );
+    });
+    const hints = [
+      "↑↓ select",
+      ...(spec.multiSelect ? ["→/Space toggle"] : []),
+      "Enter confirm",
+      ...(s.index > 0 ? ["←/Backspace back"] : []),
+      "Esc skip",
+    ];
+    lines.push(style.dim(`  ${hints.join(" · ")}`));
     return fit(lines, width);
   }
 }

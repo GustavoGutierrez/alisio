@@ -24,6 +24,8 @@ export interface AppOptions {
   plugin?: string[];
   allowWrite?: boolean;
   allowProcess?: boolean;
+  /** Allow network tools (webfetch, websearch) and a provider-native search tool. */
+  allowExternal?: boolean;
   allowMcp?: boolean;
   readOnly?: boolean;
   allowAgents?: boolean;
@@ -155,8 +157,29 @@ export async function createApplication(options: AppOptions = {}) {
       }),
     );
     context.extras.push(async () => skills.catalog(), ...plugins.contexts);
+    if (config.websearch.provider === "native" && config.provider.apiMode !== "responses")
+      throw new Error(
+        'websearch.provider is "native" but provider.apiMode is not "responses": native search ' +
+          'only works through the Responses API. Set apiMode: "responses", or choose a ' +
+          "different websearch.provider.",
+      );
     const { registerStandard } = await import("./tools/standard.ts");
-    registerStandard(registry, workspace, skills, context);
+    // `runner` is referenced lazily (constructed just below): safe because these accessors only
+    // run once the tool is actually called, well after the runner exists.
+    registerStandard(
+      registry,
+      workspace,
+      skills,
+      context,
+      plugins.ui,
+      {
+        policy: () => runner.policy,
+      },
+      {
+        config: config.websearch,
+        resolveExtension: () => plugins.extensions.resolve("websearch"),
+      },
+    );
     if (options.allowMcp && !options.readOnly) mcp.register();
     if (options.allowAgents && !options.readOnly) herdr.registerTools(registry);
     const provider = options.provider ?? new OpenAICompatibleProvider(config.provider);
@@ -184,7 +207,8 @@ export async function createApplication(options: AppOptions = {}) {
         process: !!options.allowProcess && !options.readOnly,
         external:
           !options.readOnly &&
-          (!!options.allowMcp ||
+          (!!options.allowExternal ||
+            !!options.allowMcp ||
             !!options.allowAgents ||
             plugins.externalCount > 0 ||
             registry.list().some((t) => t.name.startsWith("p_"))),
@@ -194,6 +218,9 @@ export async function createApplication(options: AppOptions = {}) {
       extensions: plugins,
       contextWindow,
       ...(options.approve && !options.readOnly ? { approve: options.approve } : {}),
+      ...(config.websearch.provider === "native"
+        ? { nativeTools: [{ type: config.websearch.nativeToolType }] }
+        : {}),
       onEvent: (event) => {
         herdr.event(event);
         plugins.emit(event);

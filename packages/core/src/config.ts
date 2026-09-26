@@ -70,6 +70,18 @@ export const configSchema = z
       })
       .strict()
       .default(() => ({ auto: true, threshold: 0.85, keepTurns: 2 })),
+    websearch: z
+      .object({
+        provider: z
+          .enum(["searxng", "duckduckgo-instant", "tavily", "brave", "serpapi", "native"])
+          .optional(),
+        searxngUrl: z.string().optional(),
+        apiKeyEnv: z.string().optional(),
+        /** Only for provider "native": the provider-native tool type sent to the model. */
+        nativeToolType: z.string().default("web_search"),
+      })
+      .strict()
+      .default(() => ({ nativeToolType: "web_search" })),
     limits: z
       .object({
         maxTurns: z.number().int().min(1).max(100).default(20),

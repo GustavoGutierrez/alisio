@@ -5,11 +5,11 @@ running tasks. The model must support streaming and tool calling in the selected
 
 ## 1. Create a configuration file
 
-`alisio init` writes an example `.alisio/config.json` in the current directory, without secrets.
+`alisio setup` writes an example `.alisio/config.json` in the current directory, without secrets.
 You can also write the file anywhere yourself.
 
 ```sh
-alisio init
+alisio setup
 ```
 
 OpenAI-compatible endpoint (`my-api.json`):

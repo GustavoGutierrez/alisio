@@ -68,8 +68,8 @@ funcional, no solo interfaces o stubs.
   `display`). Headless: `alisio run "/init ..."` con la misma sintaxis.
 - `/init` integrado: analiza el repositorio y crea o actualiza `AGENTS.md` en el sitio
   (`edit_file` con `expectedHash`), solo con hechos verificados; exige escritura (rechazo claro
-  con `--read-only`; aprobación en la TUI). `alisio init` sigue creando la configuración y
-  ahora sugiere `/init`.
+  con `--read-only`; aprobación en la TUI). El comando `alisio setup` (antes `alisio init`,
+  renombrado para no confundirse con `/init`) sigue creando la configuración y sugiere `/init`.
 - Registro genérico de puntos de extensión (`api.extensions.register`, campo declarativo
   `extensions`) con los puntos tipados `mascot` y `startup-screen`: resolución determinista
   (prioridad, id del plugin, orden de registro), diagnósticos `extension_conflict` en `/stats` y
@@ -125,6 +125,45 @@ funcional, no solo interfaces o stubs.
   la informa, tokens en caché (`prompt_tokens_details.cached_tokens` o
   `prompt_cache_hit_tokens`) y razonamiento visible (`reasoning_content`) solo para mostrar.
 - Lockfile y versiones fijadas; Biome, TypeScript, Vitest y CI Linux con Node 22.16, 22.x y 24.
+- Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
+  subagente hijo, ya que la condición es que exista alguna UI interactiva enlazada, nunca cuál
+  sesión pregunta— puede hacer de 1 a 4 preguntas de opción múltiple (2-4 opciones, como mucho una
+  `recommended`); falla rápido con un error estructurado en modo headless en vez de bloquear.
+  Contrato SDK aditivo: `Question`/`QuestionOption`/`AskQuestionsRequest`/`AskQuestionsResult` y
+  `ui.askQuestions`, con `ToolContext.label` nuevo para atribuir la llamada a la sesión hija que
+  pregunta (igual que `ApprovalRequest.label`). Panel de la TUI por pasos (una pregunta a la vez,
+  para legibilidad en terminales estrechas), con navegación ↑↓ (con vuelta, igual que
+  `SelectList`), alternar con →/Espacio en preguntas de selección múltiple, Enter confirma y
+  avanza, ←/Retroceso corrige una respuesta anterior y Esc omite **solo la pregunta actual**
+  (decisión documentada: el comportamiento exacto de Claude Code no se pudo verificar de forma
+  independiente, así que se eligió el menos sorprendente). Resumen final compacto en la
+  conversación con etiquetas truncadas con `…`. Una única cola interactiva (`InteractiveQueue`,
+  FIFO, sin prioridad de la raíz sobre los subagentes) serializa aprobaciones, el `select` de
+  `/model` y `ask_user_question`, de modo que nunca hay más de un aviso en pantalla aunque
+  pregunten varios subagentes a la vez; una pregunta retirada (sesión cancelada mientras estaba en
+  cola o en pantalla) se descarta con un aviso, sin dejar un panel obsoleto. El panel de árbol de
+  agentes gana un estado de presentación **esperando** (distinto de en ejecución) para las sesiones
+  bloqueadas en una pregunta o una aprobación.
+- Herramientas de red (núcleo, no plugins): `webfetch(url, format?, timeout?)` lee una URL como
+  `markdown`/`text`/`html` (conversión con `turndown` + `@mixmark-io/domino`, sin navegador ni
+  jsdom), rechaza contenido no textual, limita a 5 MiB y trunca el texto embebido a 20 000
+  caracteres conservando el texto completo en `.alisio/cache/webfetch/<hash>.<ext>` (legible con
+  `read_file`). `websearch(query)` resuelve un proveedor en orden: una extensión `websearch`
+  registrada por un plugin (nuevo punto de extensión, mismo mecanismo que `mascot`/`startup-screen`,
+  con reintento seguro y diagnóstico ante un proveedor que falla) → `websearch.provider` configurado
+  (`searxng`, `duckduckgo-instant`, `tavily`, `brave`, `serpapi`, `native`) → una instancia pública
+  de SearXNG por defecto. Modo `native`: añade la herramienta nativa del proveedor
+  (`websearch.nativeToolType`, por defecto `web_search`) a la petición de la Responses API en vez de
+  implementar la llamada HTTP propia; exige `provider.apiMode: "responses"` y no registra la
+  herramienta `websearch`. `execute(code)` ("Code Mode") ejecuta un fragmento JS en el módulo `vm`
+  de Node que solo puede invocar otras herramientas ya registradas vía `callTool`, respetando su
+  propio efecto/permiso (sin poder disparar una aprobación nueva), acotado a 10 s y 20 llamadas
+  anidadas, sin poder llamarse a sí mismo. Nuevo efecto `external` reutilizado para `webfetch`/
+  `websearch` (antes solo cubría MCP/Herdr/plugins) con su propio flag `--allow-external` y
+  aprobación interactiva en la TUI igual que `write`/`process`; `execute` reutiliza el efecto
+  `process` existente. Se decidió deliberadamente **no** implementar una herramienta de navegador
+  (browser): el usuario descartó esa pieza por ahora al no tener un navegador adjunto como el de
+  opencode desktop.
 
 ## Validación
 
@@ -297,6 +336,84 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   (el entorno de prueba solo tiene xterm-256color, así que solo se ejerció la ruta de
   compatibilidad de texto).
 
+## Preguntar al usuario (ask_user_question): alcance de la verificación
+
+- Vitest: reductor puro del panel (`questions.ts`, 19 pruebas) — cursor inicial en la opción
+  recomendada, navegación con vuelta, confirmar de selección única y múltiple (incluida la
+  confirmación explícita sin nada marcado, distinta de omitir), omitir (Esc) solo la pregunta
+  actual sin abortar el lote, retroceder restaurando la respuesta previa exacta sin borrarla,
+  truncado de etiquetas y resumen final. `InteractiveQueue` (`queue.ts`, 8 pruebas) — orden FIFO
+  estricto, un trabajo rechazado no bloquea el siguiente, retirada limpia de un elemento ya
+  abortado antes de su turno o mientras espera en cola (la cola sigue avanzando tras el hueco),
+  visibilidad de `current()`/`isQueued()`/`isWaiting()` para el panel de agentes. Escenario de
+  integración (`fixtures/scenarios.ts`, `ask-user-question`): sin `ui` en absoluto y con
+  `interactive()` en `false` fallan rápido sin invocar `askQuestions`; con una `ui` falsa
+  interactiva, la petición reenvía `session`/`label`/`signal` y las respuestas se asignan de
+  vuelta en el orden de las preguntas (incluida una omitida, que se traduce en `selected: []` con
+  `skipped: true`, distinto de una selección múltiple vacía y explícita); validación de esquema
+  (1-4 preguntas, 2-4 opciones) a través de `ToolRegistry.parse`; reglas de negocio en tiempo de
+  ejecución (como mucho una opción `recommended`, etiquetas únicas por pregunta).
+- Pseudo-terminal (Linux, xterm-256color) con un servidor simulado real: lote de dos preguntas
+  (una de selección única con una opción `recommended` marcada visualmente, otra de selección
+  múltiple) a 100 columnas — navegación con vuelta verificada (↑ dos veces desde la opción
+  recomendada pasa por la primera y da la vuelta a la última), alternar con →, retroceder
+  restaurando el cursor exacto de una pregunta ya confirmada, reavanzar, omitir con Esc la última
+  pregunta (envía el lote sin abortarlo) y el bloque de resumen final con las etiquetas correctas.
+  Confirmado también a 28 columnas con el flujo `/ask`: el modelo propuso 3 opciones marcando
+  `Node` como recomendada, Enter la confirmó de inmediato y el resumen (`Runtime: Node`) se
+  renderizó sin desbordar ni truncar mal a ese ancho.
+- No verificado en pseudo-terminal (solo con pruebas unitarias de `InteractiveQueue`, que son
+  deterministas y agnósticas de qué sesión pregunta): dos o más subagentes reales llamando a
+  `ask_user_question` a la vez a través de `@alisio/plugin-subagents` y del panel de agentes real,
+  con la migaja de pan mostrando qué agente pregunta y la retirada limpia de una pregunta en cola
+  al cancelar ese subagente. El diseño y el enrutamiento (cola única, respuesta solo a la sesión
+  exacta que preguntó) están probados de forma aislada pero no se ejerció con subagentes reales en
+  una terminal; ver «Límites conocidos».
+- No se intentó `/ask` con DeepSeek real en esta tarea (se priorizó el servidor simulado
+  determinista, que permite fijar exactamente las opciones y así verificar cada tecla del panel;
+  las tareas previas de este proyecto ya validaron por separado que DeepSeek responde de forma
+  fiable a llamadas de herramientas).
+
+## Herramientas de red (webfetch, websearch, execute): alcance de la verificación
+
+- Escenarios de integración (Vitest, servidor HTTP local determinista vía `fixtures/http.ts`):
+  `webfetch` — redirección seguida, HTML a markdown con script/style eliminados, rechazo de
+  contenido binario/imagen, rechazo de esquemas no http(s), truncado con `fullTextPath` y
+  verificación del texto completo en disco. `websearch` — cadena SearXNG con `searxngUrl`
+  apuntando al servidor local, DuckDuckGo Instant Answer (con `fetch` global reemplazado
+  temporalmente para no depender de la red), guarda SSRF (`validateSearxngUrl`), el nuevo punto de
+  extensión `websearch` con prioridad ganando sobre lo integrado, su reintento seguro con
+  diagnóstico ante un proveedor que lanza excepción, y la restauración de la cadena integrada al
+  cerrar el `PluginHost`. `execute` — llamada exitosa a una herramienta permitida, denegación de un
+  efecto no autorizado (sin tocar el sistema de archivos), éxito cuando la política sí lo permite,
+  cumplimiento del timeout (con `timeoutMs` inyectable para pruebas rápidas), límite de 20 llamadas
+  anidadas, prohibición de llamarse a sí mismo, y ausencia de `require`/`process`/`fetch`/
+  `setTimeout` dentro del snippet aislado.
+- Verificación real (Bun, sin clave alguna del entorno de Alisio expuesta): una llamada real a
+  `https://example.com/` con `webfetch` devolvió HTML convertido correctamente a markdown
+  (`# Example Domain`, enlace conservado); una llamada real a `execute` combinando
+  `callTool("webfetch", ...)` dentro del snippet aislado con `policy.external: true` confirmó el
+  contenido de la página y devolvió solo un resumen calculado (no la página completa). Una llamada
+  real a `websearch` con `duckduckgo-instant` devolvió resultados reales para «Node.js» (tras
+  ajustar el proveedor a un `User-Agent` de navegador y a detectar JSON por contenido en vez de por
+  cabecera `Content-Type`, ya que la API de DuckDuckGo devuelve JSON válido con un
+  `Content-Type: application/x-javascript` en ciertas condiciones).
+- Hallazgo empírico honesto sobre el proveedor SearXNG por defecto (sin configurar nada): se
+  probaron 9 instancias públicas distintas listadas en searx.space (incluida la que se dejó como
+  URL por defecto, `searx.be`) con una única solicitud automatizada fresca cada una; **todas**
+  devolvieron un captcha/verificación de bot (HTTP 200 con una página de desafío) o `429 Too Many
+  Requests`. La cadena por defecto es correcta arquitectónicamente (sin clave, autoalojable, sin
+  bloqueo de proveedor) pero en la práctica actual no debe asumirse funcional sin autoalojar una
+  instancia propia; el mensaje de `limitation` del resultado y la documentación lo dicen así de
+  forma explícita.
+- No verificado: una llamada real a un proveedor de pago (`tavily`/`brave`/`serpapi`) — ninguna
+  clave de esos servicios está disponible en este entorno y no se fabricó ninguna; solo se probaron
+  con un servidor HTTP local simulando su forma de respuesta. Tampoco se verificó el modo `native`
+  contra un proveedor real que lo soporte (la configuración de DeepSeek que trae Alisio no lo
+  soporta, como se documenta); su validación (`apiMode: "responses"` requerido) y el paso del tipo
+  de herramienta nativa hacia la petición sí están cubiertos por el flujo normal de tipos y por
+  inspección de código, no por una llamada real.
+
 ## Límites conocidos
 
 - Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
@@ -361,11 +478,33 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Aprobaciones: solo para efectos `write` y `process` y solo en la TUI; "permitir en la
   sesión" dura mientras viva el proceso. La espera cuenta dentro de `limits.timeoutMs`.
   El contrato `Policy` no cambió: la aprobación es una opción adicional de `RunnerOptions`.
+- `ask_user_question`/`/ask`: la cola interactiva compartida cubre aprobaciones, el `select` de
+  plugins y las preguntas, pero deliberadamente NO incluye los selectores propios de `/model` ni
+  `/resume` (siguen con su mecanismo previo sin cambios): son comandos que el usuario escribe él
+  mismo, nunca concurrentes con la pregunta de un subagente, y `chooseModel()` ya no esperaba la
+  resolución del selector antes de esta tarea, así que integrarlos habría exigido una
+  reestructuración ajena al alcance. Retroceder a una pregunta de selección múltiple sin
+  confirmarla descarta su selección provisional (solo las respuestas ya confirmadas sobreviven a
+  ir hacia atrás y hacia adelante); al volver a entrar en una pregunta de selección múltiple sin
+  respuesta previa, su opción por defecto (la recomendada, o la primera) queda premarcada, para
+  que confirmar sin tocar nada sea una elección deliberada y no una selección vacía accidental —
+  esto no aplica a la propia `initialQuestionState` de un lote nuevo, que empieza sin nada marcado.
+  No se probó con subagentes reales concurrentes en una terminal (ver la sección de verificación).
 - Un `resume` con otro modelo ya no falla: la sesión es la fuente del modelo y `--model`
   lo cambia explícitamente para los turnos siguientes.
 
 - Plugins en proceso pueden bloquear el event loop o saltarse servicios mediados. Solo código
   confiable; los timeouts del motor no pueden detener código síncrono hostil.
+- `execute` usa el módulo `vm` de Node, que **no es un mecanismo de seguridad** (documentación
+  oficial de Node): aísla el ámbito global del snippet y acota su tiempo, pero no es una frontera a
+  nivel de sistema operativo; un exploit de V8 podría escapar. Cada `callTool` anidado respeta el
+  efecto/permiso ya concedido a la sesión, pero nunca puede solicitar uno nuevo. Límite fijo de 10 s
+  y 20 llamadas anidadas (no configurables por el usuario final en esta versión).
+- `webfetch`/`websearch` (efecto `external`) siguen sin sandbox de red: `--allow-external` da al
+  modelo acceso a cualquier URL http(s) alcanzable, igual que `--allow-process` da acceso a
+  cualquier ejecutable. El proveedor SearXNG por defecto (sin configurar nada) es poco fiable en la
+  práctica frente a instancias públicas con protección antibots; véase la sección de verificación.
+  DuckDuckGo Instant Answer solo responde consultas factuales directas, nunca búsqueda general.
 - El bloqueo SQLite por PID está diseñado para procesos locales en un host, no para una base
   compartida en red. La reutilización de PID puede exigir intervención del usuario.
 - La validación de rutas no es un aislamiento OS. La shell y plugins tienen permisos del usuario.

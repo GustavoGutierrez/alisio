@@ -34,8 +34,11 @@ export class ExtensionRegistry {
     provider: ExtensionPoints[K],
     options: { plugin: string; priority?: number; fallback?: boolean },
   ): () => void {
-    if (!provider || typeof provider.id !== "string" || typeof provider.render !== "function")
-      throw new Error(`Invalid ${point} provider: it needs an id and a render function`);
+    // `id` is the one thing every extension point shares; a point-specific shape (e.g. `render`
+    // for a renderable point) is validated by that point's own resolution call site, the same way
+    // a throwing or malformed provider already falls back there (see `startup/index.ts`).
+    if (!provider || typeof provider.id !== "string")
+      throw new Error(`Invalid ${point} provider: it needs an id`);
     const priority = options.priority ?? 0;
     if (!Number.isFinite(priority)) throw new Error("Extension priority must be a finite number");
     const entry: Entry = {

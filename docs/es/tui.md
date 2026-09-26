@@ -72,6 +72,7 @@ Al escribir `/` se abre el autocompletado.
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
+| `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
@@ -79,9 +80,10 @@ Al escribir `/` se abre el autocompletado.
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
 | `/agents …` | Comando del plugin integrado de subagentes: lista, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; consulte [Subagentes](/es/subagents#in-the-tui) |
 
-`/init` es una plantilla de prompt, no el comando `alisio init`: `alisio init` solo escribe un
-`.alisio/config.json` de ejemplo. Las demás [plantillas de prompts](/es/prompt-templates) aparecen en
-una sección propia de `/help` y en el autocompletado.
+`/init` es una plantilla de prompt que genera o actualiza `AGENTS.md` a partir del repositorio; no
+tiene relación con el comando `alisio setup`, que solo genera un `.alisio/config.json` de ejemplo.
+Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una sección propia de `/help` y
+en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/compact`,
@@ -111,9 +113,15 @@ En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name r
 ## Panel de agentes {#agent-panel}
 
 Cuando se ejecutan [subagentes](/es/subagents), aparece bajo el editor un panel en árbol plegable. Su
-cabecera muestra cuántos agentes están en ejecución, en cola y terminados; cada fila muestra un icono
-de estado, el nombre y el color del agente, el tiempo transcurrido, los tokens y un resumen en vivo de
-una línea. La sangría muestra padre → hijo.
+cabecera muestra cuántos agentes están en ejecución, en cola, **esperando** y terminados; cada fila
+muestra un icono de estado, el nombre y el color del agente, el tiempo transcurrido, los tokens y un
+resumen en vivo de una línea. La sangría muestra padre → hijo.
+
+Una fila muestra **esperando** (◆, distinto del spinner de ejecución) en lugar de en ejecución
+cuando ese agente está bloqueado en `ask_user_question` o en una aprobación de escritura/proceso —ya
+sea la que se muestra en pantalla, o en cola tras otra—. Es un estado solo de presentación calculado
+a partir de la misma [cola interactiva](#ask-user-question) que serializa los avisos; nunca se
+persiste, así que desaparece en cuanto se responde o se retira la pregunta del agente.
 
 | Foco | Tecla | Acción |
 | --- | --- | --- |
@@ -209,6 +217,59 @@ admite pegado con corchetes, así que cada salto de línea incluido se trata com
 se envía un mensaje por línea en lugar de un único mensaje combinado. Use la TUI completa (la
 opción por defecto en una terminal interactiva) para pegar varias líneas o imágenes.
 
+## Preguntar al usuario (ask_user_question) {#ask-user-question}
+
+El modelo puede hacer una o varias preguntas de opción múltiple con la herramienta
+`ask_user_question` (véase [Herramientas y permisos](/es/tools#ask-user-question)) —por ejemplo
+cuando hay una bifurcación real en el enfoque y la preferencia del usuario cambia lo que sigue—.
+También puede iniciarlo usted mismo con `/ask <pregunta>`: el agente propone 2 a 4 opciones
+concretas para su propia pregunta (marcando una como `recommended` solo cuando tiene una opinión
+clara) y llama a la herramienta de inmediato.
+
+Las preguntas se muestran **de una en una** (por pasos), no como un único panel con las opciones de
+todas las preguntas a la vez: una terminal estrecha no puede mostrar de forma legible las opciones de
+varias preguntas en una sola pantalla, y un paso se reajusta de forma independiente al
+redimensionar. La línea de cabecera muestra `Question i/N`; una opción `recommended` se marca y
+colorea, no solo se describe, así que resalta incluso cuando las descripciones se truncan.
+
+| Tecla | Acción |
+| --- | --- |
+| ↑ / ↓ | Mover la opción resaltada (da la vuelta en los extremos) |
+| → / Espacio | Alternar una opción (solo en preguntas de selección múltiple) |
+| Enter | Confirma la pregunta actual y avanza; envía en la última pregunta |
+| ← / Retroceso | Retroceder para cambiar una respuesta anterior (solo se ofrece tras avanzar) |
+| Esc | Omite **solo la pregunta actual** |
+
+**Esc omite solo la pregunta actual**, no todo el lote: la marca como omitida (se muestra como
+`_Skipped_` en el resumen) y pasa a la siguiente exactamente igual que Enter, así que una pregunta
+anterior o posterior del mismo lote nunca se ve afectada. Fue una decisión deliberada (el
+comportamiento exacto de Claude Code aquí no se pudo verificar de forma independiente en su
+momento): cancelar todo el lote descartaría respuestas ya dadas, lo cual sorprende más que omitir
+una sola pregunta.
+
+Tras confirmar u omitir la última pregunta, se añade un resumen compacto a la conversación: una
+línea por pregunta con su cabecera y la(s) opción(es) elegida(s), o `_Skipped_` / `_None selected_`
+(una respuesta de selección múltiple explícitamente vacía, distinta de una omisión); las etiquetas
+largas de las opciones se truncan con `…` final en lugar de ajustarse, para mantener el resumen
+corto.
+
+### Un solo aviso a la vez
+
+Las aprobaciones de escritura/proceso, el selector de `/model` y `ask_user_question` comparten
+**una sola cola interactiva**: como mucho uno de ellos está en pantalla a la vez, en el orden en que
+se solicitaron (estrictamente FIFO —el primero en llegar, el primero en atenderse—; no hay
+prioridad de la raíz sobre los subagentes, ya que un subagente también puede llamar a
+`ask_user_question` mediante la misma herramienta). La pregunta de un [subagente](/es/subagents)
+muestra una migaja de pan con quién pregunta (su ruta de agente, p. ej. `general › explore asks:`) y
+su respuesta se entrega solo a ese subagente exacto, nunca se difunde. Si un subagente se cancela
+mientras su pregunta está en cola o mostrándose, se retira de forma limpia —un aviso lo indica, y el
+siguiente elemento en cola (si lo hay) ocupa su lugar— en lugar de dejar un aviso obsoleto para una
+sesión ya muerta. El [panel de agentes](#agent-panel) muestra a ese agente como **esperando**
+mientras esté en cola o mostrándose.
+
+Los selectores propios de `/model` y `/resume` no forman parte de esta cola compartida: son comandos
+que usted mismo escribe, nunca concurrentes con la pregunta de un subagente.
+
 ## Aprobaciones interactivas {#interactive-approvals}
 
 En la TUI, cuando `write` o `process` no están permitidos mediante flags, las herramientas
@@ -219,5 +280,7 @@ correspondientes se ofrecen igualmente al modelo, y Alisio pregunta antes de eje
 - **Denegar** (*Deny*)
 
 Con `--read-only` no se pregunta y esas herramientas siguen desactivadas. Los modos headless nunca
-preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeoutMs`. Consulte
+preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeoutMs`. Las
+aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
+que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte
 [Herramientas y permisos](/es/tools).

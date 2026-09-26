@@ -66,6 +66,13 @@ export interface ModelProvider {
     maxOutputTokens: number;
     signal: AbortSignal;
     model?: string;
+    /**
+     * Raw provider-native tool definitions (for example a hosted `web_search` tool), appended to
+     * the request's `tools` array verbatim, alongside the function tools built from `tools`. Only
+     * meaningful for providers that document an equivalent server-side tool; an implementation
+     * that does not support one may ignore this or let the provider reject it.
+     */
+    nativeTools?: Array<Record<string, unknown>>;
   }): AsyncIterable<ProviderEvent>;
   /** Optional model catalog. Implementations must not expose credentials. */
   listModels?(signal: AbortSignal): Promise<ModelInfo[]>;
@@ -76,6 +83,8 @@ export interface ToolContext {
   emit: (data: unknown) => void;
   /** Session that issued the call, when run by the agent loop. */
   session?: string;
+  /** Who is asking, e.g. an agent path such as "general › explore" (child sessions only). */
+  label?: string;
 }
 export interface ToolDefinition {
   name: string;
@@ -228,10 +237,22 @@ export interface StartupScreenProvider {
   id: string;
   render(ctx: StartupContext): string[];
 }
+export interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+/** A pluggable web-search backend for the `websearch` tool. */
+export interface SearchProvider {
+  id: string;
+  search(query: string, options?: { signal?: AbortSignal }): Promise<SearchResult[]>;
+}
 /** Typed map of extension points; new points are added here without breaking existing ones. */
 export interface ExtensionPoints {
   mascot: MascotProvider;
   "startup-screen": StartupScreenProvider;
+  /** Replaces the built-in websearch resolution (SearXNG/DuckDuckGo/configured/native) entirely. */
+  websearch: SearchProvider;
 }
 export interface ExtensionOptions {
   /** Higher wins (default 0). Ties break by plugin id, then registration order. */
@@ -321,6 +342,34 @@ export interface SelectRequest {
   title: string;
   options: Array<{ value: string; label: string; description?: string }>;
 }
+export interface QuestionOption {
+  /** Stable value returned by `ui.askQuestions`; not necessarily shown to the user. */
+  value: string;
+  label: string;
+  description?: string;
+  /** At most one option per question should be marked recommended. A suggestion, never forced. */
+  recommended?: boolean;
+}
+export interface Question {
+  id: string;
+  /** Short chip label (e.g. shown as a breadcrumb/heading), distinct from the full `question` text. */
+  header: string;
+  question: string;
+  /** 2-4 options. */
+  options: QuestionOption[];
+  multiSelect?: boolean;
+}
+export interface AskQuestionsRequest {
+  /** 1-4 questions, asked one after another. */
+  questions: Question[];
+  /** Session asking (a child session when delegated). */
+  session?: string;
+  /** Who is asking, e.g. an agent path such as "general › explore". */
+  label?: string;
+  signal?: AbortSignal;
+}
+/** Each question id maps to the chosen value(s), or undefined when the question was skipped. */
+export type AskQuestionsResult = Record<string, string | string[] | undefined>;
 /** Where a command was invoked (the interactive UI's current session, when known). */
 export interface CommandContext {
   sessionId?: string;
@@ -404,9 +453,14 @@ export interface PluginAPI {
     panel(id: string, provider: PanelProvider): () => void;
     /** Ask the user to choose; resolves undefined when no interactive UI is available. */
     select(request: SelectRequest): Promise<string | undefined>;
+    /**
+     * Ask the user one or more multiple-choice questions. Resolves every question id to
+     * undefined when no interactive UI is available (never hangs headless).
+     */
+    askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
     /** Open a session in a read-only view (interactive UIs only). */
     open(sessionId: string): boolean;
-    /** True when an interactive UI can answer `select`. */
+    /** True when an interactive UI is bound at all (globally, not per-session). */
     interactive(): boolean;
   };
 }

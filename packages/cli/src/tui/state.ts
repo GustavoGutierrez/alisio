@@ -106,6 +106,11 @@ export const COMMANDS: CommandSpec[] = [
   { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
   { name: "tools", description: "List tools and permission state" },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
+  {
+    name: "ask",
+    description: "Ask the agent to turn your question into a multiple-choice ask_user_question",
+    argumentHint: "<question>",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 /** Every TUI slash name (commands, aliases and routing prefixes); templates cannot take them. */

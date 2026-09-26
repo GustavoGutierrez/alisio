@@ -3,6 +3,8 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  AskQuestionsRequest,
+  AskQuestionsResult,
   CommandContext,
   CommandOptions,
   CompactionHooks,
@@ -65,15 +67,17 @@ export class PluginHost implements RunnerExtensions {
   private sessionsImpl?: PluginAPI["sessions"];
   private uiImpl?: {
     select(request: SelectRequest): Promise<string | undefined>;
+    askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
     open(sessionId: string): boolean;
   };
   /** Binds the child session service once the runner exists. */
   setSessions(sessions: PluginAPI["sessions"]) {
     this.sessionsImpl = sessions;
   }
-  /** Binds interactive UI services (the TUI); without them select resolves undefined. */
+  /** Binds interactive UI services (the TUI); without them select/askQuestions resolve undefined. */
   setInteractiveUI(ui: {
     select(request: SelectRequest): Promise<string | undefined>;
+    askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
     open(sessionId: string): boolean;
   }) {
     this.uiImpl = ui;
@@ -81,6 +85,25 @@ export class PluginHost implements RunnerExtensions {
   get sessions(): PluginAPI["sessions"] {
     if (!this.sessionsImpl) throw new Error("Child sessions are not available yet");
     return this.sessionsImpl;
+  }
+  /**
+   * Live accessor for core standard tools (e.g. `ask_user_question`), which are not "a plugin"
+   * with an id and so cannot use the per-plugin `ui` wrapper built in `activate()`. Bound lazily
+   * (reads `this.uiImpl` at call time) since `registerStandard` runs before the TUI calls
+   * `setInteractiveUI`. `interactive()` reflects whether ANY interactive UI is bound at all,
+   * never which session is asking, so child sessions under an interactive root TUI pass too.
+   */
+  get ui(): {
+    interactive(): boolean;
+    askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
+  } {
+    return {
+      interactive: () => !!this.uiImpl,
+      askQuestions: (request) =>
+        this.uiImpl
+          ? this.uiImpl.askQuestions(request)
+          : Promise.resolve(Object.fromEntries(request.questions.map((q) => [q.id, undefined]))),
+    };
   }
   get promptRoots(): string[] {
     return this.promptSources.map((s) => s.dir);
@@ -309,6 +332,10 @@ export class PluginHost implements RunnerExtensions {
           });
         },
         select: async (request) => (this.uiImpl ? this.uiImpl.select(request) : undefined),
+        askQuestions: async (request) =>
+          this.uiImpl
+            ? this.uiImpl.askQuestions(request)
+            : Object.fromEntries(request.questions.map((q) => [q.id, undefined])),
         open: (sessionId) => this.uiImpl?.open(sessionId) ?? false,
         interactive: () => !!this.uiImpl,
         status: (key, text, detail) => {

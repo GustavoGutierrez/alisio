@@ -182,8 +182,8 @@ The optional argument is an extra focus appended at the end (`$ARGUMENTS`):
 alisio run "/init focus on the plugin SDK" --allow-write
 ```
 
-`/init` is not `alisio init`: the `alisio init` command writes an example `.alisio/config.json`
-and now prints a hint pointing to `/init`.
+`/init` generates or updates `AGENTS.md` from the repository; `alisio setup` is a separate command
+that only writes an example `.alisio/config.json` and prints a hint pointing to `/init`.
 
 ::: tip Larger repositories
 Exploration re-sends the growing context on every turn, and `limits.maxTokens` is a cumulative

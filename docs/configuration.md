@@ -66,6 +66,15 @@ Provider precedence: selected file → environment variables → CLI flags.
 
 See [Context compaction](/compaction).
 
+## `websearch`
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `provider` | none (public SearXNG) | `"searxng"`, `"duckduckgo-instant"`, `"tavily"`, `"brave"`, `"serpapi"` or `"native"` — see [Tools & permissions](/tools#websearch) |
+| `searxngUrl` | a public instance | Self-hosted or another public SearXNG instance; non-loopback values must use `https://` |
+| `apiKeyEnv` | `<PROVIDER>_API_KEY` | Environment variable holding the key for `tavily`/`brave`/`serpapi` |
+| `nativeToolType` | `web_search` | Only for `provider: "native"`: the provider-native tool type sent to the model |
+
 ## `context`
 
 ```json
@@ -196,10 +205,11 @@ Global flags (valid for every command):
 | `--api-mode <mode>` | `chat` or `responses` |
 | `--allow-write` | Allow file writes |
 | `--allow-process` | Allow arbitrary subprocesses; not sandboxed |
+| `--allow-external` | Allow network tools: `webfetch`, `websearch` and provider-native search |
 | `--allow-mcp` | Allow configured MCP servers and remote tool calls |
 | `--allow-agents` | Allow messaging neighboring agents through Herdr |
 | `--no-herdr` | Disable automatic Herdr lifecycle reports |
-| `--read-only` | Disable writes, arbitrary processes, executable plugins and MCP |
+| `--read-only` | Disable writes, arbitrary processes, network tools, executable plugins and MCP |
 | `--db <path>` | Session database |
 | `--json` | Emit versioned JSONL events |
 | `--no-tui` | Use the plain readline interactive mode instead of the TUI |
@@ -217,7 +227,7 @@ Commands:
 | `alisio` | Interactive TUI (or readline with `--no-tui`) |
 | `alisio run <prompt>` | Headless run; `/name args` runs a [prompt template](/prompt-templates) |
 | `alisio resume <session> [prompt]` | Resume a session (TUI without prompt, headless with prompt) |
-| `alisio init` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
+| `alisio setup` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Environment and provider diagnostics |
 | `alisio sessions list` | List sessions |
 | `alisio sessions recover <session> --acknowledge` | Acknowledge uncertain tool effects after a crash |

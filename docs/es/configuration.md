@@ -67,6 +67,15 @@ Precedencia del proveedor: archivo seleccionado → variables de entorno → fla
 
 Consulte [Compactación de contexto](/es/compaction).
 
+## `websearch`
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `provider` | ninguno (SearXNG público) | `"searxng"`, `"duckduckgo-instant"`, `"tavily"`, `"brave"`, `"serpapi"` o `"native"` — véase [Herramientas y permisos](/es/tools#websearch) |
+| `searxngUrl` | una instancia pública | Instancia SearXNG autoalojada u otra pública; los valores que no sean loopback deben usar `https://` |
+| `apiKeyEnv` | `<PROVIDER>_API_KEY` | Variable de entorno con la clave para `tavily`/`brave`/`serpapi` |
+| `nativeToolType` | `web_search` | Solo para `provider: "native"`: el tipo de herramienta nativa del proveedor enviado al modelo |
+
 ## `context`
 
 ```json
@@ -201,10 +210,11 @@ Flags globales (válidos para todos los comandos):
 | `--api-mode <mode>` | `chat` o `responses` |
 | `--allow-write` | Permite escribir archivos |
 | `--allow-process` | Permite subprocesos arbitrarios; sin sandbox |
+| `--allow-external` | Permite herramientas de red: `webfetch`, `websearch` y la búsqueda nativa del proveedor |
 | `--allow-mcp` | Permite los servidores MCP configurados y las llamadas a herramientas remotas |
 | `--allow-agents` | Permite enviar mensajes a agentes vecinos mediante Herdr |
 | `--no-herdr` | Desactiva los reportes automáticos de ciclo de vida a Herdr |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, plugins ejecutables y MCP |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, plugins ejecutables y MCP |
 | `--db <path>` | Base de datos de sesiones |
 | `--json` | Emite eventos JSONL versionados |
 | `--no-tui` | Usa el modo interactivo readline sencillo en lugar de la TUI |
@@ -222,7 +232,7 @@ Comandos:
 | `alisio` | TUI interactiva (o readline con `--no-tui`) |
 | `alisio run <prompt>` | Ejecución headless; `/name args` ejecuta una [plantilla de prompt](/es/prompt-templates) |
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
-| `alisio init` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
+| `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Diagnóstico del entorno y del proveedor |
 | `alisio sessions list` | Lista las sesiones |
 | `alisio sessions recover <session> --acknowledge` | Reconoce efectos inciertos de herramientas tras una caída |

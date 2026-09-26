@@ -27,20 +27,27 @@ export default definePlugin({
 ## Extension points
 
 Typed, generic extension points let plugins replace parts of the experience without core
-changes. Today: `mascot` and `startup-screen`.
+changes. Today: `mascot`, `startup-screen` and `websearch`.
 
 ```ts
 api.extensions.register("mascot", {
   id: "kite",
   render: ({ terminal }) => (terminal.unicode ? ["  ◢◣", " ◢██◣", " ◥██◤", "  ◥◤"] : ["  /\\", " /  \\", " \\  /", "  \\/"]),
 }, { priority: 10 });
+
+api.extensions.register("websearch", {
+  id: "brave-example",
+  search: async (query) => [{ title: "...", url: "https://...", snippet: "..." }],
+}, { priority: 10 });
 ```
 
 The highest `priority` wins; ties break by plugin `id`, then registration order, and are reported
-as `extension_conflict`. Providers receive only their context (`terminal.color`, `unicode`,
-`columns`); output is sanitized and clamped, and a failing provider falls back to the default.
-A declarative `extensions: { mascot, "startup-screen" }` field on the plugin is also accepted.
-Plugins are identified by `id` (not `name`).
+as `extension_conflict`. A renderable provider (`mascot`, `startup-screen`) receives only its
+context (`terminal.color`, `unicode`, `columns`); its output is sanitized and clamped, and a
+failing provider falls back to the default. `websearch` fully replaces Alisio's built-in
+search-provider resolution while registered (a throwing provider also falls back, with a
+diagnostic). A declarative `extensions: { mascot, "startup-screen", websearch }` field on the
+plugin is also accepted. Plugins are identified by `id` (not `name`).
 
 ## Prompt templates
 
@@ -67,8 +74,15 @@ Generic building blocks used by the built-in subagents plugin and available to a
 - `api.sessions.spawn/run/cancel/enqueue/...`: child sessions with a parent link, fresh context
   and narrowed permissions (a child never exceeds its parent); aborting a parent aborts them.
 - `api.ui.panel(id, { title, nodes, action })`: a collapsible tree under the TUI editor.
-- `api.ui.select({ title, options })`: ask the user (resolves `undefined` headless).
+- `api.ui.select({ title, options })`: ask the user to choose one (resolves `undefined` headless).
+- `api.ui.askQuestions({ questions, session?, label?, signal? })`: ask 1-4 multiple-choice questions
+  (2-4 options each, an optional `recommended` one); resolves every question id `undefined` headless.
+  `session`/`label` attribute the question to the asking (sub)session, mirroring `ApprovalRequest`.
+- `api.ui.interactive()`: true when an interactive UI is bound at all (never per-session), so a
+  child session under an interactive root can safely call `select`/`askQuestions` too.
 - `api.ui.open(sessionId)`, `api.resources.agents(dir)`, `api.resources.list(kind)`.
+- `ToolContext.label`: who is asking (an agent path such as `"general › explore"`), set for tool
+  calls made by a labeled child session; mirrors `ApprovalRequest.label`.
 - `ToolDefinition.concurrent`: run alongside other read/concurrent calls of the same turn.
 
 The API covers tools, commands, events, context providers, compaction hooks, session start/end

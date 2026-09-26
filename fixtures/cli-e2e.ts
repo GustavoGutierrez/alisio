@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { serve } from "./http.ts";
@@ -176,6 +176,26 @@ try {
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
   assert.equal(sessions.length, 5);
+  // `alisio setup` (renamed from `alisio init`, which now behaves like any unknown command).
+  const setupDirectory = await mkdtemp(join(tmpdir(), `alisio-${mode}-setup-`));
+  try {
+    const setupOutput = await execute(["setup", "--cwd", setupDirectory]);
+    assert.match(setupOutput, /Created .*config\.json/);
+    const scaffolded = JSON.parse(
+      await readFile(join(setupDirectory, ".alisio", "config.json"), "utf8"),
+    );
+    assert.equal(scaffolded.provider.model, "YOUR_MODEL_ID");
+    const setupAgain = await execute(["setup", "--cwd", setupDirectory], false, 1);
+    assert.match(setupAgain, /Configuration exists/);
+    // `init` is no longer a subcommand: commander's own default behavior (no special-casing)
+    // rejects it, since the root command's default action takes no positional arguments.
+    const unknownInit = await execute(["init", "--cwd", setupDirectory], false, 1);
+    assert.match(unknownInit, /error:/i);
+    const helpOutput = await execute(["--help"]);
+    assert.match(helpOutput, /\bsetup\b/);
+  } finally {
+    await rm(setupDirectory, { recursive: true, force: true });
+  }
   console.log(
     JSON.stringify({
       ok: true,
@@ -189,6 +209,7 @@ try {
         "no node:sqlite ExperimentalWarning",
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
         "headless prompt template /init; --read-only refusal",
+        "alisio setup scaffolds config; alisio init is now an unknown command",
       ],
     }),
   );

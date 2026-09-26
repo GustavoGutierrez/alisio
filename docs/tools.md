@@ -8,7 +8,7 @@ approval or is disabled.
 | `read` | No side effects | Enabled |
 | `write` | Modifies workspace files | Needs `--allow-write` (or TUI approval) |
 | `process` | Runs arbitrary processes | Needs `--allow-process` (or TUI approval) |
-| `external` | MCP, Herdr, external plugin tools | Enabled only when MCP, agents or external plugins are active, and never with `--read-only` |
+| `external` | Network tools (`webfetch`, `websearch`), MCP, Herdr, external plugin tools | Needs `--allow-external` (or TUI approval), `--allow-mcp`, `--allow-agents` or an active external plugin; never with `--read-only` |
 | `internal` | Writes only Alisio-owned state (never the workspace or network) | Always allowed; honored only for built-in plugins |
 
 Unknown or plugin operations default to `external`. `/tools` in the TUI shows the current state of
@@ -25,10 +25,14 @@ each tool (`enabled`, `ask`, `disabled`).
 | `git_diff` | `read` | `git diff --no-ext-diff --no-textconv` |
 | `skill_load`, `skill_search`, `skill_resource` | `read` | Agent Skills catalog, activation and resources |
 | `context_explain` | `read` | Explain which `AGENTS.md` files apply to a path (see [Context](/context)) |
+| `ask_user_question` | `read` | Ask the user 1-4 multiple-choice questions (see [below](#ask-user-question)) |
 | `write_file` | `write` | Write a file |
 | `edit_file` | `write` | Replace an exact, unique match in a file |
 | `run_process` | `process` | Run a command with an argument array |
 | `shell` | `process` | Run a shell command |
+| `webfetch` | `external` | Read a URL as text/markdown/html (see [below](#webfetch)) |
+| `websearch` | `external` | Search the web (see [below](#websearch)) |
+| `execute` | `process` | Run a JS snippet that calls other tools ("Code Mode", see [below](#execute)) |
 
 Edits require a SHA-256 fingerprint of the file and an exact, unique match. Writes use a temporary
 file plus an atomic replace on the same filesystem. Mediated operations reject paths outside the
@@ -43,26 +47,135 @@ Built-in plugins add more tools: `memory_*` from [Persistent memory](/memory) an
 `task_status`, `task_wait` and `send_message` from [Subagents](/subagents), all with the `internal`
 effect.
 
+## Asking the user {#ask-user-question}
+
+`ask_user_question` lets the model ask 1-4 multiple-choice questions (2-4 options each, at most one
+`recommended` per question — a suggestion, never forced) when there is a real fork in the approach.
+It is `effect: read` but gated on an interactive UI being bound **at all** (`ui.interactive()`),
+regardless of which session is asking — a [subagent](/subagents) under an interactive root TUI can
+use it too. In a headless run (`run`, `resume <id> "prompt"`, `--json`, or any session without a
+bound interactive UI) the call fails fast with a structured error telling the model to ask in plain
+text instead; it never hangs waiting for a UI that cannot answer. See [Terminal
+UI](/tui#ask-user-question) for the panel, its keys, the Esc-skips-current-question-only behavior,
+and how root and subagent questions are queued and routed back to the exact session that asked.
+
+## Reading a URL: webfetch {#webfetch}
+
+`webfetch(url, format?, timeout?)` fetches an `http(s)` URL and returns it as `markdown` (default),
+`text` or `html`. It follows redirects (bounded by the runtime's own default, roughly 20 hops), and
+refuses non-textual responses (images, other binaries) with a clear error instead of returning
+garbage — check the response's `content-type` first if you are unsure a URL is fetchable at all.
+Responses over 5 MiB are rejected. `timeout` is in seconds, default 30, capped at 120.
+
+HTML is converted with [`turndown`](https://www.npmjs.com/package/turndown) (markdown) or a
+minimal script/style-stripped text extraction; both use
+[`@mixmark-io/domino`](https://www.npmjs.com/package/@mixmark-io/domino), a small pure-JS DOM
+implementation (turndown's only dependency) — never a headless browser or jsdom. The converted text
+embedded in the result is capped at 20,000 characters; a longer page is truncated there, but the
+full text is written to a workspace-scoped cache file (`.alisio/cache/webfetch/<hash>.<ext>`) and
+the result's `fullTextPath` names it, so a follow-up `read_file` is never lossy.
+
+## Searching the web: websearch {#websearch}
+
+`websearch(query)` returns `{ title, url, snippet }[]`. No provider is bundled as a hard
+dependency; the tool resolves one, in order:
+
+1. **A plugin-registered `websearch` extension** (`api.extensions.register("websearch", ...)`) —
+   see [Writing plugins](/plugins#extension-points). Fully replaces everything below while loaded;
+   a throwing provider falls back to the built-in chain with a diagnostic.
+2. **`websearch.provider`** from [configuration](/configuration), when set:
+
+   | `provider` | Needs | Notes |
+   | --- | --- | --- |
+   | `"searxng"` | `websearch.searxngUrl` (optional; see below) | Self-hosted or another public instance |
+   | `"duckduckgo-instant"` | Nothing | Keyless; **only answers direct factual/infobox queries** (Wikipedia-style) — an empty result does not mean nothing exists on the web |
+   | `"tavily"` | `TAVILY_API_KEY` (or `websearch.apiKeyEnv`) | Card-free free tier (1000 credits/month at the time of writing) |
+   | `"brave"` | `BRAVE_SEARCH_API_KEY` | Needs a card; ~$5/month recurring credit ≈ 1000 queries at the time of writing — not card-free |
+   | `"serpapi"` | `SERPAPI_API_KEY` | Check current SerpApi pricing |
+   | `"native"` | `provider.apiMode: "responses"` | The model provider searches server-side; see below — the `websearch` tool is not even registered in this mode |
+
+3. **Nothing configured**: a public [SearXNG](https://docs.searxng.org/) instance
+   (`websearch.searxngUrl`'s default), queried with `GET <url>/search?q=...&format=json` — genuinely
+   free and keyless. **In practice this is unreliable**: while building this tool, nearly every
+   public instance tried (from [searx.space](https://searx.space)) rate-limited or bot-blocked a
+   single fresh automated request. Treat it as a starting point, not something to depend on.
+   Self-hosting is one line away:
+
+   ```sh
+   docker run -d -p 8080:8080 searxng/searxng
+   ```
+   ```json
+   { "websearch": { "searxngUrl": "http://localhost:8080" } }
+   ```
+
+   A non-loopback `searxngUrl` must use `https://` (a heuristic SSRF guard, since — unlike the
+   other providers' hardcoded hosts — this one is user-configurable and could point anywhere).
+
+Every result includes a `source`; when relevant, a `limitation` (e.g. DuckDuckGo Instant Answer's
+narrow scope) and, only when a plugin provider failed over to the built-in chain, a `diagnostic`.
+
+**`"native"` passthrough** is opt-in and provider-specific: with `provider.apiMode: "responses"`,
+Alisio appends a raw provider-native tool definition (`{ type: websearch.nativeToolType }`,
+default `"web_search"`) to the Responses API request instead of implementing its own HTTP call; the
+provider answers the search server-side, so the `websearch` tool is not registered in this mode.
+Most OpenAI-compatible providers — including the DeepSeek configuration Alisio ships with — do
+**not** support this; check your provider's own documentation for the exact tool type it expects
+before opting in. An unsupported/rejected tool surfaces as a normal provider error, the same as any
+other request failure.
+
+## Running a snippet against other tools: execute {#execute}
+
+`execute(code)` ("Code Mode") runs a short JavaScript snippet that calls other already-registered
+tools through `await callTool(name, input)` and returns one final value — so intermediate tool
+results (e.g. several files' contents) never re-enter the model's own context, only the snippet's
+return value does. It is a much lighter-weight feature than it might sound: it does **not**
+replicate a full JS engine or interpreter, and it does not give the snippet any capability a plain
+sequential tool call would not already have.
+
+- Sandboxing uses Node's built-in `vm` module: the snippet gets its own global object and V8
+  intrinsics, with no `require`, `process`, `fetch`, filesystem access or timers — the only thing
+  exposed is `callTool`. `codeGeneration` is restricted, so the snippet cannot `eval()` or
+  `new Function()` its way to more.
+- Every nested `callTool` goes through the exact same effect/permission gate as a direct call: an
+  effect the current policy does not already allow is denied outright. `execute` never triggers a
+  new interactive approval from inside the snippet (that could mean a confusing, potentially
+  deadlocking nested prompt) — it can only use what this session already has.
+- Bounded to 10 seconds wall-clock and 20 nested tool calls; a snippet cannot call `execute` itself.
+
+::: danger Not a security sandbox
+Node's own documentation is explicit: "the vm module is not a security mechanism; do not use it to
+run untrusted code." `execute` isolates a snippet's scope and bounds its running time for
+correctness and ergonomics, not as an OS-level boundary — the same trust model as every other
+in-process Alisio tool. See [Not a sandbox](#not-a-sandbox).
+:::
+
+`execute` uses the `process` effect (reusing the existing gate rather than adding a new
+classification): running a JS snippet is arbitrary code execution in the same spirit as
+`run_process`/`shell`, and `--allow-process` is what a user already expects to gate "run stuff".
+
 ## Permission flags
 
 | Flag | Effect |
 | --- | --- |
 | (none) | Read and search tools only |
 | `--allow-write` | Enables `write_file` and `edit_file` |
-| `--allow-process` | Enables `run_process` and `shell` |
+| `--allow-process` | Enables `run_process`, `shell` and `execute` |
+| `--allow-external` | Enables `webfetch` and `websearch` |
 | `--allow-mcp` | Starts/connects configured MCP servers and exposes their capabilities |
 | `--allow-agents` | Enables Herdr messaging tools |
-| `--read-only` | Disables writes, arbitrary processes, MCP, agent messaging and executable (external) plugins |
+| `--read-only` | Disables writes, arbitrary processes, network tools, MCP, agent messaging and executable (external) plugins |
 
 `--read-only` wins over every `--allow-*` flag. Built-in plugins (for example `memory`) remain
 active under `--read-only` because their tools only use the `internal` effect; use
-`--disable-plugin memory` for a strictly write-free mode.
+`--disable-plugin memory` for a strictly write-free mode. Like `write`/`process`, an unallowed
+`external` tool is still offered in the TUI and asks for interactive approval instead of being
+silently excluded (headless modes never ask, see below).
 
 ## Interactive approval
 
-In the TUI, `write` and `process` tools that were not allowed by flags are offered to the model and
-Alisio asks before running each call: allow once, allow that effect for the session, or deny.
-Headless modes (`run`, `resume <id> "prompt"`, `--json`) never ask. See
+In the TUI, `write`, `process` and `external` tools that were not allowed by flags are offered to
+the model and Alisio asks before running each call: allow once, allow that effect for the session,
+or deny. Headless modes (`run`, `resume <id> "prompt"`, `--json`) never ask. See
 [Terminal UI](/tui#interactive-approvals).
 
 ## Not a sandbox
