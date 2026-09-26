@@ -26,9 +26,14 @@ cruzada los perfiles globales de `/connect`; la configuración raíz heredada `p
 compatibilidad de arranque/headless. Los metadatos y errores nunca exponen credenciales.
 
 La configuración raíz `provider`, las variables de entorno y los flags heredados siguen admitidos y
-no se reescriben. Las fuentes explícitas seleccionan el proveedor compatible con OpenAI para esa
-ejecución; `--model` reemplaza el modelo. `AppOptions.provider` tiene máxima prioridad. Los modos
-headless nunca preguntan.
+no se reescriben. `AppOptions.provider` tiene máxima prioridad. Después, una anulación explícita del
+endpoint (`--base-url`, `--api-mode`, `OPENAI_BASE_URL`, `ALISIO_API_MODE`) o una capa de proyecto de
+confianza/explícita que realmente defina `provider` en la raíz selecciona el proveedor heredado
+compatible con OpenAI para esa ejecución. Los ajustes de MCP, plugins, skills u otros campos por sí
+solos no lo hacen. En caso contrario se restaura el perfil activo de `/connect`; `--model` o
+`ALISIO_MODEL` solo pueden reemplazar su modelo. El `provider` heredado global es el respaldo cuando
+no existe un perfil guardado, por lo que no anula de forma permanente una selección de `/connect`.
+Los modos headless nunca preguntan.
 
 Hay cuatro proveedores integrados y activados por defecto:
 
@@ -90,7 +95,10 @@ El modo chat maneja mensajes de texto y function tool calls. El modo Responses c
 opacos del proveedor, incluido el razonamiento cifrado para continuación con `store: false`. Un
 proveedor compatible puede implementar solo una parte de la API de OpenAI: valide su modelo y endpoint.
 
-Precedencia del proveedor: archivo seleccionado → variables de entorno → flags de la CLI.
+Dentro de la configuración heredada del proveedor, la precedencia es archivo global → archivo de
+proyecto de confianza o explícito → variables de entorno → flags de la CLI. La precedencia de
+selección anterior determina cuándo se usa esa configuración en lugar del perfil activo de
+`/connect`.
 
 ## `limits`
 
@@ -191,6 +199,15 @@ También se buscan las raíces de proyecto (`.agents/skills`, `.alisio/skills`, 
 en proyectos de confianza), las raíces de usuario y las skills de plugins. Consulte
 [Contexto: AGENTS.md y skills](/es/context#skills).
 
+`/skills` escribe las decisiones de activación locales del proyecto sin cambiar las raíces:
+
+```json
+{ "skillOverrides": { "review": { "enabled": false } } }
+```
+
+Las anulaciones se aplican a la skill efectiva del proyecto actual. Las skills propiedad de plugins
+están bloqueadas y siguen el ciclo de vida de su plugin.
+
 ## Plantillas de prompts
 
 No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en
@@ -213,7 +230,7 @@ de `command`/`url`.
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
 | `transport` | inferido | `stdio` o `http` (Streamable HTTP) |
-| `enabled` | `true` | Estado persistido que gestiona `/mcp` |
+| `enabled` | `true` | Estado configurado persistido que gestiona `/mcp`; no concede permiso de ejecución ni significa conectado |
 | `command` | ninguno | stdio: ejecutable |
 | `args` | `[]` | stdio: argumentos; `./` y `../` se resuelven respecto al archivo de configuración |
 | `url` | ninguno | http: URL del servidor |
@@ -269,8 +286,10 @@ muestran esos valores. Los valores directos de `env` se pasan solo a ese subproc
 sobre una variable del mismo nombre reenviada con `envAllow`; úselos para opciones no secretas o
 rutas locales protegidas. Los secretos HTTP no pueden escribirse literalmente:
 `bearerTokenEnv` nombra la variable de entorno que contiene el token. Un servidor configurado
-permanece desconectado hasta que se solicita y solo
-está disponible con `--allow-mcp`; `--read-only` siempre prohíbe MCP. Un servidor stdio es un
+permanece desconectado hasta que se solicita. La TUI interactiva puede conceder acceso MCP de
+proceso/red para la sesión actual de la aplicación tras una confirmación clara; ese permiso no se
+guarda en la configuración. Los modos no TUI y los consumidores programáticos aún requieren
+`--allow-mcp` o `allowMcp`; `--read-only` siempre prohíbe MCP. Un servidor stdio es un
 subproceso con sus privilegios de usuario, **no un sandbox**. Confíe únicamente en la configuración y
 el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
 

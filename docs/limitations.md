@@ -21,7 +21,8 @@ it is not a statement that all of its release criteria are met.
 - Interactive MCP OAuth and MCP multimedia capabilities. `/mcp` supports explicit reconnect and
   environment-referenced bearer tokens, but not browser authentication flows.
   Configured servers connect lazily and stdio runs with the user's privileges; neither MCP nor its
-  subprocess transport is a sandbox.
+  subprocess transport is a sandbox. Semantic names and descriptions improve model routing but do
+  not guarantee automatic tool selection; explicitly name `server/tool` when the call is required.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
 - Hardening against hostile processes and filesystem races. No OS sandbox is offered.
 

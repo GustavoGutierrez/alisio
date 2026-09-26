@@ -198,6 +198,8 @@ describe("commands", () => {
     expect(resolveCommand("connect")).toBe("connect");
     expect(resolveCommand("models")).toBe("model");
     expect(resolveCommand("plugin")).toBe("plugins");
+    expect(resolveCommand("skill")).toBe("skills");
+    expect(resolveCommand("skills")).toBe("skills");
     expect(resolveCommand("mcp")).toBe("mcp");
     expect(reservedCommandNames()).toContain("mcp");
   });
@@ -211,6 +213,8 @@ describe("MCP manager presentation", () => {
         displayName: "Global server",
         source: { kind: "global" },
         status: "connected",
+        enabled: true,
+        runtimePermission: "granted",
         counts: { tools: 2 },
       },
       {
@@ -218,6 +222,8 @@ describe("MCP manager presentation", () => {
         displayName: "Project server",
         source: { kind: "project" },
         status: "needs-authentication",
+        enabled: true,
+        runtimePermission: "not-granted",
         counts: { tools: 0 },
       },
     ]);
@@ -225,6 +231,12 @@ describe("MCP manager presentation", () => {
       "User · [x] Global server",
       "Project · [?] Project server",
     ]);
+    expect(items[0]?.description).toBe(
+      "configured enabled · permission granted · connected · 2 tools loaded",
+    );
+    expect(items[1]?.description).toBe(
+      "configured enabled · permission not-granted · needs-authentication · 0 tools loaded",
+    );
     expect(JSON.stringify(items)).not.toContain("Built-in");
   });
 
@@ -419,7 +431,16 @@ describe("event reduction", () => {
       { kind: "user", text: "plain" },
     ]);
     expect(reservedCommandNames()).toEqual(
-      expect.arrayContaining(["help", "quit", "new", "copy", "plugins", "plugin"]),
+      expect.arrayContaining([
+        "help",
+        "quit",
+        "new",
+        "copy",
+        "plugins",
+        "plugin",
+        "skills",
+        "skill",
+      ]),
     );
     expect(reservedCommandNames()).not.toContain("init");
   });

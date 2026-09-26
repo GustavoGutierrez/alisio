@@ -209,15 +209,22 @@ subprocess is not an isolation boundary, and the `effect` field does not isolate
 ## MCP
 
 MCP servers use canonical `mcp.servers` or compatible `mcpServers` configuration. They remain
-disconnected until requested and are only available with `--allow-mcp` (never with `--read-only`).
+disconnected until requested. Headless, JSON, readline, doctor and embedded uses require
+`--allow-mcp`/`allowMcp`; in the interactive TUI, choosing **Connect** or **Enable** first presents a
+session-only process/network consent. `--read-only` always blocks MCP.
 Stdio servers are unsandboxed subprocesses; direct `env` values are scoped to that child and are not
 shown in diagnostics.
 
 - `mcp_connect` connects on demand and registers the server's tools; `mcp_resource` and `mcp_prompt`
   list and read resources and prompts.
 - `/mcp` shows disabled, disconnected, connecting, connected, failed, needs authentication and
-  restart-required states where applicable. It displays declared read-only, destructive and
-  open-world tool annotations; missing annotations are not treated as destructive.
+  restart-required states where applicable. Configured/enabled, runtime permission, connection and
+  loaded-tool counts are separate states. It displays declared read-only, destructive and open-world
+  tool annotations; missing annotations are not treated as destructive.
+- Connected tools use semantic provider-safe names such as `mcp_devforge_time_diff`; deterministic
+  short hashes are added only for collisions or truncation. They are available to the next model
+  turn. The model still chooses whether to call them: say “use `devforge/time_diff`” when that call is
+  required rather than relying on automatic selection.
 - Exposed tools must use schemas supported by the registry. Schema changes require a reconnect; a
   call is never executed with a stale schema.
 - There is no interactive OAuth and no automatic retry of operations with effects.

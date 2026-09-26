@@ -59,7 +59,8 @@ export class PluginHost implements RunnerExtensions {
   private modelsImpl?: PluginAPI["models"];
   observers = new Set<(event: Readonly<RunEvent>) => void>();
   contexts: Array<() => Promise<string>> = [];
-  skillRoots: string[] = [];
+  /** Skill directories registered by plugins, retaining trusted registration ownership. */
+  skillSources: Array<{ plugin: string; name: string; dir: string }> = [];
   /** Prompt template directories registered by plugins, with their plugin id. */
   promptSources: Array<{ plugin: string; dir: string }> = [];
   /** Agent definition directories registered by plugins, with their plugin id. */
@@ -109,6 +110,9 @@ export class PluginHost implements RunnerExtensions {
   }
   get promptRoots(): string[] {
     return this.promptSources.map((s) => s.dir);
+  }
+  get skillRoots(): string[] {
+    return this.skillSources.map((source) => source.dir);
   }
   private loaded = new Map<string, { plugin: Plugin; undo: Array<() => void>; builtin: boolean }>();
   constructor(
@@ -243,10 +247,14 @@ export class PluginHost implements RunnerExtensions {
       },
       resources: {
         skills: (path) => {
-          const p = resolve(base, path);
-          this.skillRoots.push(p);
+          const entry = {
+            plugin: plugin.id,
+            name: plugin.name ?? plugin.id,
+            dir: resolve(base, path),
+          };
+          this.skillSources.push(entry);
           track(() => {
-            this.skillRoots = this.skillRoots.filter((x) => x !== p);
+            this.skillSources = this.skillSources.filter((x) => x !== entry);
           });
         },
         prompts: (path) => {
@@ -265,7 +273,7 @@ export class PluginHost implements RunnerExtensions {
         },
         list: (kind) =>
           (kind === "skills"
-            ? this.skillRoots.map((dir) => ({ plugin: "", dir }))
+            ? this.skillSources
             : kind === "prompts"
               ? this.promptSources
               : this.agentSources

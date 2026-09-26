@@ -273,10 +273,16 @@ program
     );
   });
 program.command("doctor").action(async (_opts, cmd) => {
-  const { findWorkspace, loadConfig, ProviderSettingsStore, which } = await import("@alisio/core");
+  const {
+    findWorkspace,
+    loadConfigWithProvenance,
+    overridesSavedProviderProfile,
+    ProviderSettingsStore,
+    which,
+  } = await import("@alisio/core");
   const o = options(cmd);
   const workspace = await findWorkspace(o.cwd ?? process.cwd());
-  const config = await loadConfig(workspace, {
+  const { config, provenance } = await loadConfigWithProvenance(workspace, {
     file: o.config,
     trustProject: o.trustProject,
     model: o.model,
@@ -286,12 +292,10 @@ program.command("doctor").action(async (_opts, cmd) => {
   const saved = await new ProviderSettingsStore().active();
   const useSaved =
     !!saved &&
-    !o.baseURL &&
-    !o.apiMode &&
-    !o.config &&
-    !o.trustProject &&
-    !process.env.OPENAI_BASE_URL &&
-    !process.env.ALISIO_API_MODE;
+    !overridesSavedProviderProfile(
+      provenance,
+      !!o.baseURL || !!o.apiMode || !!process.env.OPENAI_BASE_URL || !!process.env.ALISIO_API_MODE,
+    );
   const model =
     o.model?.trim() ||
     process.env.ALISIO_MODEL?.trim() ||
@@ -414,7 +418,7 @@ for (const name of ["list", "validate"]) {
         trusted: !!o.trustProject || !!o.config,
         configSkills: config.skills,
       });
-      const catalog = new Skills();
+      const catalog = new Skills({ overrides: path ? {} : config.skillOverrides });
       await catalog.discover(path ? [resolve(cwd, path)] : roots);
       console.log(
         JSON.stringify(

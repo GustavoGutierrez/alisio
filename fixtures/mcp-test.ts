@@ -60,6 +60,7 @@ export async function runMcpTest(mode: string): Promise<{ mode: string; ok: bool
     assert.deepEqual(connector.info("test").counts, { tools: 2, resources: 1, prompts: 1 });
     assert.deepEqual(connector.tools("test")[0], {
       name: "echo",
+      effectiveName: "mcp_test_echo",
       title: "Friendly Echo",
       description: "Echo test",
       annotations: { readOnly: true, destructive: false, openWorld: false },
@@ -84,14 +85,16 @@ export async function runMcpTest(mode: string): Promise<{ mode: string; ok: bool
     assert.match(JSON.stringify(prompt), /Review code/);
     await connector.disconnect("test");
     assert.equal(connector.info("test").status, "disconnected");
-    assert.equal(registry.list().filter((t) => t.name.startsWith("m_")).length, 0);
-    if (mode === "stdio")
+    assert.equal(registry.list().filter((t) => t.name.startsWith("mcp_test_")).length, 0);
+    if (mode === "stdio") {
       assert.equal((await connector.reconnect("test", context.signal)).length, 2);
+      assert.equal(registry.list().filter((t) => t.name.startsWith("mcp_test_")).length, 2);
+    }
     await connector.setEnabled("test", false);
     assert.equal(connector.info("test").status, "disabled");
     await assert.rejects(connector.connect("test", context.signal), /disabled/);
     await connector.close();
-    assert.equal(registry.list().filter((t) => t.name.startsWith("m_")).length, 0);
+    assert.equal(registry.list().filter((t) => t.name.startsWith("mcp_test_")).length, 0);
     return { mode, ok: true };
   } finally {
     await connector.close();

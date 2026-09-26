@@ -50,6 +50,7 @@ import { ConnectInputPrompt } from "./connect-input.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
+import { SkillsManager } from "./skills-manager.ts";
 import {
   addItem,
   COMMANDS,
@@ -227,7 +228,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       session: shortId(session),
       write: policy.write ? "on" : ask ? "ask" : "off",
       process: policy.process ? "on" : ask ? "ask" : "off",
-      mcp: !!options.allowMcp && !options.readOnly,
+      mcp: app.mcpRuntimePermission() === "granted",
       readOnly: !!options.readOnly,
     };
   };
@@ -879,6 +880,21 @@ export async function runTui(options: TuiOptions): Promise<void> {
     if (!catalog.length) return notice("No plugins are available");
     openCatalog();
   };
+  const manageSkills = () => {
+    const entries = app.skillCatalog();
+    if (!entries.length) return notice("No skills are available");
+    showPicker(
+      new SkillsManager({
+        entries,
+        height: () => Math.max(6, (process.stdout.rows ?? 24) - 7),
+        onClose: closePicker,
+        onToggle: (id, enabled) => app.setSkillEnabled(id, enabled),
+        onError: error,
+        onChanged: notice,
+        requestRender: () => tui.requestRender(),
+      }),
+    );
+  };
   const manageMcp = () => {
     const openCatalog = () => {
       const entries = app.mcp.list();
@@ -898,7 +914,9 @@ export async function runTui(options: TuiOptions): Promise<void> {
                 ? `Command: ${selected.command}`
                 : `URL: ${selected.url}`;
             const detail = [
-              `Status: ${selected.status} · Source: ${source}`,
+              `Configured: ${selected.enabled ? "enabled" : "disabled"} · Source: ${source}`,
+              `Runtime permission: ${selected.runtimePermission.replace("-", " ")}`,
+              `Connection: ${selected.status === "disabled" ? "disconnected" : selected.status}`,
               endpoint,
               selected.source.file
                 ? `Config: ${shortenPath(selected.source.file, homedir(), 72)}`
@@ -955,32 +973,24 @@ export async function runTui(options: TuiOptions): Promise<void> {
                     );
                   }
                   if (action.value === "connect") {
-                    if (!options.allowMcp) {
-                      error("Restart with --allow-mcp before connecting to an MCP server");
-                      return openCatalog();
-                    }
-                    if (options.readOnly) {
-                      error("MCP is unavailable under --read-only");
-                      return openCatalog();
-                    }
-                    void app.mcp
-                      .reconnect(selected.name, AbortSignal.timeout(15_000))
-                      .then(() => notice(`${selected.displayName} connected.`))
-                      .catch(error)
-                      .finally(openCatalog);
+                    withMcpConsent(() =>
+                      app.mcp
+                        .reconnect(selected.name, AbortSignal.timeout(15_000))
+                        .then(() => notice(`${selected.displayName} connected.`)),
+                    );
                     return;
                   }
-                  void app
-                    .setMcpEnabled(
-                      selected.name,
-                      selected.status === "disabled",
-                      !!options.allowMcp,
-                    )
-                    .then((updated) =>
-                      notice(`${updated.displayName}: ${updated.status.replace("-", " ")}.`),
-                    )
-                    .catch(error)
-                    .finally(openCatalog);
+                  const enabling = !selected.enabled;
+                  const applyToggle = () =>
+                    app
+                      .setMcpEnabled(selected.name, enabling, enabling)
+                      .then((updated) =>
+                        notice(
+                          `${updated.displayName}: configured ${updated.enabled ? "enabled" : "disabled"}; ${updated.status.replace("-", " ")}.`,
+                        ),
+                      );
+                  if (enabling) withMcpConsent(applyToggle);
+                  else void applyToggle().catch(error).finally(openCatalog);
                 },
                 openCatalog,
                 false,
@@ -991,6 +1001,45 @@ export async function runTui(options: TuiOptions): Promise<void> {
           closePicker,
           true,
           "[x] connected · [-] disconnected · [ ] disabled · [!] failed · [?] needs authentication · [*] restart required",
+        ),
+      );
+    };
+    const withMcpConsent = (action: () => Promise<unknown>) => {
+      if (options.readOnly) {
+        error("MCP is unavailable under --read-only");
+        return openCatalog();
+      }
+      const run = () => void action().catch(error).finally(openCatalog);
+      if (app.mcpRuntimePermission() === "granted") return run();
+      showPicker(
+        new Picker(
+          "Grant MCP access for this session?",
+          [
+            {
+              value: "grant",
+              label: "Grant and continue",
+              description: "May start the configured process or network connection",
+            },
+            {
+              value: "cancel",
+              label: "Cancel",
+              description: "Make no permission or server changes",
+            },
+          ],
+          (choice) => {
+            if (choice.value !== "grant") return openCatalog();
+            try {
+              app.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
+              notice("MCP process/network access granted for this Alisio session only.");
+              run();
+            } catch (cause) {
+              error(cause);
+              openCatalog();
+            }
+          },
+          openCatalog,
+          false,
+          "This grant is not saved. Configured server enablement is persisted separately. MCP servers and their tools run with your user privileges.",
         ),
       );
     };
@@ -1110,7 +1159,16 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
-  const mutating = new Set(["connect", "model", "plugins", "mcp", "compact", "clear", "resume"]);
+  const mutating = new Set([
+    "connect",
+    "model",
+    "plugins",
+    "skills",
+    "mcp",
+    "compact",
+    "clear",
+    "resume",
+  ]);
   const handleSubmit = async (raw: string) => {
     const text = raw.trim();
     if (!text) return;
@@ -1157,6 +1215,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return await chooseModel();
         case "plugins":
           return managePlugins();
+        case "skills":
+          return manageSkills();
         case "mcp":
           return manageMcp();
         case "compact":

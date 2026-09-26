@@ -14,7 +14,11 @@ funcional, no solo interfaces o stubs.
   credenciales en `credentials.json` (escritura atómica, `0600`, directorio `0700`; no cifrado).
   El arranque sin proveedor permite onboarding; headless nunca pregunta. Cada cambio inicia una
   sesión nueva para no mezclar continuación opaca. Se mantienen config/env/flags heredados y la
-  máxima prioridad de `AppOptions.provider`.
+  máxima prioridad de `AppOptions.provider`. Un perfil activo de `/connect` se restaura entre
+  proyectos aunque la capa de confianza solo defina MCP/plugins/skills; solo un `provider` raíz real
+  en la capa de proyecto/explícita o una anulación de endpoint selecciona el adaptador heredado para
+  esa ejecución. La cobertura usa hogares y proyectos temporales con credenciales ficticias e incluye
+  reinicio tras `/model`; no consulta configuración ni credenciales reales del usuario.
   El formulario de `/connect` acepta pegado normal y bracketed paste por fragmentos, permite editar
   URL con cursor y mantiene los secretos enmascarados fuera del historial y del transcript.
   Hay tres plugins dedicados adicionales y publicables: `@alisio/plugin-deepseek` usa el endpoint
@@ -47,7 +51,10 @@ funcional, no solo interfaces o stubs.
   (solo proyectos de confianza), rutas configuradas, `~/.agents/skills` y `<config>/skills`, y
   plugins; el proyecto prevalece con aviso y ganador determinista; validación de nombres según la
   especificación (el desajuste con el directorio solo avisa); profundidad ≤ 5 y ≤ 2000
-  directorios; catálogo progresivo, activación y recursos.
+  directorios; catálogo progresivo, activación y recursos. Gestor TUI `/skills` con búsqueda,
+  orden por nombre/origen/tokens aproximados, viewport acotado y navegación completa; metadatos
+  seguros de origen/alcance/propietario, anulaciones de proyecto atómicas con efecto inmediato y
+  skills de plugins bloqueadas por su ciclo de vida.
 - Presupuesto de tokens proporcional: `limits.maxTokens` es opcional; por defecto 8 × ventana de
   contexto (entre 400k y 8M) o 1M si la ventana es desconocida.
 - Plugin integrado `subagents` (`@alisio/plugin-subagents`, desactivable): definiciones de agentes
@@ -67,10 +74,15 @@ funcional, no solo interfaces o stubs.
   skills, estado y desregistro/cleanup.
 - MCP oficial v2: stdio, Streamable HTTP, herramientas, recursos, prompts y cierre. Configuración
   global + proyecto de confianza (o global + `--config` explícito), combinación por nombre, forma
-  canónica `mcp.servers` y alias compatible `mcpServers`; conexión diferida bajo `--allow-mcp`.
+  canónica `mcp.servers` y alias compatible `mcpServers`; conexión diferida bajo `--allow-mcp` en
+  usos no TUI o mediante consentimiento explícito válido solo para la sesión TUI actual; bloqueo
+  absoluto con `--read-only`.
   Gestor TUI `/mcp` agrupado por origen real, con estados, detalles saneados, catálogo y anotaciones
-  de herramientas, conexión/reconexión, limpieza al desconectar y activación persistida atómicamente
-  en la forma y archivo que definieron el servidor.
+  de herramientas; distingue activación configurada, permiso de ejecución, conexión y herramientas
+  cargadas. La conexión/reconexión registra nombres semánticos seguros como
+  `mcp_devforge_time_diff` para el siguiente turno, limpia al desconectar y persiste la activación de
+  forma atómica en la forma y archivo que definieron el servidor. El modelo conserva la decisión de
+  llamar una herramienta; el nombre semántico mejora, pero no garantiza, la selección automática.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 - CLI interactiva/headless, JSONL, reanudación, configuración y diagnósticos.
 - Runtime Node-first: Node.js >=22.16 (mínimo verificado: 22.13–22.15 incluyen `node:sqlite`
@@ -588,6 +600,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - TUI: las estadísticas de `/stats` cubren solo el proceso actual de la TUI para la sesión
   activa; no se reconstruyen desde eventos persistidos. La TUI necesita una terminal con
   pantalla alternativa; en otros casos use `--no-tui` o `run`.
+- Skills: el coste de tokens mostrado por `/skills` es una aproximación uniforme de bytes/4, no el
+  tokenizador del proveedor. Una skill de un plugin desactivado tras reiniciar deja de existir en el
+  catálogo; un cambio pendiente del plugin conserva la skill bloqueada y marca su origen como
+  pendiente de reinicio. Los diagnósticos headless pueden incluir rutas de confianza; la TUI no.
 - `provider.contextWindow` se aplica solo al modelo configurado; tras `/model`, la ventana
   proviene de `GET /models` o queda como desconocida (y la compactación automática por
   umbral se desactiva para ese modelo, salvo por `limits.maxContextChars`).

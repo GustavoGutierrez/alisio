@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,6 +12,7 @@ import { createDeepSeekPlugin } from "@alisio/plugin-deepseek";
 import { createOpenAICompatiblePlugin } from "@alisio/plugin-openai-compatible";
 import { definePlugin, type ModelProvider } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { startupInput } from "../packages/cli/src/banner.ts";
 
 const provider = (id: string, model = "m", dispose?: () => void): ModelProvider => ({
   id,
@@ -25,6 +26,38 @@ const builtin: BuiltinPlugin = {
   defaultProvider: true,
   create: createOpenAICompatiblePlugin,
 };
+const deepseekBuiltin: BuiltinPlugin = {
+  id: "deepseek",
+  description: "test",
+  create: createDeepSeekPlugin,
+};
+async function providerFixture(prefix: string) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  const config = join(root, "config");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, ".alisio"), { recursive: true });
+  vi.stubEnv("ALISIO_CONFIG_HOME", config);
+  vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
+  vi.stubEnv("OPENAI_BASE_URL", "");
+  vi.stubEnv("ALISIO_API_MODE", "");
+  vi.stubEnv("ALISIO_MODEL", "");
+  return { root, config, workspace };
+}
+async function json(file: string, value: unknown) {
+  await mkdir(join(file, ".."), { recursive: true });
+  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+async function saveDeepSeek(config: string, model = "saved-model") {
+  await new ProviderSettingsStore(config).saveActive(
+    "deepseek",
+    {
+      provider: "deepseek",
+      values: { baseURL: "https://api.deepseek.com", apiMode: "chat" },
+      model,
+    },
+    { apiKey: "fake-test-key" },
+  );
+}
 afterEach(() => vi.unstubAllEnvs());
 
 describe("provider registry", () => {
@@ -75,6 +108,222 @@ describe("provider settings", () => {
 });
 
 describe("application provider selection", () => {
+  it("restores a saved profile through trusted MCP-only project configuration", async () => {
+    const { config, workspace } = await providerFixture("alisio-provider-mcp-project-");
+    await saveDeepSeek(config);
+    await json(join(config, "config.json"), {
+      provider: {
+        baseURL: "https://global-legacy.example.test/v1",
+        auth: "none",
+        model: "global-legacy-model",
+      },
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      mcpServers: { fixture: { command: "fixture-mcp" } },
+    });
+    const app = await createApplication({
+      cwd: workspace,
+      trustProject: true,
+      builtins: [builtin, deepseekBuiltin],
+      noHerdr: true,
+    });
+    try {
+      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.provider.model).toBe("saved-model");
+      expect(
+        startupInput(app, {
+          version: "test",
+          terminal: { color: false, unicode: true, columns: 80, interactive: false },
+        }),
+      ).toMatchObject({ model: "saved-model", provider: "api.deepseek.com" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("restores a saved profile through project plugin/skills-only configuration", async () => {
+    const { config, workspace } = await providerFixture("alisio-provider-project-tools-");
+    await saveDeepSeek(config);
+    await json(join(workspace, ".alisio", "config.json"), {
+      plugins: ["./missing-plugin.mjs"],
+      skills: ["./skills"],
+    });
+    const app = await createApplication({
+      cwd: workspace,
+      trustProject: true,
+      builtins: [builtin, deepseekBuiltin],
+      noHerdr: true,
+    });
+    try {
+      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.provider.model).toBe("saved-model");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("restores a saved profile through explicit MCP-only configuration", async () => {
+    const { root, config, workspace } = await providerFixture("alisio-provider-mcp-explicit-");
+    await saveDeepSeek(config);
+    const explicit = join(root, "explicit.json");
+    await json(explicit, { mcp: { servers: { fixture: { command: "fixture-mcp" } } } });
+    const app = await createApplication({
+      cwd: workspace,
+      config: explicit,
+      builtins: [builtin, deepseekBuiltin],
+      noHerdr: true,
+    });
+    try {
+      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.provider.model).toBe("saved-model");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each(["project", "explicit"] as const)(
+    "lets an actual %s legacy provider override the saved profile for that run",
+    async (layer) => {
+      const { root, config, workspace } = await providerFixture(`alisio-provider-${layer}-legacy-`);
+      await saveDeepSeek(config);
+      const file =
+        layer === "project"
+          ? join(workspace, ".alisio", "config.json")
+          : join(root, "explicit.json");
+      await json(file, {
+        provider: {
+          baseURL: `https://${layer}.example.test/v1`,
+          auth: "none",
+          model: `${layer}-model`,
+        },
+      });
+      const app = await createApplication({
+        cwd: workspace,
+        ...(layer === "project" ? { trustProject: true } : { config: file }),
+        builtins: [builtin, deepseekBuiltin],
+        noHerdr: true,
+      });
+      try {
+        expect(app.provider.id).toContain(`${layer}.example.test`);
+        expect(app.provider.model).toBe(`${layer}-model`);
+        expect(app.providerInfo).toMatchObject({ id: "openai-compatible", persisted: false });
+        expect((await app.providerSettings.active())?.profile.provider).toBe("deepseek");
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it("falls back through global and project legacy provider layers without a saved profile", async () => {
+    const { config, workspace } = await providerFixture("alisio-provider-legacy-layers-");
+    await json(join(config, "config.json"), {
+      provider: { baseURL: "https://global.example.test/v1", auth: "none", model: "global-model" },
+    });
+    const global = await createApplication({ cwd: workspace, builtins: [builtin], noHerdr: true });
+    try {
+      expect(global.provider.id).toContain("global.example.test");
+      expect(global.provider.model).toBe("global-model");
+    } finally {
+      await global.close();
+    }
+    await json(join(workspace, ".alisio", "config.json"), {
+      provider: {
+        baseURL: "https://project.example.test/v1",
+        auth: "none",
+        model: "project-model",
+      },
+    });
+    const project = await createApplication({
+      cwd: workspace,
+      trustProject: true,
+      builtins: [builtin],
+      noHerdr: true,
+    });
+    try {
+      expect(project.provider.id).toContain("project.example.test");
+      expect(project.provider.model).toBe("project-model");
+    } finally {
+      await project.close();
+    }
+  });
+
+  it.each([
+    ["CLI", "cli-model"],
+    ["environment", "env-model"],
+  ] as const)(
+    "applies a model-only %s override within the saved provider",
+    async (source, model) => {
+      const { config, workspace } = await providerFixture("alisio-provider-model-override-");
+      await saveDeepSeek(config);
+      if (source === "environment") vi.stubEnv("ALISIO_MODEL", model);
+      const app = await createApplication({
+        cwd: workspace,
+        ...(source === "CLI" ? { model } : {}),
+        builtins: [builtin, deepseekBuiltin],
+        noHerdr: true,
+      });
+      try {
+        expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+        expect(app.provider.model).toBe(model);
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it("restores the provider/model selected through the model selector after restart", async () => {
+    const { config, workspace } = await providerFixture("alisio-provider-model-restart-");
+    const selectable: BuiltinPlugin = {
+      id: "selectable",
+      description: "test",
+      create: () =>
+        definePlugin({
+          id: "selectable",
+          version: "1.0.0",
+          apiVersion: 1,
+          setup(api) {
+            api.providers.register({
+              id: "selectable",
+              name: "Selectable",
+              fields: [],
+              create: (request) => ({
+                ...provider("selectable:runtime", String(request.profile.model ?? "")),
+                async listModels() {
+                  return ["old-model", "selected-model"].map((id) => ({ id, name: id }));
+                },
+              }),
+            });
+          },
+        }),
+    };
+    await new ProviderSettingsStore(config).saveActive(
+      "selectable",
+      { provider: "selectable", values: {}, model: "old-model" },
+      {},
+    );
+    const first = await createApplication({
+      cwd: workspace,
+      builtins: [selectable],
+      noHerdr: true,
+    });
+    try {
+      expect(await first.switchModel("selectable/selected-model")).toBeDefined();
+    } finally {
+      await first.close();
+    }
+    const restarted = await createApplication({
+      cwd: workspace,
+      builtins: [selectable],
+      noHerdr: true,
+    });
+    try {
+      expect(restarted.providerInfo).toMatchObject({ id: "selectable", persisted: true });
+      expect(restarted.provider.model).toBe("selected-model");
+    } finally {
+      await restarted.close();
+    }
+  });
+
   it("discovers every stored plugin profile independently and switches by profile", async () => {
     const root = await mkdtemp(join(tmpdir(), "alisio-provider-catalogs-"));
     vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));

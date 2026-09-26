@@ -226,15 +226,24 @@ privilegios; ni un manifiesto de plugin ni un subproceso son una frontera de ais
 ## MCP
 
 Los servidores MCP usan la configuración canónica `mcp.servers` o la compatible `mcpServers`.
-Permanecen desconectados hasta que se solicitan y solo están disponibles con `--allow-mcp` (nunca con
-`--read-only`). Los servidores stdio son subprocesos sin sandbox; los valores `env` directos quedan
+Permanecen desconectados hasta que se solicitan. Los modos headless, JSON, readline y doctor, y el
+uso embebido, requieren `--allow-mcp`/`allowMcp`; en la TUI interactiva, **Conectar** o **Activar**
+presenta primero un consentimiento de proceso/red válido solo para esa sesión. `--read-only` siempre
+bloquea MCP. Los servidores stdio son subprocesos sin sandbox; los valores `env` directos quedan
 limitados a ese proceso hijo y no aparecen en diagnósticos.
 
 - `mcp_connect` conecta bajo demanda y registra las herramientas del servidor; `mcp_resource` y
   `mcp_prompt` permiten listar y consultar recursos y prompts.
 - `/mcp` muestra los estados desactivado, desconectado, conectando, conectado, fallido, requiere
-  autenticación y requiere reinicio cuando correspondan. Presenta las anotaciones declaradas de solo
-  lectura, destructiva y mundo abierto; una herramienta sin anotaciones no se considera destructiva.
+  autenticación y requiere reinicio cuando correspondan. Configuración/activación, permiso de
+  ejecución, conexión y cantidad de herramientas cargadas son estados separados. Presenta las
+  anotaciones declaradas de solo lectura, destructiva y mundo abierto; una herramienta sin
+  anotaciones no se considera destructiva.
+- Las herramientas conectadas usan nombres semánticos seguros para proveedores, como
+  `mcp_devforge_time_diff`; solo se agrega un hash corto y determinista por colisión o truncamiento.
+  Están disponibles en el siguiente turno del modelo. El modelo aún decide si las llama: escriba
+  «usa `devforge/time_diff`» cuando la llamada sea obligatoria, en vez de depender de la selección
+  automática.
 - Las herramientas expuestas deben usar esquemas soportados por el registro. Los cambios de esquema
   exigen reconectar; nunca se ejecuta una llamada con un esquema obsoleto.
 - No hay OAuth interactivo ni reintentos automáticos de operaciones con efectos.

@@ -89,7 +89,17 @@ Al principio solo se incluyen en el contexto el nombre y la descripción de cada
 carga con la herramienta `skill_load` o con `/skill:name`, y los archivos de apoyo con
 `skill_resource`. `skill_search` busca en el catálogo.
 
+En la TUI, `/skills` (o `/skill`) abre el catálogo efectivo sin cargar los cuerpos. Muestra
+alcance/origen, estado habilitado u ocultado y un coste aproximado de tokens (`~`, estimado desde los
+bytes del archivo a cuatro caracteres por token). Los ganadores de proyecto, configuración y usuario
+están habilitados por defecto y se pueden cambiar de inmediato. La anulación local se guarda de forma
+atómica en `.alisio/config.json`; un archivo existente debe ser de confianza. Las skills de plugins
+usan un nombre visible como `vercel:nextjs`, están bloqueadas por su plugin y remiten a `/plugins`.
+
 ```sh
 alisio skills list
 alisio skills validate ./.agents/skills
 ```
+
+Los comandos headless incluyen metadatos de origen/estado y rutas de diagnóstico de confianza. El
+catálogo normal de la TUI nunca muestra rutas absolutas ni cuerpos de skills.

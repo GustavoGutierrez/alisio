@@ -104,4 +104,58 @@ describe("discovery", () => {
     expect(skills.catalog()).not.toContain("BODY-notes");
     expect(await skills.load("notes")).toContain("BODY-notes");
   });
+
+  it("exposes safe source, ownership and approximate-token metadata", async () => {
+    const dir = join(root, "metadata");
+    await skill(dir, "nextjs", "Next.js guidance");
+    const skills = new Skills();
+    await skills.discover([
+      {
+        dir,
+        scope: "plugin",
+        source: "plugin",
+        owner: { id: "vercel", name: "Vercel" },
+      },
+    ]);
+    const entry = skills.catalogEntries()[0];
+    expect(entry).toMatchObject({
+      id: "vercel:nextjs",
+      displayId: "vercel:nextjs",
+      source: "plugin",
+      scope: "plugin",
+      owner: { id: "vercel", name: "Vercel" },
+      locked: true,
+      manageable: false,
+      enabled: true,
+      effective: true,
+    });
+    expect(entry?.approximateTokens).toBeGreaterThan(0);
+    expect(JSON.stringify(entry)).not.toContain(root);
+    await expect(skills.load("vercel:nextjs")).resolves.toContain("BODY-nextjs");
+    expect(() => skills.setEnabled("vercel:nextjs", false)).toThrow("locked by its plugin");
+  });
+
+  it("keeps precedence fixed while a manageable effective skill is disabled", async () => {
+    const project = join(root, "overrides-project");
+    const user = join(root, "overrides-user");
+    await skill(project, "review", "project winner");
+    await skill(user, "review", "shadowed user copy");
+    const skills = new Skills({ overrides: { review: { enabled: false } } });
+    await skills.discover([
+      { dir: project, scope: "project" },
+      { dir: user, scope: "user" },
+    ]);
+    expect(skills.items.has("review")).toBe(false);
+    expect(skills.catalog()).not.toContain("project winner");
+    expect(skills.catalogEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ description: "project winner", effective: true, enabled: false }),
+        expect.objectContaining({ description: "shadowed user copy", effective: false }),
+      ]),
+    );
+    await expect(skills.load("review")).rejects.toThrow("disabled");
+    skills.setEnabled("review", true);
+    expect(skills.catalog()).toContain("project winner");
+    await expect(skills.load("review")).resolves.toContain("BODY-review");
+  });
 });

@@ -86,6 +86,8 @@ const configObjectSchema = z
     provider: providerSchema.default(() => providerSchema.parse({})),
     plugins: z.array(z.string()).default([]),
     skills: z.array(z.string()).default([]),
+    /** Project-local enable/disable overrides for effective non-plugin skills. */
+    skillOverrides: z.record(z.string(), z.object({ enabled: z.boolean() }).strict()).default({}),
     mcp: z
       .object({ servers: serversSchema(compatibleServerSchema).default({}) })
       .strict()
@@ -180,6 +182,23 @@ export interface McpServerSource {
   form: "canonical" | "alias";
 }
 export type LoadedConfig = Config & { mcpSources: Record<string, McpServerSource> };
+export interface ConfigProvenance {
+  selectedLayer?: {
+    kind: "project" | "explicit";
+    hasLegacyProvider: boolean;
+  };
+}
+export interface ConfigLoadResult {
+  config: LoadedConfig;
+  provenance: ConfigProvenance;
+}
+/** Whether legacy provider selection should take priority over a saved plugin profile for this run. */
+export function overridesSavedProviderProfile(
+  provenance: ConfigProvenance,
+  hasEndpointOverride: boolean,
+): boolean {
+  return hasEndpointOverride || !!provenance.selectedLayer?.hasLegacyProvider;
+}
 export const configHome = () =>
   process.env.ALISIO_CONFIG_HOME ??
   join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "alisio");
@@ -198,7 +217,7 @@ export function configFile(
       ? join(workspace, ".alisio", "config.json")
       : join(configHome(), "config.json");
 }
-export async function loadConfig(
+export async function loadConfigWithProvenance(
   workspace: string,
   options: {
     file?: string;
@@ -207,7 +226,7 @@ export async function loadConfig(
     model?: string;
     apiMode?: string;
   } = {},
-): Promise<LoadedConfig> {
+): Promise<ConfigLoadResult> {
   const globalFile = join(configHome(), "config.json");
   const selectedFile = options.file
     ? resolve(options.file)
@@ -249,10 +268,15 @@ export async function loadConfig(
     return { config, keys: new Set(Object.keys(object)), sources };
   };
   const global = await parseLayer(globalFile, "global");
+  // Skill activation is deliberately project-local; never carry a similarly named global field
+  // into another workspace.
+  global.config.skillOverrides = {};
   let config = global.config;
   let mcpSources = global.sources;
+  let selectedKeys: Set<string> | undefined;
   if (selectedFile && selectedFile !== globalFile) {
     const selected = await parseLayer(selectedFile, options.file ? "explicit" : "project");
+    selectedKeys = selected.keys;
     const overlaid = { ...config };
     for (const key of selected.keys) {
       if (key === "mcp" || key === "mcpServers") continue;
@@ -267,6 +291,8 @@ export async function loadConfig(
       };
     mcpSources = { ...mcpSources, ...selected.sources };
     config = overlaid;
+  } else if (selectedFile) {
+    selectedKeys = global.keys;
   }
   config.provider = providerSchema.parse({
     ...config.provider,
@@ -280,7 +306,32 @@ export async function loadConfig(
   const url = new URL(config.provider.baseURL);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("baseURL must be an HTTP(S) URL without credentials");
-  return { ...config, mcpSources };
+  return {
+    config: { ...config, mcpSources },
+    provenance: {
+      ...(selectedFile
+        ? {
+            selectedLayer: {
+              kind: options.file ? ("explicit" as const) : ("project" as const),
+              hasLegacyProvider: selectedKeys?.has("provider") ?? false,
+            },
+          }
+        : {}),
+    },
+  };
+}
+
+export async function loadConfig(
+  workspace: string,
+  options: {
+    file?: string;
+    trustProject?: boolean;
+    baseURL?: string;
+    model?: string;
+    apiMode?: string;
+  } = {},
+): Promise<LoadedConfig> {
+  return (await loadConfigWithProvenance(workspace, options)).config;
 }
 
 /** Atomically toggles one MCP server in the form and file that defined it. */
@@ -374,6 +425,50 @@ export async function setProjectPluginEnabled(input: {
         : {};
     raw.pluginOverrides = { ...current, [input.id]: { enabled: input.enabled } };
   }
+  raw.schemaVersion ??= 1;
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, file);
+    await chmod(file, 0o600);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return file;
+}
+
+/** Atomically updates one project skill override while preserving every unrelated JSON field. */
+export async function setProjectSkillEnabled(input: {
+  workspace: string;
+  id: string;
+  enabled: boolean;
+  trusted: boolean;
+}): Promise<string> {
+  const file = join(input.workspace, ".alisio", "config.json");
+  let raw: Record<string, unknown> = {};
+  if (await exists(file)) {
+    if (!input.trusted)
+      throw new Error("Trust this project before changing its existing Alisio configuration");
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("Project Alisio configuration must be a JSON object");
+    raw = parsed as Record<string, unknown>;
+  }
+  const current =
+    raw.skillOverrides &&
+    typeof raw.skillOverrides === "object" &&
+    !Array.isArray(raw.skillOverrides)
+      ? (raw.skillOverrides as Record<string, unknown>)
+      : {};
+  raw.skillOverrides = { ...current, [input.id]: { enabled: input.enabled } };
   raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;

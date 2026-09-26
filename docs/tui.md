@@ -47,7 +47,7 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
 | Status bar | Context used versus the window, `used / total (pct%)`, with a green (< 60 %), yellow (< 85 %) or red bar; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
-| Pickers | Selectable lists for `/model`, `/plugins`, `/resume` and approvals |
+| Pickers | Selectable lists for `/model`, `/plugins`, `/skills`, `/resume` and approvals |
 
 Errors appear in red inside the conversation without closing the TUI.
 
@@ -72,7 +72,8 @@ Typing `/` opens autocompletion.
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
 | `/plugins` (`/plugin`) | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled |
-| `/mcp` | Browse a filterable server list grouped by its real source (User, Project, Explicit, plugin or built-in), inspect status/config location/capability counts, view tool annotations, connect or reconnect, and persist enable/disable in the defining file. Process/network actions require `--allow-mcp`; all MCP actions are blocked by `--read-only` |
+| `/skills` (`/skill`) | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
+| `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp`, Connect/Enable shows process/network consequences and can grant access for this TUI session only. `--read-only` blocks it |
 | `/copy` | Copy the last assistant response to the clipboard |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
@@ -88,8 +89,13 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/plugins`, `/mcp`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+is running, prompts and the `/model`, `/plugins`, `/skills`, `/mcp`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
 interrupt first.
+
+The skills catalog uses `↑`/`↓`, PgUp/PgDn, Home/End and the mouse wheel. It keeps the selection
+visible after filtering, sorting and resizing, renders only the rows that fit, and reports clipped
+rows as `↑ N more above` / `↓ N more below`. Enter or Space toggles the selected manageable skill;
+Esc closes it.
 
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and
 `/command plugin.id:name args`. Lines are processed sequentially; Ctrl+C cancels and exits.

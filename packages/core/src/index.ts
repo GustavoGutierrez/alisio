@@ -11,14 +11,19 @@ export {
 } from "./application.ts";
 export {
   type Config,
+  type ConfigLoadResult,
+  type ConfigProvenance,
   configFile,
   configHome,
   configSchema,
   type LoadedConfig,
   loadConfig,
+  loadConfigWithProvenance,
   type McpServerSource,
+  overridesSavedProviderProfile,
   setMcpServerEnabled,
   setProjectPluginEnabled,
+  setProjectSkillEnabled,
   stateHome,
 } from "./config.ts";
 export {
@@ -95,6 +100,7 @@ export {
 } from "./resources/prompts.ts";
 export {
   type Skill,
+  type SkillCatalogEntry,
   type SkillRoot,
   type SkillScope,
   Skills,

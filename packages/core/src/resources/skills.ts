@@ -17,16 +17,32 @@ const metadata = z.object({
   description: z.string().min(1).max(1024),
 });
 export interface Skill {
+  /** Backward-compatible load id. */
   name: string;
+  /** Stable catalog id; plugin skills are namespaced by their registering plugin. */
+  id: string;
+  effectiveId: string;
+  displayId: string;
   description: string;
   directory: string;
   file: string;
   scope: SkillScope;
+  source: string;
+  owner?: { id: string; name: string };
+  manageable: boolean;
+  locked: boolean;
+  enabled: boolean;
+  effective: boolean;
+  shadowedBy?: string;
+  approximateTokens: number;
 }
+export type SkillCatalogEntry = Omit<Skill, "directory" | "file">;
 export type SkillScope = "project" | "config" | "user" | "plugin";
 export interface SkillRoot {
   dir: string;
   scope: SkillScope;
+  source?: string;
+  owner?: { id: string; name: string };
 }
 /**
  * Discovery roots in precedence order (first wins): project `.agents/skills`, `.alisio/skills`
@@ -40,7 +56,7 @@ export function skillRoots(options: {
   configHome: string;
   trusted: boolean;
   configSkills?: string[];
-  pluginRoots?: string[];
+  pluginRoots?: Array<string | { dir: string; plugin: string; name?: string }>;
 }): SkillRoot[] {
   const roots: SkillRoot[] = [];
   if (options.trusted) {
@@ -52,37 +68,61 @@ export function skillRoots(options: {
       dir = dirname(dir);
     }
   }
-  for (const dir of options.configSkills ?? []) roots.push({ dir, scope: "config" });
+  for (const dir of options.configSkills ?? [])
+    roots.push({ dir, scope: "config", source: "configured" });
   roots.push(
-    { dir: join(options.home, ".agents", "skills"), scope: "user" },
-    { dir: join(options.configHome, "skills"), scope: "user" },
+    { dir: join(options.home, ".agents", "skills"), scope: "user", source: "user" },
+    { dir: join(options.configHome, "skills"), scope: "user", source: "user" },
   );
-  for (const dir of options.pluginRoots ?? []) roots.push({ dir, scope: "plugin" });
+  for (const value of options.pluginRoots ?? []) {
+    if (typeof value === "string") roots.push({ dir: value, scope: "plugin", source: "plugin" });
+    else
+      roots.push({
+        dir: value.dir,
+        scope: "plugin",
+        source: "plugin",
+        owner: { id: value.plugin, name: value.name ?? value.plugin },
+      });
+  }
   return roots;
 }
 export class Skills {
   items = new Map<string, Skill>();
+  /** Every valid discovered skill, including lower-precedence shadowed entries. */
+  entries: Skill[] = [];
   diagnostics: string[] = [];
+  private effective = new Map<string, Skill>();
+  private overrides: Record<string, { enabled: boolean }>;
   private seen = new Set<string>();
   private scanned = 0;
   private maxDepth: number;
   private maxDirs: number;
-  constructor(options: { maxDepth?: number; maxDirs?: number } = {}) {
+  constructor(
+    options: {
+      maxDepth?: number;
+      maxDirs?: number;
+      overrides?: Record<string, { enabled: boolean }>;
+    } = {},
+  ) {
     this.maxDepth = options.maxDepth ?? 5;
     this.maxDirs = options.maxDirs ?? 2000;
+    this.overrides = { ...(options.overrides ?? {}) };
   }
   /** Roots in precedence order; plain strings are treated as user-level roots. */
   async discover(roots: Array<string | SkillRoot>): Promise<void> {
     this.items.clear();
+    this.entries = [];
+    this.effective.clear();
     this.diagnostics = [];
     this.seen.clear();
     this.scanned = 0;
     for (const root of roots) {
       const entry = typeof root === "string" ? { dir: root, scope: "user" as const } : root;
-      await this.walk(entry.dir, 0, entry.scope);
+      await this.walk(entry.dir, 0, entry);
     }
+    this.refreshEnabledItems();
   }
-  private async walk(path: string, depth: number, scope: SkillScope): Promise<void> {
+  private async walk(path: string, depth: number, root: SkillRoot): Promise<void> {
     if (depth > this.maxDepth) return;
     if (this.scanned >= this.maxDirs) {
       if (this.scanned === this.maxDirs) {
@@ -112,12 +152,34 @@ export class Skills {
           this.diagnostics.push(
             `Skill ${data.name} lives in directory "${basename(canonical)}" (spec expects the same name); loaded anyway: ${file}`,
           );
-        const existing = this.items.get(data.name);
+        const existing = this.effective.get(data.name);
+        const displayId = root.owner ? `${root.owner.id}:${data.name}` : data.name;
+        const duplicate = this.entries.filter((entry) => entry.displayId === displayId).length;
+        const id = duplicate ? `${displayId}#shadow-${duplicate}` : displayId;
+        const size = (await fileSize(file)) ?? 0;
+        const item: Skill = {
+          ...data,
+          id,
+          effectiveId: existing?.effectiveId ?? id,
+          displayId,
+          directory: canonical,
+          file,
+          scope: root.scope,
+          source: root.source ?? root.scope,
+          ...(root.owner ? { owner: root.owner } : {}),
+          manageable: root.scope !== "plugin",
+          locked: root.scope === "plugin",
+          enabled: root.scope === "plugin" ? true : this.overrides[id]?.enabled !== false,
+          effective: !existing,
+          ...(existing ? { shadowedBy: existing.displayId } : {}),
+          approximateTokens: Math.max(1, Math.ceil(size / 4)),
+        };
+        this.entries.push(item);
         if (existing)
           this.diagnostics.push(
-            `Skill ${data.name} from ${file} (${scope}) is shadowed: ${existing.file} (${existing.scope}) overrides it`,
+            `Skill ${data.name} from ${file} (${root.scope}) is shadowed: ${existing.file} (${existing.scope}) overrides it`,
           );
-        else this.items.set(data.name, { ...data, directory: canonical, file, scope });
+        else this.effective.set(data.name, item);
       } catch (e) {
         this.diagnostics.push(`${file}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -131,7 +193,7 @@ export class Skills {
     }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name)))
       if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules")
-        await this.walk(join(canonical, entry.name), depth + 1, scope);
+        await this.walk(join(canonical, entry.name), depth + 1, root);
   }
   private async parse(file: string) {
     if (((await fileSize(file)) ?? 0) > 64_000) throw new Error("Skill exceeds 64 KB");
@@ -150,8 +212,34 @@ export class Skills {
       return "Large skill catalog. Use skill_search to find skills, then skill_load.";
     return `Available skills (load instructions with skill_load):\n${text}`;
   }
+  /** Safe catalog metadata: no absolute paths and no skill body text. */
+  catalogEntries(): SkillCatalogEntry[] {
+    return this.entries.map(({ directory: _directory, file: _file, ...skill }) => ({
+      ...skill,
+      ...(skill.owner ? { owner: { ...skill.owner } } : {}),
+    }));
+  }
+  setEnabled(id: string, enabled: boolean): Skill {
+    const skill = this.entries.find((entry) => entry.id === id && entry.effective);
+    if (!skill) throw new Error(`Unknown effective skill: ${id}`);
+    if (!skill.manageable || skill.locked)
+      throw new Error("This skill is locked by its plugin; use /plugins to manage the owner");
+    skill.enabled = enabled;
+    this.overrides[id] = { enabled };
+    this.refreshEnabledItems();
+    return { ...skill };
+  }
+  private refreshEnabledItems(): void {
+    this.items.clear();
+    for (const skill of this.effective.values())
+      if (skill.enabled) this.items.set(skill.name, skill);
+  }
   async load(name: string): Promise<string> {
-    const skill = this.items.get(name);
+    const effective = this.effective.get(name) ?? this.entries.find((entry) => entry.id === name);
+    if (effective?.effective && !effective.enabled)
+      throw new Error(`Skill "${effective.displayId}" is disabled. Re-enable it with /skills.`);
+    const skill =
+      this.items.get(name) ?? [...this.items.values()].find((entry) => entry.id === name);
     if (!skill) throw new Error(`Unknown skill: ${name}`);
     await this.parse(skill.file);
     return `Skill root: ${skill.directory}\nUse skill_resource to read supporting files.\n${await readText(skill.file)}`;

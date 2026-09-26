@@ -86,7 +86,17 @@ Only each skill's name and description are included in the context at first. The
 with the `skill_load` tool or `/skill:name`, and supporting files with `skill_resource`.
 `skill_search` searches the catalog.
 
+In the TUI, `/skills` (or `/skill`) opens the effective catalog without loading skill bodies. It
+shows scope/source, enabled and shadowed status, and an approximate token cost (`~`, estimated from
+file bytes at four characters per token). Project, configured and user winners are enabled by
+default and can be toggled immediately. The project-local override is saved atomically in
+`.alisio/config.json`; an existing file must be trusted. Plugin skills use a namespaced display such
+as `vercel:nextjs`, are locked to their owning plugin, and direct you to `/plugins`.
+
 ```sh
 alisio skills list
 alisio skills validate ./.agents/skills
 ```
+
+The headless commands include source/status metadata and trusted diagnostic paths. The ordinary TUI
+catalog never shows absolute paths or skill bodies.

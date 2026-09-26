@@ -12,9 +12,11 @@ import type {
 import {
   configFile,
   configHome,
-  loadConfig,
+  loadConfigWithProvenance,
+  overridesSavedProviderProfile,
   setMcpServerEnabled,
   setProjectPluginEnabled,
+  setProjectSkillEnabled,
   stateHome,
 } from "./config.ts";
 import { completeText } from "./core/compaction.ts";
@@ -129,7 +131,7 @@ const nonBlank = (value: string | undefined): string | undefined => {
 export async function createApplication(options: AppOptions = {}) {
   const cwd = resolve(options.cwd ?? process.cwd()),
     workspace = await findWorkspace(cwd);
-  const config = await loadConfig(workspace, {
+  const { config, provenance: configProvenance } = await loadConfigWithProvenance(workspace, {
     file: options.config,
     trustProject: options.trustProject,
     model: options.model,
@@ -138,7 +140,7 @@ export async function createApplication(options: AppOptions = {}) {
   });
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
   const registry = new ToolRegistry(),
-    skills = new Skills(),
+    skills = new Skills({ overrides: config.skillOverrides }),
     context = new ProjectContext(workspace, {
       globalDir: configHome(),
       cwd,
@@ -154,6 +156,11 @@ export async function createApplication(options: AppOptions = {}) {
       options.readOnly ? "read-only" : options.allowMcp ? "allowed" : "disabled",
       config.mcpSources,
     );
+  let mcpRuntimePermission: "granted" | "not-granted" | "read-only" = options.readOnly
+    ? "read-only"
+    : options.allowMcp
+      ? "granted"
+      : "not-granted";
   const herdr = options.noHerdr
     ? new HerdrBridge({}, async () => "")
     : HerdrBridge.fromEnvironment(workspace, (error) => process.stderr.write(`${error}\n`));
@@ -325,7 +332,7 @@ export async function createApplication(options: AppOptions = {}) {
         configHome: configHome(),
         trusted: !!options.trustProject || !!options.config,
         configSkills: config.skills,
-        pluginRoots: plugins.skillRoots,
+        pluginRoots: plugins.skillSources,
       }),
     );
     context.extras.push(async () => skills.catalog(), ...plugins.contexts);
@@ -351,13 +358,13 @@ export async function createApplication(options: AppOptions = {}) {
     const providerSettings = new ProviderSettingsStore();
     const saved = options.provider ? undefined : await providerSettings.active();
     const defaultProvider = (options.builtins ?? []).find((item) => item.defaultProvider);
-    const legacyEndpointOverride =
+    const legacyEndpointOverride = overridesSavedProviderProfile(
+      configProvenance,
       !!options.baseURL ||
-      !!options.apiMode ||
-      !!process.env.OPENAI_BASE_URL ||
-      !!process.env.ALISIO_API_MODE ||
-      !!options.config ||
-      !!options.trustProject;
+        !!options.apiMode ||
+        !!process.env.OPENAI_BASE_URL ||
+        !!process.env.ALISIO_API_MODE,
+    );
     const selectedSaved = legacyEndpointOverride ? undefined : saved;
     const supportsNativeSearch = (
       id: string | undefined,
@@ -566,6 +573,17 @@ export async function createApplication(options: AppOptions = {}) {
       const target = await resolveModel(request.model, request.signal);
       return completeText(await runtimeFor(target), { ...request, model: target.model.id });
     });
+    const runtimePolicy = {
+      write: !!options.allowWrite && !options.readOnly,
+      process: !!options.allowProcess && !options.readOnly,
+      external:
+        !options.readOnly &&
+        (!!options.allowExternal ||
+          !!options.allowMcp ||
+          !!options.allowAgents ||
+          plugins.externalCount > 0 ||
+          registry.list().some((t) => t.name.startsWith("p_"))),
+    };
     const runner = new AgentRunner({
       provider,
       providerFor,
@@ -573,17 +591,7 @@ export async function createApplication(options: AppOptions = {}) {
       store,
       context,
       workspace,
-      policy: {
-        write: !!options.allowWrite && !options.readOnly,
-        process: !!options.allowProcess && !options.readOnly,
-        external:
-          !options.readOnly &&
-          (!!options.allowExternal ||
-            !!options.allowMcp ||
-            !!options.allowAgents ||
-            plugins.externalCount > 0 ||
-            registry.list().some((t) => t.name.startsWith("p_"))),
-      },
+      policy: runtimePolicy,
       ...config.limits,
       compaction: config.compaction,
       extensions: plugins,
@@ -664,6 +672,28 @@ export async function createApplication(options: AppOptions = {}) {
       registry,
       context,
       skills,
+      /** Path- and content-safe metadata for the interactive skills manager. */
+      skillCatalog() {
+        const pluginStatus = new Map([...pluginCatalog.values()].map((entry) => [entry.id, entry]));
+        return skills.catalogEntries().map((skill) => {
+          const owner = skill.owner ? pluginStatus.get(skill.owner.id) : undefined;
+          return {
+            ...skill,
+            ...(owner?.status === "restart-required"
+              ? { source: "plugin (restart required)" }
+              : {}),
+          };
+        });
+      },
+      /** Persist a project-local override and apply it to model-visible skills immediately. */
+      async setSkillEnabled(id: string, enabled: boolean) {
+        const current = skills.catalogEntries().find((skill) => skill.id === id && skill.effective);
+        if (!current) throw new Error(`Unknown effective skill: ${id}`);
+        if (!current.manageable || current.locked)
+          throw new Error("This skill is locked by its plugin; use /plugins to manage the owner");
+        await setProjectSkillEnabled({ workspace, id, enabled, trusted: trustedProject });
+        return skills.setEnabled(id, enabled);
+      },
       plugins,
       /** Credential- and path-safe catalog for the current resolved plugin set. */
       pluginCatalog(): PluginCatalogEntry[] {
@@ -729,6 +759,22 @@ export async function createApplication(options: AppOptions = {}) {
         return { ...updated, categories: [...updated.categories] };
       },
       mcp,
+      /** Current-process MCP grant; deliberately independent from persisted server enablement. */
+      mcpRuntimePermission() {
+        return mcpRuntimePermission;
+      },
+      /** Host-owned interactive consent boundary. Headless callers remain blocked unless flagged. */
+      grantMcpRuntimePermission(request: { source: "interactive-tui"; confirmed: boolean }) {
+        if (!request.confirmed) return mcpRuntimePermission;
+        if (request.source !== "interactive-tui")
+          throw new Error("MCP runtime permission may only be granted by the interactive TUI");
+        if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
+        if (mcpRuntimePermission === "granted") return mcpRuntimePermission;
+        mcp.grantRuntimePermission();
+        runtimePolicy.external = true;
+        mcpRuntimePermission = "granted";
+        return mcpRuntimePermission;
+      },
       /** Persist an MCP toggle in its defining layer, then safely update this process. */
       async setMcpEnabled(id: string, enabled: boolean, connect = false) {
         if (options.readOnly) throw new Error("MCP changes are unavailable under --read-only");
@@ -738,7 +784,9 @@ export async function createApplication(options: AppOptions = {}) {
         await mcp.setEnabled(
           id,
           enabled,
-          connect && enabled && options.allowMcp ? AbortSignal.timeout(15_000) : undefined,
+          connect && enabled && mcpRuntimePermission === "granted"
+            ? AbortSignal.timeout(15_000)
+            : undefined,
         );
         return mcp.info(id);
       },

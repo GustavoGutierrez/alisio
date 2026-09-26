@@ -26,8 +26,12 @@ participate in cross-provider resolution; legacy root `provider` configuration r
 startup/headless compatibility. Metadata and errors never expose credentials.
 
 Legacy root `provider`, environment variables and CLI flags remain supported and are not rewritten.
-Explicit endpoint/configuration sources select the legacy OpenAI-compatible provider for that run;
-`--model` overrides the selected model. Programmatic `AppOptions.provider` has highest priority.
+Programmatic `AppOptions.provider` has highest priority. Next, explicit endpoint overrides
+(`--base-url`, `--api-mode`, `OPENAI_BASE_URL`, `ALISIO_API_MODE`) or a trusted project/explicit
+layer that actually defines root `provider` select the legacy OpenAI-compatible provider for that
+run. MCP, plugin, skill and other settings alone do not. Otherwise the active `/connect` profile is
+restored; `--model` or `ALISIO_MODEL` may replace only its model. Global legacy `provider` is the
+fallback when no saved profile exists, so it does not permanently defeat a `/connect` selection.
 Headless modes never prompt.
 
 Four provider choices are built in and enabled by default:
@@ -95,7 +99,9 @@ Chat mode handles text messages and function tool calls. Responses mode keeps th
 opaque items, including encrypted reasoning for continuation with `store: false`. A compatible
 provider may implement only part of the OpenAI API: validate your model and endpoint.
 
-Provider precedence: selected file → environment variables → CLI flags.
+Within legacy provider configuration, precedence is global file → trusted project or explicit file →
+environment variables → CLI flags. The provider-selection precedence above determines when that
+legacy configuration is used instead of an active `/connect` profile.
 
 ## `limits`
 
@@ -193,6 +199,15 @@ Extra Agent Skills roots, resolved relative to the configuration file.
 Project roots (`.agents/skills`, `.alisio/skills`, `.claude/skills`, trusted projects only), user
 roots and plugin skills are also searched. See [Context: AGENTS.md and skills](/context#skills).
 
+`/skills` writes project-local activation choices without changing the discovery roots:
+
+```json
+{ "skillOverrides": { "review": { "enabled": false } } }
+```
+
+Overrides apply to the effective skill in the current project. Plugin-owned skills are locked and
+follow their plugin lifecycle instead.
+
 ## Prompt templates
 
 There is no configuration key for templates. They are read from `<config home>/prompts/` and, for
@@ -212,7 +227,7 @@ The canonical form is `mcp.servers`, keyed by name. `transport` may be explicit 
 | Field | Default | Description |
 | --- | --- | --- |
 | `transport` | inferred | `stdio` or `http` (Streamable HTTP) |
-| `enabled` | `true` | Persisted state managed by `/mcp` |
+| `enabled` | `true` | Persisted configured state managed by `/mcp`; it does not grant runtime access or mean connected |
 | `command` | none | stdio: executable |
 | `args` | `[]` | stdio: arguments; `./` and `../` are resolved relative to the configuration file |
 | `url` | none | http: server URL |
@@ -266,8 +281,10 @@ URLs, commands, arguments and environment values are strictly validated. Environ
 never shown by diagnostics. Direct `env` values are passed only to that child and override a
 same-name value forwarded through `envAllow`; use them for non-secret settings or protected local
 paths. HTTP secrets cannot be literal: `bearerTokenEnv` names the environment variable that holds the
-token. A configured server stays disconnected until requested and is only
-available with `--allow-mcp`; `--read-only` always prohibits MCP. A stdio server is a subprocess with
+token. A configured server stays disconnected until requested. The interactive TUI may grant MCP
+process/network access for the current application session after clear confirmation; this grant is
+not written to configuration. Non-TUI and programmatic callers still require `--allow-mcp` or
+`allowMcp`; `--read-only` always prohibits MCP. A stdio server is a subprocess with
 your user privileges, **not a sandbox**. Only trust the configuration and executable you run. See
 [Tools & permissions](/tools#mcp).
 

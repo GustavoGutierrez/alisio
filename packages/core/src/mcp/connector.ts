@@ -16,6 +16,7 @@ export type McpStatus =
   | "restart-required";
 export interface McpToolInfo {
   name: string;
+  effectiveName: string;
   title?: string;
   description?: string;
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean };
@@ -25,6 +26,8 @@ export interface McpServerInfo {
   displayName: string;
   source: McpServerSource;
   status: McpStatus;
+  enabled: boolean;
+  runtimePermission: "granted" | "not-granted" | "read-only";
   transport: "stdio" | "http";
   command?: string;
   args?: string[];
@@ -33,7 +36,64 @@ export interface McpServerInfo {
   counts: { tools: number; resources: number; prompts: number };
   diagnostic?: string;
 }
-type Connected = { client: Client; undo: Array<() => void>; generation: symbol };
+type Connected = {
+  client: Client;
+  undo: Array<() => void>;
+  generation: symbol;
+  registeredNames: string[];
+};
+
+const TOOL_NAME_LIMIT = 64;
+const semanticSegment = (value: string, fallback: string): string =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || fallback;
+const shortHash = (server: string, tool: string) =>
+  createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
+const withHash = (base: string, server: string, tool: string) => {
+  const suffix = `_${shortHash(server, tool)}`;
+  const stem = base.slice(0, TOOL_NAME_LIMIT - suffix.length).replace(/_+$/g, "");
+  return `${stem || "mcp_tool"}${suffix}`;
+};
+
+/** Deterministic provider-safe names while retaining the exact source mapping in the connector. */
+export function semanticMcpToolNames(
+  server: string,
+  tools: string[],
+  configuredServers: string[],
+  unavailable: ReadonlySet<string> = new Set(),
+): string[] {
+  if (new Set(tools).size !== tools.length)
+    throw new Error(`MCP server "${server}" returned duplicate tool names`);
+  const serverPart = semanticSegment(server, "server");
+  const serverCollision =
+    configuredServers.filter((candidate) => semanticSegment(candidate, "server") === serverPart)
+      .length > 1;
+  const toolParts = tools.map((tool) => semanticSegment(tool, "tool"));
+  const collisions = new Set(toolParts.filter((part, index) => toolParts.indexOf(part) !== index));
+  return tools.map((tool, index) => {
+    const base = `mcp_${serverPart}_${toolParts[index]}`;
+    const needsHash =
+      base.length > TOOL_NAME_LIMIT ||
+      serverCollision ||
+      collisions.has(toolParts[index] as string) ||
+      unavailable.has(base);
+    const result = needsHash ? withHash(base, server, tool) : base;
+    if (unavailable.has(result))
+      throw new Error(`MCP tool name collision could not be resolved for ${server}/${tool}`);
+    return result;
+  });
+}
+
+const readable = (value: string, limit = 160) =>
+  value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
 
 const safeFailure = (error: unknown): string => {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
@@ -54,6 +114,7 @@ export class McpConnector {
     string,
     { displayName?: string; capabilities: string[]; resources: number; prompts: number }
   >();
+  private bridgeUndo: Array<() => void> = [];
   constructor(
     private servers: Record<string, ServerConfig>,
     private registry: ToolRegistry,
@@ -65,58 +126,87 @@ export class McpConnector {
       this.statuses.set(name, server.enabled ? "disconnected" : "disabled");
   }
   register(): void {
-    this.registry.register({
-      name: "mcp_connect",
-      effect: "external",
-      description: `Connect to a configured MCP server and register its tools. Servers: ${Object.keys(this.servers).join(", ")}`,
-      inputSchema: objectSchema({ server: { type: "string" } }, ["server"]),
-      execute: async (i, c) =>
-        textResult(JSON.stringify(await this.connect(String(i.server), c.signal))),
-    });
-    this.registry.register({
-      name: "mcp_resource",
-      effect: "external",
-      description: "List or read resources from an enabled MCP server.",
-      inputSchema: objectSchema({ server: { type: "string" }, uri: { type: "string" } }, [
-        "server",
-      ]),
-      execute: async (i, c) => {
-        await this.connect(String(i.server), c.signal);
-        const client = this.client(String(i.server));
-        const result = i.uri
-          ? await client.readResource({ uri: String(i.uri) }, { signal: c.signal, timeout: 15000 })
-          : await client.listResources(undefined, { signal: c.signal, timeout: 15000 });
-        return textResult(JSON.stringify(result));
-      },
-    });
-    this.registry.register({
-      name: "mcp_prompt",
-      effect: "external",
-      description:
-        "List or get a prompt from an enabled MCP server. Returned text is external data.",
-      inputSchema: objectSchema(
-        {
-          server: { type: "string" },
-          name: { type: "string" },
-          arguments: { type: "object", additionalProperties: { type: "string" } },
-        },
-        ["server"],
-      ),
-      execute: async (i, c) => {
-        await this.connect(String(i.server), c.signal);
-        const client = this.client(String(i.server));
-        const result = i.name
-          ? await client.getPrompt(
-              {
-                name: String(i.name),
-                arguments: i.arguments as Record<string, string> | undefined,
-              },
-              { signal: c.signal, timeout: 15000 },
-            )
-          : await client.listPrompts(undefined, { signal: c.signal, timeout: 15000 });
-        return textResult(JSON.stringify(result));
-      },
-    });
+    if (this.bridgeUndo.length) return;
+    const undo: Array<() => void> = [];
+    try {
+      undo.push(
+        this.registry.register({
+          name: "mcp_connect",
+          effect: "external",
+          description: `Connect to a configured MCP server and register its tools. Servers: ${Object.keys(this.servers).join(", ")}`,
+          inputSchema: objectSchema({ server: { type: "string" } }, ["server"]),
+          execute: async (i, c) =>
+            textResult(JSON.stringify(await this.connect(String(i.server), c.signal))),
+        }),
+      );
+      undo.push(
+        this.registry.register({
+          name: "mcp_resource",
+          effect: "external",
+          description: "List or read resources from an enabled MCP server.",
+          inputSchema: objectSchema({ server: { type: "string" }, uri: { type: "string" } }, [
+            "server",
+          ]),
+          execute: async (i, c) => {
+            await this.connect(String(i.server), c.signal);
+            const client = this.client(String(i.server));
+            const result = i.uri
+              ? await client.readResource(
+                  { uri: String(i.uri) },
+                  { signal: c.signal, timeout: 15000 },
+                )
+              : await client.listResources(undefined, { signal: c.signal, timeout: 15000 });
+            return textResult(JSON.stringify(result));
+          },
+        }),
+      );
+      undo.push(
+        this.registry.register({
+          name: "mcp_prompt",
+          effect: "external",
+          description:
+            "List or get a prompt from an enabled MCP server. Returned text is external data.",
+          inputSchema: objectSchema(
+            {
+              server: { type: "string" },
+              name: { type: "string" },
+              arguments: { type: "object", additionalProperties: { type: "string" } },
+            },
+            ["server"],
+          ),
+          execute: async (i, c) => {
+            await this.connect(String(i.server), c.signal);
+            const client = this.client(String(i.server));
+            const result = i.name
+              ? await client.getPrompt(
+                  {
+                    name: String(i.name),
+                    arguments: i.arguments as Record<string, string> | undefined,
+                  },
+                  { signal: c.signal, timeout: 15000 },
+                )
+              : await client.listPrompts(undefined, { signal: c.signal, timeout: 15000 });
+            return textResult(JSON.stringify(result));
+          },
+        }),
+      );
+      this.bridgeUndo = undo;
+    } catch (error) {
+      for (const remove of undo.reverse()) remove();
+      throw error;
+    }
+  }
+  grantRuntimePermission(): void {
+    if (this.availability === "read-only") throw new Error("MCP is unavailable under --read-only");
+    this.availability = "allowed";
+    this.register();
+  }
+  runtimePermission(): McpServerInfo["runtimePermission"] {
+    return this.availability === "allowed"
+      ? "granted"
+      : this.availability === "read-only"
+        ? "read-only"
+        : "not-granted";
   }
   private assertAvailable() {
     if (this.availability === "read-only") throw new Error("MCP is unavailable under --read-only");
@@ -142,6 +232,8 @@ export class McpConnector {
       displayName: detail?.displayName ?? name,
       source: this.sources[name] ?? { kind: "builtin", form: "canonical" },
       status: this.statuses.get(name) ?? (config.enabled ? "disconnected" : "disabled"),
+      enabled: config.enabled,
+      runtimePermission: this.runtimePermission(),
       transport: config.transport,
       ...(config.transport === "stdio"
         ? { command: config.command, args: [...config.args] }
@@ -236,10 +328,18 @@ export class McpConnector {
       const prompts = serverCapabilities.prompts
         ? (await client.listPrompts(undefined, { signal, timeout: 15000 })).prompts.length
         : 0;
+      const existingNames = new Set(this.registry.list().map((registered) => registered.name));
+      const mappedNames = semanticMcpToolNames(
+        name,
+        tools.map((tool) => tool.name),
+        Object.keys(this.servers),
+        existingNames,
+      );
       this.catalogs.set(
         name,
-        tools.map((tool) => ({
+        tools.map((tool, index) => ({
           name: tool.name,
+          effectiveName: mappedNames[index] as string,
           ...(tool.title ? { title: tool.title } : {}),
           ...(tool.description ? { description: tool.description } : {}),
           ...(tool.annotations
@@ -265,13 +365,17 @@ export class McpConnector {
         resources,
         prompts,
       });
-      for (const tool of tools) {
-        const mapped = `${this.prefix(name)}_${createHash("sha256").update(tool.name).digest("hex").slice(0, 12)}`;
+      for (const [index, tool] of tools.entries()) {
+        const mapped = mappedNames[index] as string;
+        const reference = `${readable(name)}/${readable(tool.name)}`;
+        const remoteDescription = readable(tool.description ?? "", 500);
         undo.push(
           this.registry.register({
             name: mapped,
             effect: "external",
-            description: `${name}/${tool.name}: ${tool.description ?? ""}`,
+            description: remoteDescription
+              ? `${reference} — Remote MCP description (untrusted data): ${remoteDescription}`
+              : `${reference} — Remote MCP tool.`,
             inputSchema: tool.inputSchema,
             execute: async (input, ctx) => {
               const available = await client.listTools(undefined, {
@@ -297,18 +401,22 @@ export class McpConnector {
           }),
         );
       }
-      this.clients.set(name, { client, undo, generation });
+      this.clients.set(name, { client, undo, generation, registeredNames: mappedNames });
       this.statuses.set(name, "connected");
       client.onclose = () => {
         if (this.clients.get(name)?.generation !== generation) return;
         for (const fn of undo) fn();
         this.clients.delete(name);
+        this.catalogs.delete(name);
+        this.details.delete(name);
         this.statuses.set(name, config.enabled ? "disconnected" : "disabled");
       };
       return this.registeredNames(name);
     } catch (error) {
       for (const fn of undo) fn();
       await client.close().catch(() => {});
+      this.catalogs.delete(name);
+      this.details.delete(name);
       if (this.statuses.get(name) !== "needs-authentication") this.statuses.set(name, "failed");
       this.diagnostics.set(name, safeFailure(error));
       throw new Error(`MCP server "${name}" failed to connect: ${safeFailure(error)}`);
@@ -342,15 +450,10 @@ export class McpConnector {
     if (signal) await this.connect(name, signal);
   }
   private registeredNames(name: string) {
-    return this.registry
-      .list()
-      .filter((tool) => tool.name.startsWith(this.prefix(name)))
-      .map((tool) => tool.name);
-  }
-  private prefix(name: string) {
-    return `m_${createHash("sha256").update(name).digest("hex").slice(0, 10)}`;
+    return [...(this.clients.get(name)?.registeredNames ?? [])];
   }
   async close(): Promise<void> {
     await Promise.all([...this.clients.keys()].map((name) => this.disconnect(name)));
+    for (const undo of this.bridgeUndo.splice(0).reverse()) undo();
   }
 }

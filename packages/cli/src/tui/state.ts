@@ -84,6 +84,8 @@ export interface McpServerView {
     | "failed"
     | "needs-authentication"
     | "restart-required";
+  enabled: boolean;
+  runtimePermission: "granted" | "not-granted" | "read-only";
   counts: { tools: number };
 }
 const mcpSourceTitle = (kind: McpServerView["source"]["kind"]) =>
@@ -115,12 +117,13 @@ export function mcpServerItems(entries: McpServerView[]) {
     servers.map((entry, index) => ({
       value: entry.name,
       label: `${index === 0 ? `${title} · ` : ""}${marker(entry.status)} ${entry.displayName}`,
-      description: `${entry.status}${entry.status === "connected" ? ` · ${entry.counts.tools} tool${entry.counts.tools === 1 ? "" : "s"}` : ""}`,
+      description: `configured ${entry.enabled ? "enabled" : "disabled"} · permission ${entry.runtimePermission} · ${entry.status}${entry.status === "connected" ? ` · ${entry.counts.tools} tool${entry.counts.tools === 1 ? "" : "s"} loaded` : " · 0 tools loaded"}`,
     })),
   );
 }
 export interface McpToolView {
   name: string;
+  effectiveName?: string;
   title?: string;
   description?: string;
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean };
@@ -133,8 +136,12 @@ export function mcpToolItems(tools: McpToolView[]) {
       tool.annotations?.openWorld === true ? "open-world" : undefined,
     ].filter(Boolean);
     return {
-      value: tool.name,
-      label: tool.title ? `${tool.title} · ${tool.name}` : tool.name,
+      value: tool.effectiveName ?? tool.name,
+      label: tool.title
+        ? `${tool.title} · ${tool.name}${tool.effectiveName && tool.effectiveName !== tool.name ? ` → ${tool.effectiveName}` : ""}`
+        : tool.effectiveName && tool.effectiveName !== tool.name
+          ? `${tool.name} → ${tool.effectiveName}`
+          : tool.name,
       description: [...flags, tool.description].filter(Boolean).join(" · ") || "No description",
     };
   });
@@ -277,6 +284,11 @@ export const COMMANDS: CommandSpec[] = [
     description: "Browse and manage project plugins",
     aliases: ["plugin"],
   },
+  {
+    name: "skills",
+    description: "Browse and manage effective skills",
+    aliases: ["skill"],
+  },
   { name: "mcp", description: "Browse and manage MCP servers" },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   {
@@ -288,7 +300,7 @@ export const COMMANDS: CommandSpec[] = [
 ];
 /** Every TUI slash name (commands, aliases and routing prefixes); templates cannot take them. */
 export function reservedCommandNames(): string[] {
-  return [...COMMANDS.flatMap((c) => [c.name, ...(c.aliases ?? [])]), "command", "skill"];
+  return [...COMMANDS.flatMap((c) => [c.name, ...(c.aliases ?? [])]), "command"];
 }
 export function resolveCommand(name: string): string | undefined {
   const lower = name.toLowerCase();

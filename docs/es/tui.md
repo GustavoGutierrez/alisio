@@ -48,7 +48,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
 | Barra de estado | Contexto usado frente a la ventana, `used / total (pct%)`, con barra verde (< 60 %), amarilla (< 85 %) o roja; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
-| Selectores | Listas seleccionables para `/model`, `/plugins`, `/resume` y las aprobaciones |
+| Selectores | Listas seleccionables para `/model`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
 
 Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
@@ -73,7 +73,8 @@ Al escribir `/` se abre el autocompletado.
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
 | `/plugins` (`/plugin`) | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo |
-| `/mcp` | Explora una lista filtrable agrupada por su origen real (Usuario, Proyecto, Explícito, plugin o integrado), muestra estado, ubicación de configuración, capacidades y conteos, permite ver anotaciones de herramientas, conectar/reconectar y persistir la activación en el archivo que lo definió. Las acciones de proceso/red requieren `--allow-mcp`; `--read-only` bloquea todas las acciones MCP |
+| `/skills` (`/skill`) | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
+| `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial, Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI. `--read-only` lo bloquea |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
@@ -89,8 +90,13 @@ Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una secció
 en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
-autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/mcp`, `/compact`,
+autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/skills`, `/mcp`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero.
+
+El catálogo de skills usa `↑`/`↓`, RePág/AvPág, Inicio/Fin y la rueda del ratón. Mantiene visible la
+selección al filtrar, ordenar y redimensionar, solo renderiza las filas que caben e informa los
+recortes como `↑ N more above` / `↓ N more below`. Enter o Espacio cambia la skill gestionable
+seleccionada; Esc cierra el catálogo.
 
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y
 `/command plugin.id:name args`. Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.
