@@ -6,7 +6,7 @@ hero:
   text: Speed and efficiency for building
   tagline: An extensible, provider-agnostic coding-agent harness for your terminal.
   image:
-    src: /alisio/assets/logo.png
+    src: /assets/logo.png
     alt: Alisio mascot
   actions:
     - theme: brand
@@ -35,6 +35,8 @@ features:
 ---
 
 ## What is Alisio?
+
+![Alisio banner](</assets/banner.png>)
 
 Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
 endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
