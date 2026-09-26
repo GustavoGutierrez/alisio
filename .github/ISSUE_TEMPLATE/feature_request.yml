@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose a new feature or improvement for Alisio
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature. Please describe the problem you are trying to solve
+        and the shape of the solution you have in mind.
+
+        **Do not paste real API keys or credentials here.**
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is the problem or gap you are trying to solve? Try to state the outcome, not just a feature name.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should Alisio behave? Include commands, flags, or configuration shapes you imagine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you try or consider, and why is this option better?
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area (if known)
+      options:
+        - Core / runner
+        - SDK / plugin API
+        - CLI / TUI
+        - Provider(s)
+        - MCP
+        - Memory
+        - Subagents
+        - Documentation
+        - Other
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+        - label: I removed any real API keys, credentials, and databases from this report

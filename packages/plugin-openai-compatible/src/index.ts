@@ -51,6 +51,14 @@ export function createOpenAICompatiblePlugin(): Plugin {
             description: "Stored only in the global credentials file",
           },
           {
+            key: "apiKeyEnv",
+            label: "API key environment variable",
+            kind: "text",
+            defaultValue: defaults.apiKeyEnv,
+            description:
+              "Environment variable consulted when no stored API key exists; the connection remembers this name",
+          },
+          {
             key: "apiMode",
             label: "API mode",
             kind: "select",
@@ -94,7 +102,11 @@ export function createOpenAICompatiblePlugin(): Plugin {
         create(request) {
           const auth = value(request, "auth", defaults.auth) as OpenAICompatibleConfig["auth"];
           const apiKey = request.credentials.apiKey;
-          const apiKeyEnv = value(request, "apiKeyEnv", defaults.apiKeyEnv);
+          const rawApiKeyEnv = value(request, "apiKeyEnv", defaults.apiKeyEnv);
+          const apiKeyEnv =
+            typeof rawApiKeyEnv === "string" && rawApiKeyEnv.trim()
+              ? rawApiKeyEnv.trim()
+              : defaults.apiKeyEnv;
           if (auth !== "none" && !apiKey && !process.env[apiKeyEnv])
             throw new Error(
               "API key is required (enter one in /connect or set the configured environment variable)",

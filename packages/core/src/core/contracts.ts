@@ -53,6 +53,12 @@ export interface SessionStore {
    * rest verbatim and in order. Callers must never split a tool call from its results.
    */
   compact(id: string, replaced: number, summary: Message): void;
+  /**
+   * Atomically replace the whole active history with `messages` (like `compact` without a
+   * summary): used after a context-budget reduction so the persisted transcript matches what
+   * was actually sent. Callers must never split a tool call from its results.
+   */
+  overwrite(id: string, messages: Message[]): void;
   acquire(id: string): void;
   release(id: string): void;
   beginCall(session: string, call: ToolCall): void;

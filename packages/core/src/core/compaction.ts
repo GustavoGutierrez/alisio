@@ -123,6 +123,73 @@ export function planCompaction(
 const clip = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max)}… [truncated]` : text;
 
+/** Marker appended to message content cut by the context-budget reduction. */
+export const TRUNCATION_MARKER = "… [truncated by context budget]";
+/** Default per-message cap for kept tool result text after a failed compaction. */
+export const MAX_TOOL_RESULT_CHARS = 8_000;
+/** Default per-message cap for kept user/assistant text after a failed compaction. */
+export const MAX_TEXT_CHARS = 16_000;
+
+export interface MessageReductionOptions {
+  /** Keep at most this many characters of text per tool result (default 8_000). */
+  maxToolResultChars?: number;
+  /** Keep at most this many characters per user/assistant text (default 16_000). */
+  maxTextChars?: number;
+}
+export interface MessageReduction {
+  messages: Message[];
+  /** Number of messages whose content was truncated. */
+  truncated: number;
+}
+
+/**
+ * Cuts oversized retained content so the session fits the context-budget hard limit after a
+ * compaction could not. Only message CONTENT changes (user/assistant `text` and the text parts
+ * of tool results); roles, call IDs, order and message boundaries stay identical, so the
+ * transcript remains valid and replayable and a tool call is never separated from its results.
+ * Checkpoint summaries (`summary: true`) are bounded by design and never truncated.
+ */
+export function reduceMessageSizes(
+  messages: Message[],
+  options: MessageReductionOptions = {},
+): MessageReduction {
+  const maxToolResultChars = options.maxToolResultChars ?? MAX_TOOL_RESULT_CHARS;
+  const maxTextChars = options.maxTextChars ?? MAX_TEXT_CHARS;
+  let truncated = 0;
+  const reduced = messages.map((m): Message => {
+    if (m.role === "user") {
+      if (m.summary || m.text.length <= maxTextChars) return m;
+      truncated++;
+      return { ...m, text: `${m.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
+    }
+    if (m.role === "assistant") {
+      if (m.text.length <= maxTextChars) return m;
+      truncated++;
+      return { ...m, text: `${m.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
+    }
+    let used = 0;
+    let changed = false;
+    const content = m.result.content.map((part) => {
+      const room = maxToolResultChars - used;
+      const text =
+        room <= 0
+          ? TRUNCATION_MARKER
+          : part.text.length > room
+            ? `${part.text.slice(0, room)}\n${TRUNCATION_MARKER}`
+            : part.text;
+      if (text !== part.text) {
+        changed = true;
+        used = maxToolResultChars;
+      } else used += part.text.length;
+      return { type: "text" as const, text };
+    });
+    if (!changed) return m;
+    truncated++;
+    return { ...m, result: { ...m.result, content } };
+  });
+  return truncated ? { messages: reduced, truncated } : { messages, truncated: 0 };
+}
+
 /**
  * Plain-text transcript used as summarizer input. Provider continuation data (for example
  * encrypted reasoning) is opaque and is intentionally not included.

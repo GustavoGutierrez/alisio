@@ -275,6 +275,37 @@ alisio mcp list --config ./my-api.json
 alisio mcp doctor my-server --config ./my-api.json --allow-mcp
 ```
 
+### Example: Brave Search
+
+The official package runs over stdio through `npx` (resolved from your `PATH`, which the
+connector forwards to the child):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "brave-search": {
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@brave/brave-search-mcp-server"],
+        "envAllow": ["BRAVE_API_KEY"]
+      }
+    }
+  }
+}
+```
+
+`envAllow` forwards the listed environment variables **by name** from your shell; the key never
+sits in the config file. Export it before starting Alisio:
+
+```sh
+export BRAVE_API_KEY=your-key
+```
+
+MCP stays disconnected until requested: passing `--allow-mcp` (or setting the global `mcp.allow`
+preference) grants process/network consent and auto-connects enabled servers; in the TUI you can
+also just choose **Connect** in `/mcp`.
+
 ## Herdr
 
 Inside a [Herdr](https://github.com/GustavoGutierrez/alisio/blob/main/docs/herdr.md) pane, lifecycle

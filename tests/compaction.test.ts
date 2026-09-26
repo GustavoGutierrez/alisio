@@ -7,6 +7,7 @@ import {
   MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
+  reduceMessageSizes,
   renderCheckpoint,
   serializeForSummary,
   shouldCompact,
@@ -234,5 +235,77 @@ describe("proportional token budget", () => {
     expect(defaultTokenBudget(32_000)).toBe(400_000);
     expect(defaultTokenBudget(128_000)).toBe(1_024_000);
     expect(defaultTokenBudget(1_048_576)).toBe(8_000_000);
+  });
+});
+
+describe("reduceMessageSizes", () => {
+  const marker = "… [truncated by context budget]";
+  const bigTool = (callId: string): Message => ({
+    role: "tool",
+    callId,
+    result: { content: [{ type: "text", text: "x".repeat(20_000) }] },
+  });
+
+  it("cuts oversized tool results and texts to the per-message caps with the marker", () => {
+    const input: Message[] = [
+      { role: "user", text: "u".repeat(20_000) },
+      { role: "assistant", text: "a".repeat(40_000), calls: [] },
+      bigTool("c1"),
+    ];
+    const { messages, truncated } = reduceMessageSizes(input);
+    expect(truncated).toBe(3);
+    const user = messages[0];
+    const assistant = messages[1];
+    const toolResult = messages[2];
+    expect(user?.role).toBe("user");
+    expect(assistant?.role).toBe("assistant");
+    expect(toolResult?.role).toBe("tool");
+    if (user?.role === "user" && assistant?.role === "assistant" && toolResult?.role === "tool") {
+      expect(user.text.length).toBe(16_000 + marker.length + 1);
+      expect(user.text).toContain(marker);
+      expect(assistant.text.length).toBe(16_000 + marker.length + 1);
+      expect(toolResult.result.content[0]?.text.length).toBe(8_000 + marker.length + 1);
+    }
+  });
+
+  it("respects custom caps, leaves small messages alone and keeps structure intact", () => {
+    const input: Message[] = [
+      { role: "user", text: "ok" },
+      { role: "assistant", text: "", calls: [{ id: "c1", name: "hello", arguments: "{}" }] },
+      bigTool("c1"),
+      { role: "user", text: "u".repeat(5_000) },
+    ];
+    const { messages, truncated } = reduceMessageSizes(input, {
+      maxToolResultChars: 1_000,
+      maxTextChars: 2_000,
+    });
+    expect(truncated).toBe(2);
+    expect(messages[0]).toEqual(input[0]);
+    expect(messages[1]).toEqual(input[1]);
+    const toolResult = messages[2];
+    expect(toolResult && "result" in toolResult && toolResult.result.isError).toBeUndefined();
+    expect(toolResult && "result" in toolResult && toolResult.result.content[0]?.text.length).toBe(
+      1_000 + marker.length + 1,
+    );
+    assertPaired(messages);
+  });
+
+  it("never truncates compaction checkpoints (summary messages)", () => {
+    const input: Message[] = [
+      { role: "user", summary: true, text: "c".repeat(30_000) },
+      bigTool("c1"),
+      { role: "assistant", text: "t".repeat(20_000), calls: [] },
+    ];
+    const { messages, truncated } = reduceMessageSizes(input);
+    expect(truncated).toBe(2);
+    expect(messages[0]).toEqual(input[0]);
+    expect(messages[1] && "result" in messages[1]!).toBe(true);
+  });
+
+  it("returns the input untouched when nothing exceeds the caps", () => {
+    const input = history;
+    const { messages, truncated } = reduceMessageSizes(input);
+    expect(truncated).toBe(0);
+    expect(messages).toBe(input);
   });
 });

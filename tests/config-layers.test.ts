@@ -202,6 +202,46 @@ describe("MCP configuration compatibility", () => {
     expect(parsed.mcp.servers.explicit).toMatchObject({ transport: "stdio", args: [] });
   });
 
+  it("parses a project config with a brave-search server that forwards the API key by name", async () => {
+    const { workspace } = await fixture();
+    // Fixture modeled on the project .alisio/config.json: the brave-search entry forwards
+    // BRAVE_API_KEY from the environment by NAME (envAllow), never with a literal value.
+    await json(join(workspace, ".alisio", "config.json"), {
+      schemaVersion: 1,
+      plugins: [],
+      mcp: {
+        servers: {
+          devforge: {
+            command: "/bin/devforge-mcp",
+            args: [],
+            env: { DEV_FORGE_CONFIG: "/fixture/devforge/config.json" },
+          },
+          "brave-search": {
+            transport: "stdio",
+            command: "npx",
+            args: ["-y", "@brave/brave-search-mcp-server"],
+            envAllow: ["BRAVE_API_KEY"],
+          },
+        },
+      },
+      skillOverrides: { "skill-improver": { enabled: true } },
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.mcp.servers["brave-search"]).toEqual({
+      transport: "stdio",
+      enabled: true,
+      command: "npx",
+      args: ["-y", "@brave/brave-search-mcp-server"],
+      envAllow: ["BRAVE_API_KEY"],
+      env: {},
+    });
+    expect(config.mcp.servers.devforge).toMatchObject({ command: "/bin/devforge-mcp" });
+    // Safe forwarding only: no literal secret is stored or reachable through the parsed config.
+    const serialized = JSON.stringify(config);
+    expect(serialized).not.toContain("=sk-");
+    expect(serialized).not.toMatch(/sk-\w{16,}/);
+  });
+
   it("atomically toggles the defining form without rewriting unrelated JSON", async () => {
     const { global, workspace } = await fixture();
     const file = join(global, "config.json");

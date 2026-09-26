@@ -15,6 +15,11 @@ funcional, no solo interfaces o stubs.
   Cuando el catálogo no informa la ventana de contexto del modelo seleccionado (servidores locales
   como llama.cpp), `/connect` pregunta un `contextWindow` opcional en tokens que se guarda en los
   `values` del perfil y alimenta la barra de contexto.
+  El perfil también recuerda el nombre de la variable de entorno de la clave (`values.apiKeyEnv`):
+  los registros de los plugins exponen el campo, `/connect` lo persiste, y al crear el proveedor se
+  usa el nombre recordado (con respaldo al nombre por defecto del plugin) para leer
+  `process.env[...]` cuando no hay credencial guardada; la credencial guardada siempre tiene
+  prioridad.
   El arranque sin proveedor permite onboarding; headless nunca pregunta. Cada cambio inicia una
   sesión nueva para no mezclar continuación opaca. Se mantienen config/env/flags heredados y la
   máxima prioridad de `AppOptions.provider`. Un perfil activo de `/connect` se restaura entre
@@ -425,6 +430,16 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   oficiales de DeepSeek/OpenCode) y una base honesta `basis: "unknown"` sin total inventado en caso
   contrario; la barra de la TUI pinta `~9.9k / ?` para ese caso (Vitest de reducción/formateo) y
   expone el punto de compactación a la TUI.
+- Recuperación del presupuesto de contexto tras una compactación insuficiente (Vitest, proveedores
+  simulados, sin red): si tras compactar los mensajes conservados aún superan `limits.maxContextChars`
+  (colas con resultados enormes de herramientas), el runner reduce el contenido retenido por mensaje
+  (resultados de herramientas > 8k caracteres y textos usuario/asistente > 16k, marcador
+  `… [truncated by context budget]`, solo contenido: roles/IDs de llamada/fronteras intactos, revisado
+  en el transcript persistido) y completa el prompt; el evento `context_reduced` informa cuántos
+  mensajes se cortaron. Solo una cola irreducible lanza el error accionable (tamaño aproximado +
+  `/compact` + nueva sesión) y, como la reducción persiste, un prompt posterior en la misma sesión
+  vuelve a compactar un turno más y completa sin errores. El límite duro, el umbral de ventana y el
+  respaldo de caracteres no cambian; los checkpoints (`summary`) nunca se cortan.
 - Versión en tiempo de ejecución (Vitest): un cargador por paquete lee la versión del propio
   `package.json` (`ALISIO_PACKAGE_VERSION` gana en binarios autónomos; `dev` si no hay manifest ni
   inyección). Metadatos de plugins, `user-agent` por defecto y el cliente MCP dejan de llevar

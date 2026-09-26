@@ -38,9 +38,9 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
   real pressure) — Alisio falls back to `limits.maxContextChars`: est. tokens (≈ characters / 4)
   reaching `maxContextChars / 4` also compacts. Exactly one of the two applies, so the TUI context
   bar and the engine always agree on when compaction triggers. `maxContextChars` additionally stays
-  as the post-compaction hard limit: if compressing cannot get under it, the run fails with an
-  actionable error instead of sending an oversized request. `auto: false` disables automatic
-  compaction entirely.
+  as the post-compaction hard limit: if compressing cannot get under it, the retained tail is
+  reduced (see below), and only an irreducible session fails with an actionable error instead of
+  sending an oversized request. `auto: false` disables automatic compaction entirely.
 
 ## Configuration
 
@@ -77,6 +77,28 @@ transcript). If a summary is cut by this budget:
 A partial checkpoint preserves everything the model produced before the cut, but may omit later
 context; treat it as a degraded fallback, not a full summary.
 
+## Reducing an oversized kept tail
+
+Compaction keeps `keepTurns` recent turns **verbatim**. If those turns hold huge tool outputs
+(for example `grep` over a large repository), even a perfect checkpoint cannot bring the request
+under `limits.maxContextChars`, and the session used to die on every prompt. Instead, after a
+compaction the runner now checks the hard limit and, when still over, **reduces the retained
+messages in place** before sending anything:
+
+- Tool results over **8 000 characters** and user/assistant texts over **16 000 characters** are
+  cut with an explicit `… [truncated by context budget]` marker. The caps apply per message.
+- Only message **content** changes: roles, call IDs, order and message boundaries stay identical,
+  so the transcript remains valid and replayable and a tool call is never separated from its
+  results. The reduced transcript is persisted (originals stay in the database marked as
+  compacted, like compaction itself).
+- The `context_reduced` event reports how many messages were cut.
+- Only if even the reduced tail exceeds the limit — a pathological session — the run fails with an
+  actionable error naming the approximate size and suggesting `/compact`, trimming large tool
+  outputs, or starting a new session. The reduction is still persisted, so the session keeps
+  working for later prompts.
+
+Checkpoint summaries (`summary: true`) are bounded by design and are never cut by this step.
+
 ## Events
 
 | Event | When |
@@ -84,6 +106,7 @@ context; treat it as a degraded fallback, not a full summary.
 | `compaction_started` | Compaction begins |
 | `compaction_completed` | Done; includes `before`/`after` estimates, the size of the summarized span and of the checkpoint, plugin reports, and `partial: true` when the summary was cut but kept |
 | `compaction_skipped` | Not enough history to compact |
+| `context_reduced` | After compaction, retained messages still exceeded `maxContextChars` and were cut per message (`messages` = how many) |
 | `compaction_failed` | The summarizer call failed (including a cut summary with nothing usable) |
 | `plugin_hook_failed` | A plugin hook failed or timed out; compaction continues without it |
 

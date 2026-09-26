@@ -17,6 +17,16 @@ informa la ventana del modelo seleccionado. La ventana efectiva de un modelo es,
 `values.contextWindow` del perfil activo (intención del usuario: prevalece sobre el catálogo) y
 luego el `context_window` del propio catálogo.
 
+Cada conexión también recuerda el nombre de la variable de entorno de su clave de API: los `values`
+del perfil guardan `apiKeyEnv` (el nombre que elegiste para esa conexión). Cuando un proveedor
+necesita una clave, la precedencia es: primero la credencial guardada en `credentials.json`, luego
+`process.env[apiKeyEnv]` usando el **nombre recordado en el perfil** y, solo si el perfil no lo
+registra, el nombre por defecto del plugin (por ejemplo `DEEPSEEK_API_KEY` para el plugin DeepSeek,
+`OPENAI_API_KEY` para el compatible con OpenAI). Como el nombre se persiste con el perfil, el
+respaldo por entorno sigue funcionando aunque luego se elimine la credencial guardada. No interviene
+ningún almacén de secretos nuevo: el nombre de la variable de entorno es un valor de configuración
+no secreto, y las claves solo se leen del archivo de credenciales o de esa variable de entorno.
+
 `/model` y `/models` abren el mismo selector global. Agrupa por título de proveedor todos los
 perfiles creados mediante `/connect`, marca la pareja proveedor/modelo activa y mantiene disponibles
 los perfiles sanos si falla otro catálogo. Elegir una pareja distinta la persiste e inicia una sesión

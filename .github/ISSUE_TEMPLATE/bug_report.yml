@@ -1,0 +1,93 @@
+name: Bug report
+description: Report a bug in Alisio
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in the form below.
+
+        **Do not paste real API keys, credentials, or session/memory databases here.**
+        Report security vulnerabilities privately via
+        [GitHub Security Advisories](https://github.com/GustavoGutierrez/alisio/security/advisories/new)
+        instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `alisio --version` (e.g. `0.1.0-alpha.8`)
+      placeholder: "0.1.0-alpha.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install Alisio?
+      options:
+        - npm package (@alisio/alisio-code)
+        - Standalone binary
+        - Running from the repository (main)
+        - Other / not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: context
+    attributes:
+      label: Where did the bug happen?
+      options:
+        - Interactive TUI
+        - Readline mode (--no-tui)
+        - Headless (run / resume)
+        - CLI command (doctor, plugins, mcp, sessions, ...)
+        - Provider / model request
+        - MCP
+        - Plugin
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal commands or steps. Use fake keys (e.g. `sk-test-...`) if any are needed.
+      placeholder: |
+        1. Run `alisio`
+        2. Type ...
+        3. See the error below
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, terminal, Node/Bun versions (`alisio doctor` may help). Redact any real credentials before pasting.
+      placeholder: |
+        - OS: Linux (Ubuntu 24.04)
+        - Runtime: Node 22.16 / Bun 1.4.2
+        - Model provider: deepseek / openai-compatible / ...
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      description: Help maintainers act faster.
+      options:
+        - label: I searched existing issues and this is not a duplicate
+        - label: I removed any real API keys, credentials, and databases from this report
+        - label: This is not a security vulnerability (those go through the private reporting flow)

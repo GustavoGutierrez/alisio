@@ -107,6 +107,17 @@ describe("chat completions: finish_reason length", () => {
     ]);
   });
 
+  it("deepseek chat: finish length after text also completes truncated", async () => {
+    const provider = deepseek(
+      client([{ ...chatChunk("partial ", null) }, { ...chatChunk("answer", "length") }]),
+    );
+    const events = await collect(provider, "fixture");
+    expect(events.at(-1)).toMatchObject({
+      type: "completed",
+      message: { role: "assistant", text: "partial answer", calls: [], truncated: true },
+    });
+  });
+
   it.each([
     ["deepseek (chat)", deepseek(client([{ ...chatChunk("", "length") }]))],
     [
@@ -367,5 +378,43 @@ describe("OpenCode providers", () => {
       type: "completed",
       message: { text: "partial", truncated: true },
     });
+  });
+
+  it("opencode-go responses: incomplete after text completes truncated", async () => {
+    const fetchMock = vi.fn(async () =>
+      sse([
+        { type: "response.output_text.delta", delta: "partial " },
+        { type: "response.output_text.delta", delta: "answer" },
+        {
+          type: "response.incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          response: {
+            output: [
+              { type: "message", content: [{ type: "output_text", text: "partial answer" }] },
+            ],
+          },
+        },
+      ]),
+    );
+    const provider = openCode("gpt-5.6-luna", fetchMock as typeof fetch, true);
+    const events = await collect(provider, "gpt-5.6-luna");
+    expect(events.at(-1)).toMatchObject({
+      type: "completed",
+      message: { text: "partial answer", truncated: true },
+    });
+  });
+
+  it("opencode-go responses: incomplete before any text throws actionably", async () => {
+    const fetchMock = vi.fn(async () =>
+      sse([
+        {
+          type: "response.incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          response: { output: [] },
+        },
+      ]),
+    );
+    const provider = openCode("gpt-5.6-luna", fetchMock as typeof fetch, true);
+    await expect(collect(provider, "gpt-5.6-luna")).rejects.toThrow(/max output tokens/);
   });
 });

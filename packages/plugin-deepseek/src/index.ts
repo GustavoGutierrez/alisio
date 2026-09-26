@@ -3,8 +3,13 @@ import { type DeepSeekConfig, DeepSeekProvider } from "./provider.ts";
 import { loadVersion } from "./version.ts";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_API_KEY_ENV = "DEEPSEEK_API_KEY";
 const profileString = (request: ProviderCreateRequest, key: string, fallback: string) =>
-  typeof request.profile[key] === "string" ? String(request.profile[key]) : fallback;
+  typeof request.profile[key] === "string" && String(request.profile[key]).trim()
+    ? String(request.profile[key]).trim()
+    : typeof request.legacy?.[key] === "string" && String(request.legacy[key]).trim()
+      ? String(request.legacy[key]).trim()
+      : fallback;
 
 export function createDeepSeekPlugin(): Plugin {
   return definePlugin({
@@ -28,6 +33,15 @@ export function createDeepSeekPlugin(): Plugin {
             description: "Stored only in the global credentials file",
           },
           {
+            key: "apiKeyEnv",
+            label: "API key environment variable",
+            kind: "text",
+            required: false,
+            defaultValue: DEFAULT_API_KEY_ENV,
+            description:
+              "Environment variable consulted when no stored API key exists; the connection remembers this name",
+          },
+          {
             key: "apiMode",
             label: "API mode",
             kind: "select",
@@ -49,7 +63,11 @@ export function createDeepSeekPlugin(): Plugin {
         ],
         create(request) {
           const apiKey = request.credentials.apiKey;
-          if (!apiKey) throw new Error("DeepSeek API key is required");
+          const apiKeyEnv = profileString(request, "apiKeyEnv", DEFAULT_API_KEY_ENV);
+          if (!apiKey && !process.env[apiKeyEnv])
+            throw new Error(
+              `DeepSeek API key is required (set it in /connect or export ${apiKeyEnv})`,
+            );
           const baseURL = profileString(request, "baseURL", DEFAULT_BASE_URL);
           const url = new URL(baseURL);
           if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
@@ -59,8 +77,8 @@ export function createDeepSeekPlugin(): Plugin {
             throw new Error(`Unsupported DeepSeek API mode: ${apiMode}`);
           const config: DeepSeekConfig = {
             baseURL,
-            apiKey,
-            apiKeyEnv: "DEEPSEEK_API_KEY",
+            ...(apiKey ? { apiKey } : {}),
+            apiKeyEnv,
             model: profileString(request, "model", ""),
             apiMode,
             auth: "bearer",

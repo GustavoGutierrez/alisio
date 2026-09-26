@@ -39,8 +39,9 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
   los tokens estimados (≈ caracteres / 4) que alcanzan `maxContextChars / 4` también compactan.
   Aplica exactamente uno de los dos criterios, de modo que la barra de contexto de la TUI y el motor
   siempre coinciden sobre cuándo se compacta. `maxContextChars` además sigue siendo el límite duro
-  posterior a la compactación: si comprimir no logra quedarse por debajo, la ejecución falla con un
-  error accionable en vez de enviar una petición descomunal. `auto: false` desactiva la
+  posterior a la compactación: si comprimir no logra quedarse por debajo, la cola conservada se
+  reduce (ver más abajo) y solo una sesión irreducible falla con un error accionable en vez de enviar
+  una petición descomunal. `auto: false` desactiva la
   compactación automática por completo.
 
 ## Configuración
@@ -78,6 +79,29 @@ todo el historial). Si el presupuesto corta un resumen:
 Un checkpoint parcial conserva todo lo que el modelo produjo antes del corte, pero puede omitir
 contexto posterior; trátelo como un respaldo degradado, no como un resumen completo.
 
+## Reducción de una cola conservada descomunal
+
+La compactación conserva `keepTurns` turnos recientes **sin cambios**. Si esos turnos contienen
+salidas enormes de herramientas (por ejemplo `grep` sobre un repositorio grande), ni siquiera un
+checkpoint perfecto logra dejar la petición por debajo de `limits.maxContextChars`, y la sesión
+solía morir en cada prompt. En su lugar, tras una compactación el runner ahora comprueba el límite
+duro y, si sigue superado, **reduce los mensajes conservados en su sitio** antes de enviar nada:
+
+- Los resultados de herramientas de más de **8 000 caracteres** y los textos de usuario/asistente de
+  más de **16 000 caracteres** se cortan con el marcador explícito `… [truncated by context budget]`.
+  Los límites aplican por mensaje.
+- Solo cambia el **contenido** de los mensajes: roles, IDs de llamada, orden y fronteras de mensajes
+  quedan idénticos, de modo que el transcript sigue siendo válido y reproducible y una llamada a
+  herramienta nunca se separa de sus resultados. El transcript reducido se persiste (los originales
+  permanecen en la base marcados como compactados, igual que en la propia compactación).
+- El evento `context_reduced` informa cuántos mensajes se cortaron.
+- Solo si incluso la cola reducida supera el límite — una sesión patológica — la ejecución falla con
+  un error accionable que nombra el tamaño aproximado y sugiere `/compact`, recortar salidas grandes
+  de herramientas o iniciar una sesión nueva. La reducción igualmente se persiste, así que la sesión
+  sigue funcionando para prompts posteriores.
+
+Los checkpoints (`summary: true`) están acotados por diseño y este paso nunca los corta.
+
 ## Eventos
 
 | Evento | Cuándo |
@@ -85,6 +109,7 @@ contexto posterior; trátelo como un respaldo degradado, no como un resumen comp
 | `compaction_started` | Comienza la compactación |
 | `compaction_completed` | Terminó; incluye estimaciones `before`/`after`, el tamaño del tramo resumido y del checkpoint, informes de plugins y `partial: true` cuando el resumen se cortó pero se conservó |
 | `compaction_skipped` | No hay historia suficiente para compactar |
+| `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se cortaron por mensaje (`messages` = cuántos) |
 | `compaction_failed` | Falló la llamada al resumidor (incluido un resumen cortado sin nada aprovechable) |
 | `plugin_hook_failed` | Un hook de plugin falló o agotó su tiempo; la compactación continúa sin él |
 

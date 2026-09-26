@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DeepSeekProvider } from "@alisio/plugin-deepseek";
 import type { Message, RunEvent, ToolCall } from "@alisio/sdk";
 import { textResult } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
@@ -382,6 +383,348 @@ describe("compaction truncation handling", () => {
       });
       await runner.compact(session.id);
       expect(seen).toBe(4096);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("ends a run normally when the DeepSeek responses stream completes truncated after text", async () => {
+    const fx = await fixture();
+    try {
+      const responsesClient = {
+        responses: {
+          async create() {
+            return (async function* () {
+              yield { type: "response.output_text.delta", delta: "partial " };
+              yield { type: "response.output_text.delta", delta: "answer" };
+              yield {
+                type: "response.incomplete",
+                incomplete_details: { reason: "max_output_tokens" },
+                response: {
+                  output: [
+                    { type: "message", content: [{ type: "output_text", text: "partial answer" }] },
+                  ],
+                },
+              };
+            })();
+          },
+        },
+      };
+      const deepseek = new DeepSeekProvider(
+        {
+          baseURL: "https://api.deepseek.com",
+          apiKey: "fake",
+          apiKeyEnv: "UNUSED",
+          model: "deepseek-flash",
+          apiMode: "responses",
+          auth: "bearer",
+          tokenParameter: "max_tokens",
+          streamUsage: false,
+        },
+        responsesClient as any,
+      );
+      const session = fx.store.create(fx.root, deepseek.id, "deepseek-flash");
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: deepseek,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxTurns: 3,
+        onEvent,
+      });
+      const result = await runner.run(session.id, "test");
+      expect(result.status).toBe("completed");
+      expect(result.text).toBe("partial answer");
+      const warning = events.find((e) => e.type === "response_truncated");
+      expect(warning).toBeDefined();
+      expect(
+        (events.find((e) => e.type === "run_completed")?.data as { truncated?: boolean }).truncated,
+      ).toBe(true);
+      expect(events.some((e) => e.type === "run_completed")).toBe(true);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("keeps a truncated DeepSeek responses summary as a partial checkpoint", async () => {
+    const fx = await fixture();
+    try {
+      const responsesClient = {
+        responses: {
+          async create() {
+            return (async function* () {
+              yield {
+                type: "response.incomplete",
+                incomplete_details: { reason: "max_output_tokens" },
+                response: {
+                  output: [
+                    {
+                      type: "message",
+                      content: [{ type: "output_text", text: JSON.stringify(checkpoint) }],
+                    },
+                  ],
+                },
+              };
+            })();
+          },
+        },
+      };
+      const deepseek = new DeepSeekProvider(
+        {
+          baseURL: "https://api.deepseek.com",
+          apiKey: "fake",
+          apiKeyEnv: "UNUSED",
+          model: "deepseek-flash",
+          apiMode: "responses",
+          auth: "bearer",
+          tokenParameter: "max_tokens",
+          streamUsage: false,
+        },
+        responsesClient as any,
+      );
+      const session = fx.store.create(fx.root, "deepseek", "deepseek-flash");
+      for (const message of history()) fx.store.append(session.id, message);
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: deepseek,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        onEvent,
+      });
+      const result = await runner.compact(session.id);
+      expect(result?.replaced).toBe(2);
+      expect(events.some((e) => e.type === "compaction_completed" && (e.data as any).partial)).toBe(
+        true,
+      );
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("fails a DeepSeek responses compaction that is truncated before any text", async () => {
+    const fx = await fixture();
+    try {
+      const responsesClient = {
+        responses: {
+          async create() {
+            return (async function* () {
+              yield {
+                type: "response.incomplete",
+                incomplete_details: { reason: "max_output_tokens" },
+                response: { output: [] },
+              };
+            })();
+          },
+        },
+      };
+      const deepseek = new DeepSeekProvider(
+        {
+          baseURL: "https://api.deepseek.com",
+          apiKey: "fake",
+          apiKeyEnv: "UNUSED",
+          model: "deepseek-flash",
+          apiMode: "responses",
+          auth: "bearer",
+          tokenParameter: "max_tokens",
+          streamUsage: false,
+        },
+        responsesClient as any,
+      );
+      const session = fx.store.create(fx.root, "deepseek", "deepseek-flash");
+      for (const message of history()) fx.store.append(session.id, message);
+      const runner = new AgentRunner({
+        provider: deepseek,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+      });
+      await expect(runner.compact(session.id)).rejects.toThrow(/compaction\.maxOutputTokens/);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+/**
+ * Context-budget recovery: after a compaction that still leaves the kept tail over
+ * `maxContextChars`, the runner reduces oversized retained content in place instead of failing,
+ * and only an irreducible tail produces the actionable error (with the session still usable).
+ */
+describe("context-budget reduction after compaction", () => {
+  const marker = "… [truncated by context budget]";
+  const big = (n: number) => "x".repeat(n);
+  // Summarizer/agent stub: streams the checkpoint JSON when called with no tools (compaction),
+  // otherwise completes a normal answer. Compaction summarizer calls arrive with `tools: []`.
+  const twoFaceProvider = () => {
+    let rounds = 0;
+    return {
+      id: "test",
+      model: "test",
+      async *stream(request: { tools?: unknown[] }) {
+        rounds++;
+        if (!request.tools?.length)
+          yield { type: "completed", message: completed(JSON.stringify(checkpoint)) };
+        else yield { type: "completed", message: completed(`answer ${rounds}`) };
+      },
+    };
+  };
+
+  const bigTurn = (user: string, callId: string, size: number): Message[] => [
+    { role: "user", text: user },
+    { role: "assistant", text: "", calls: [{ id: callId, name: "hello", arguments: "{}" }] },
+    { role: "tool", callId, result: { content: [{ type: "text", text: big(size) }] } },
+  ];
+
+  it("reduces an oversized kept tail after compaction, completes, and keeps the transcript valid", async () => {
+    const fx = await fixture();
+    try {
+      const session = fx.store.create(fx.root, "test", "test");
+      for (const message of [
+        ...bigTurn("turn a", "c1", 40_000),
+        ...bigTurn("turn b", "c2", 40_000),
+      ])
+        fx.store.append(session.id, message);
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 30_000,
+        onEvent,
+      });
+      // Compaction runs first; the kept tail (turn b + this prompt) is ~41k chars over the 30k
+      // cap, so the runner reduces the oversized tool result instead of failing.
+      const result = await runner.run(session.id, "continue");
+      expect(result.status).toBe("completed");
+      const reduced = events.find((e) => e.type === "context_reduced");
+      expect(reduced).toBeDefined();
+      expect(reduced?.data).toEqual({ messages: 1 });
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+      // Transcript: roles and call IDs intact; the kept tool result was cut with the marker.
+      const stored = fx.store.messages(session.id);
+      expect(stored.map((m) => m.role)).toEqual([
+        "user", // summary checkpoint
+        "user",
+        "assistant",
+        "tool",
+        "user",
+        "assistant",
+      ]);
+      const toolMessage = stored.find((m) => m.role === "tool")!;
+      expect(toolMessage.callId).toBe("c2");
+      const text =
+        toolMessage.role === "tool" ? toolMessage.result.content.map((c) => c.text).join("\n") : "";
+      expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
+      expect(text).toContain(marker);
+      // Every assistant call still has its result (valid, replayable transcript).
+      const ids = stored.flatMap((m) => (m.role === "assistant" ? m.calls.map((c) => c.id) : []));
+      const done = new Set(stored.filter((m) => m.role === "tool").map((m) => m.callId));
+      for (const id of ids) expect(done.has(id)).toBe(true);
+      // The same session keeps working after the recovery.
+      const again = await runner.run(session.id, "next prompt");
+      expect(again.status).toBe("completed");
+      expect(again.text).toMatch(/^answer /);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("throws the actionable error when even the reduced tail exceeds the cap, and the session still works", async () => {
+    const fx = await fixture();
+    try {
+      const session = fx.store.create(fx.root, "test", "test");
+      const turnB: Message[] = [
+        { role: "user", text: "turn b" },
+        {
+          role: "assistant",
+          text: "",
+          calls: ["c1", "c2", "c3", "c4", "c5"].map((id) => ({
+            id,
+            name: "hello",
+            arguments: "{}",
+          })),
+        },
+        ...["c1", "c2", "c3", "c4", "c5"].map(
+          (id): Message => ({
+            role: "tool",
+            callId: id,
+            result: { content: [{ type: "text", text: big(40_000) }] },
+          }),
+        ),
+      ];
+      for (const message of [...bigTurn("turn a", "ca", 40_000), ...turnB])
+        fx.store.append(session.id, message);
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 30_000,
+      });
+      // Even at the 8k cap the five kept tool results (~40k+ chars) exceed the 30k limit:
+      // the run fails with an actionable error, naming size and remedies.
+      const error = await runner.run(session.id, "continue").then(
+        () => null,
+        (e: unknown) => e as Error,
+      );
+      expect(error).not.toBeNull();
+      expect(error?.message).toContain("start a new session");
+      expect(error?.message).toContain("/compact");
+      expect(error?.message).toMatch(/approximately \d+ characters/);
+      // The reduction was still persisted, so the leap past the cap is gone for the next turn.
+      const stored = fx.store.messages(session.id);
+      expect(stored.filter((m) => m.role === "tool")).toHaveLength(5);
+      for (const m of stored) {
+        if (m.role !== "tool") continue;
+        const text = m.result.content.map((c) => c.text).join("\n");
+        expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
+        expect(text).toContain(marker);
+      }
+      // A subsequent prompt in the same session succeeds: auto-compaction now keeps only the
+      // two most recent (small) turns, the big turn is summarized away, and no fatal error.
+      const again = await runner.run(session.id, "hi");
+      expect(again.status).toBe("completed");
+      expect(again.text).toMatch(/^answer /);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("does not touch sessions already under the hard limit", async () => {
+    const fx = await fixture();
+    try {
+      const session = fx.store.create(fx.root, "test", "test");
+      for (const message of bigTurn("small", "c1", 200)) fx.store.append(session.id, message);
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 30_000,
+        onEvent,
+      });
+      const result = await runner.run(session.id, "hi");
+      expect(result.status).toBe("completed");
+      expect(events.some((e) => e.type === "context_reduced")).toBe(false);
+      const tool = fx.store.messages(session.id).find((m) => m.role === "tool");
+      expect(tool?.role).toBe("tool");
+      expect(tool && "result" in tool && tool.result.content[0]?.text).toBe("x".repeat(200));
     } finally {
       await fx.close();
     }

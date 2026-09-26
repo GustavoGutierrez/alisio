@@ -587,6 +587,65 @@ describe("application provider selection", () => {
     }
   });
 
+  it("falls back to the profile apiKeyEnv when the stored credential is gone", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-api-key-env-"));
+    vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
+    vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
+    vi.stubEnv("DEEPSEEK_API_KEY", "fake-environment-test-key");
+    // No stored credential: only the remembered environment-variable name.
+    await new ProviderSettingsStore(join(root, "config")).saveActive(
+      "deepseek",
+      {
+        provider: "deepseek",
+        values: {
+          baseURL: "https://api.deepseek.com",
+          apiMode: "chat",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+        },
+        model: "saved-model",
+      },
+      {},
+    );
+    const app = await createApplication({ cwd: root, builtins: [deepseekBuiltin], noHerdr: true });
+    try {
+      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.provider.model).toBe("saved-model");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps the credential-first precedence: stored key wins over the environment", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-credential-precedence-"));
+    vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
+    vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
+    vi.stubEnv("DEEPSEEK_API_KEY", "fake-environment-test-key");
+    await new ProviderSettingsStore(join(root, "config")).saveActive(
+      "deepseek",
+      {
+        provider: "deepseek",
+        values: {
+          baseURL: "https://api.deepseek.com",
+          apiMode: "chat",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+        },
+        model: "saved-model",
+      },
+      { apiKey: "fake-stored-test-key" },
+    );
+    const app = await createApplication({ cwd: root, builtins: [deepseekBuiltin], noHerdr: true });
+    try {
+      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.provider.model).toBe("saved-model");
+      // The stored credential is what identification uses; the environment value is never read.
+      expect((await app.providerSettings.active())?.credentials.apiKey).toBe(
+        "fake-stored-test-key",
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it("keeps a saved global model when CLI and environment model values are blank", async () => {
     const root = await mkdtemp(join(tmpdir(), "alisio-saved-model-"));
     vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));

@@ -74,7 +74,7 @@ Al escribir `/` se abre el autocompletado.
 | Comando | Función |
 | --- | --- |
 | `/help` | Comandos y teclas |
-| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva |
+| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva |
 | `/model`, `/models` | Abre el selector global de proveedor/modelo. Las entradas se agrupan y prefijan con el título del proveedor, se marca la pareja activa y los catálogos no disponibles siguen visibles sin ocultar perfiles sanos. Una pareja distinta se persiste e inicia una sesión nueva; la pareja activa no hace nada. No se lista la configuración raíz heredada |
 | `/compact [focus]` | Resume la historia antigua con el modelo actual, con instrucciones de foco opcionales |
 | `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto y detalles de plugins |

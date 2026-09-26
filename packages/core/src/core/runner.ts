@@ -13,6 +13,7 @@ import {
   MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
+  reduceMessageSizes,
   shouldCompactContext,
   summarize,
   summaryMessage,
@@ -384,6 +385,7 @@ export class AgentRunner {
     const controller = this.claim(sessionId);
     const o = this.options,
       emit = this.emitter(sessionId);
+    const limit = o.maxContextChars ?? 160_000;
     let tokens = 0,
       lastText = "",
       acquired = false;
@@ -479,7 +481,7 @@ export class AgentRunner {
             used(),
             chars(),
             o.contextWindow?.(model),
-            o.maxContextChars ?? 160_000,
+            limit,
             compaction.threshold ?? 0.85,
           )
         ) {
@@ -487,10 +489,24 @@ export class AgentRunner {
           instructions = await withPersona();
           messages = o.store.messages(sessionId);
         }
-        if (chars() > (o.maxContextChars ?? 160_000))
-          throw new Error(
-            "Context budget exceeded and compaction could not reduce it; start a new session.",
-          );
+        // A compaction that still leaves the session over the hard limit (typically a kept tail
+        // holding huge tool outputs) is reduced in place instead of failing outright: oversized
+        // kept content is cut per message (roles/callIds/boundaries untouched, so the transcript
+        // stays valid and replayable). Only if even the reduced tail exceeds the limit the run
+        // fails with an actionable error; the reduction is persisted either way, so the session
+        // stays usable for later prompts.
+        if (chars() > limit) {
+          const reduction = reduceMessageSizes(messages);
+          if (reduction.truncated > 0) {
+            o.store.overwrite(sessionId, reduction.messages);
+            messages = reduction.messages;
+            emit("context_reduced", { messages: reduction.truncated });
+          }
+          if (chars() > limit)
+            throw new Error(
+              `Context budget exceeded and compaction could not reduce it (approximately ${chars()} characters; limit ${limit}). Run /compact, trim large tool outputs, or start a new session.`,
+            );
+        }
         let completion: Extract<Message, { role: "assistant" }> | undefined;
         let truncated = false;
         let usage: { input: number; output: number; cachedInput?: number } | undefined;

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import { createDeepSeekPlugin, DeepSeekProvider } from "@alisio/plugin-deepseek";
-import { OpenAICompatibleProvider } from "@alisio/plugin-openai-compatible";
+import {
+  createOpenAICompatiblePlugin,
+  OpenAICompatibleProvider,
+} from "@alisio/plugin-openai-compatible";
 import {
   classifyOpenCodeModel,
   createOpenCodePlugin,
@@ -98,6 +101,66 @@ describe("DeepSeek provider", () => {
     expect(value.fields.find((field) => field.key === "baseURL")?.defaultValue).toBe(
       "https://api.deepseek.com",
     );
+  });
+
+  it("registers the configurable API key environment variable with the plugin default", () => {
+    for (const value of [
+      registration(createDeepSeekPlugin()),
+      registration(createOpenAICompatiblePlugin()),
+    ]) {
+      expect(value.fields.find((field) => field.key === "apiKeyEnv")?.kind).toBe("text");
+      expect(value.fields.find((field) => field.key === "apiKeyEnv")?.required).not.toBe(true);
+    }
+    expect(
+      registration(createDeepSeekPlugin()).fields.find((field) => field.key === "apiKeyEnv")
+        ?.defaultValue,
+    ).toBe("DEEPSEEK_API_KEY");
+    expect(
+      registration(createOpenAICompatiblePlugin()).fields.find((field) => field.key === "apiKeyEnv")
+        ?.defaultValue,
+    ).toBe("OPENAI_API_KEY");
+  });
+
+  it("resolves the apiKeyEnv name from the profile and falls back to the plugin default", () => {
+    vi.stubEnv("MY_CUSTOM_API_KEY_VAR", "fake-custom-key");
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    const profiled = registration(createDeepSeekPlugin()).create({
+      profile: { apiKeyEnv: "MY_CUSTOM_API_KEY_VAR" },
+      credentials: {},
+    } as never) as ModelProvider;
+    // Construction succeeds only when the resolved env name (the profile's) is consulted:
+    // the plugin default DEEPSEEK_API_KEY is empty, so any fallback to it would throw.
+    expect(profiled.id).toBe("deepseek:chat:https://api.deepseek.com");
+
+    // When the profile names a var that is unset, the default env var does NOT rescue it.
+    vi.stubEnv("MY_CUSTOM_API_KEY_VAR", "");
+    vi.stubEnv("DEEPSEEK_API_KEY", "fake-default-key");
+    expect(() =>
+      registration(createDeepSeekPlugin()).create({
+        profile: { apiKeyEnv: "MY_CUSTOM_API_KEY_VAR" },
+        credentials: {},
+      } as never),
+    ).toThrow(/MY_CUSTOM_API_KEY_VAR/);
+  });
+
+  it("with no profile apiKeyEnv, falls back to the plugin default env name", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "fake-default-key");
+    const provider = registration(createDeepSeekPlugin()).create({
+      profile: {},
+      credentials: {},
+    } as never) as ModelProvider;
+    expect(provider.id).toBe("deepseek:chat:https://api.deepseek.com");
+  });
+
+  it("with a stored credential, never consults any environment variable", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    const provider = registration(createDeepSeekPlugin()).create({
+      profile: {},
+      credentials: { apiKey: "fake-stored-key" },
+    } as never) as ModelProvider;
+    expect(provider.id).toBe("deepseek:chat:https://api.deepseek.com");
+    expect(JSON.stringify(provider)).not.toContain("fake-stored-key");
+    expect(inspect(provider, { showHidden: true, depth: 8 })).not.toContain("fake-stored-key");
   });
 
   it("parses the exact official catalog metadata shape", async () => {

@@ -321,7 +321,15 @@ program.command("doctor").action(async (_opts, cmd) => {
           : model,
       auth: useSaved ? saved.profile.values.auth : config.provider.auth,
       keyConfigured: useSaved
-        ? !!saved.credentials.apiKey || saved.profile.values.auth === "none"
+        ? !!saved.credentials.apiKey ||
+          saved.profile.values.auth === "none" ||
+          !!process.env[
+            typeof saved.profile.values.apiKeyEnv === "string" && saved.profile.values.apiKeyEnv
+              ? saved.profile.values.apiKeyEnv
+              : saved.profile.provider === "deepseek"
+                ? "DEEPSEEK_API_KEY"
+                : "OPENAI_API_KEY"
+          ]
         : config.provider.auth === "none" || !!process.env[config.provider.apiKeyEnv],
     },
   };

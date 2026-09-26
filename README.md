@@ -106,6 +106,9 @@ pnpm publish -- --all --dry-run   # preview the publishable packages; see docs/p
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [Publishing](https://gustavogutierrez.github.io/alisio/publishing).
 
+Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability, and follow
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) when participating.
+
 ## License
 
 [MIT](LICENSE) · Maintainer: **Gustavo Gutiérrez**

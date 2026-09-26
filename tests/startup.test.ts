@@ -206,6 +206,38 @@ describe("startup plugin summary", () => {
       { id: "utility", version: "1.0.0", builtin: false },
     ]);
   });
+
+  it("groups the real CLI builtins into model providers plus named non-providers", async () => {
+    // The actual production path: every default builtin activates through the plugin host and
+    // the startup screen is rendered from its metadata (not a hand-built list).
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = await mkdtemp(join(tmpdir(), "alisio-startup-builtins-"));
+    try {
+      const { BUILTIN_PLUGINS } = await import("../packages/cli/src/builtin.ts");
+      const host = new PluginHost(new ToolRegistry(), state(), {}, new ProviderRegistry());
+      const context = {
+        workspace: root,
+        cwd: root,
+        stateHome: root,
+        configHome: root,
+        home: root,
+        trusted: false,
+        configDir: root,
+      };
+      for (const builtin of BUILTIN_PLUGINS)
+        await host.activate(builtin.create({}, context), root, { builtin: true });
+      const rendered = renderStartup(host, {
+        ...base,
+        terminal: terminal({ columns: 120 }),
+      }).lines.join("\n");
+      expect(rendered).toContain("with 4 model providers, memory (builtin), subagents (builtin)");
+      expect(rendered).not.toMatch(/deepseek \(|openai-compatible \(|opencode \(|opencode-go \(/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("plugins extending the startup screen", () => {

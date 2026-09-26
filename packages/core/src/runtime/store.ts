@@ -196,6 +196,14 @@ export class SQLiteStore implements SessionStore {
         this.db.prepare("INSERT INTO messages(session,body) VALUES(?,?)").run(id, row.body);
     });
   }
+  overwrite(id: string, messages: Message[]): void {
+    this.db.transaction(() => {
+      // Retire the active rows (originals stay marked compacted for auditing), then rewrite
+      // the reduced transcript in the same order.
+      this.db.prepare("UPDATE messages SET compacted=1 WHERE session=? AND compacted=0").run(id);
+      for (const message of messages) this.append(id, message);
+    });
+  }
   acquire(id: string): void {
     this.db.transaction(() => {
       this.get(id);

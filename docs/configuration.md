@@ -16,6 +16,16 @@ model's window. The effective window for a model is, in priority: the legacy `pr
 (configured model only), then the active profile's `values.contextWindow` (user intent — it wins
 over the catalog), then the catalog's own `context_window`.
 
+Each connection also remembers its API key environment variable name: the profile's `values`
+store `apiKeyEnv` (the name you chose for that connection). When a provider needs a key, the
+precedence is: the stored credential in `credentials.json` first, then `process.env[apiKeyEnv]`
+using the **profile's** remembered variable name, then the plugin's default variable name (for
+example `DEEPSEEK_API_KEY` for the DeepSeek plugin, `OPENAI_API_KEY` for OpenAI-compatible) only
+when the profile does not record one. Because the name is persisted with the profile, the
+environment fallback keeps working even if the stored credential is later removed. No new secret
+store is involved: the environment variable name is a non-secret configuration value, and keys
+themselves are only ever read from the credentials file or that environment variable.
+
 `/model` and `/models` open the same global selector. It groups every profile created through
 `/connect` by provider title, marks the active provider/model pair, and keeps healthy profiles
 selectable when another catalog is unavailable. Selecting a different pair persists it and starts a
