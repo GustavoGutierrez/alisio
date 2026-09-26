@@ -21,6 +21,7 @@ jobs:
           node-version: "24"
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck && pnpm test && pnpm build && pnpm pack:check
       - id: changesets
