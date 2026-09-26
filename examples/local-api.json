@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "provider": {
+    "baseURL": "http://127.0.0.1:1234/v1",
+    "model": "YOUR_LOCAL_MODEL_ID",
+    "apiMode": "chat",
+    "auth": "none",
+    "tokenParameter": "max_tokens",
+    "streamUsage": false
+  }
+}

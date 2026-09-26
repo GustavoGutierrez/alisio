@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.alisio/
+.env
+*.sqlite*
+coverage/

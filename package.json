@@ -1,0 +1,44 @@
+{
+  "name": "alisio",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "bun apps/cli/src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration.test.ts",
+    "build": "bun build apps/cli/src/main.ts --compile --outfile dist/alisio",
+    "bench": "bun scripts/bench.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:compiled",
+    "test:compiled": "bun fixtures/compiled-cli-test.ts",
+    "test:herdr": "bun fixtures/herdr-cli-test.ts"
+  },
+  "dependencies": {
+    "@alisio/sdk": "workspace:*",
+    "@earendil-works/pi-tui": "0.87.1",
+    "@modelcontextprotocol/client": "2.1.0",
+    "ajv": "8.20.0",
+    "commander": "15.0.0",
+    "openai": "7.23.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@changesets/cli": "3.0.3",
+    "@modelcontextprotocol/server": "2.1.0",
+    "@types/bun": "1.4.2",
+    "@types/node": "26.6.2",
+    "bun": "1.4.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  },
+  "engines": {
+    "node": ">=24",
+    "bun": ">=1.4.2"
+  }
+}

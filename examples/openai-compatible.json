@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "provider": {
+    "baseURL": "https://api.openai.com/v1",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "model": "YOUR_MODEL_ID",
+    "apiMode": "chat",
+    "auth": "bearer",
+    "tokenParameter": "max_completion_tokens",
+    "streamUsage": true
+  },
+  "plugins": [],
+  "skills": [],
+  "mcp": { "servers": {} }
+}

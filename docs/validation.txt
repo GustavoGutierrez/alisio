@@ -1,0 +1,15 @@
+$ pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:compiled
+$ tsc --noEmit
+$ biome check .
+Checked 56 files in 16ms. No fixes applied.
+$ vitest run
+ Test Files  8 passed (8)
+      Tests  80 passed (80)
+$ bun build apps/cli/src/main.ts --compile --outfile dist/alisio
+  [33ms]  bundle  615 modules
+ [124ms] compile  dist/alisio
+$ bun fixtures/compiled-cli-test.ts
+{"ok":true,"checks":["compiled CLI HTTP tool loop","JSONL output","external TypeScript plugin with dependency","session persistence"]}
+
+Nota: la prueba 'search' requiere ripgrep (rg) en PATH; sin él falla por el entorno.
+Verificación manual de la TUI y de la memoria: ver docs/implementation-status.md.
