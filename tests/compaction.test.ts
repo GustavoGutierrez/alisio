@@ -8,6 +8,7 @@ import {
   parseCheckpointOutput,
   planCompaction,
   reduceMessageSizes,
+  reduceMessagesToBudget,
   renderCheckpoint,
   serializeForSummary,
   shouldCompact,
@@ -305,6 +306,130 @@ describe("reduceMessageSizes", () => {
   it("returns the input untouched when nothing exceeds the caps", () => {
     const input = history;
     const { messages, truncated } = reduceMessageSizes(input);
+    expect(truncated).toBe(0);
+    expect(messages).toBe(input);
+  });
+});
+
+describe("reduceMessagesToBudget", () => {
+  const marker = "… [truncated by context budget]";
+  const bigTool = (callId: string, size: number): Message => ({
+    role: "tool",
+    callId,
+    result: { content: [{ type: "text", text: "t".repeat(size) }] },
+  });
+  const serialized = (messages: Message[]) => JSON.stringify(messages).length;
+  const mediumTurn = (results: number, size: number): Message[] => [
+    { role: "user", text: "task" },
+    {
+      role: "assistant",
+      text: "",
+      calls: Array.from({ length: results }, (_, i) => call(`c${i}`)),
+    },
+    ...Array.from({ length: results }, (_, i) => bigTool(`c${i}`, size)),
+  ];
+
+  it("brings many medium results (each under the 8k cap) under the target", () => {
+    // 25 results of 7 000 chars: every one individually under MAX_TOOL_RESULT_CHARS, together
+    // ~180k — the per-message reducer would report truncated: 0, the budget reducer must not.
+    const input = mediumTurn(25, 7_000);
+    expect(serialized(input)).toBeGreaterThan(170_000);
+    const { messages, truncated } = reduceMessagesToBudget(input, 60_000);
+    expect(truncated).toBeGreaterThan(0);
+    expect(serialized(messages)).toBeLessThanOrEqual(60_000);
+    expect(messages.map((m) => m.role)).toEqual(input.map((m) => m.role));
+    assertPaired(messages);
+  });
+
+  it("clips the largest items first so the smallest changes achieve the target", () => {
+    const input = mediumTurn(3, 0).slice(0, 2); // user + assistant with 3 calls
+    input.push(bigTool("c0", 30_000), bigTool("c1", 20_000), bigTool("c2", 10_000));
+    // ~61k total; clipping the two biggest to 8k (~27k) fits a 35k target.
+    const { messages, truncated } = reduceMessagesToBudget(input, 35_000);
+    expect(truncated).toBe(2);
+    expect(serialized(messages)).toBeLessThanOrEqual(35_000);
+    const texts = messages
+      .filter((m) => m.role === "tool")
+      .map((m) => (m.role === "tool" ? m.result.content.map((p) => p.text).join("\n") : ""));
+    expect(texts[0]).toContain(marker);
+    expect(texts[1]).toContain(marker);
+    expect(texts[2]).toBe("t".repeat(10_000)); // smallest result untouched
+  });
+
+  it("breaks ties by position (deterministic total order)", () => {
+    const input: Message[] = [
+      { role: "user", text: "task" },
+      { role: "assistant", text: "", calls: [call("c0"), call("c1")] },
+      bigTool("c0", 30_000),
+      bigTool("c1", 30_000),
+    ];
+    const { messages, truncated } = reduceMessagesToBudget(input, serialized(input) - 20_000);
+    expect(truncated).toBe(1);
+    const texts = messages
+      .filter((m) => m.role === "tool")
+      .map((m) => (m.role === "tool" ? m.result.content.map((p) => p.text).join("\n") : ""));
+    expect(texts[0]).toContain(marker);
+    expect(texts[1]).toBe("t".repeat(30_000));
+  });
+
+  it("is deterministic: same input and target yield the identical transcript", () => {
+    const input = mediumTurn(25, 7_000);
+    const a = reduceMessagesToBudget(input, 60_000);
+    const b = reduceMessagesToBudget(input, 60_000);
+    expect(b.messages).toEqual(a.messages);
+    expect(b.truncated).toBe(a.truncated);
+    expect(a.messages).toEqual(b.messages); // and toEqual is symmetric on the transcript
+    const c = reduceMessagesToBudget([...input], 60_000);
+    expect(c.messages).toEqual(a.messages);
+  });
+
+  it("never truncates summary checkpoints, even at the minimum caps", () => {
+    const calls = Array.from({ length: 5 }, (_, i) => call(`c${i}`));
+    const input: Message[] = [
+      { role: "user", summary: true, text: "s".repeat(30_000) },
+      { role: "assistant", text: "", calls },
+      ...Array.from({ length: 5 }, (_, i) => bigTool(`c${i}`, 30_000)),
+    ];
+    const { messages, truncated } = reduceMessagesToBudget(input, 5_000);
+    expect(truncated).toBe(5);
+    expect(messages[0]).toEqual(input[0]);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages[0] && "text" in messages[0] && messages[0].text).toBe("s".repeat(30_000));
+    assertPaired(messages);
+  });
+
+  it("stops at the minimum caps (tool 512 / text 1024) when the target is unreachable", () => {
+    const input: Message[] = Array.from({ length: 60 }, (_, i) =>
+      i % 2 === 0 ? { role: "user" as const, text: "u".repeat(20_000) } : bigTool(`c${i}`, 20_000),
+    );
+    const { messages, truncated } = reduceMessagesToBudget(input, 1_000);
+    expect(truncated).toBe(60);
+    for (const m of messages) {
+      if (m.role === "user") expect(m.text.length).toBeLessThanOrEqual(1024 + marker.length + 1);
+      else if (m.role === "tool") {
+        const text = m.result.content.map((p) => p.text).join("\n");
+        expect(text.length).toBeLessThanOrEqual(512 + marker.length + 1);
+        expect(text).toContain(marker);
+      }
+    }
+  });
+
+  it("honors custom starting caps and descends from them", () => {
+    const input = [...mediumTurn(1, 0).slice(0, 2), bigTool("c0", 20_000)]; // user + call + result
+    const { messages, truncated } = reduceMessagesToBudget(input, 6_000, {
+      maxToolResultChars: 1_000,
+    });
+    expect(truncated).toBe(1);
+    const tool = messages[2];
+    const text =
+      tool && tool.role === "tool" ? tool.result.content.map((p) => p.text).join("\n") : "";
+    expect(text.length).toBe(1_000 + marker.length + 1);
+    expect(text).toContain(marker);
+  });
+
+  it("returns the input untouched when the target already fits", () => {
+    const input = history;
+    const { messages, truncated } = reduceMessagesToBudget(input, 10_000);
     expect(truncated).toBe(0);
     expect(messages).toBe(input);
   });

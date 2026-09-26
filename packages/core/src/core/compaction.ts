@@ -143,6 +143,39 @@ export interface MessageReduction {
 }
 
 /**
+ * Cuts ONE message's content down to the given per-message caps. Returns the same reference when
+ * nothing changes, so callers can detect a no-op by identity. See `reduceMessageSizes` for the
+ * invariants (roles/callIds/boundaries untouched, summaries never truncated).
+ */
+function clampMessage(message: Message, maxToolResultChars: number, maxTextChars: number): Message {
+  if (message.role === "user") {
+    if (message.summary || message.text.length <= maxTextChars) return message;
+    return { ...message, text: `${message.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
+  }
+  if (message.role === "assistant") {
+    if (message.text.length <= maxTextChars) return message;
+    return { ...message, text: `${message.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
+  }
+  let used = 0;
+  let changed = false;
+  const content = message.result.content.map((part) => {
+    const room = maxToolResultChars - used;
+    const text =
+      room <= 0
+        ? TRUNCATION_MARKER
+        : part.text.length > room
+          ? `${part.text.slice(0, room)}\n${TRUNCATION_MARKER}`
+          : part.text;
+    if (text !== part.text) {
+      changed = true;
+      used = maxToolResultChars;
+    } else used += part.text.length;
+    return { type: "text" as const, text };
+  });
+  return changed ? { ...message, result: { ...message.result, content } } : message;
+}
+
+/**
  * Cuts oversized retained content so the session fits the context-budget hard limit after a
  * compaction could not. Only message CONTENT changes (user/assistant `text` and the text parts
  * of tool results); roles, call IDs, order and message boundaries stay identical, so the
@@ -156,38 +189,118 @@ export function reduceMessageSizes(
   const maxToolResultChars = options.maxToolResultChars ?? MAX_TOOL_RESULT_CHARS;
   const maxTextChars = options.maxTextChars ?? MAX_TEXT_CHARS;
   let truncated = 0;
-  const reduced = messages.map((m): Message => {
-    if (m.role === "user") {
-      if (m.summary || m.text.length <= maxTextChars) return m;
-      truncated++;
-      return { ...m, text: `${m.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
-    }
-    if (m.role === "assistant") {
-      if (m.text.length <= maxTextChars) return m;
-      truncated++;
-      return { ...m, text: `${m.text.slice(0, maxTextChars)}\n${TRUNCATION_MARKER}` };
-    }
-    let used = 0;
-    let changed = false;
-    const content = m.result.content.map((part) => {
-      const room = maxToolResultChars - used;
-      const text =
-        room <= 0
-          ? TRUNCATION_MARKER
-          : part.text.length > room
-            ? `${part.text.slice(0, room)}\n${TRUNCATION_MARKER}`
-            : part.text;
-      if (text !== part.text) {
-        changed = true;
-        used = maxToolResultChars;
-      } else used += part.text.length;
-      return { type: "text" as const, text };
-    });
-    if (!changed) return m;
+  const reduced = messages.map((m) => {
+    const cut = clampMessage(m, maxToolResultChars, maxTextChars);
+    if (cut === m) return m;
     truncated++;
-    return { ...m, result: { ...m.result, content } };
+    return cut;
   });
   return truncated ? { messages: reduced, truncated } : { messages, truncated: 0 };
+}
+
+/** Descending per-round tool-result caps used by `reduceMessagesToBudget` by default. */
+const DEFAULT_TOOL_CAP_ROUNDS = [MAX_TOOL_RESULT_CHARS, 4_096, 2_048, 1_024, 512];
+/** Descending per-round user/assistant text caps used by `reduceMessagesToBudget` by default. */
+const DEFAULT_TEXT_CAP_ROUNDS = [MAX_TEXT_CHARS, 8_192, 4_096, 2_048, 1_024];
+
+/** A strictly descending cap sequence starting at `start`, followed by the smaller defaults. */
+function capRounds(start: number, defaults: number[]): number[] {
+  return [start, ...defaults.filter((c) => c < start)];
+}
+
+export interface BudgetReductionOptions extends MessageReductionOptions {
+  /**
+   * Descending per-round caps for tool result text, replacing the default
+   * 8192 → 4096 → 2048 → 1024 → 512 sequence.
+   */
+  toolCapRounds?: number[];
+  /**
+   * Descending per-round caps for user/assistant text, replacing the default
+   * 16384 → 8192 → 4096 → 2048 → 1024 sequence.
+   */
+  textCapRounds?: number[];
+}
+
+/**
+ * Budget-based reduction: iteratively clips the LARGEST retained content (tool results in
+ * practice, then long texts) in descending cap rounds until the serialized transcript fits
+ * `targetChars` or the minimum caps are reached. Unlike `reduceMessageSizes` (which only clips
+ * messages whose INDIVIDUAL size exceeds its cap), this also handles sessions with many MEDIUM
+ * tool results (for example MCP outputs of a few thousand characters each) that stay under the
+ * per-message caps but together exhaust the context budget.
+ *
+ * The invariants match `reduceMessageSizes`: only message content changes (roles, call IDs,
+ * order and message boundaries stay identical, so a tool call is never separated from its
+ * results), checkpoint summaries are never truncated, and every cut carries the
+ * `… [truncated by context budget]` marker. Within a round the most expensive messages are
+ * clipped first (ties by position), so the smallest number of changes achieves the target; the
+ * order and the round caps make the result a deterministic total order of the input.
+ */
+export function reduceMessagesToBudget(
+  messages: Message[],
+  targetChars: number,
+  options: BudgetReductionOptions = {},
+): MessageReduction {
+  const target = Math.max(1, Math.floor(targetChars));
+  const toolCapRounds =
+    options.toolCapRounds ??
+    capRounds(options.maxToolResultChars ?? MAX_TOOL_RESULT_CHARS, DEFAULT_TOOL_CAP_ROUNDS);
+  const textCapRounds =
+    options.textCapRounds ??
+    capRounds(options.maxTextChars ?? MAX_TEXT_CHARS, DEFAULT_TEXT_CAP_ROUNDS);
+  const rounds = Math.max(toolCapRounds.length, textCapRounds.length);
+  // Working transcript; `messages` keeps the untouched originals for re-clipping each round.
+  const working = [...messages];
+  const sizeOf = (m: Message) => JSON.stringify(m).length;
+  const sizes = working.map(sizeOf);
+  // Serialized array length == sum of message lengths + n-1 commas + 2 brackets (+n+1 total).
+  let size = sizes.reduce((a, b) => a + b, 0) + working.length + 1;
+  if (size <= target) return { messages, truncated: 0 };
+  const clipped = new Set<number>();
+  for (let round = 0; round < rounds && size > target; round++) {
+    const toolCap = toolCapRounds[Math.min(round, toolCapRounds.length - 1)];
+    const textCap = textCapRounds[Math.min(round, textCapRounds.length - 1)];
+    if (toolCap === undefined || textCap === undefined) break;
+    let shrank = true;
+    while (size > target && shrank) {
+      shrank = false;
+      // Largest (by current serialized size) clip-able message first; ties by position.
+      let best = -1,
+        bestSize = -1;
+      for (let i = 0; i < working.length; i++) {
+        const current = sizes[i];
+        if (current === undefined || current <= bestSize) continue;
+        const m = messages[i];
+        if (!m) continue;
+        const over =
+          m.role === "user"
+            ? !m.summary && m.text.length > textCap
+            : m.role === "assistant"
+              ? m.text.length > textCap
+              : m.role === "tool" &&
+                m.result.content.reduce((a, p) => a + p.text.length, 0) > toolCap;
+        if (over) {
+          best = i;
+          bestSize = current;
+        }
+      }
+      if (best < 0) break;
+      const original = messages[best];
+      const oldSize = sizes[best];
+      if (!original || oldSize === undefined) break;
+      // Re-clip from the ORIGINAL content so earlier markers are never embedded mid-result.
+      const cut = clampMessage(original, toolCap, textCap);
+      const newSize = sizeOf(cut);
+      const delta = oldSize - newSize;
+      sizes[best] = newSize;
+      if (delta <= 0) continue; // already at this round's caps; no room to shrink further
+      working[best] = cut;
+      clipped.add(best);
+      size -= delta;
+      shrank = true;
+    }
+  }
+  return clipped.size ? { messages: working, truncated: clipped.size } : { messages, truncated: 0 };
 }
 
 /**

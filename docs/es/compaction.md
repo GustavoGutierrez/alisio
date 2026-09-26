@@ -87,18 +87,29 @@ checkpoint perfecto logra dejar la petición por debajo de `limits.maxContextCha
 solía morir en cada prompt. En su lugar, tras una compactación el runner ahora comprueba el límite
 duro y, si sigue superado, **reduce los mensajes conservados en su sitio** antes de enviar nada:
 
-- Los resultados de herramientas de más de **8 000 caracteres** y los textos de usuario/asistente de
-  más de **16 000 caracteres** se cortan con el marcador explícito `… [truncated by context budget]`.
-  Los límites aplican por mensaje.
-- Solo cambia el **contenido** de los mensajes: roles, IDs de llamada, orden y fronteras de mensajes
-  quedan idénticos, de modo que el transcript sigue siendo válido y reproducible y una llamada a
-  herramienta nunca se separa de sus resultados. El transcript reducido se persiste (los originales
-  permanecen en la base marcados como compactados, igual que en la propia compactación).
+- La reducción apunta a un **presupuesto total de caracteres** para el transcript:
+  `objetivo = max(4 000, limits.maxContextChars − instrucciones − herramientas)`, de modo que
+  también cubre sesiones con muchos resultados MEDIOS de herramientas (por ejemplo salidas MCP de
+  unos pocos miles de caracteres cada una) que individualmente quedan bajo los límites por mensaje
+  pero juntos superan el límite.
+- El contenido se recorta **de forma iterativa, primero el más grande**, en rondas de límites
+  descendentes: resultados de herramientas a 8 000 → 4 096 → 2 048 → 1 024 → 512 caracteres,
+  textos de usuario/asistente a 16 000 → 8 192 → 4 096 → 2 048 → 1 024. Cada ronda corta primero
+  los mensajes más caros (empates por posición), de modo que el menor número de cambios alcanza el
+  objetivo; el recorrido se detiene en cuanto el transcript cabe, o al llegar a los límites
+  mínimos.
+- Cada corte lleva el marcador explícito `… [truncated by context budget]`. Solo cambia el
+  **contenido** de los mensajes: roles, IDs de llamada, orden y fronteras de mensajes quedan
+  idénticos, de modo que el transcript sigue siendo válido y reproducible y una llamada a
+  herramienta nunca se separa de sus resultados. El transcript reducido se persiste (los
+  originales permanecen en la base marcados como compactados, igual que en la propia
+  compactación).
 - El evento `context_reduced` informa cuántos mensajes se cortaron.
-- Solo si incluso la cola reducida supera el límite — una sesión patológica — la ejecución falla con
-  un error accionable que nombra el tamaño aproximado y sugiere `/compact`, recortar salidas grandes
-  de herramientas o iniciar una sesión nueva. La reducción igualmente se persiste, así que la sesión
-  sigue funcionando para prompts posteriores.
+- Solo una sesión patológica — `instrucciones` más `herramientas` que ya superan el límite por sí
+  solas, de modo que ni siquiera el mínimo de 4 000 caracteres cabe — falla con un error accionable
+  que nombra el tamaño aproximado y sugiere `/compact`, recortar salidas grandes de herramientas o
+  iniciar una sesión nueva. La reducción igualmente se persiste, así que la sesión sigue
+  funcionando para prompts posteriores.
 
 Los checkpoints (`summary: true`) están acotados por diseño y este paso nunca los corta.
 
@@ -109,7 +120,7 @@ Los checkpoints (`summary: true`) están acotados por diseño y este paso nunca 
 | `compaction_started` | Comienza la compactación |
 | `compaction_completed` | Terminó; incluye estimaciones `before`/`after`, el tamaño del tramo resumido y del checkpoint, informes de plugins y `partial: true` cuando el resumen se cortó pero se conservó |
 | `compaction_skipped` | No hay historia suficiente para compactar |
-| `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se cortaron por mensaje (`messages` = cuántos) |
+| `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se recortaron hasta un objetivo total de caracteres (`messages` = cuántos) |
 | `compaction_failed` | Falló la llamada al resumidor (incluido un resumen cortado sin nada aprovechable) |
 | `plugin_hook_failed` | Un hook de plugin falló o agotó su tiempo; la compactación continúa sin él |
 

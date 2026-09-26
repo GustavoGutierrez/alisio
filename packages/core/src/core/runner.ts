@@ -13,7 +13,7 @@ import {
   MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
-  reduceMessageSizes,
+  reduceMessagesToBudget,
   shouldCompactContext,
   summarize,
   summaryMessage,
@@ -102,6 +102,12 @@ export function defaultTokenBudget(contextWindow?: number): number {
 }
 /** Extension output appended to history is capped regardless of what hooks return. */
 const MAX_INJECT_CHARS = 24_000;
+/**
+ * Floor for the post-compaction transcript target: retained messages are never reduced below
+ * this many characters, so a pathological session (instructions + tools alone crowding out the
+ * limit) fails with an actionable error instead of silently losing the whole history.
+ */
+const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
 const allowed = (policy: Policy, effect: string) =>
   effect === "read" || effect === "internal" || !!policy[effect as keyof Policy];
 export interface CompactionResult {
@@ -490,13 +496,21 @@ export class AgentRunner {
           messages = o.store.messages(sessionId);
         }
         // A compaction that still leaves the session over the hard limit (typically a kept tail
-        // holding huge tool outputs) is reduced in place instead of failing outright: oversized
-        // kept content is cut per message (roles/callIds/boundaries untouched, so the transcript
-        // stays valid and replayable). Only if even the reduced tail exceeds the limit the run
-        // fails with an actionable error; the reduction is persisted either way, so the session
-        // stays usable for later prompts.
+        // holding huge tool outputs) is reduced in place instead of failing outright: retained
+        // content is clipped against a TOTAL character target for the transcript
+        // (`limit − instructions − tools`), largest items first, tool results before texts, in
+        // descending cap rounds. That also covers sessions with many MEDIUM results (e.g. MCP
+        // outputs of a few thousand chars each) that individually stay under the per-message
+        // caps; roles/callIds/boundaries stay untouched, so the transcript remains valid and
+        // replayable. Only if even the reduction floor cannot fit (instructions + tools alone
+        // crowd out the limit) the run fails with an actionable error; the reduction is
+        // persisted either way, so the session stays usable for later prompts.
         if (chars() > limit) {
-          const reduction = reduceMessageSizes(messages);
+          const targetChars = Math.max(
+            MIN_MESSAGE_BUDGET_FLOOR,
+            limit - instructions.length - toolsText.length,
+          );
+          const reduction = reduceMessagesToBudget(messages, targetChars);
           if (reduction.truncated > 0) {
             o.store.overwrite(sessionId, reduction.messages);
             messages = reduction.messages;

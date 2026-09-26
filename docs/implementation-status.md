@@ -431,15 +431,22 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   contrario; la barra de la TUI pinta `~9.9k / ?` para ese caso (Vitest de reducción/formateo) y
   expone el punto de compactación a la TUI.
 - Recuperación del presupuesto de contexto tras una compactación insuficiente (Vitest, proveedores
-  simulados, sin red): si tras compactar los mensajes conservados aún superan `limits.maxContextChars`
-  (colas con resultados enormes de herramientas), el runner reduce el contenido retenido por mensaje
-  (resultados de herramientas > 8k caracteres y textos usuario/asistente > 16k, marcador
-  `… [truncated by context budget]`, solo contenido: roles/IDs de llamada/fronteras intactos, revisado
-  en el transcript persistido) y completa el prompt; el evento `context_reduced` informa cuántos
-  mensajes se cortaron. Solo una cola irreducible lanza el error accionable (tamaño aproximado +
-  `/compact` + nueva sesión) y, como la reducción persiste, un prompt posterior en la misma sesión
-  vuelve a compactar un turno más y completa sin errores. El límite duro, el umbral de ventana y el
-  respaldo de caracteres no cambian; los checkpoints (`summary`) nunca se cortan.
+  simulados, sin red): si tras compactar los mensajes conservados aún superan `limits.maxContextChars`,
+  el runner reduce el contenido retenido contra un OBJETIVO TOTAL de caracteres
+  (`objetivo = max(4 000, límite − instrucciones − herramientas)`), recortando primero los mensajes
+  más grandes en rondas de límites descendentes (resultados de herramientas 8k → 4 096 → 2 048 →
+  1 024 → 512; textos usuario/asistente 16k → 8 192 → 4 096 → 2 048 → 1 024; marcador
+  `… [truncated by context budget]`, solo contenido: roles/IDs de llamada/fronteras intactos,
+  revisado en el transcript persistido) y completa el prompt. Esto cubre también sesiones con
+  MUCHOS resultados medios de herramientas (3–8k cada uno, p. ej. salidas MCP), que individualmente
+  quedaban bajo los límites por mensaje y antes producían `truncated: 0` y el error fatal; el evento
+  `context_reduced` informa cuántos mensajes se cortaron. Solo una sesión patológica (instrucciones +
+  herramientas que ya superan el límite por sí solas, de manera que ni el suelo de 4 000 caracteres
+  cabe) lanza el error accionable (tamaño aproximado + `/compact` + nueva sesión) y, como la
+  reducción persiste, un prompt posterior en la misma sesión completa sin errores. El límite duro,
+  el umbral de ventana, el respaldo de caracteres y la semántica de `shouldCompactContext` no
+  cambian; los checkpoints (`summary`) nunca se cortan; el reducer es determinista (orden total
+  estable: más grande primero, empates por posición).
 - Versión en tiempo de ejecución (Vitest): un cargador por paquete lee la versión del propio
   `package.json` (`ALISIO_PACKAGE_VERSION` gana en binarios autónomos; `dev` si no hay manifest ni
   inyección). Metadatos de plugins, `user-agent` por defecto y el cliente MCP dejan de llevar

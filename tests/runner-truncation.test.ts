@@ -555,8 +555,10 @@ describe("compaction truncation handling", () => {
 
 /**
  * Context-budget recovery: after a compaction that still leaves the kept tail over
- * `maxContextChars`, the runner reduces oversized retained content in place instead of failing,
- * and only an irreducible tail produces the actionable error (with the session still usable).
+ * `maxContextChars`, the runner reduces retained content in place against a TOTAL character
+ * target (largest items first, in descending cap rounds) instead of failing, and only a
+ * pathological session (instructions + tools alone crowding out the limit) produces the
+ * actionable error (with the session still usable).
  */
 describe("context-budget reduction after compaction", () => {
   const marker = "… [truncated by context budget]";
@@ -640,7 +642,7 @@ describe("context-budget reduction after compaction", () => {
     }
   });
 
-  it("throws the actionable error when even the reduced tail exceeds the cap, and the session still works", async () => {
+  it("walks a tail of five huge results down the cap rounds and completes", async () => {
     const fx = await fixture();
     try {
       const session = fx.store.create(fx.root, "test", "test");
@@ -665,6 +667,106 @@ describe("context-budget reduction after compaction", () => {
       ];
       for (const message of [...bigTurn("turn a", "ca", 40_000), ...turnB])
         fx.store.append(session.id, message);
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 30_000,
+        onEvent,
+      });
+      // The five kept results (~201k) cannot fit the 30k limit at the 8k cap: the budget
+      // reducer walks the cap rounds (8000 -> 4096) clipping the largest first, stopping as
+      // soon as the transcript fits — so only SOME results reach the lower round.
+      const result = await runner.run(session.id, "continue");
+      expect(result.status).toBe("completed");
+      const reduced = events.find((e) => e.type === "context_reduced");
+      expect(reduced).toBeDefined();
+      expect(reduced?.data).toEqual({ messages: 5 });
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+      const stored = fx.store.messages(session.id);
+      const tools = stored.filter((m) => m.role === "tool");
+      expect(tools).toHaveLength(5);
+      const texts = tools.map((m) => m.result.content.map((c) => c.text).join("\n"));
+      for (const text of texts) {
+        expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
+        expect(text).toContain(marker);
+      }
+      // The round walk really happened: at least one result dropped below the 8k cap, and the
+      // persisted transcript now fits the limit (instructions ~238 + tools ~67 + messages).
+      expect(texts.some((t) => t.length < 8_000 + marker.length + 1)).toBe(true);
+      expect(JSON.stringify(stored).length + 238 + 67).toBeLessThanOrEqual(30_000);
+      // The reduction was still persisted, so the leap past the cap is gone for the next turn.
+      const again = await runner.run(session.id, "hi");
+      expect(again.status).toBe("completed");
+      expect(again.text).toMatch(/^answer /);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("recovers a session with ~25 medium tool results (each under 8k) that used to die", async () => {
+    const fx = await fixture();
+    try {
+      const session = fx.store.create(fx.root, "test", "test");
+      // An old huge turn (summarized away by auto-compaction) plus a recent turn holding 25
+      // medium results of 7 000 chars each: every one individually under the 8k per-message cap,
+      // together ~180k — the historical per-message reducer reported `truncated: 0` and the run
+      // died with the fatal context-budget error on this very prompt.
+      for (const message of bigTurn("old turn", "ca", 40_000)) fx.store.append(session.id, message);
+      const callIds = Array.from({ length: 25 }, (_, i) => `m${i}`);
+      fx.store.append(session.id, { role: "user", text: "medium results" });
+      fx.store.append(session.id, {
+        role: "assistant",
+        text: "",
+        calls: callIds.map((id) => ({ id, name: "hello", arguments: "{}" })),
+      });
+      for (const id of callIds)
+        fx.store.append(session.id, {
+          role: "tool",
+          callId: id,
+          result: { content: [{ type: "text", text: big(7_000) }] },
+        });
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 160_000,
+        onEvent,
+      });
+      // Auto-compaction summarizes the old turn, the kept medium tail still exceeds the limit,
+      // and the budget reducer brings it under 160k; no fatal error.
+      const result = await runner.run(session.id, "continue");
+      expect(result.status).toBe("completed");
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+      const reduced = events.find((e) => e.type === "context_reduced");
+      expect(reduced).toBeDefined();
+      // Transcript stays structurally valid: roles and call IDs untouched.
+      const stored = fx.store.messages(session.id);
+      const ids = stored.flatMap((m) => (m.role === "assistant" ? m.calls.map((c) => c.id) : []));
+      const done = new Set(stored.filter((m) => m.role === "tool").map((m) => m.callId));
+      for (const id of ids) expect(done.has(id)).toBe(true);
+      // The next prompt completes WITHOUT the fatal error (the reported bug).
+      const again = await runner.run(session.id, "next prompt");
+      expect(again.status).toBe("completed");
+      expect(again.text).toMatch(/^answer /);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("fails actionably when instructions+tools alone exceed the limit, and later prompts still work", async () => {
+    const fx = await fixture();
+    try {
+      const session = fx.store.create(fx.root, "test", "test");
+      for (const message of bigTurn("turn a", "c1", 40_000)) fx.store.append(session.id, message);
       const runner = new AgentRunner({
         provider: twoFaceProvider() as any,
         registry: fx.registry,
@@ -674,27 +776,19 @@ describe("context-budget reduction after compaction", () => {
         policy: { write: false, process: false, external: false },
         maxContextChars: 30_000,
       });
-      // Even at the 8k cap the five kept tool results (~40k+ chars) exceed the 30k limit:
-      // the run fails with an actionable error, naming size and remedies.
-      const error = await runner.run(session.id, "continue").then(
-        () => null,
-        (e: unknown) => e as Error,
-      );
+      // Instructions alone (~35k) exceed the 30k limit: even the 4k reduction floor cannot fit,
+      // so the run fails with the actionable error.
+      const error = await runner
+        .run(session.id, "continue", undefined, { instructions: big(35_000) })
+        .then(
+          () => null,
+          (e: unknown) => e as Error,
+        );
       expect(error).not.toBeNull();
-      expect(error?.message).toContain("start a new session");
+      expect(error?.message).toContain("Context budget exceeded");
       expect(error?.message).toContain("/compact");
       expect(error?.message).toMatch(/approximately \d+ characters/);
-      // The reduction was still persisted, so the leap past the cap is gone for the next turn.
-      const stored = fx.store.messages(session.id);
-      expect(stored.filter((m) => m.role === "tool")).toHaveLength(5);
-      for (const m of stored) {
-        if (m.role !== "tool") continue;
-        const text = m.result.content.map((c) => c.text).join("\n");
-        expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
-        expect(text).toContain(marker);
-      }
-      // A subsequent prompt in the same session succeeds: auto-compaction now keeps only the
-      // two most recent (small) turns, the big turn is summarized away, and no fatal error.
+      // A later prompt in the same session succeeds: no leftovers poison the TUI.
       const again = await runner.run(session.id, "hi");
       expect(again.status).toBe("completed");
       expect(again.text).toMatch(/^answer /);
