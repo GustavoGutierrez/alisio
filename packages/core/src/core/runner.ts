@@ -9,10 +9,11 @@ import {
 } from "@alisio/sdk";
 import {
   checkpointInstructions,
+  effectiveContextBudget,
   estimateTokens,
   parseCheckpointOutput,
   planCompaction,
-  shouldCompact,
+  shouldCompactContext,
   summarize,
   summaryMessage,
 } from "./compaction.ts";
@@ -30,6 +31,11 @@ export interface CompactionSettings {
   auto?: boolean;
   threshold?: number;
   keepTurns?: number;
+  /**
+   * Per-call output token budget for the summarizer. Defaults to 4096 when unset; never falls
+   * back to the agent-loop `maxOutputTokens`. A truncated summary is accepted as partial.
+   */
+  maxOutputTokens?: number;
 }
 export interface RunnerOptions {
   /** Provider bound to this persisted session. */
@@ -47,7 +53,8 @@ export interface RunnerOptions {
   maxTokens?: number;
   onEvent?: (event: RunEvent) => void;
   readConcurrency?: number;
-  /** Context window in tokens for a model, when known. Unknown disables auto compaction. */
+  /** Context window in tokens for a model, when known. Drives auto-compaction at `threshold`; when
+   *  unknown (or absurdly large, see `MAX_TRUSTED_WINDOW`) the char budget falls back. */
   contextWindow?: (model: string) => number | undefined;
   compaction?: CompactionSettings;
   /** When set, write/process tools not allowed by the policy are offered and ask first. */
@@ -199,6 +206,29 @@ export class AgentRunner {
       estimateTokens(this.toolsText(this.availableTools()))
     );
   }
+  /**
+   * The effective context budget a session's auto-compaction and the TUI context bar both use:
+   * the model window when known (and not beyond `MAX_TRUSTED_WINDOW`), otherwise the char budget
+   * converted to estimated tokens. `compactionAt` is the percentage of `total` where auto
+   * compaction triggers, so the bar turns red exactly where the engine compacts.
+   */
+  contextBudget(model: string): {
+    total: number;
+    basis: "window" | "chars";
+    compactionAt: number;
+  } {
+    const budget = effectiveContextBudget(
+      this.options.contextWindow?.(model),
+      this.options.maxContextChars ?? 160_000,
+    );
+    return {
+      ...budget,
+      compactionAt:
+        budget.basis === "window"
+          ? Math.round((this.options.compaction?.threshold ?? 0.85) * 100)
+          : 100,
+    };
+  }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {
     const id = model.trim();
@@ -284,12 +314,12 @@ export class AgentRunner {
         Object.entries(contribution.fields).map(([name, f]) => [name, f.description]),
       );
       const provider = await (o.providerFor?.(o.store.get(sessionId)) ?? o.provider);
-      const raw = await summarize(provider, {
+      const { text: raw, truncated: summaryTruncated } = await summarize(provider, {
         instructions: checkpointInstructions(contribution.instructions, fields),
         messages: plan.summarized,
         focus,
         model,
-        maxOutputTokens: o.maxOutputTokens ?? 4096,
+        maxOutputTokens: o.compaction?.maxOutputTokens ?? 4096,
         signal,
         sessionId,
       });
@@ -330,6 +360,7 @@ export class AgentRunner {
         summarizedTokens: estimateTokens(plan.summarized),
         checkpointTokens: estimateTokens(summary.text),
         plugins: after.reports,
+        ...(summaryTruncated ? { partial: true } : {}),
       });
       return { replaced: plan.cut, before, after: afterTokens, summary };
     } catch (error) {
@@ -439,11 +470,20 @@ export class AgentRunner {
             ? last.tokens + estimateTokens(messages.slice(last.count))
             : estimateTokens(instructions) + estimateTokens(messages) + estimateTokens(toolsText);
         };
-        const overChars = chars() > (o.maxContextChars ?? 160_000);
-        const overWindow =
+        // One effective budget: a known window triggers at `used >= window * threshold`; an
+        // unknown (or absurdly large, see MAX_TRUSTED_WINDOW) window falls back to the char
+        // estimate (`chars / 4 >= maxContextChars / 4`). `maxContextChars` below stays as the
+        // post-compaction hard limit.
+        if (
           compaction.auto !== false &&
-          shouldCompact(used(), o.contextWindow?.(model), compaction.threshold ?? 0.85);
-        if (overWindow || (overChars && compaction.auto !== false)) {
+          shouldCompactContext(
+            used(),
+            chars(),
+            o.contextWindow?.(model),
+            o.maxContextChars ?? 160_000,
+            compaction.threshold ?? 0.85,
+          )
+        ) {
           await this.compactLocked(sessionId, emit, model, combined, "auto");
           instructions = await withPersona();
           messages = o.store.messages(sessionId);
@@ -453,6 +493,7 @@ export class AgentRunner {
             "Context budget exceeded and compaction could not reduce it; start a new session.",
           );
         let completion: Extract<Message, { role: "assistant" }> | undefined;
+        let truncated = false;
         let usage: { input: number; output: number; cachedInput?: number } | undefined;
         for await (const e of provider.stream({
           instructions,
@@ -470,6 +511,7 @@ export class AgentRunner {
           else {
             if (completion) throw new Error("Provider emitted multiple completions");
             completion = e.message;
+            truncated = e.message.truncated === true;
             usage = e.usage;
             tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
             usageTotal.input += e.usage?.input ?? 0;
@@ -501,7 +543,19 @@ export class AgentRunner {
           ...(usage ? { usage } : {}),
         });
         if (!completion.calls.length) {
-          emit("run_completed", { tokens, text: lastText });
+          const final: { tokens: number; text: string; truncated?: boolean } = {
+            tokens,
+            text: lastText,
+          };
+          if (truncated) {
+            // The adapter kept a usable answer, but the token budget cut it off.
+            emit("response_truncated", {
+              turn: turn + 1,
+              maxOutputTokens: o.maxOutputTokens ?? 4096,
+            });
+            final.truncated = true;
+          }
+          emit("run_completed", final);
           return { sessionId, text: lastText, status: "completed", usage: usageTotal };
         }
         const prepared = completion.calls.map((call) => {

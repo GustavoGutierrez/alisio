@@ -397,11 +397,24 @@ export class OpenCodeGatewayProvider implements ModelProvider {
       }
       if (choice.finish_reason) finish = choice.finish_reason;
     }
-    if (finish !== "stop" && finish !== "tool_calls")
+    if (finish !== "stop" && finish !== "tool_calls" && finish !== "length")
       throw new Error(`OpenCode chat response incomplete: ${finish ?? "stream ended"}`);
     const completed = [...calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call);
     if (completed.some((call) => !call.id || !call.name)) throw new Error("Incomplete tool call");
-    yield { type: "completed", message: { role: "assistant", text, calls: completed }, usage };
+    if (finish === "length" && !text.trim())
+      throw new Error(
+        "OpenCode chat response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+      );
+    yield {
+      type: "completed",
+      message: {
+        role: "assistant",
+        text,
+        calls: completed,
+        ...(finish === "length" ? { truncated: true } : {}),
+      },
+      usage,
+    };
   }
 
   private responsesInput(messages: Message[]): Json[] {
@@ -461,8 +474,40 @@ export class OpenCodeGatewayProvider implements ModelProvider {
         yield { type: "text_delta", delta: event.delta };
       if (event.type === "response.reasoning_summary_text.delta")
         yield { type: "reasoning_delta", delta: event.delta };
-      if (["response.failed", "response.incomplete", "error"].includes(event.type))
+      if (["response.failed", "error"].includes(event.type))
         throw new Error(`OpenCode Responses request failed: ${event.type}`);
+      if (event.type === "response.incomplete") {
+        complete = true;
+        const output = event.response.output as Json[];
+        const calls = output
+          .filter((item) => item.type === "function_call")
+          .map((item) => ({ id: item.call_id, name: item.name, arguments: item.arguments }));
+        const text = output
+          .filter((item) => item.type === "message")
+          .flatMap((item) => item.content ?? [])
+          .filter((item) => item.type === "output_text")
+          .map((item) => item.text)
+          .join("");
+        if (!text.trim())
+          throw new Error(
+            "OpenCode Responses response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+          );
+        if (calls.some((call) => !call.id || !call.name)) throw new Error("Incomplete tool call");
+        const u = event.response.usage;
+        yield {
+          type: "completed",
+          message: { role: "assistant", text, calls, providerData: output, truncated: true },
+          usage: u
+            ? {
+                input: u.input_tokens ?? 0,
+                output: u.output_tokens ?? 0,
+                ...(typeof u.input_tokens_details?.cached_tokens === "number"
+                  ? { cachedInput: u.input_tokens_details.cached_tokens }
+                  : {}),
+              }
+            : undefined,
+        };
+      }
       if (event.type === "response.completed") {
         complete = true;
         const output = event.response.output as Json[];
@@ -615,7 +660,8 @@ export class OpenCodeGatewayProvider implements ModelProvider {
         stopReason = event.delta?.stop_reason ?? stopReason;
       }
     }
-    if (stopReason !== "end_turn" && stopReason !== "tool_use")
+    const truncated = stopReason === "max_tokens";
+    if (!truncated && stopReason !== "end_turn" && stopReason !== "tool_use")
       throw new Error(`OpenCode Messages response incomplete: ${stopReason ?? "stream ended"}`);
     const calls: ToolCall[] = [];
     for (let index = 0; index < blocks.length; index++) {
@@ -623,7 +669,26 @@ export class OpenCodeGatewayProvider implements ModelProvider {
       if (!block || block.type !== "tool_use") continue;
       const args = argumentParts.get(index) || JSON.stringify(block.input ?? {});
       calls.push({ id: block.id, name: block.name, arguments: args });
-      block.input = JSON.parse(args || "{}");
+      try {
+        block.input = JSON.parse(args || "{}");
+      } catch {
+        if (!truncated) throw new Error("Incomplete tool call");
+        throw new Error(
+          `OpenCode Messages response incomplete: tool call arguments cut off for ${block.name}`,
+        );
+      }
+    }
+    if (truncated) {
+      if (!text.trim())
+        throw new Error(
+          "OpenCode Messages response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+        );
+      yield {
+        type: "completed",
+        message: { role: "assistant", text, calls, providerData: blocks, truncated: true },
+        usage: { input, output },
+      };
+      return;
     }
     yield {
       type: "completed",

@@ -2,12 +2,15 @@ import type { Message } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
 import {
   checkpointInstructions,
+  effectiveContextBudget,
   estimateTokens,
+  MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
   renderCheckpoint,
   serializeForSummary,
   shouldCompact,
+  shouldCompactContext,
 } from "../packages/core/src/core/compaction.ts";
 
 const call = (id: string, name = "read_file") => ({ id, name, arguments: `{"path":"${id}.ts"}` });
@@ -144,6 +147,34 @@ describe("summary input and thresholds", () => {
     expect(shouldCompact(860, 1000, 0.85)).toBe(true);
     expect(shouldCompact(840, 1000, 0.85)).toBe(false);
     expect(shouldCompact(10_000_000, undefined, 0.85)).toBe(false);
+  });
+
+  it("drives auto-compaction from ONE effective budget (window or char fallback)", () => {
+    // Known window (<= MAX_TRUSTED_WINDOW): triggers at used >= window * threshold only; the char
+    // estimate is irrelevant on this branch.
+    expect(shouldCompactContext(860, 0, 1000, 160_000, 0.85)).toBe(true);
+    expect(shouldCompactContext(849, 0, 1000, 160_000, 0.85)).toBe(false);
+    expect(shouldCompactContext(40_000, 0, 1000, 160_000, 0.85)).toBe(true); // over threshold
+    // Unknown window: the raw char estimate (`chars / 4`) drives the fallback, so a provider's
+    // token report can never push the session into needless compaction.
+    expect(shouldCompactContext(40_000, 160_000, undefined, 160_000, 0.85)).toBe(true);
+    expect(shouldCompactContext(40_000, 159_996, undefined, 160_000, 0.85)).toBe(false);
+    // A known window does NOT use the char budget; the two never fight.
+    expect(shouldCompactContext(39_999, 1_000_000, 1_000_000, 160_000, 0.85)).toBe(false);
+  });
+
+  it("treats absurdly large declared windows as unknown so the char fallback protects", () => {
+    const huge = MAX_TRUSTED_WINDOW + 1;
+    expect(effectiveContextBudget(huge, 160_000)).toEqual({ total: 40_000, basis: "chars" });
+    expect(effectiveContextBudget(undefined, 160_000)).toEqual({ total: 40_000, basis: "chars" });
+    expect(effectiveContextBudget(0, 160_000)).toEqual({ total: 40_000, basis: "chars" });
+    // The guard kicks in before a huge window*s threshold could never be reached in practice.
+    expect(shouldCompactContext(40_000, 160_000, huge, 160_000, 0.85)).toBe(true);
+    expect(shouldCompactContext(40_000, 0, 1_000_000, 160_000, 0.85)).toBe(false);
+    expect(effectiveContextBudget(1_000_000, 160_000)).toEqual({
+      total: 1_000_000,
+      basis: "window",
+    });
   });
 });
 

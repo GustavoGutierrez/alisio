@@ -266,9 +266,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
       path.unshift(cur.label);
     const siblings = nodes.filter((n) => n.parentId === node.parentId);
     const child = viewedState();
-    const window = app.contextWindow(child?.model ?? view.model);
+    const budget = app.contextBudget(child?.model ?? view.model);
     const pct =
-      child?.context && window ? ` · ctx ${Math.round((child.context.used / window) * 100)}%` : "";
+      child?.context && budget
+        ? ` · ctx ${Math.round((child.context.used / budget.total) * 100)}%`
+        : "";
     const tokens = child
       ? ` · ↑${formatTokens(child.stats.input)} ↓${formatTokens(child.stats.output)}`
       : "";
@@ -282,7 +284,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         : undefined;
   const footer = new Footer(
     () => viewedState() ?? view,
-    () => app.contextWindow((viewedState() ?? view).model),
+    () => app.contextBudget((viewedState() ?? view).model),
     () => panelHint() ?? hint,
     () => [...app.plugins.status.values()].map((s) => s.text),
   );
@@ -1089,7 +1091,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   };
   const statsReport = () => {
     const s = view.stats;
-    const window = app.contextWindow(view.model);
+    const budget = app.contextBudget(view.model);
     const tools = Object.entries(s.tools)
       .map(([name, t]) => `| \`${name}\` | ${t.calls} | ${t.errors} |`)
       .join("\n");
@@ -1101,7 +1103,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `- Tokens: in ${formatTokens(s.input)} · out ${formatTokens(s.output)} · cached ${formatTokens(s.cached)}`,
       `- Runs: ${s.runs} · turns: ${s.turns}${s.lastRunMs !== undefined ? ` · last run ${formatDuration(s.lastRunMs)}` : ""}`,
       `- Duration: ${formatDuration(Date.now() - s.startedAt)}`,
-      `- Context: ${formatContext(view.context?.used ?? 0, window, view.context?.estimated ?? true)}`,
+      `- Context: ${formatContext(view.context?.used ?? 0, budget?.total, view.context?.estimated ?? true, budget?.basis)}`,
       "",
       tools ? `| Tool | Calls | Errors |\n| --- | --- | --- |\n${tools}` : "No tool calls yet.",
       "",

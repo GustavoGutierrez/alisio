@@ -11,6 +11,57 @@ export function shouldCompact(used: number, window: number | undefined, threshol
   return !!window && window > 0 && used >= window * threshold;
 }
 
+/**
+ * Declared context windows above this many tokens are treated as unknown for auto-compaction and
+ * for the context bar: a `window * threshold` trigger would dwarf the char-budget fallback and
+ * hide real pressure (e.g. an 8M-token window with a default 160k-char budget would never even
+ * reach 2% before running out of space). Documented in docs/compaction.md.
+ */
+export const MAX_TRUSTED_WINDOW = 2_000_000;
+
+export interface ContextBudget {
+  /** Effective total in tokens the context bar and auto-compaction measure against. */
+  total: number;
+  /** What the total is derived from: the model window, or the char-budget fallback. */
+  basis: "window" | "chars";
+}
+
+/**
+ * The single effective budget shared by the runner's auto-compaction and the TUI context bar.
+ * A known window (>= 1 token and <= MAX_TRUSTED_WINDOW) is used directly; otherwise the char
+ * budget is converted to estimated tokens (about 4 characters per token) so the bar fills where
+ * the char fallback actually compacts instead of showing an almost-empty bar next to an early
+ * compaction (the DeepSeek ~1M-window vs 160k-char budget mismatch).
+ */
+export function effectiveContextBudget(
+  window: number | undefined,
+  maxContextChars: number,
+): ContextBudget {
+  if (window !== undefined && window > 0 && window <= MAX_TRUSTED_WINDOW)
+    return { total: window, basis: "window" };
+  return { total: Math.max(1, Math.round(maxContextChars / 4)), basis: "chars" };
+}
+
+/**
+ * Whether to auto-compact before the next model call. Uses ONE effective budget: a known window
+ * triggers at `used >= window * threshold`; an unknown or guard-bounded window falls back to the
+ * char budget (`estimatedChars / 4 >= maxContextChars / 4`, keeping the old ~4-characters-per-token
+ * protection). `used` (provider-reported when available) feeds the window branch and the context
+ * bar; `estimatedChars` is the raw character count of the next request and feeds the fallback, so
+ * a provider's token report can never push an unknown-window session into needless compaction.
+ */
+export function shouldCompactContext(
+  used: number,
+  estimatedChars: number,
+  window: number | undefined,
+  maxContextChars: number,
+  threshold: number,
+): boolean {
+  const budget = effectiveContextBudget(window, maxContextChars);
+  if (budget.basis === "window") return used >= budget.total * threshold;
+  return estimatedChars / 4 >= budget.total;
+}
+
 export interface CompactionOptions {
   /** Recent user turns kept verbatim. */
   keepTurns?: number;
@@ -181,6 +232,12 @@ export function parseCheckpointOutput(raw: string, fields: string[] = []): Check
   return { structured: true, checkpoint, extracted, text: renderCheckpoint(checkpoint) };
 }
 
+export interface TextCompletion {
+  text: string;
+  /** Provider reported an output-token cut (finish "length"): text may be partial. */
+  truncated: boolean;
+}
+
 export async function summarize(
   provider: ModelProvider,
   request: {
@@ -192,25 +249,39 @@ export async function summarize(
     signal: AbortSignal;
     sessionId?: string;
   },
-): Promise<string> {
+): Promise<TextCompletion> {
   const focus = request.focus?.trim()
     ? `\n\nAdditional focus requested by the user: ${request.focus.trim()}`
     : "";
-  const text = await completeText(provider, {
-    system: request.instructions,
-    messages: [
-      {
-        role: "user",
-        text: `Checkpoint this session transcript.${focus}\n\n<transcript>\n${serializeForSummary(request.messages)}\n</transcript>`,
-      },
-    ],
-    maxTokens: request.maxOutputTokens,
-    signal: request.signal,
-    ...(request.model ? { model: request.model } : {}),
-    ...(request.sessionId ? { sessionId: request.sessionId } : {}),
-  });
-  if (!text) throw new Error("Summarizer returned an empty summary");
-  return text;
+  let completion: TextCompletion;
+  try {
+    completion = await completeTextWithMeta(provider, {
+      system: request.instructions,
+      messages: [
+        {
+          role: "user",
+          text: `Checkpoint this session transcript.${focus}\n\n<transcript>\n${serializeForSummary(request.messages)}\n</transcript>`,
+        },
+      ],
+      maxTokens: request.maxOutputTokens,
+      signal: request.signal,
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+    });
+  } catch (error) {
+    // The adapters report an empty "length" cut with a message about max output tokens.
+    if (!request.signal.aborted && String(error).includes("max output tokens"))
+      throw new Error(
+        "Compaction summary was cut off before any usable text was produced; raise compaction.maxOutputTokens",
+      );
+    throw error;
+  }
+  if (completion.truncated && !completion.text)
+    throw new Error(
+      "Compaction summary was cut off before any usable text was produced; raise compaction.maxOutputTokens",
+    );
+  if (!completion.text) throw new Error("Summarizer returned an empty summary");
+  return completion;
 }
 
 /** Narrow provider-agnostic completion used by compaction and the plugin model service. */
@@ -218,8 +289,17 @@ export async function completeText(
   provider: ModelProvider,
   request: CompletionRequest & { signal: AbortSignal; sessionId?: string },
 ): Promise<string> {
+  return (await completeTextWithMeta(provider, request)).text;
+}
+
+/** Like `completeText`, but also reports whether the provider cut the response by tokens. */
+async function completeTextWithMeta(
+  provider: ModelProvider,
+  request: CompletionRequest & { signal: AbortSignal; sessionId?: string },
+): Promise<TextCompletion> {
   let text = "",
-    completed = false;
+    completed = false,
+    truncated = false;
   for await (const event of provider.stream({
     instructions: request.system,
     messages: request.messages.map((m) =>
@@ -236,11 +316,12 @@ export async function completeText(
     request.signal.throwIfAborted();
     if (event.type === "completed") {
       completed = true;
+      truncated = event.message.truncated === true;
       text = event.message.text || text;
     } else if (event.type === "text_delta") text += event.delta;
   }
   if (!completed) throw new Error("Completion ended without a completed response");
-  return text.trim();
+  return { text: text.trim(), truncated };
 }
 
 export function summaryMessage(body: string, replaced: number): Message {

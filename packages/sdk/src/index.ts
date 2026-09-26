@@ -34,7 +34,18 @@ export type Message =
    * instead of `text` (e.g. `/init` for an expanded prompt template). Providers ignore both.
    */
   | { role: "user"; text: string; summary?: boolean; display?: string; attachments?: Attachment[] }
-  | { role: "assistant"; text: string; calls: ToolCall[]; providerData?: unknown[] }
+  | {
+      role: "assistant";
+      text: string;
+      calls: ToolCall[];
+      providerData?: unknown[];
+      /**
+       * The provider reported `finish_reason: "length"` (or an equivalent incomplete-stop signal):
+       * the response was cut by the output token budget. Per-answer text and tool calls are
+       * complete as far as they went; consumers decide whether to warn or accept a partial result.
+       */
+      truncated?: boolean;
+    }
   | { role: "tool"; callId: string; result: ToolResult };
 export interface Usage {
   input: number;

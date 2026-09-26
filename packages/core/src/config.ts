@@ -127,9 +127,14 @@ const configObjectSchema = z
         auto: z.boolean().default(true),
         threshold: z.number().min(0.1).max(0.99).default(0.85),
         keepTurns: z.number().int().min(0).max(20).default(2),
+        /**
+         * Output token budget for the summarizer call. Larger than the agent-loop budget on
+         * purpose: a truncated summary is kept as partial, never re-run.
+         */
+        maxOutputTokens: z.number().int().positive().default(16_000),
       })
       .strict()
-      .default(() => ({ auto: true, threshold: 0.85, keepTurns: 2 })),
+      .default(() => ({ auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 })),
     websearch: z
       .object({
         provider: z

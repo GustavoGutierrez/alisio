@@ -121,18 +121,35 @@ describe("formatters", () => {
     expect(formatTokens(1_250_000)).toBe("1.3M");
   });
 
-  it("classifies context usage thresholds", () => {
+  it("classifies context usage thresholds, red exactly at the compaction point", () => {
     expect(contextLevel(0)).toBe("ok");
     expect(contextLevel(59.9)).toBe("ok");
     expect(contextLevel(60)).toBe("warn");
     expect(contextLevel(84.9)).toBe("warn");
     expect(contextLevel(85)).toBe("danger");
+    // The bar turns red where the engine auto-compacts: window threshold (default 85%)...
+    expect(contextLevel(59.9, 85)).toBe("ok");
+    expect(contextLevel(84.9, 85)).toBe("warn");
+    expect(contextLevel(85, 85)).toBe("danger");
+    // ...or 100% of the char-budget fallback when the window is unknown.
+    expect(contextLevel(74.9, 100)).toBe("ok");
+    expect(contextLevel(75, 100)).toBe("warn");
+    expect(contextLevel(99.9, 100)).toBe("warn");
+    expect(contextLevel(100, 100)).toBe("danger");
+    // A custom low threshold moves the red point with it.
+    expect(contextLevel(50, 50)).toBe("danger");
   });
 
   it("formats context used versus window, marking estimates", () => {
     expect(formatContext(12_300, 128_000, false)).toBe("12.3k / 128k (10%)");
     expect(formatContext(12_300, 128_000, true)).toBe("~12.3k / 128k (10%)");
     expect(formatContext(500, undefined, false)).toBe("500 / unknown");
+  });
+
+  it("marks the char-budget basis when there is no model window", () => {
+    expect(formatContext(40_000, 40_000, true, "chars")).toBe("~40k / 40k (100%) char budget");
+    expect(formatContext(12_300, 40_000, true, "chars")).toBe("~12.3k / 40k (31%) char budget");
+    expect(formatContext(12_300, 128_000, false, "window")).toBe("12.3k / 128k (10%)");
   });
 
   it("formats durations", () => {
@@ -407,6 +424,33 @@ describe("event reduction", () => {
     expect(s.items.at(-1)).toEqual({
       kind: "notice",
       text: "Context injected by memory (~420 tokens)",
+    });
+  });
+
+  it("flags a truncated summary checkpoint in the compaction notice", () => {
+    let s = initialViewState("m1");
+    s = reduceEvent(
+      s,
+      ev("compaction_completed", {
+        reason: "auto",
+        before: 9_000,
+        after: 1_200,
+        replaced: 10,
+        partial: true,
+      }),
+    );
+    const notice = s.items.at(-1);
+    expect(notice?.kind).toBe("notice");
+    expect(notice && "text" in notice ? notice.text : "").toContain("partial");
+    expect(notice && "text" in notice ? notice.text : "").toContain("compaction.maxOutputTokens");
+  });
+
+  it("shows a visible notice when a response was cut by max output tokens", () => {
+    let s = initialViewState("m1");
+    s = reduceEvent(s, ev("response_truncated", { turn: 1, maxOutputTokens: 4096 }));
+    expect(s.items.at(-1)).toEqual({
+      kind: "notice",
+      text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens to allow longer answers.",
     });
   });
 

@@ -94,6 +94,11 @@ funcional, no solo interfaces o stubs.
   `@alisio/plugin-opencode`, `@alisio/plugin-opencode-go`, `@alisio/plugin-openai-compatible`, `@alisio/plugin-subagents` y
   `alisio` (CLI/TUI, registro de plugins integrados). Build con `tsc` a `dist/` (JS + `.d.ts`),
   `publishConfig.exports` sin fuentes, changesets para versionado y publicación con provenance.
+  Nuevo `scripts/publish.ts` (`pnpm publish`): empaqueta y publica en orden dependiente seguro
+  (sdk → core → plugins → cli), con `--all`/`--package <nombre>` obligatorios, `--version`
+  (bump atómico), `--dry-run` (sin efectos), `--build`/`--no-build`, el mismo chequeo de fugas que
+  `pack:check` sobre el manifiesto empaquetado, `==> nombre@versión` por paquete y detención
+  clara ante fallos sin publicar en silencio el resto; documentado en [Publishing](/publishing).
 - Plugins como paquetes npm (`--plugin nombre` o `plugins: ["nombre"]`), resueltos desde el
   proyecto y luego las raíces globales; exigen la keyword `alisio-plugin`.
 - Binario autónomo opcional (`pnpm build:binary`, Bun) y workflow de release con binarios
@@ -271,8 +276,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Validar Herdr con servidor/PTY reales; añadir launcher/resumer nativo si Herdr lo permite.
 - Checkpoints/rewind de sesión y memoria vectorial: no existen.
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
-- Primera publicación real en npm y release con binarios (flujos preparados, no ejecutados);
-  SemVer de rangos de plugins y recarga en sesión inactiva.
+- Primera publicación real en npm y release con binarios: el script `pnpm publish`
+  (`scripts/publish.ts`, ver [Publicación](/es/publishing)) está implementado y cubierto por
+  pruebas unitarias, pero no se ha ejecutado contra el registro real; SemVer de rangos de plugins
+  y recarga en sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo y capacidades multimedia MCP. `/mcp` permite reconexión explícita y bearer
   mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.
@@ -371,6 +378,33 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   binario compilado. No se probó en Windows/macOS ni en emuladores reales distintos (kitty,
   iTerm2, Windows Terminal); Shift+Enter depende de la terminal.
 - No se ejecutó una compactación automática con inferencia real autenticada.
+- Métrica de contexto coherente (Vitest, proveedores simulados, sin red): el runner compacta con el
+  presupuesto de caracteres de respaldo cuando la ventana es desconocida, NO compacta pronto cuando
+  la ventana conocida es grande (el desajuste DeepSeek ~1M de ventana frente a 160k de caracteres),
+  compacta en `ventana × threshold` aunque esté muy por debajo del presupuesto de caracteres, y
+  trata las ventanas declaradas por encima de 2M de tokens como desconocidas para que el respaldo
+  siga protegiendo; la barra de la TUI se pone roja exactamente en el punto de compactación y marca
+  la base `char budget` cuando no hay ventana (Vitest de reducción/formateo). `app.contextBudget`
+  expone el presupuesto efectivo y el punto de compactación a la TUI.
+- Script de publicación (`scripts/publish.ts`, Vitest con directorios temporales y sin red): orden
+  sdk → core → cli, rechazo del chequeo de fugas (manifiesto `workspace:`), dry-run sin efectos
+  secundarios (no escribe ni publica), matemática del bump de versión (escritura atómica y
+  restauración ante fallo) y error de paquete desconocido. El diagrama de flujo de herramientas
+  `docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp` (referenciado en
+  `/tools` y `/es/tools`) es un binario sin rastrear que debe añadirse a git.
+- Truncamiento (Vitest, proveedores simulados, sin red): los cuatro adaptadores (openai-compatible,
+  deepseek, opencode, opencode-go) emiten `completed` con `truncated: true` cuando el corte
+  (`finish_reason` `length`, `response.incomplete` o `stop_reason` `max_tokens`) dejó texto
+  aprovechable y llamadas completas, y siguen lanzando con texto vacío, llamadas parciales o
+  final abrupto; el runner completa una respuesta cortada sin llamadas con el evento
+  `response_truncated` y `truncated: true` en `run_completed`, ejecuta las llamadas de un turno
+  cortado y continúa, acepta un resumen cortado pero aprovechable como checkpoint parcial
+  (`partial: true` en `compaction_completed`), falla con mensaje accionable cuando el resumen no
+  produjo nada (`compaction.maxOutputTokens`) y usa `compaction.maxOutputTokens` (por defecto
+  16000 en el esquema de configuración, 4096 si el runner se construye sin configuración), nunca
+  el presupuesto del bucle del agente; la TUI muestra el aviso y el marcador `partial` (Vitest de
+  reducción de eventos) y el esquema de configuración acepta el nuevo campo con su dato por
+  defecto.
 
 ## Memoria y plugins: alcance de la verificación
 
@@ -611,6 +645,14 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `limits.maxTokens`. Las estimaciones antes/después son aproximadas (≈4 caracteres/token).
   Los items opacos de Responses del tramo resumido se descartan; los conservados no cambian.
   Una sesión con resultados de herramientas inciertos no se compacta hasta recuperarla.
+- Respuestas truncadas: cuando una respuesta se corta por `limits.maxOutputTokens` (o el resumen
+  de compactación por `compaction.maxOutputTokens`), el texto producido se conserva tal cual. Una
+  respuesta cortada completa la ejecución con aviso y marca `truncated`; un resumen cortado se
+  guarda como checkpoint **parcial** — la información producida antes del corte se preserva, pero
+  un resumen truncado puede omitir contexto posterior. El resumidor estima tokens por su cuenta
+  (≈4 caracteres/token), así que un resumen cerca de su presupuesto puede cortarse aunque el
+  modelo no esté cerca de *su* límite; el presupuesto real consumido lo informa el proveedor y no
+  puede comprobarse de antemano.
 - Aprobaciones: para los efectos `write`, `process` y `external`, y solo en la TUI (la propia
   TUI ya pasa siempre un manejador `approve` salvo con `--read-only`, así que sin ningún flag el
   efecto se ofrece y se pregunta en cada llamada; ver la tabla de verdad en `docs/tools.md`); los

@@ -802,6 +802,8 @@ export async function createApplication(options: AppOptions = {}) {
       runner,
       herdr,
       contextWindow,
+      /** Effective context budget + compaction point shared by the runner and the TUI bar. */
+      contextBudget: (model: string) => runner.contextBudget(model),
       loadModels,
       /** Creates a provider for validation/model discovery without changing the active provider. */
       async probeProvider(

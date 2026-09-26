@@ -47,15 +47,20 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 | Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp`; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
-| Barra de estado | Contexto usado frente a la ventana, `used / total (pct%)`, con barra verde (< 60 %), amarilla (< 85 %) o roja; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
+| Barra de estado | Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
 | Selectores | Listas seleccionables para `/model`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
 
 Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
-La ventana de contexto proviene de `provider.contextWindow`, luego del campo `context_window` (o
-`context_length`) de `GET /models`, y en otro caso es `unknown`. El contexto usado es el último
-`prompt + completion` informado por el proveedor; sin `usage`, se muestra una estimación marcada con
-`~` (unos 4 caracteres por token).
+La barra de contexto mide **la misma métrica efectiva que usa el motor** para la compactación
+automática. Con una ventana de contexto conocida (`provider.contextWindow`, el campo
+`context_window`/`context_length` de `GET /models`), el total es esa ventana y la barra se pone roja
+en `threshold` de ella (por defecto 85 %). Cuando la ventana es desconocida — o se declara
+absurdamente grande (ver [Compactación de contexto](/es/compaction)) — el total es el presupuesto de
+caracteres de respaldo (`limits.maxContextChars / 4` tokens estimados) y se muestra con el sufijo
+`char budget`, poniéndose roja en el 100 % de ahí, exactamente donde compacta el respaldo.
+El contexto usado es el último `prompt + completion` informado por el proveedor; sin `usage`, se
+muestra una estimación marcada con `~` (unos 4 caracteres por token).
 
 ## Comandos
 
@@ -278,6 +283,19 @@ mientras esté en cola o mostrándose.
 
 Los selectores propios de `/model` y `/resume` no forman parte de esta cola compartida: son comandos
 que usted mismo escribe, nunca concurrentes con la pregunta de un subagente.
+
+## Respuestas truncadas {#truncated-responses}
+
+Cuando una respuesta se corta por `limits.maxOutputTokens` (razón de finalización `length`), el
+texto producido hasta ese momento se conserva y la ejecución termina con normalidad, pero la TUI
+añade un aviso visible: `Response cut by max output tokens — the answer may be incomplete.` Es un
+aviso, no un error: aumente `limits.maxOutputTokens` en su configuración para respuestas más largas
+(véase [Configuración](/es/configuration#limits)). Un checkpoint de compactación truncado se
+muestra con el marcador `partial` y apunta a `compaction.maxOutputTokens` (véase
+[Compactación de contexto](/es/compaction)). Los modos sin interfaz siguen siendo legibles por
+máquina: `alisio run --json` nunca imprime el texto del aviso y solo lleva el estado en los datos
+del evento — `run_completed` incluye `"truncated": true` cuando la respuesta final se cortó, y
+`compaction_completed` incluye `"partial": true` para un resumen cortado.
 
 ## Aprobaciones interactivas {#interactive-approvals}
 

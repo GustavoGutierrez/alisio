@@ -1,5 +1,9 @@
 # Alisio
 
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Alisio — extensible, provider-agnostic coding-agent harness" width="720">
+</p>
+
 [![CI](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/alisio?label=npm%20alisio)](https://www.npmjs.com/package/alisio)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -86,9 +90,10 @@ The documentation site is bilingual (English and Spanish). The detailed implemen
 pnpm install --frozen-lockfile
 pnpm dev                 # run the CLI from source (Bun)
 pnpm check               # typecheck, lint, tests, build, CLI e2e (Node and binary), packs, docs
+pnpm publish -- --all --dry-run   # preview the publishable packages; see docs/publishing.md
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [Publishing](https://gustavogutierrez.github.io/alisio/publishing).
 
 ## License
 

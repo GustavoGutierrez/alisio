@@ -327,3 +327,23 @@ describe("MCP configuration compatibility", () => {
     expect(diagnostic).not.toContain(secretPath);
   });
 });
+
+describe("token budgets in configuration", () => {
+  it("defaults compaction.maxOutputTokens independently of limits.maxOutputTokens", () => {
+    const parsed = configSchema.parse({});
+    expect(parsed.compaction.maxOutputTokens).toBe(16_000);
+    expect(parsed.limits.maxOutputTokens).toBe(4096);
+    expect(parsed.limits.maxTurns).toBe(20);
+  });
+
+  it("accepts explicit values and rejects non-positive budgets", () => {
+    const parsed = configSchema.parse({
+      compaction: { maxOutputTokens: 20_000 },
+      limits: { maxOutputTokens: 8192, maxTurns: 10 },
+    });
+    expect(parsed.compaction.maxOutputTokens).toBe(20_000);
+    expect(parsed.limits.maxOutputTokens).toBe(8192);
+    expect(parsed.limits.maxTurns).toBe(10);
+    expect(() => configSchema.parse({ compaction: { maxOutputTokens: 0 } })).toThrow();
+  });
+});

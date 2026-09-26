@@ -5,6 +5,9 @@ hero:
   name: Alisio
   text: Speed and efficiency for building
   tagline: An extensible, provider-agnostic coding-agent harness for your terminal.
+  image:
+    src: /alisio/assets/logo.png
+    alt: Alisio mascot
   actions:
     - theme: brand
       text: Quick start

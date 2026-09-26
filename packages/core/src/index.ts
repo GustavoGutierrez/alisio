@@ -27,14 +27,19 @@ export {
   stateHome,
 } from "./config.ts";
 export {
+  type ContextBudget,
   checkpointInstructions,
   completeText,
+  effectiveContextBudget,
   estimateTokens,
+  MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
   renderCheckpoint,
   serializeForSummary,
   shouldCompact,
+  shouldCompactContext,
+  summarize,
 } from "./core/compaction.ts";
 export type {
   ApprovalDecision,

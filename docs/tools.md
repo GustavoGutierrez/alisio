@@ -182,6 +182,16 @@ flow (the same one write/process already used) now also covering `external`. Hea
 non-interactive by design, so an unset flag there means the effect is unavailable, full stop —
 never asked, never silently allowed.
 
+### Tool execution flow
+
+The diagram below (source asset
+`docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`) shows how tool
+execution flows through the permission model: every call is resolved against the effect
+declared by its tool definition, and only then runs — allowed, asked (interactive approval), or
+denied. It is an illustration of the flow in this section, not a security boundary.
+
+![Flujo de Ejecución de Herramientas y Modelo de Permisos — tool execution flow and the permission model](<./assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp>)
+
 ## Interactive approval
 
 In the TUI, `write`, `process` and `external` tools that were not allowed by flags are offered to

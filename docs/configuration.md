@@ -71,7 +71,7 @@ defined the value.
     "streamUsage": false
   },
   "limits": { "maxTurns": 20, "timeoutMs": 300000 },
-  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2 },
+  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
   "plugins": [],
@@ -107,10 +107,10 @@ legacy configuration is used instead of an active `/connect` profile.
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `maxTurns` | `20` | Model turns per run (1–100) |
+| `maxTurns` | `20` | Model turns per run (1–100). Each turn is one model response; a run that only calls tools many times can exhaust this |
 | `timeoutMs` | `300000` | Run timeout in milliseconds (minimum 100); includes approval waits |
-| `maxContextChars` | `160000` | Context length limit in characters; also triggers compaction |
-| `maxOutputTokens` | `4096` | Output tokens per request |
+| `maxContextChars` | `160000` | Context length limit in characters. Acts as the **fallback auto-compaction trigger** when the model window is unknown (or absurdly large, see [compaction](/configuration#compaction)) — estimated tokens (`~chars/4`) reaching `maxContextChars / 4` — and as the **hard limit** that must fit after a compaction |
+| `maxOutputTokens` | `4096` | Output tokens per request. When a model hits this budget mid-answer, Alisio keeps the text produced so far, warns that the response was cut (`response cut by max output tokens`), completes the run normally and flags the completion as `truncated` in `run_completed`. Tool calls that were fully written still execute. Raise this budget for longer answers |
 | `maxTokens` | proportional | Optional cumulative budget of reported tokens per run. Default: 8 × the model's context window, clamped to 400000–8000000; 1000000 when the window is unknown |
 
 ## `compaction`
@@ -120,6 +120,16 @@ legacy configuration is used instead of an active `/connect` profile.
 | `auto` | `true` | Compact automatically before a model call |
 | `threshold` | `0.85` | Fraction (0.1–0.99) of a known context window that triggers compaction |
 | `keepTurns` | `2` | Recent turns kept verbatim (0–20) |
+| `maxOutputTokens` | `16000` | Output token budget for the summarizer call. Independent of `limits.maxOutputTokens` and never falls back to it. If the summary is cut by this budget, the checkpoint is kept as **partial** (the UI says so); when nothing usable was produced, compaction fails and asks you to raise this value |
+
+Auto-compaction uses **one effective budget**. When the model's context window is known, it
+triggers when the used context reaches `threshold` (default `0.85`) of that window; the fixed
+`limits.maxContextChars` budget is then only a post-compaction hard limit. When the window is
+unknown — or absurdly large (declared windows beyond `2_000_000` tokens are treated as unknown so
+a gigantic `window × threshold` never hides real pressure) — the char budget falls back: the raw
+character estimate (`~chars / 4`, about 4 characters per token) reaching `maxContextChars / 4`
+also compacts (a provider's token report never triggers the fallback on its own). The TUI context
+bar mirrors this same effective metric (see [Terminal UI](/tui#layout)).
 
 See [Context compaction](/compaction).
 

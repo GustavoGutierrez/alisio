@@ -197,6 +197,17 @@ cubre `external`. Los modos headless son no interactivos por diseño, así que u
 significa que el efecto no está disponible, sin más — nunca se pregunta, nunca se permite en
 silencio.
 
+### Flujo de ejecución de herramientas
+
+El diagrama siguiente (recurso fuente
+`docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`) muestra cómo la
+ejecución de herramientas atraviesa el modelo de permisos: cada llamada se resuelve contra el efecto
+declarado por su definición de herramienta y solo entonces se ejecuta — permitida, consultada
+(aprobación interactiva) o denegada. Es una ilustración del flujo de esta sección, no una frontera
+de seguridad.
+
+![Flujo de Ejecución de Herramientas y Modelo de Permisos — flujo de ejecución de herramientas y modelo de permisos](<../assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp>)
+
 ## Aprobación interactiva
 
 En la TUI, las herramientas `write`, `process` y `external` no permitidas mediante flags se ofrecen

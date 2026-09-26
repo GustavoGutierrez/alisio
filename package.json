@@ -12,6 +12,7 @@
     "test": "vitest run",
     "build": "pnpm -r --filter \"./packages/*\" run build",
     "build:binary": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/binary-build.ts",
+    "publish": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/publish.ts",
     "test:cli": "node --experimental-strip-types --disable-warning=ExperimentalWarning fixtures/cli-e2e.ts node",
     "test:compiled": "pnpm build:binary && node --experimental-strip-types --disable-warning=ExperimentalWarning fixtures/cli-e2e.ts binary",
     "pack:check": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/pack-check.ts",

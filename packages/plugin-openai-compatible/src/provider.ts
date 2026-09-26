@@ -162,11 +162,24 @@ export class OpenAICompatibleProvider implements ModelProvider {
       }
       if (choice.finish_reason) finish = choice.finish_reason;
     }
-    if (finish !== "stop" && finish !== "tool_calls")
+    if (finish !== "stop" && finish !== "tool_calls" && finish !== "length")
       throw new Error(`Provider response incomplete: ${finish ?? "stream ended"}`);
     const completed = [...calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => c);
     if (completed.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
-    yield { type: "completed", message: { role: "assistant", text, calls: completed }, usage };
+    if (finish === "length" && !text.trim())
+      throw new Error(
+        "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+      );
+    yield {
+      type: "completed",
+      message: {
+        role: "assistant",
+        text,
+        calls: completed,
+        ...(finish === "length" ? { truncated: true } : {}),
+      },
+      usage,
+    };
   }
   private async *responses(
     request: Parameters<ModelProvider["stream"]>[0],
@@ -218,12 +231,39 @@ export class OpenAICompatibleProvider implements ModelProvider {
         yield { type: "text_delta", delta: event.delta };
       if (event.type === "response.reasoning_summary_text.delta")
         yield { type: "reasoning_delta", delta: event.delta };
-      if (
-        event.type === "response.failed" ||
-        event.type === "response.incomplete" ||
-        event.type === "error"
-      )
+      if (event.type === "response.failed" || event.type === "error")
         throw new Error(`Provider response failed: ${event.type}`);
+      if (event.type === "response.incomplete") {
+        complete = true;
+        const r = event.response;
+        const calls: ToolCall[] = r.output
+          .filter((x) => x.type === "function_call")
+          .map((x) => ({ id: x.call_id, name: x.name, arguments: x.arguments }));
+        const text = r.output
+          .filter((x) => x.type === "message")
+          .flatMap((x) => x.content)
+          .filter((x) => x.type === "output_text")
+          .map((x) => x.text)
+          .join("");
+        if (!text.trim())
+          throw new Error(
+            "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+          );
+        if (calls.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
+        yield {
+          type: "completed",
+          message: { role: "assistant", text, calls, providerData: r.output, truncated: true },
+          usage: r.usage
+            ? {
+                input: r.usage.input_tokens,
+                output: r.usage.output_tokens,
+                ...(typeof r.usage.input_tokens_details?.cached_tokens === "number"
+                  ? { cachedInput: r.usage.input_tokens_details.cached_tokens }
+                  : {}),
+              }
+            : undefined,
+        };
+      }
       if (event.type === "response.completed") {
         complete = true;
         const r = event.response;

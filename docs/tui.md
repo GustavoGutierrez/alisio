@@ -46,15 +46,19 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 | Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp`; `read-only`) |
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
-| Status bar | Context used versus the window, `used / total (pct%)`, with a green (< 60 %), yellow (< 85 %) or red bar; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
+| Status bar | Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
 | Pickers | Selectable lists for `/model`, `/plugins`, `/skills`, `/resume` and approvals |
 
 Errors appear in red inside the conversation without closing the TUI.
 
-The context window comes from `provider.contextWindow`, then the `context_window` (or
-`context_length`) field of `GET /models`, otherwise `unknown`. Used context is the last
-`prompt + completion` reported by the provider; without `usage`, an estimate marked with `~`
-(about 4 characters per token) is shown.
+The context bar measures the **same effective metric the engine uses** for auto-compaction. With a
+known context window (`provider.contextWindow`, the `context_window`/`context_length` field of
+`GET /models`), the total is that window and the bar turns red at `threshold` of it (default 85 %).
+When the window is unknown — or declared absurdly large (see [Context compaction](/compaction)) —
+the total is the char-budget fallback (`limits.maxContextChars / 4` estimated tokens) and is shown
+with a `char budget` suffix, turning red at 100 % there, exactly where the fallback compacts.
+Used context is the last `prompt + completion` reported by the provider; without `usage`, an
+estimate marked with `~` (about 4 characters per token) is shown.
 
 ## Commands
 
@@ -265,6 +269,19 @@ panel](#agent-panel) shows that agent as **waiting** for as long as it is queued
 
 `/model` and `/resume`'s own pickers are not part of this shared queue: they are commands you type
 yourself, never concurrent with a subagent's question.
+
+## Truncated responses {#truncated-responses}
+
+When a response is cut by `limits.maxOutputTokens` (finish reason `length`), the text produced so
+far is kept and the run completes normally, but the TUI adds a visible notice:
+`Response cut by max output tokens — the answer may be incomplete.` This is a hint, not an error:
+raise `limits.maxOutputTokens` in your configuration for longer answers (see
+[Configuration](/configuration#limits)). A truncated checkpoint from context compaction is shown
+with a `partial` marker and points at `compaction.maxOutputTokens` (see
+[Context compaction](/compaction)). Headless modes stay machine-readable: `alisio run --json`
+never prints the notice text and carries the state only in event data — `run_completed` includes
+`"truncated": true` when the final answer was cut, and `compaction_completed` includes
+`"partial": true` for a cut summary.
 
 ## Interactive approvals
 

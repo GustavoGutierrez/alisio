@@ -67,7 +67,7 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
     "streamUsage": false
   },
   "limits": { "maxTurns": 20, "timeoutMs": 300000 },
-  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2 },
+  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
   "plugins": [],
@@ -104,10 +104,10 @@ selección anterior determina cuándo se usa esa configuración en lugar del per
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `maxTurns` | `20` | Turnos del modelo por ejecución (1–100) |
+| `maxTurns` | `20` | Turnos del modelo por ejecución (1–100). Cada turno es una respuesta del modelo; una ejecución que solo llama a herramientas muchas veces puede agotarlos |
 | `timeoutMs` | `300000` | Tiempo límite de la ejecución en milisegundos (mínimo 100); incluye las esperas de aprobación |
-| `maxContextChars` | `160000` | Límite de longitud del contexto en caracteres; también activa la compactación |
-| `maxOutputTokens` | `4096` | Tokens de salida por petición |
+| `maxContextChars` | `160000` | Límite de longitud del contexto en caracteres. Actúa como **disparador de compactación por defecto (fallback)** cuando la ventana del modelo es desconocida (o absurdamente grande; ver [compactación](/es/configuration#compaction)) — tokens estimados (`~caracteres/4`) que alcanzan `maxContextChars / 4` — y como **límite duro** que debe caber tras una compactación |
+| `maxOutputTokens` | `4096` | Tokens de salida por petición. Cuando un modelo alcanza este presupuesto a mitad de respuesta, Alisio conserva el texto producido, avisa de que la respuesta se cortó (`response cut by max output tokens`), completa la ejecución con normalidad y marca la finalización como `truncated` en `run_completed`. Las llamadas a herramientas totalmente escritas siguen ejecutándose. Aumente este presupuesto para respuestas más largas |
 | `maxTokens` | proporcional | Presupuesto acumulado opcional de tokens informados por ejecución. Por defecto: 8 × la ventana de contexto del modelo, acotado a 400000–8000000; 1000000 cuando la ventana es desconocida |
 
 ## `compaction`
@@ -117,6 +117,18 @@ selección anterior determina cuándo se usa esa configuración en lugar del per
 | `auto` | `true` | Compactar automáticamente antes de una llamada al modelo |
 | `threshold` | `0.85` | Fracción (0.1–0.99) de una ventana de contexto conocida que activa la compactación |
 | `keepTurns` | `2` | Turnos recientes conservados sin cambios (0–20) |
+| `maxOutputTokens` | `16000` | Presupuesto de tokens de salida para la llamada del resumidor. Independiente de `limits.maxOutputTokens` y nunca recurre a él. Si el presupuesto corta el resumen, el checkpoint se conserva como **parcial** (la interfaz lo indica); si no se produjo nada aprovechable, la compactación falla y pide que aumente este valor |
+
+La compactación automática usa **un único presupuesto efectivo**. Cuando la ventana de contexto del
+modelo es conocida, se dispara cuando el contexto usado alcanza `threshold` (por defecto `0.85`) de
+esa ventana; el presupuesto fijo `limits.maxContextChars` queda entonces solo como límite duro
+posterior a la compactación. Cuando la ventana es desconocida — o absurdamente grande (las ventanas
+declaradas por encima de `2_000_000` tokens se tratan como desconocidas para que un
+`ventana × threshold` gigantesco no oculte la presión real) — se recurre al presupuesto de
+caracteres: la estimación de caracteres en bruto (`~caracteres / 4`, unos 4 caracteres por token)
+que alcanza `maxContextChars / 4` también compacta (un informe de tokens del proveedor nunca
+dispara el respaldo por sí solo). La barra de contexto de la TUI refleja esta misma métrica
+efectiva (ver [Interfaz de terminal](/es/tui)).
 
 Consulte [Compactación de contexto](/es/compaction).
 

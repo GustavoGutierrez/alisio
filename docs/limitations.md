@@ -15,8 +15,9 @@ it is not a statement that all of its release criteria are met.
 - Validate Herdr with a real server/PTY; add a native launcher/resumer if Herdr allows it.
 - Session checkpoints/rewind and vector memory: they do not exist.
 - Interactive onboarding; configurable color themes; expandable reasoning view.
-- First real npm publication and release with binaries (workflows prepared, not executed); SemVer
-  ranges for plugins and reload in an idle session.
+- First real npm publication and release with binaries: the `pnpm publish` script
+  (`scripts/publish.ts`, see [Publishing](/publishing)) is implemented and unit-tested but has not
+  been run against the real registry; SemVer ranges for plugins and reload in an idle session.
 - Automatic discovery of Pi paths and incremental watch.
 - Interactive MCP OAuth and MCP multimedia capabilities. `/mcp` supports explicit reconnect and
   environment-referenced bearer tokens, but not browser authentication flows.
@@ -87,12 +88,21 @@ it is not a statement that all of its release criteria are met.
   persisted events. The TUI needs a terminal with an alternate screen; otherwise use `--no-tui` or
   `run`.
 - `provider.contextWindow` applies only to the configured model; after `/model`, the window comes from
-  `GET /models` or stays unknown (and threshold-based automatic compaction is disabled for that
-  model, except through `limits.maxContextChars`).
+  `GET /models` or stays unknown. Auto-compaction uses ONE effective budget: with a known window it
+  triggers at `threshold` of that window only; with an unknown window (or one declared beyond
+  `2_000_000` tokens) it falls back to `limits.maxContextChars` (est. tokens at `maxContextChars / 4`),
+  which also stays as the post-compaction hard limit. The TUI context bar reflects the same budget.
 - **Compaction** uses the current provider; its token usage is not added to the `limits.maxTokens`
   budget. Before/after estimates are approximate (about 4 characters per token). Responses opaque
   items of the summarized span are discarded; kept ones do not change. A session with uncertain tool
   results is not compacted until it is recovered.
+- **Truncated responses**: when a response is cut by `limits.maxOutputTokens` (or the compaction
+  summary by `compaction.maxOutputTokens`), the produced text is kept as-is. A cut response completes
+  the run with a warning and a `truncated` flag; a cut summary becomes a **partial checkpoint** —
+  information produced before the cut is preserved, but a truncated summary may omit later context.
+  The summarizer independently estimates tokens (≈4 characters per token), so a summary near its
+  budget can be cut even when the model itself is not near *its* limit; the exact budget consumed is
+  provider-reported and cannot be checked in advance.
 - **Approvals**: only for `write` and `process` effects and only in the TUI; "allow for the session"
   lasts while the process lives. The wait counts within `limits.timeoutMs`. The `Policy` contract did
   not change: approval is an additional `RunnerOptions` option.
@@ -137,3 +147,26 @@ Linux against a simulated provider, but not on Windows/macOS or in other real te
 emulators (kitty, iTerm2, Windows Terminal). Real copies through `xclip`/`wl-copy`/`pbcopy`/Windows
 and an automatic compaction with a real provider were not verified. The full detail is in the
 source file linked above.
+
+Truncation handling was verified with mocked providers only (Vitest, no network):
+the four adapters (OpenAI-compatible, DeepSeek, OpenCode Console, OpenCode Go) emit
+`completed` with `truncated: true` when a cut (`finish_reason` `length`, `response.incomplete`
+or `stop_reason` `max_tokens`) left usable text with complete tool calls, and still throw on
+empty text, partial tool calls or an abrupt end; the runner completes a cut no-tool-call turn
+with the `response_truncated` event and `truncated: true` in `run_completed`, executes tool calls
+from a cut turn and continues, accepts a cut-but-usable summary as a partial checkpoint
+(`partial: true` in `compaction_completed`), fails with an actionable `compaction.maxOutputTokens`
+message when the summary produced nothing usable, and uses `compaction.maxOutputTokens` (default
+16000 in the config schema, 4096 when the runner is built without configuration), never the agent
+loop budget; the TUI shows the warning notice and the `partial` marker (event-reduction Vitest);
+and the config schema accepts the new field with its default.
+
+The coherent context metric was verified with mocked providers (Vitest, no network): the runner
+auto-compacts on the char-budget fallback when the window is unknown, does NOT compact early when a
+large window is known (the DeepSeek ~1M-window vs 160k-char mismatch), compacts at `window ×
+threshold`, and treats declared windows beyond 2M tokens as unknown; the TUI bar turns red exactly
+at the compaction point and marks the char-budget basis. The publish script is covered by focused
+unit tests (ordering, leak check, dry-run side effects, version bump, unknown package) with temp
+dirs and no network; `docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`
+(the tool-flow diagram referenced from the tools pages) is an untracked binary asset that must be
+added to git before committing.

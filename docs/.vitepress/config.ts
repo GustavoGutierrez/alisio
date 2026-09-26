@@ -21,7 +21,10 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
       items: ["context", "subagents", "compaction", "memory"].map(item),
     },
     { text: labels.groupExtend ?? "Extend", items: ["plugins", "architecture"].map(item) },
-    { text: labels.groupProject ?? "Project", items: ["limitations", "contributing"].map(item) },
+    {
+      text: labels.groupProject ?? "Project",
+      items: ["publishing", "limitations", "contributing"].map(item),
+    },
   ];
 }
 
@@ -42,6 +45,7 @@ const en = {
   memory: "Persistent memory",
   plugins: "Writing plugins",
   architecture: "Architecture",
+  publishing: "Publishing",
   limitations: "Known limitations",
   contributing: "Contributing",
 };
@@ -63,6 +67,7 @@ const es = {
   memory: "Memoria persistente",
   plugins: "Escribir plugins",
   architecture: "Arquitectura",
+  publishing: "Publicación",
   limitations: "Limitaciones conocidas",
   contributing: "Contribuir",
 };
@@ -73,6 +78,7 @@ export default defineConfig({
   description: "An extensible, provider-agnostic coding-agent harness for your terminal.",
   cleanUrls: true,
   lastUpdated: true,
+  head: [["link", { rel: "icon", href: "/alisio/assets/favicon.png" }]],
   sitemap: { hostname: "https://gustavogutierrez.github.io/alisio/" },
   srcExclude: [
     "specification.md",

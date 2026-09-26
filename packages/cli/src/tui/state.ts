@@ -185,18 +185,36 @@ export function configuredProviderModelItems(
   }
   return items;
 }
-export function contextLevel(pct: number): Level {
-  return pct < 60 ? "ok" : pct < 85 ? "warn" : "danger";
+export function contextLevel(pct: number, compactionAt = 85): Level {
+  // Warning band starts a quarter below the auto-compaction point; danger is exactly there.
+  const warn = Math.max(0, compactionAt - 25);
+  return pct < warn ? "ok" : pct < compactionAt ? "warn" : "danger";
 }
 export function contextPercent(used: number, total: number | undefined): number | undefined {
   return total && total > 0 ? (used / total) * 100 : undefined;
 }
-export function formatContext(used: number, total: number | undefined, estimated: boolean) {
+/** The effective total the context bar measures against, and what it is derived from. */
+export interface ContextBudget {
+  /** Effective total in tokens (model window, or the char budget converted to tokens). */
+  total: number;
+  /** Basis of the total: the model's context window, or the char-budget fallback. */
+  basis: "window" | "chars";
+  /** Percentage of `total` at which the engine auto-compacts; the bar turns red there. */
+  compactionAt: number;
+}
+export function formatContext(
+  used: number,
+  total: number | undefined,
+  estimated: boolean,
+  basis?: "window" | "chars",
+) {
   const prefix = `${estimated ? "~" : ""}${formatTokens(used)} / `;
   const pct = contextPercent(used, total);
-  return pct === undefined || !total
-    ? `${prefix}unknown`
-    : `${prefix}${formatTokens(total)} (${Math.round(pct)}%)`;
+  if (pct === undefined || !total) return `${prefix}unknown`;
+  // The `~` marks an estimate; the "char budget" suffix tells the user the bar is measured
+  // against the fallback (est. tokens from limits.maxContextChars), not a model window.
+  const basisSuffix = basis === "chars" ? " char budget" : "";
+  return `${prefix}${formatTokens(total)} (${Math.round(pct)}%)${basisSuffix}`;
 }
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
@@ -595,6 +613,9 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         typeof d.summarizedTokens === "number" && typeof d.checkpointTokens === "number"
           ? ` · checkpoint ~${formatTokens(d.summarizedTokens)} → ~${formatTokens(d.checkpointTokens)} tokens`
           : "";
+      const partial = d.partial
+        ? " · partial: the summary was cut by max output tokens; consider raising compaction.maxOutputTokens"
+        : "";
       return addItem(
         {
           ...state,
@@ -604,7 +625,7 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         {
           kind: "notice",
           text: [
-            `Context compacted (${String(d.reason ?? "manual")}): ${String(d.replaced ?? 0)} messages summarized, ~${formatTokens(Number(d.before ?? 0))} → ~${formatTokens(Number(d.after ?? 0))} tokens${checkpoint}`,
+            `Context compacted (${String(d.reason ?? "manual")}): ${String(d.replaced ?? 0)} messages summarized, ~${formatTokens(Number(d.before ?? 0))} → ~${formatTokens(Number(d.after ?? 0))} tokens${checkpoint}${partial}`,
             ...reports,
           ].join("\n"),
         },
@@ -630,6 +651,11 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         { ...state, compacting: false },
         { kind: "error", text: `Compaction failed: ${String(d.error ?? "unknown error")}` },
       );
+    case "response_truncated":
+      return addItem(state, {
+        kind: "notice",
+        text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens to allow longer answers.",
+      });
     case "model_changed":
       return {
         ...state,

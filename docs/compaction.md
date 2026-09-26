@@ -31,15 +31,21 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
 ## Manual and automatic
 
 - **Manual**: `/compact [focus]` in the TUI, with optional focus instructions.
-- **Automatic**: before a model call, when the context exceeds `threshold` of a known context window,
-  or when `limits.maxContextChars` is exceeded. With an unknown window only the character limit
-  applies. `auto: false` disables it.
+- **Automatic**: before a model call, when the used context reaches `threshold` of a **known**
+  context window (`provider.contextWindow` or `GET /models`). When the window is unknown — or a
+  declared window is absurdly large (beyond `2_000_000` tokens, so `window × threshold` cannot hide
+  real pressure) — Alisio falls back to `limits.maxContextChars`: est. tokens (≈ characters / 4)
+  reaching `maxContextChars / 4` also compacts. Exactly one of the two applies, so the TUI context
+  bar and the engine always agree on when compaction triggers. `maxContextChars` additionally stays
+  as the post-compaction hard limit: if compressing cannot get under it, the run fails with an
+  actionable error instead of sending an oversized request. `auto: false` disables automatic
+  compaction entirely.
 
 ## Configuration
 
 ```json
 {
-  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2 }
+  "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 }
 }
 ```
 
@@ -48,19 +54,35 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
 | `auto` | `true` | Automatic compaction |
 | `threshold` | `0.85` | Fraction of a known context window (0.1–0.99) |
 | `keepTurns` | `2` | Recent turns kept verbatim (0–20) |
+| `maxOutputTokens` | `16000` | Output token budget for the summarizer call; independent of `limits.maxOutputTokens` |
 
 The context window comes from `provider.contextWindow` or `GET /models`. Compaction token usage is
 not counted against `limits.maxTokens`, and before/after estimates are approximate (about 4
 characters per token).
+
+## Truncated summaries
+
+The summarizer has its own output budget (`compaction.maxOutputTokens`, default 16000 — larger
+than the agent loop's `limits.maxOutputTokens` on purpose, since a summary must fit the whole
+transcript). If a summary is cut by this budget:
+
+- A **usable** partial summary (structured checkpoint JSON or plain text) is kept: compaction
+  completes and `compaction_completed` includes `"partial": true`. The TUI notice marks the
+  checkpoint as partial and suggests raising `compaction.maxOutputTokens`.
+- If the cut produced **nothing usable**, compaction fails with an actionable message pointing at
+  `compaction.maxOutputTokens`.
+
+A partial checkpoint preserves everything the model produced before the cut, but may omit later
+context; treat it as a degraded fallback, not a full summary.
 
 ## Events
 
 | Event | When |
 | --- | --- |
 | `compaction_started` | Compaction begins |
-| `compaction_completed` | Done; includes `before`/`after` estimates, the size of the summarized span and of the checkpoint, and plugin reports |
+| `compaction_completed` | Done; includes `before`/`after` estimates, the size of the summarized span and of the checkpoint, plugin reports, and `partial: true` when the summary was cut but kept |
 | `compaction_skipped` | Not enough history to compact |
-| `compaction_failed` | The summarizer call failed |
+| `compaction_failed` | The summarizer call failed (including a cut summary with nothing usable) |
 | `plugin_hook_failed` | A plugin hook failed or timed out; compaction continues without it |
 
 Events are emitted as versioned JSONL with `--json`.

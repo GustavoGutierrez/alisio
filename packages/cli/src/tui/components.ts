@@ -24,6 +24,7 @@ import {
   reduceQuestions,
 } from "./questions.ts";
 import {
+  type ContextBudget,
   contextLevel,
   contextPercent,
   editSummary,
@@ -119,18 +120,19 @@ export class Header implements Component {
 export class Footer implements Component {
   constructor(
     private view: () => ViewState,
-    private window: () => number | undefined,
+    private budget: () => ContextBudget | undefined,
     private hint: () => string | undefined,
     private statuses: () => string[] = () => [],
   ) {}
   invalidate(): void {}
   render(width: number): string[] {
     const v = this.view(),
-      total = this.window(),
+      budget = this.budget(),
+      total = budget?.total,
       used = v.context?.used ?? 0,
       estimated = v.context?.estimated ?? true;
     const pct = contextPercent(used, total);
-    const level = contextLevel(pct ?? 0);
+    const level = contextLevel(pct ?? 0, budget?.compactionAt ?? 85);
     const cells = 10,
       filled = pct === undefined ? 0 : Math.min(cells, Math.round((pct / 100) * cells));
     const bar =
@@ -146,7 +148,7 @@ export class Footer implements Component {
     type Seg = { text: string; priority: number; paint: (t: string) => string };
     const segments: Seg[] = [
       {
-        text: `ctx ${formatContext(used, total, estimated)}`,
+        text: `ctx ${formatContext(used, total, estimated, budget?.basis)}`,
         priority: 10,
         paint: pct === undefined ? style.gray : levelColor(level),
       },
