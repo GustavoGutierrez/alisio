@@ -2,6 +2,19 @@
 import { Command } from "commander";
 
 const VERSION = "0.1.0-alpha.1";
+/** Built-in plugins and prompt templates, and the slash names templates may not take. */
+async function cliDefaults() {
+  const [{ BUILTIN_PLUGINS }, { BUILTIN_PROMPTS }, { reservedCommandNames }] = await Promise.all([
+    import("./builtin.ts"),
+    import("./prompts/index.ts"),
+    import("./tui/state.ts"),
+  ]);
+  return {
+    builtins: BUILTIN_PLUGINS,
+    builtinPrompts: BUILTIN_PROMPTS,
+    reservedPromptNames: reservedCommandNames(),
+  };
+}
 const program = new Command();
 program
   .name("alisio")
@@ -49,7 +62,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
   }
   const { createApplication } = await import("@alisio/core");
   const app = await createApplication({
-    builtins: (await import("./builtin.ts")).BUILTIN_PLUGINS,
+    ...(await cliDefaults()),
     ...opts,
     onEvent: (event) => {
       if (opts.json) process.stdout.write(`${JSON.stringify(event)}\n`);
@@ -62,6 +75,14 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
   const controller = new AbortController();
   const interrupt = () => controller.abort(new Error("Interrupted"));
   process.on("SIGINT", interrupt);
+  // `/name args` runs a prompt template (same syntax as the TUI); refuse before creating a session.
+  let template: ReturnType<typeof app.expandPrompt>;
+  try {
+    template = prompt ? app.expandPrompt(prompt) : undefined;
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
   let session =
     sessionId ?? app.store.create(app.workspace, app.provider.id, app.provider.model).id;
   try {
@@ -73,7 +94,12 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(prompt);
       if (match?.[1])
         prompt = `${await app.skills.load(match[1])}\n\nUser request: ${match[2] ?? ""}`;
-      await app.runner.run(session, prompt, controller.signal);
+      await app.runner.run(
+        session,
+        template?.text ?? prompt,
+        controller.signal,
+        template ? { display: template.display } : {},
+      );
       if (!opts.json) process.stdout.write(`\nSession: ${session}\n`);
       return;
     }
@@ -130,7 +156,13 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(line);
         const input = match?.[1] ? `${await app.skills.load(match[1])}\n\n${match[2] ?? ""}` : line;
         try {
-          await app.runner.run(session, input, controller.signal);
+          const template = app.expandPrompt(input);
+          await app.runner.run(
+            session,
+            template?.text ?? input,
+            controller.signal,
+            template ? { display: template.display } : {},
+          );
         } catch (e) {
           console.error(String(e));
         }
@@ -146,6 +178,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
 }
 program
   .command("run")
+  .description('Run one prompt headless; "/name args" runs a prompt template (e.g. "/init")')
   .argument("<prompt>")
   .action((prompt, _options, cmd) => run(cmd, prompt));
 program
@@ -156,7 +189,7 @@ program
 program.action((_opts, cmd) => run(cmd));
 program
   .command("init")
-  .description("Write an example configuration without secrets")
+  .description("Write an example configuration without secrets (for AGENTS.md use /init)")
   .action(async (_opts, cmd) => {
     const { resolve, join } = await import("node:path");
     const { mkdir, writeFile } = await import("node:fs/promises");
@@ -170,6 +203,9 @@ program
     );
     console.log(
       `Created ${path}. Set your model, endpoint and environment key. Use --config ${path}.`,
+    );
+    console.log(
+      'To generate AGENTS.md for this project, run /init inside alisio (or: alisio run "/init" --allow-write).',
     );
   });
 program.command("doctor").action(async (_opts, cmd) => {
@@ -304,7 +340,7 @@ plugins.command("list").action(async (_opts, cmd) => {
 plugins.command("doctor").action(async (_opts, cmd) => {
   const { createApplication } = await import("@alisio/core");
   const app = await createApplication({
-    builtins: (await import("./builtin.ts")).BUILTIN_PLUGINS,
+    ...(await cliDefaults()),
     ...options(cmd),
     provider: {
       id: "inspection",
@@ -359,7 +395,7 @@ mcp
     if (!o.allowMcp) throw new Error("Use --allow-mcp to start or connect to a configured server");
     const { createApplication } = await import("@alisio/core");
     const app = await createApplication({
-      builtins: (await import("./builtin.ts")).BUILTIN_PLUGINS,
+      ...(await cliDefaults()),
       ...o,
       provider: {
         id: "inspection",

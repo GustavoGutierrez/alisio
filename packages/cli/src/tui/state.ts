@@ -108,6 +108,10 @@ export const COMMANDS: CommandSpec[] = [
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
+/** Every TUI slash name (commands, aliases and routing prefixes); templates cannot take them. */
+export function reservedCommandNames(): string[] {
+  return [...COMMANDS.flatMap((c) => [c.name, ...(c.aliases ?? [])]), "command", "skill"];
+}
 export function resolveCommand(name: string): string | undefined {
   const lower = name.toLowerCase();
   return COMMANDS.find((c) => c.name === lower || c.aliases?.includes(lower))?.name;
@@ -469,7 +473,9 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
   for (const m of messages) if (m.role === "tool") results.set(m.callId, m);
   for (const m of messages) {
     if (m.role === "user")
-      items.push(m.summary ? { kind: "info", text: m.text } : { kind: "user", text: m.text });
+      items.push(
+        m.summary ? { kind: "info", text: m.text } : { kind: "user", text: m.display ?? m.text },
+      );
     else if (m.role === "assistant") {
       if (m.text) items.push({ kind: "assistant", text: m.text, reasoning: "", done: true });
       for (const c of m.calls) {

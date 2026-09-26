@@ -112,6 +112,11 @@ initially; the body is loaded with the `skill_load` tool or `/skill:name`, and s
 `skill_resource`. YAML, name, description and the name/directory match are validated
 (`alisio skills validate`). `.pi/skills` is not imported automatically.
 
+## Prompt templates
+
+There is no configuration key for templates. They are read from `<config home>/prompts/` and, for
+trusted projects, from `.alisio/prompts/`. See [Prompt templates](/prompt-templates).
+
 ## `mcp.servers`
 
 MCP servers, keyed by name. Never write literal secrets: pass environment variable names.
@@ -198,9 +203,9 @@ Commands:
 | Command | Description |
 | --- | --- |
 | `alisio` | Interactive TUI (or readline with `--no-tui`) |
-| `alisio run <prompt>` | Headless run |
+| `alisio run <prompt>` | Headless run; `/name args` runs a [prompt template](/prompt-templates) |
 | `alisio resume <session> [prompt]` | Resume a session (TUI without prompt, headless with prompt) |
-| `alisio init` | Write an example `.alisio/config.json` without secrets |
+| `alisio init` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Environment and provider diagnostics |
 | `alisio sessions list` | List sessions |
 | `alisio sessions recover <session> --acknowledge` | Acknowledge uncertain tool effects after a crash |

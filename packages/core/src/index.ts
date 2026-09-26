@@ -49,6 +49,19 @@ export {
 } from "./plugins/host.ts";
 export { OpenAICompatibleProvider } from "./providers/openai-compatible.ts";
 export { ProjectContext } from "./resources/context.ts";
+export {
+  expandSlashPrompt,
+  loadPromptTemplates,
+  type PromptDiagnostic,
+  type PromptRequirement,
+  type PromptSource,
+  type PromptSourceKind,
+  type PromptTemplate,
+  parsePromptTemplate,
+  promptSources,
+  renderPromptTemplate,
+  splitArguments,
+} from "./resources/prompts.ts";
 export { Skills } from "./resources/skills.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {

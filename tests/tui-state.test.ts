@@ -9,9 +9,11 @@ import {
   formatTokens,
   hostOf,
   initialViewState,
+  itemsFromHistory,
   lastAssistantText,
   parseCommand,
   reduceEvent,
+  reservedCommandNames,
   resolveCommand,
   shortenPath,
   summarizeToolArgs,
@@ -275,5 +277,19 @@ describe("event reduction", () => {
     s = reduceEvent(s, ev("tool_started", { id: "t", name: "shell", arguments: "{}" }));
     s = reduceEvent(s, ev("text_delta", { delta: "second **answer**" }));
     expect(lastAssistantText(s.items)).toBe("second **answer**");
+  });
+
+  it("shows the display text of expanded templates and reserves command names", () => {
+    expect(
+      itemsFromHistory([
+        { role: "user", text: "Analyze this repository ...", display: "/init focus" },
+        { role: "user", text: "plain" },
+      ]),
+    ).toEqual([
+      { kind: "user", text: "/init focus" },
+      { kind: "user", text: "plain" },
+    ]);
+    expect(reservedCommandNames()).toEqual(expect.arrayContaining(["help", "quit", "new", "copy"]));
+    expect(reservedCommandNames()).not.toContain("init");
   });
 });

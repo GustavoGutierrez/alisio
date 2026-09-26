@@ -261,6 +261,7 @@ export class AgentRunner {
     sessionId: string,
     prompt: string,
     signal?: AbortSignal,
+    options: { display?: string } = {},
   ): Promise<{ sessionId: string; text: string; status: string }> {
     if (this.busy) throw new Error("Runner is busy; await current run or cancel it");
     this.busy = true;
@@ -311,7 +312,11 @@ export class AgentRunner {
         }
         combined.throwIfAborted();
       }
-      o.store.append(sessionId, { role: "user", text: prompt });
+      o.store.append(sessionId, {
+        role: "user",
+        text: prompt,
+        ...(options.display ? { display: options.display } : {}),
+      });
       emit("run_started", { model });
       const compaction = o.compaction ?? {};
       for (let turn = 0; turn < (o.maxTurns ?? 20); turn++) {

@@ -114,6 +114,11 @@ se incluyen el nombre y la descripción; el cuerpo se carga con la herramienta `
 descripción y la coincidencia entre nombre y directorio (`alisio skills validate`). `.pi/skills` no
 se importa automáticamente.
 
+## Plantillas de prompts
+
+No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en
+proyectos de confianza, de `.alisio/prompts/`. Consulte [Plantillas de prompts](/es/prompt-templates).
+
 ## `mcp.servers`
 
 Servidores MCP, indexados por nombre. Nunca escriba secretos literales: indique nombres de variables
@@ -203,9 +208,9 @@ Comandos:
 | Comando | Descripción |
 | --- | --- |
 | `alisio` | TUI interactiva (o readline con `--no-tui`) |
-| `alisio run <prompt>` | Ejecución headless |
+| `alisio run <prompt>` | Ejecución headless; `/name args` ejecuta una [plantilla de prompt](/es/prompt-templates) |
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
-| `alisio init` | Escribe un `.alisio/config.json` de ejemplo sin secretos |
+| `alisio init` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Diagnóstico del entorno y del proveedor |
 | `alisio sessions list` | Lista las sesiones |
 | `alisio sessions recover <session> --acknowledge` | Reconoce efectos inciertos de herramientas tras una caída |

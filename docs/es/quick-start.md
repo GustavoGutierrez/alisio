@@ -106,6 +106,17 @@ Indicar `--model` al reanudar cambia la sesión a ese modelo para los turnos sig
 `sessions recover` solo es necesario cuando una caída dejó una herramienta con resultado incierto;
 consulte [Compactación de contexto](/es/compaction#uncertain-tool-results).
 
+## 6. Generar AGENTS.md
+
+Ejecute la plantilla integrada `/init` en la TUI, o en modo headless, para crear o actualizar el
+`AGENTS.md` raíz con instrucciones específicas del proyecto para agentes de programación:
+
+```sh
+alisio run "/init" --config ./my-api.json --allow-write
+```
+
+Consulte [Plantillas de prompts](/es/prompt-templates#built-in-init).
+
 ## Modelo de confianza de la configuración {#configuration-trust-model}
 
 Abrir un repositorio no debe redirigir su clave de API a un endpoint elegido por ese repositorio. Por
@@ -120,4 +131,4 @@ eso Alisio lee:
 `--trust-project` también carga los plugins ejecutables del proyecto desde `.alisio/plugins`, que se
 ejecutan con todos los privilegios del proceso. Úselo solo en repositorios de confianza.
 
-Siguiente: [Interfaz de terminal](/es/tui) · [Configuración](/es/configuration).
+Siguiente: [Interfaz de terminal](/es/tui) · [Plantillas de prompts](/es/prompt-templates) · [Configuración](/es/configuration).

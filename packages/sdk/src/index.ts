@@ -16,7 +16,11 @@ export interface ToolResult {
 }
 export type Message =
   /** `summary` marks a compaction summary that replaced earlier history. */
-  | { role: "user"; text: string; summary?: boolean }
+  /**
+   * `summary` marks injected context (e.g. a compaction checkpoint); `display` is what UIs show
+   * instead of `text` (e.g. `/init` for an expanded prompt template). Providers ignore both.
+   */
+  | { role: "user"; text: string; summary?: boolean; display?: string }
   | { role: "assistant"; text: string; calls: ToolCall[]; providerData?: unknown[] }
   | { role: "tool"; callId: string; result: ToolResult };
 export interface Usage {

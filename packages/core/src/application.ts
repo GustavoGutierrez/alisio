@@ -11,6 +11,7 @@ import { McpConnector } from "./mcp/connector.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible.ts";
 import { ProjectContext } from "./resources/context.ts";
+import { expandSlashPrompt, loadPromptTemplates, promptSources } from "./resources/prompts.ts";
 import { Skills } from "./resources/skills.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
@@ -34,6 +35,10 @@ export interface AppOptions {
   onEvent?: (event: RunEvent) => void;
   /** First-party plugins activated through the trusted path (the CLI passes its registry). */
   builtins?: BuiltinPlugin[];
+  /** Prompt templates shipped by the embedder (lowest precedence). */
+  builtinPrompts?: Array<{ name: string; text: string }>;
+  /** Names templates may not take (e.g. the UI's own slash commands). */
+  reservedPromptNames?: string[];
   /** Built-in plugin ids to disable (e.g. `memory`). */
   disablePlugins?: string[];
   /** Interactive approval for write/process tools; ignored in read-only mode. */
@@ -172,9 +177,40 @@ export async function createApplication(options: AppOptions = {}) {
         options.onEvent?.(event);
       },
     });
+    // Project prompts follow the config trust model: --trust-project or an explicit --config.
+    const prompts = await loadPromptTemplates(
+      promptSources({
+        builtin: options.builtinPrompts ?? [],
+        plugins: plugins.promptSources,
+        userDir: join(configHome(), "prompts"),
+        projectDir: join(workspace, ".alisio", "prompts"),
+        trusted: !!options.trustProject || !!options.config,
+      }),
+      { reserved: [...(options.reservedPromptNames ?? []), ...plugins.commands.keys()] },
+    );
+    /**
+     * `/name args` → rendered template text, or undefined when not a template. Throws when the
+     * template requires a capability that is neither allowed nor approvable.
+     */
+    const expandPrompt = (input: string) => {
+      const expanded = expandSlashPrompt(input, prompts.templates);
+      if (!expanded) return undefined;
+      for (const need of expanded.template.requires) {
+        const flag = need === "write" ? "--allow-write" : "--allow-process";
+        if (options.readOnly)
+          throw new Error(
+            `/${expanded.name} needs ${need} access, which --read-only disables. Run it without --read-only (and with ${flag}, or approve the calls in the TUI).`,
+          );
+        if (!runner.policy[need] && !runner.approvals)
+          throw new Error(`/${expanded.name} needs ${need} access: rerun with ${flag}.`);
+      }
+      return expanded;
+    };
     return {
       workspace,
       config,
+      prompts,
+      expandPrompt,
       store,
       registry,
       context,

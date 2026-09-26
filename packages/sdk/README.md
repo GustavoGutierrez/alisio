@@ -42,6 +42,24 @@ as `extension_conflict`. Providers receive only their context (`terminal.color`,
 A declarative `extensions: { mascot, "startup-screen" }` field on the plugin is also accepted.
 Plugins are identified by `id` (not `name`).
 
+## Prompt templates
+
+`api.resources.prompts("./prompts")` registers a directory of Markdown templates that become
+slash commands (for example `/review src/app.ts`):
+
+```md
+---
+description: Review a file for bugs
+argument-hint: <path>
+requires: [write]   # optional: write | process
+---
+Review $1 carefully. Extra focus: $ARGUMENTS
+```
+
+`$ARGUMENTS` is the whole argument string and `$1`..`$9` are shell-like positional arguments.
+Precedence: built-in < plugin < user (`~/.config/alisio/prompts`) < trusted project
+(`.alisio/prompts`).
+
 The API covers tools, commands, events, context providers, compaction hooks, session start/end
 hooks, provider-agnostic `model.complete`, a SQLite storage port and UI status. Publish plugins as
 JavaScript with the `alisio-plugin` keyword and `@alisio/sdk` as a peer dependency. Guide:

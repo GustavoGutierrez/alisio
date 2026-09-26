@@ -33,6 +33,18 @@ funcional, no solo interfaces o stubs.
 - Binario autónomo opcional (`pnpm build:binary`, Bun) y workflow de release con binarios
   linux-x64/arm64, darwin-x64/arm64 y windows-x64, `SHA256SUMS` e instalador `scripts/install.sh`.
 - Sitio de documentación bilingüe (VitePress, inglés y español) desplegado en GitHub Pages.
+- Plantillas de prompts: Markdown con frontmatter YAML (`description`, `argument-hint`,
+  `requires`), sintaxis `$ARGUMENTS` y `$1`..`$9`; fuentes con precedencia documentada
+  (integradas < plugins vía `resources.prompts` < usuario `<config>/prompts` < proyecto
+  `.alisio/prompts` solo si es de confianza) y diagnósticos (`prompt_override`,
+  `prompt_conflict`, `prompt_invalid`, `prompt_shadowed`). Cada plantilla es un comando slash
+  con descripción en `/help` y autocompletado; se envía como turno normal (streaming,
+  herramientas, aprobaciones) y la conversación muestra `/nombre args` (persistido como
+  `display`). Headless: `alisio run "/init ..."` con la misma sintaxis.
+- `/init` integrado: analiza el repositorio y crea o actualiza `AGENTS.md` en el sitio
+  (`edit_file` con `expectedHash`), solo con hechos verificados; exige escritura (rechazo claro
+  con `--read-only`; aprobación en la TUI). `alisio init` sigue creando la configuración y
+  ahora sugiere `/init`.
 - Registro genérico de puntos de extensión (`api.extensions.register`, campo declarativo
   `extensions`) con los puntos tipados `mascot` y `startup-screen`: resolución determinista
   (prioridad, id del plugin, orden de registro), diagnósticos `extension_conflict` en `/stats` y
@@ -91,7 +103,6 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
 - Primera publicación real en npm y release con binarios (flujos preparados, no ejecutados);
   SemVer de rangos de plugins y recarga en sesión inactiva.
-- Plantillas de prompts: la API reserva rutas, el renderizado está pendiente.
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo, reconexión explícita en la CLI y capacidades multimedia MCP.
 - OpenTelemetry remoto, métricas de memoria y benchmarks de repositorios grandes.
@@ -115,6 +126,21 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   un binario alterado). No se ejecutó ninguna publicación ni release; los workflows de release
   y Pages no se ejecutaron en GitHub. Binarios macOS/Windows/arm64 no probados (compilación
   cruzada de Bun).
+
+## Plantillas y `/init`: alcance de la verificación
+
+- Vitest: parseo y validación del frontmatter, sustitución de argumentos, precedencia y
+  diagnósticos, nombres reservados, confianza del proyecto, expansión slash, `display` en el
+  historial. Escenarios: `/init` con proveedor simulado (list_files/read_file → write_file al
+  crear; read_file → edit_file con hash al actualizar, conservando el contenido humano),
+  rechazo con `--read-only` y sin `--allow-write`, aprobaciones, plantillas de plugin, usuario
+  y proyecto (no cargadas sin confianza). `test:cli`/`test:compiled`: `run "/init"` headless y
+  rechazo con `--read-only`.
+- DeepSeek real (`deepseek-flash`) sobre una copia temporal de `examples/plugins/custom-mascot`:
+  creó un `AGENTS.md` de 103 líneas con hechos verificados; una segunda ejecución con foco lo
+  actualizó con `edit_file` conservando una nota humana. En esa segunda ejecución se agotó
+  `limits.maxTokens` (100 000) después de aplicar los cambios; en repositorios grandes conviene
+  subir ese límite.
 
 ## Pantalla de inicio y extensiones: alcance de la verificación
 
@@ -178,6 +204,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `node --env-file=.env`. Los plugins `.ts` locales requieren Bun o Node >=22.18; los paquetes
   npm de plugins deben publicarse en JavaScript. La condición de export `alisio-source` solo
   se usa en desarrollo dentro del monorepo y no se publica.
+- Plantillas: sin inclusiones ni parciales, sin ejecución de comandos ni inyección de archivos;
+  solo `$1`..`$9` posicionales; `/init` depende del modelo para limitarse a hechos verificados y
+  consume bastantes tokens en repositorios grandes (`limits.maxTokens`).
 - Pantalla de inicio: con `TERM=dumb` solo la pantalla de inicio pasa a ASCII; el resto de la
   TUI (cabecera, barras) sigue usando glifos Unicode. El ancho se cuenta por punto de código,
   así que glifos anchos (CJK, emoji) en mascotas personalizadas pueden desalinear. Los

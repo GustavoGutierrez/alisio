@@ -71,10 +71,15 @@ Typing `/` opens autocompletion.
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
 | `/copy` | Copy the last assistant response to the clipboard |
+| `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
 | `/memory …` | Command of the built-in memory plugin; see [Persistent memory](/memory) |
+
+`/init` is a prompt template, not the `alisio init` command: `alisio init` only writes an example
+`.alisio/config.json`. Other [prompt templates](/prompt-templates) appear in their own section of
+`/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
 is running, prompts and the `/model`, `/compact`, `/clear` and `/resume` commands wait: press Esc to

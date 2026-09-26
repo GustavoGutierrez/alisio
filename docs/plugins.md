@@ -56,7 +56,7 @@ removed automatically when it is unloaded.
 | `events.on(handler)` | Observes versioned run events (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
 | `context.register(provider)` | `() => Promise<string>`; adds text to the model context |
 | `resources.skills(path)` | Adds an Agent Skills root (relative to the plugin file) |
-| `resources.prompts(path)` | Reserved: registers a prompt templates root; rendering is not implemented yet |
+| `resources.prompts(path)` | Adds a directory of [prompt templates](/prompt-templates#templates-from-plugins) (`*.md`, relative to the plugin file) |
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
 | `compaction.register({ beforeCompact, afterCompact })` | Compaction hooks, see below |

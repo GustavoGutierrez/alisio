@@ -17,7 +17,6 @@ it is not a statement that all of its release criteria are met.
 - Interactive onboarding; configurable color themes; expandable reasoning view.
 - First real npm publication and release with binaries (workflows prepared, not executed); SemVer
   ranges for plugins and reload in an idle session.
-- Prompt templates: the API reserves paths, rendering is pending.
 - Automatic discovery of Pi paths and incremental watch.
 - Interactive MCP OAuth, explicit reconnection in the CLI and MCP multimedia capabilities.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
@@ -51,6 +50,8 @@ it is not a statement that all of its release criteria are met.
 - **Startup screen**: the TUI chrome itself (header, bars) still uses Unicode glyphs under
   `TERM=dumb`; only the startup screen falls back to ASCII. Width counting treats every code point as
   one column, so wide East Asian or emoji glyphs in custom mascots may misalign.
+- **Prompt templates**: no template includes or partials, no shell execution or file injection in
+  templates, `$10` and higher are not supported, and positional arguments are plain text only.
 - **Clipboard**: OSC 52 cannot be confirmed; the TUI reports it as unverified.
 - **TUI**: `/stats` covers only the current TUI process for the active session; it is not rebuilt from
   persisted events. The TUI needs a terminal with an alternate screen; otherwise use `--no-tui` or

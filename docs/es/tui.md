@@ -72,10 +72,15 @@ Al escribir `/` se abre el autocompletado.
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
+| `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
+
+`/init` es una plantilla de prompt, no el comando `alisio init`: `alisio init` solo escribe un
+`.alisio/config.json` de ejemplo. Las demás [plantillas de prompts](/es/prompt-templates) aparecen en
+una sección propia de `/help` y en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/compact`,

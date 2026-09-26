@@ -53,7 +53,11 @@ export class PluginHost implements RunnerExtensions {
   observers = new Set<(event: Readonly<RunEvent>) => void>();
   contexts: Array<() => Promise<string>> = [];
   skillRoots: string[] = [];
-  promptRoots: string[] = [];
+  /** Prompt template directories registered by plugins, with their plugin id. */
+  promptSources: Array<{ plugin: string; dir: string }> = [];
+  get promptRoots(): string[] {
+    return this.promptSources.map((s) => s.dir);
+  }
   private loaded = new Map<string, { plugin: Plugin; undo: Array<() => void>; builtin: boolean }>();
   constructor(
     private registry: ToolRegistry,
@@ -173,10 +177,10 @@ export class PluginHost implements RunnerExtensions {
           });
         },
         prompts: (path) => {
-          const p = resolve(base, path);
-          this.promptRoots.push(p);
+          const entry = { plugin: plugin.id, dir: resolve(base, path) };
+          this.promptSources.push(entry);
           track(() => {
-            this.promptRoots = this.promptRoots.filter((x) => x !== p);
+            this.promptSources = this.promptSources.filter((x) => x !== entry);
           });
         },
       },

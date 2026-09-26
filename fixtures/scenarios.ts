@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type ModelProvider, type ProviderEvent, textResult } from "@alisio/sdk";
 import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
+import { BUILTIN_PROMPTS } from "../packages/cli/src/prompts/index.ts";
 import { createApplication } from "../packages/core/src/application.ts";
 import { configSchema, loadConfig } from "../packages/core/src/config.ts";
 import { estimateTokens } from "../packages/core/src/core/compaction.ts";
@@ -1736,6 +1737,227 @@ const fixtures: Record<string, () => Promise<void>> = {
       assert.equal(app.runner.policy.external, true);
     } finally {
       await app.close();
+    }
+  },
+  async "prompt-init"() {
+    const project = join(root, "proj");
+    await mkdir(join(project, ".git"), { recursive: true });
+    await writeFile(
+      join(project, "package.json"),
+      JSON.stringify({ name: "demo", scripts: { test: "vitest run" } }),
+    );
+    const calls: string[] = [];
+    let firstUser = "";
+    let round = 0;
+    const call = (id: string, name: string, args: unknown) => ({
+      id,
+      name,
+      arguments: JSON.stringify(args),
+    });
+    const provider = (mode: "create" | "update"): ModelProvider => ({
+      id: "test",
+      model: "test",
+      async *stream(request) {
+        const users = request.messages.filter((m) => m.role === "user");
+        firstUser = users.at(-1)?.role === "user" ? (users.at(-1) as { text: string }).text : "";
+        round++;
+        const last = request.messages.at(-1);
+        let calls_: ReturnType<typeof call>[] = [];
+        if (mode === "create")
+          calls_ =
+            round === 1
+              ? [call("l1", "list_files", {}), call("r1", "read_file", { path: "package.json" })]
+              : round === 2
+                ? [
+                    call("w1", "write_file", {
+                      path: "AGENTS.md",
+                      content: "# demo\n\n- Test: `vitest run` (from package.json)\n",
+                      expectedHash: null,
+                    }),
+                  ]
+                : [];
+        else if (round === 1) calls_ = [call("r2", "read_file", { path: "AGENTS.md" })];
+        else if (round === 2) {
+          const sha = JSON.parse(
+            last?.role === "tool" ? (last.result.content[0]?.text ?? "{}") : "{}",
+          ).sha256;
+          calls_ = [
+            call("e1", "edit_file", {
+              path: "AGENTS.md",
+              oldText: "Human note: keep this.",
+              newText: "Human note: keep this.\n\n## Commands\n- `vitest run`",
+              expectedHash: sha,
+            }),
+          ];
+        }
+        for (const c of calls_) calls.push(c.name);
+        yield {
+          type: "completed",
+          message: {
+            role: "assistant",
+            text: calls_.length ? "" : "Summary: AGENTS.md updated.",
+            calls: calls_,
+          },
+        };
+      },
+    });
+    const config = join(root, "cfg.json");
+    await writeFile(
+      config,
+      JSON.stringify({
+        provider: { baseURL: "http://127.0.0.1:9/v1", model: "test", auth: "none" },
+      }),
+    );
+    process.env.ALISIO_STATE_HOME = join(root, "state");
+    const open = (mode: "create" | "update", extra: Record<string, unknown> = {}) =>
+      createApplication({
+        cwd: project,
+        config,
+        noHerdr: true,
+        db: join(root, `${crypto.randomUUID()}.sqlite`),
+        builtinPrompts: BUILTIN_PROMPTS,
+        provider: provider(mode),
+        allowWrite: true,
+        ...extra,
+      });
+    // Create: explores, then writes a new AGENTS.md; the prompt is persisted with its display.
+    let app = await open("create");
+    try {
+      const expanded = app.expandPrompt("/init");
+      assert.ok(expanded);
+      assert.match(expanded.text, /AGENTS\.md/);
+      assert.match(expanded.text, /expectedHash/);
+      const s = app.store.create(app.workspace, app.provider.id, "test");
+      await app.runner.run(s.id, expanded.text, undefined, { display: expanded.display });
+      assert.deepEqual(calls, ["list_files", "read_file", "write_file"]);
+      assert.match(await readFile(join(project, "AGENTS.md"), "utf8"), /vitest run/);
+      assert.equal(firstUser, expanded.text);
+      assert.deepEqual(app.store.messages(s.id)[0], {
+        role: "user",
+        text: expanded.text,
+        display: "/init",
+      });
+    } finally {
+      await app.close();
+    }
+    // Update: reads the existing file and edits it with the current hash (never write_file).
+    await writeFile(join(project, "AGENTS.md"), "# demo\n\nHuman note: keep this.\n");
+    calls.length = 0;
+    round = 0;
+    app = await open("update");
+    try {
+      const expanded = app.expandPrompt("/init focus on tests");
+      assert.ok(expanded);
+      assert.match(expanded.text, /focus on tests/);
+      const s = app.store.create(app.workspace, app.provider.id, "test");
+      await app.runner.run(s.id, expanded.text, undefined, { display: expanded.display });
+      assert.deepEqual(calls, ["read_file", "edit_file"]);
+      const text = await readFile(join(project, "AGENTS.md"), "utf8");
+      assert.match(text, /Human note: keep this\./);
+      assert.match(text, /## Commands/);
+      assert.equal(
+        (app.store.messages(s.id)[0] as { display?: string }).display,
+        "/init focus on tests",
+      );
+    } finally {
+      await app.close();
+    }
+    // Requirements: --read-only refuses clearly; headless without write or approvals too.
+    app = await open("create", { readOnly: true, allowWrite: false });
+    try {
+      assert.throws(() => app.expandPrompt("/init"), /--read-only/);
+    } finally {
+      await app.close();
+    }
+    app = await open("create", { allowWrite: false });
+    try {
+      assert.throws(() => app.expandPrompt("/init"), /--allow-write/);
+      assert.equal(app.expandPrompt("/not-a-template"), undefined);
+    } finally {
+      await app.close();
+    }
+    app = await open("create", { allowWrite: false, approve: async () => "once" });
+    try {
+      assert.ok(app.expandPrompt("/init"), "approvals make write requirements satisfiable");
+    } finally {
+      await app.close();
+    }
+  },
+  async "prompt-sources"() {
+    const project = join(root, "work");
+    await mkdir(join(project, ".alisio", "prompts"), { recursive: true });
+    await writeFile(
+      join(project, ".alisio", "prompts", "proj.md"),
+      "---\ndescription: project prompt\n---\nProject $1",
+    );
+    const configHome = join(root, "home");
+    await mkdir(join(configHome, "prompts"), { recursive: true });
+    await writeFile(
+      join(configHome, "prompts", "hello.md"),
+      "---\ndescription: user prompt\nargument-hint: <name>\n---\nHello $1",
+    );
+    await writeFile(
+      join(configHome, "prompts", "init.md"),
+      "---\ndescription: my init\n---\nCustom init",
+    );
+    await mkdir(join(root, "plugin", "prompts"), { recursive: true });
+    await writeFile(
+      join(root, "plugin", "prompts", "review.md"),
+      "---\ndescription: plugin review\n---\nReview $ARGUMENTS",
+    );
+    await writeFile(
+      join(root, "plugin", "index.mjs"),
+      'export default {id:"prompter",version:"1.0.0",apiVersion:1,setup(api){api.resources.prompts("./prompts")}}',
+    );
+    const config = join(root, "cfg.json");
+    await writeFile(
+      config,
+      JSON.stringify({
+        provider: { baseURL: "http://127.0.0.1:9/v1", model: "test", auth: "none" },
+      }),
+    );
+    const previous = process.env.ALISIO_CONFIG_HOME;
+    process.env.ALISIO_CONFIG_HOME = configHome;
+    process.env.ALISIO_STATE_HOME = join(root, "state");
+    const provider: ModelProvider = { id: "test", model: "test", async *stream() {} };
+    const open = (trusted: boolean) =>
+      createApplication({
+        cwd: project,
+        ...(trusted ? { config } : {}),
+        noHerdr: true,
+        db: join(root, `${crypto.randomUUID()}.sqlite`),
+        builtinPrompts: BUILTIN_PROMPTS,
+        reservedPromptNames: ["help"],
+        plugin: [join(root, "plugin", "index.mjs")],
+        provider,
+      });
+    try {
+      const trusted = await open(true);
+      try {
+        const t = trusted.prompts.templates;
+        assert.equal(t.get("review")?.source, "plugin");
+        assert.equal(t.get("hello")?.argumentHint, "<name>");
+        assert.equal(t.get("proj")?.source, "project");
+        assert.equal(t.get("init")?.description, "my init");
+        assert.ok(
+          trusted.prompts.diagnostics.some(
+            (d) => d.type === "prompt_override" && d.name === "init" && d.winner === "user",
+          ),
+        );
+        assert.equal(trusted.expandPrompt("/review the parser")?.text, "Review the parser");
+      } finally {
+        await trusted.close();
+      }
+      const untrusted = await open(false);
+      try {
+        assert.equal(untrusted.prompts.templates.has("proj"), false);
+        assert.equal(untrusted.prompts.templates.get("review")?.source, "plugin");
+      } finally {
+        await untrusted.close();
+      }
+    } finally {
+      if (previous === undefined) delete process.env.ALISIO_CONFIG_HOME;
+      else process.env.ALISIO_CONFIG_HOME = previous;
     }
   },
 };

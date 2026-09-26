@@ -39,6 +39,7 @@ import {
   lastAssistantText,
   parseCommand,
   reduceEvent,
+  reservedCommandNames,
   resolveCommand,
   shortenPath,
   shortId,
@@ -99,10 +100,13 @@ export interface TuiOptions extends AppOptions {
 export async function runTui(options: TuiOptions): Promise<void> {
   const { createApplication } = await import("@alisio/core");
   const { BUILTIN_PLUGINS } = await import("../builtin.ts");
+  const { BUILTIN_PROMPTS } = await import("../prompts/index.ts");
   let dispatch: (event: RunEvent) => void = () => {};
   let approve: (request: ApprovalRequest) => Promise<ApprovalDecision> = async () => "deny";
   const app = await createApplication({
     builtins: BUILTIN_PLUGINS,
+    builtinPrompts: BUILTIN_PROMPTS,
+    reservedPromptNames: reservedCommandNames(),
     ...options,
     onEvent: (event) => dispatch(event),
     approve: (request) => approve(request),
@@ -321,9 +325,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
       tui.requestRender();
     }
   };
-  const runPrompt = (display: string, prompt: string) => {
+  const runPrompt = (display: string, prompt: string, persistDisplay?: string) => {
     push({ kind: "user", text: display });
-    return task((signal) => app.runner.run(session, prompt, signal));
+    return task((signal) =>
+      app.runner.run(session, prompt, signal, persistDisplay ? { display: persistDisplay } : {}),
+    );
   };
 
   let resolveExit: () => void = () => {};
@@ -463,6 +469,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
         (d) =>
           `- ${"winner" in d ? `extension_conflict ${d.point}: ${d.winner} over ${d.losers.join(", ")}` : `${d.type} ${d.source} ${d.hook}: ${d.error}`}`,
       ),
+      `- prompt templates: ${app.prompts.templates.size}`,
+      ...app.prompts.diagnostics.map((d) => `- ${d.type} ${JSON.stringify(d).slice(0, 160)}`),
       "",
       ...(app.plugins.status.size
         ? [
@@ -489,7 +497,20 @@ export async function runTui(options: TuiOptions): Promise<void> {
           ([name, c]) =>
             `- \`/${name}${c.argumentHint ? ` ${c.argumentHint}` : ""}\` — ${c.description ?? "plugin command"} (plugin ${c.plugin})`,
         ),
+      ...(app.prompts.templates.size
+        ? [
+            "",
+            "**Prompt templates** (rendered and sent as your message)",
+            "",
+            ...[...app.prompts.templates.values()].map(
+              (t) =>
+                `- \`/${t.name}${t.argumentHint ? ` ${t.argumentHint}` : ""}\` — ${t.description} (${t.source}${t.requires.length ? `, needs ${t.requires.join("+")}` : ""})`,
+            ),
+            "",
+          ]
+        : []),
       "- `/skill:name request` — load a skill and send the request",
+      "- `/init` (above) writes AGENTS.md; the shell command `alisio init` only scaffolds `.alisio/config.json`",
       "- `/command plugin.id:name args` — run a plugin command",
       "",
       "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · PgUp/PgDn or mouse wheel scroll",
@@ -502,13 +523,21 @@ export async function runTui(options: TuiOptions): Promise<void> {
     editor.addToHistory(raw);
     const parsed = parseCommand(text);
     const name = parsed ? resolveCommand(parsed.name) : undefined;
-    if (busy && (!parsed || (name && mutating.has(name)) || parsed.name.startsWith("skill:"))) {
+    const isTemplate = !!parsed && !name && app.prompts.templates.has(parsed.name);
+    if (
+      busy &&
+      (!parsed || (name && mutating.has(name)) || parsed.name.startsWith("skill:") || isTemplate)
+    ) {
       editor.setText(raw);
       flashHint("A turn is running: press Esc to interrupt, or wait for it to finish");
       return;
     }
     try {
       if (!parsed) return await runPrompt(raw, raw);
+      if (isTemplate) {
+        const expanded = app.expandPrompt(text);
+        if (expanded) return await runPrompt(expanded.display, expanded.text, expanded.display);
+      }
       if (parsed.name.startsWith("skill:")) {
         const skill = await app.skills.load(parsed.name.slice(6));
         return await runPrompt(text, `${skill}\n\nUser request: ${parsed.args}`);
@@ -601,6 +630,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
     new CombinedAutocompleteProvider(
       [
         ...COMMANDS,
+        ...[...app.prompts.templates.values()].map((t) => ({
+          name: t.name,
+          description: `${t.description} (template)`,
+          ...(t.argumentHint ? { argumentHint: t.argumentHint } : {}),
+        })),
         ...[...app.plugins.commandInfo.entries()]
           .filter(([name]) => !resolveCommand(name))
           .map(([name, c]) => ({

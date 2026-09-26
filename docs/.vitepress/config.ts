@@ -7,7 +7,14 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
   return [
     {
       text: labels.groupGuide ?? "Guide",
-      items: ["installation", "quick-start", "tui", "configuration", "tools"].map(item),
+      items: [
+        "installation",
+        "quick-start",
+        "tui",
+        "prompt-templates",
+        "configuration",
+        "tools",
+      ].map(item),
     },
     { text: labels.groupFeatures ?? "Features", items: ["compaction", "memory"].map(item) },
     { text: labels.groupExtend ?? "Extend", items: ["plugins", "architecture"].map(item) },
@@ -23,6 +30,7 @@ const en = {
   installation: "Installation",
   "quick-start": "Quick start",
   tui: "Terminal UI",
+  "prompt-templates": "Prompt templates",
   configuration: "Configuration",
   tools: "Tools & permissions",
   compaction: "Context compaction",
@@ -41,6 +49,7 @@ const es = {
   installation: "Instalación",
   "quick-start": "Inicio rápido",
   tui: "Interfaz de terminal",
+  "prompt-templates": "Plantillas de prompts",
   configuration: "Configuración",
   tools: "Herramientas y permisos",
   compaction: "Compactación de contexto",

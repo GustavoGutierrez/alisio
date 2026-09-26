@@ -16,9 +16,11 @@ const command =
     ? [resolve(process.platform === "win32" ? "dist/alisio.exe" : "dist/alisio")]
     : [process.execPath, resolve("packages/cli/dist/main.js")];
 let requests = 0;
+const firstUserMessages: string[] = [];
 const server = await serve(async (req) => {
   const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
   requests++;
+  firstUserMessages.push(String(body.messages.find((m) => m.role === "user")?.content ?? ""));
   // Stateless: answer after the tool result, otherwise request the tool.
   const answered = body.messages.some((m) => m.role === "tool");
   const choice = !answered
@@ -42,7 +44,7 @@ const server = await serve(async (req) => {
     { headers: { "Content-Type": "text/event-stream" } },
   );
 });
-const execute = async (args: string[], checkStderr = false) => {
+const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   const [program = "", ...prefix] = command;
   const child = spawn(program, [...prefix, ...args], {
     cwd: directory,
@@ -66,7 +68,8 @@ const execute = async (args: string[], checkStderr = false) => {
     stderr += d.toString();
   });
   const code = await new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
-  assert.equal(code, 0, stderr);
+  assert.equal(code, expectCode, stderr);
+  if (expectCode) return stderr;
   // node:sqlite's ExperimentalWarning must be silenced; other diagnostics are allowed.
   assert.doesNotMatch(stderr, /ExperimentalWarning/);
   if (checkStderr) assert.doesNotMatch(stderr, /MASCOT-MARKER|SCREEN-MARKER|Alisio v/);
@@ -151,8 +154,28 @@ try {
   assert.equal(plugins.tools.length, 1);
   assert.deepEqual(plugins.commands, ["compiled:hi"]);
   assert.deepEqual(plugins.builtin, ["memory"]);
+  // Headless prompt template: `run "/init"` renders the built-in template as the user turn.
+  firstUserMessages.length = 0;
+  await execute([
+    "run",
+    "/init focus on tests",
+    "--cwd",
+    directory,
+    "--config",
+    join(directory, "config.json"),
+    "--json",
+    "--allow-write",
+  ]);
+  assert.match(firstUserMessages[0] ?? "", /create or update the root `AGENTS\.md`/);
+  assert.match(firstUserMessages[0] ?? "", /focus on tests/);
+  const refused = await execute(
+    ["run", "/init", "--cwd", directory, "--config", join(directory, "config.json"), "--read-only"],
+    false,
+    1,
+  );
+  assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 4);
+  assert.equal(sessions.length, 5);
   console.log(
     JSON.stringify({
       ok: true,
@@ -165,6 +188,7 @@ try {
         "session persistence",
         "no node:sqlite ExperimentalWarning",
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
+        "headless prompt template /init; --read-only refusal",
       ],
     }),
   );

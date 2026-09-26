@@ -106,6 +106,17 @@ Passing `--model` when resuming switches the session to that model for the follo
 `sessions recover` is only needed after a crash left a tool with an uncertain result; see
 [Context compaction](/compaction#uncertain-tool-results).
 
+## 6. Generate AGENTS.md
+
+Run the built-in `/init` template in the TUI, or headless, to create or update the root `AGENTS.md`
+with project-specific instructions for coding agents:
+
+```sh
+alisio run "/init" --config ./my-api.json --allow-write
+```
+
+See [Prompt templates](/prompt-templates#built-in-init).
+
 ## Configuration trust model
 
 Opening a repository must not redirect your API key to an endpoint chosen by that repository. For
@@ -120,4 +131,4 @@ that reason Alisio reads:
 `--trust-project` also loads the project's executable plugins from `.alisio/plugins`, which run with
 full process privileges. Only use it for repositories you trust.
 
-Next: [Terminal UI](/tui) · [Configuration](/configuration).
+Next: [Terminal UI](/tui) · [Prompt templates](/prompt-templates) · [Configuration](/configuration).

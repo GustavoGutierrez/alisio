@@ -56,7 +56,7 @@ plugin se elimina automáticamente cuando se descarga.
 | `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
 | `context.register(provider)` | `() => Promise<string>`; añade texto al contexto del modelo |
 | `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del plugin) |
-| `resources.prompts(path)` | Reservado: registra una raíz de plantillas de prompts; el renderizado aún no está implementado |
+| `resources.prompts(path)` | Añade un directorio de [plantillas de prompts](/es/prompt-templates#templates-from-plugins) (`*.md`, relativo al archivo del plugin) |
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
