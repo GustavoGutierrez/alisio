@@ -24,6 +24,7 @@ import {
   truncateToWidth,
   VStack,
 } from "@earendil-works/pi-tui";
+import { loadVersion } from "../version.ts";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_IMAGE_BYTES,
@@ -79,7 +80,7 @@ import {
 } from "./state.ts";
 import { editorTheme, selectListTheme, style } from "./theme.ts";
 
-const VERSION = "0.1.0-alpha.1";
+const VERSION = loadVersion(import.meta.url);
 
 /** Inline selection list with type-to-filter, rendered above the editor. */
 class Picker implements Component {

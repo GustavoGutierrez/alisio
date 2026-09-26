@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { loadVersion } from "./version.ts";
 
-const VERSION = "0.1.0-alpha.1";
+const VERSION = loadVersion(import.meta.url);
 function parseAgents(json: string): Record<string, unknown> {
   const value: unknown = JSON.parse(json);
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -27,7 +28,7 @@ const program = new Command();
 program
   .name("alisio")
   .description("Velocidad y eficiencia para construir — extensible coding harness")
-  .version("0.1.0-alpha.1")
+  .version(VERSION)
   .option("--cwd <path>", "Working directory")
   .option("--config <path>", "Explicit trusted configuration file")
   .option("--trust-project", "Load project config and executable plugins (full process privileges)")
@@ -301,7 +302,7 @@ program.command("doctor").action(async (_opts, cmd) => {
     process.env.ALISIO_MODEL?.trim() ||
     (useSaved ? saved.profile.model : config.provider.model);
   const status = {
-    version: "0.1.0-alpha.1",
+    version: VERSION,
     runtime: process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.versions.node}`,
     platform: process.platform,
     workspace,
