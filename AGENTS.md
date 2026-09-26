@@ -1,5 +1,19 @@
 # Alisio contributor instructions
 
+## Who Alisio is
+
+Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
+endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
+headless for scripts and CI.
+
+- **Developed in Bogotá, Colombia** by **Ing. Gustavo Gutiérrez Mercado**.
+- **npm packages**: published under the alisio organization at
+  <https://www.npmjs.com/settings/alisio/packages> (CLI: `@alisio/alisio-code`).
+- **Source repository**: <https://github.com/GustavoGutierrez/alisio>.
+- **Developer profile**: <https://github.com/GustavoGutierrez> ·
+  LinkedIn: <https://www.linkedin.com/in/gustavo-gutierrez-mercado>.
+- **Documentation** (EN/ES): <https://gustavogutierrez.github.io/alisio/>.
+
 Use pnpm for dependencies (keep only pnpm-lock.yaml). The runtime is Node-first (Node >=22.16)
 and must keep working on Bun; Bun also builds the optional standalone binary.
 Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`,
