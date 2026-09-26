@@ -19,7 +19,31 @@ funcional, no solo interfaces o stubs.
   skills, estado y desregistro/cleanup.
 - MCP oficial v2: stdio, Streamable HTTP, herramientas, recursos, prompts y cierre.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
-- CLI interactiva/headless, JSONL, reanudación, configuración, diagnósticos y build Bun.
+- CLI interactiva/headless, JSONL, reanudación, configuración y diagnósticos.
+- Runtime Node-first: Node.js >=22.16 (mínimo verificado: 22.13–22.15 incluyen `node:sqlite`
+  sin FTS5; 22.16.0 funciona) y compatible con Bun. Sin APIs `Bun.*`: `node:sqlite` (en ambos
+  runtimes), `node:fs` y `node:child_process` detrás de la capa de runtime; el
+  `ExperimentalWarning` de SQLite se filtra de forma específica sin ocultar otros avisos.
+- Monorepo publicable: `@alisio/sdk` (contrato, sin dependencias), `@alisio/core` (núcleo
+  embebible), `@alisio/plugin-memory` (depende solo del SDK y usa el puerto de almacenamiento)
+  y `alisio` (CLI/TUI, registro de plugins integrados). Build con `tsc` a `dist/` (JS + `.d.ts`),
+  `publishConfig.exports` sin fuentes, changesets para versionado y publicación con provenance.
+- Plugins como paquetes npm (`--plugin nombre` o `plugins: ["nombre"]`), resueltos desde el
+  proyecto y luego las raíces globales; exigen la keyword `alisio-plugin`.
+- Binario autónomo opcional (`pnpm build:binary`, Bun) y workflow de release con binarios
+  linux-x64/arm64, darwin-x64/arm64 y windows-x64, `SHA256SUMS` e instalador `scripts/install.sh`.
+- Sitio de documentación bilingüe (VitePress, inglés y español) desplegado en GitHub Pages.
+- Registro genérico de puntos de extensión (`api.extensions.register`, campo declarativo
+  `extensions`) con los puntos tipados `mascot` y `startup-screen`: resolución determinista
+  (prioridad, id del plugin, orden de registro), diagnósticos `extension_conflict` en `/stats` y
+  `plugins doctor`, desregistro al desactivar el plugin.
+- Pantalla de inicio con mascota reemplazable: mascota original de Alisio (espíritu de nube del
+  viento alisio) con variantes Unicode, ASCII y compacta; pantalla por defecto con secciones
+  reutilizables, disposición lado a lado o apilada, consejos rotativos deterministas; fallback
+  seguro ante proveedores que fallan, devuelven basura o tardan; salida saneada y recortada.
+  Se muestra como primer bloque de la TUI y en stderr (si es TTY) en modo `--no-tui`; nunca en
+  `run`, `--json`, `--quiet`, `--no-banner`, `CI` ni sin TTY. Ejemplo publicable en
+  `examples/plugins/custom-mascot/`.
 - TUI con `@earendil-works/pi-tui` 0.87.1 (pantalla alternativa, renderizado diferencial):
   cabecera con modelo/host/permisos, conversación con Markdown, bloques de herramientas con
   spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens, comandos
@@ -33,7 +57,7 @@ funcional, no solo interfaces o stubs.
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del
   proveedor, `ui.status` y metadatos de comandos. El host aplica timeouts y aísla fallos.
-  Registro de plugins integrados (`src/plugins/builtin/`) con ruta de confianza, nombres sin
+  Registro de plugins integrados (`packages/cli/src/builtin.ts`) con ruta de confianza, nombres sin
   prefijo y efecto `internal`; desactivables por configuración o `--disable-plugin`.
 - Plugin integrado `memory` (estilo Engram): SQLite + FTS5 trigram, BM25 con recencia y
   accesos, upsert por `topic_key`, deduplicación con ventana de 15 minutos, borrado lógico,
@@ -48,7 +72,7 @@ funcional, no solo interfaces o stubs.
   un modelo por petición. Catálogo `GET /models` con ventana de contexto cuando el proveedor
   la informa, tokens en caché (`prompt_tokens_details.cached_tokens` o
   `prompt_cache_hit_tokens`) y razonamiento visible (`reasoning_content`) solo para mostrar.
-- Lockfile y versiones fijadas; Biome, TypeScript, Vitest y workflow CI Linux.
+- Lockfile y versiones fijadas; Biome, TypeScript, Vitest y CI Linux con Node 22.16, 22.x y 24.
 
 ## Validación
 
@@ -65,12 +89,47 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Validar Herdr con servidor/PTY reales; añadir launcher/resumer nativo si Herdr lo permite.
 - Checkpoints/rewind de sesión y memoria vectorial: no existen.
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
-- Paquetes npm publicados, SemVer de rangos de plugins, instalador y recarga en sesión inactiva.
+- Primera publicación real en npm y release con binarios (flujos preparados, no ejecutados);
+  SemVer de rangos de plugins y recarga en sesión inactiva.
 - Plantillas de prompts: la API reserva rutas, el renderizado está pendiente.
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo, reconexión explícita en la CLI y capacidades multimedia MCP.
 - OpenTelemetry remoto, métricas de memoria y benchmarks de repositorios grandes.
 - Endurecer frente a procesos hostiles y carreras de filesystem. No se ofrece sandbox OS.
+
+## Runtime y empaquetado: alcance de la verificación
+
+- Pruebas bajo Node (Vitest): adaptador SQLite (filas planas, transacciones anidadas, FTS5
+  trigram, permisos 0600, filtro del aviso experimental), helpers de archivos, `which`, runner
+  de procesos (salida, truncado, timeout) y resolución de plugins por ruta o paquete. Todos
+  los escenarios de integración se ejecutan en proceso bajo Node y un subconjunto también en Bun.
+- `test:cli` ejecuta `packages/cli/dist/main.js` con Node contra un proveedor simulado
+  (verificado en Node 22.19 y en el mínimo 22.16.0); `test:compiled` hace lo mismo con el
+  binario Bun. Ambos comprueban que no aparezca el `ExperimentalWarning` de SQLite.
+- `pack:check` empaqueta los cuatro paquetes con pnpm y valida contenido (solo `dist`, README,
+  LICENSE, `package.json`), `exports` hacia `dist`, ausencia de `workspace:` y de fuentes.
+- Instalación global real con npm desde los tarballs locales mediante un registro temporal
+  (`scripts/install-smoke.ts`): `alisio --help` funciona desde el empaquetado npm.
+- DeepSeek real bajo Node puro con el CLI construido (`run --read-only`, herramientas y JSONL).
+- `scripts/install.sh` probado contra un espejo local (instalación con checksum y rechazo de
+  un binario alterado). No se ejecutó ninguna publicación ni release; los workflows de release
+  y Pages no se ejecutaron en GitHub. Binarios macOS/Windows/arm64 no probados (compilación
+  cruzada de Bun).
+
+## Pantalla de inicio y extensiones: alcance de la verificación
+
+- Pruebas (Vitest, Node): registro (prioridades, desempate por id, conflictos, fallbacks,
+  desregistro); pantalla por defecto en 36/60/100/160 columnas (secciones presentes, anchos
+  dentro del límite, ASCII sin unicode, sin ANSI sin color); mascota y pantalla de plugins,
+  campo declarativo, prioridades, empate con diagnóstico, proveedores rotos con fallback,
+  saneado de secuencias de control, vuelta a los valores por defecto al cerrar el plugin;
+  política del banner (TUI, readline, run, `--json`, `--quiet`, `--no-banner`, `CI`, sin TTY)
+  y capacidades del terminal (`TERM=dumb`, `NO_COLOR`, `LANG=C`, 0 columnas → 80).
+- `test:cli` y `test:compiled`: el JSONL de `run --json` es idéntico (normalizando ids, marcas de
+  tiempo y duraciones) con y sin un plugin que registra mascota y pantalla, sin banner en stdout
+  ni stderr.
+- Pseudo-terminal: TUI a 110 y 36 columnas, `TERM=dumb`, `NO_COLOR=1`, `--no-banner`, plugin de
+  ejemplo (cometa) en ancho y estrecho, y modo `--no-tui` con stderr TTY, redirigido y `--quiet`.
 
 ## TUI y compactación: alcance de la verificación
 
@@ -114,6 +173,16 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   el portapapeles del usuario); compactación automática con DeepSeek real; Windows/macOS.
 
 ## Límites conocidos
+
+- Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
+  `node --env-file=.env`. Los plugins `.ts` locales requieren Bun o Node >=22.18; los paquetes
+  npm de plugins deben publicarse en JavaScript. La condición de export `alisio-source` solo
+  se usa en desarrollo dentro del monorepo y no se publica.
+- Pantalla de inicio: con `TERM=dumb` solo la pantalla de inicio pasa a ASCII; el resto de la
+  TUI (cabecera, barras) sigue usando glifos Unicode. El ancho se cuenta por punto de código,
+  así que glifos anchos (CJK, emoji) en mascotas personalizadas pueden desalinear. Los
+  proveedores son síncronos: un proveedor lento no puede interrumpirse, solo descartarse.
+- Licencia MIT provisional (titular: Gustavo Gutiérrez), pendiente de confirmación.
 
 - Memoria: la búsqueda usa el tokenizador trigram, así que los términos de menos de 3
   caracteres se ignoran. Sin búsqueda semántica. El resumen automático de cierre solo se

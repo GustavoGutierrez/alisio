@@ -1,0 +1,479 @@
+# Escribir plugins
+
+Un plugin es un módulo ES cuya exportación por defecto es un objeto `Plugin`. El contrato está en
+[`@alisio/sdk`](https://www.npmjs.com/package/@alisio/sdk): tipos más dos utilidades
+(`definePlugin`, `textResult`), sin dependencias de runtime ni SDKs de proveedores.
+
+```ts
+import { definePlugin, textResult } from "@alisio/sdk";
+
+export default definePlugin({
+  id: "acme.hello",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    api.tools.register({
+      name: "hello",
+      description: "Greets the user.",
+      effect: "read",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      async execute() {
+        return textResult("Hello!");
+      },
+    });
+  },
+});
+```
+
+::: danger Los plugins son código de confianza
+Los plugins se ejecutan en el mismo proceso con todos los privilegios del proceso de Alisio. Ni un
+manifiesto de plugin ni un subproceso son un sandbox, y el campo `effect` no aísla nada. Cargue solo
+código en el que confíe.
+:::
+
+## El objeto `Plugin`
+
+| Miembro | Descripción |
+| --- | --- |
+| `id` | ID único que cumple `^[a-z0-9][a-z0-9.-]{0,63}$`, por ejemplo `acme.hello` |
+| `version` | SemVer, por ejemplo `0.1.0` o `0.1.0-beta.1` |
+| `apiVersion` | Siempre `1` |
+| `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
+| `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
+| `dispose()` | Opcional; libera recursos cuando Alisio se cierra |
+
+`definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de plugin duplicados.
+
+## Referencia de `PluginAPI`
+
+Cada método `register`/`on` devuelve una función para anular el registro. Todo lo que registra un
+plugin se elimina automáticamente cuando se descarga.
+
+| Miembro | Descripción |
+| --- | --- |
+| `tools.register(tool)` | Registra una herramienta (`ToolDefinition`) |
+| `commands.register(name, handler, options?)` | Registra un comando; `handler(args: string) => Promise<string>` devuelve el texto que se muestra al usuario. `options`: `{ description?, argumentHint? }`, mostrados en `/help` y en el autocompletado |
+| `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
+| `context.register(provider)` | `() => Promise<string>`; añade texto al contexto del modelo |
+| `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del plugin) |
+| `resources.prompts(path)` | Reservado: registra una raíz de plantillas de prompts; el renderizado aún no está implementado |
+| `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
+| `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
+| `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
+| `session.onStart(handler)` | El texto devuelto se inyecta una vez al comienzo de una sesión nueva y vacía (persistido en la sesión) |
+| `session.onEnd(handler)` | Se llama cuando termina una sesión interactiva (`/clear`, `/exit`, salida) |
+| `model.complete(request)` | Completado de texto agnóstico del proveedor: `{ system, messages, maxTokens?, model?, signal? }` → `Promise<string>` |
+| `extensions.register(point, provider, options?)` | Proporciona una implementación para un [punto de extensión](#extension-points) (`mascot`, `startup-screen`); `options`: `{ priority? }` |
+| `ui.status(key, text, detail?)` | Texto breve en la barra de estado de la TUI; `detail` aparece en `/stats`; `text: undefined` lo elimina |
+
+### Herramientas
+
+```ts
+interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: JsonSchema;
+  effect?: "read" | "write" | "process" | "external" | "internal";
+  paths?: (input: Record<string, unknown>) => string[];
+  execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
+}
+```
+
+`ToolContext` proporciona `signal`, `workspace`, `emit(data)` y `session`. Devuelva
+`textResult(text, isError?)`. El efecto controla los permisos ([Herramientas y permisos](/es/tools)):
+las operaciones desconocidas o de plugins usan `external` por defecto; declare `read` solo para
+herramientas sin efectos secundarios.
+
+### Reglas de nombres y prefijos
+
+| Elemento | Plugin externo | Plugin integrado |
+| --- | --- | --- |
+| Nombre de herramienta | `p_<hash>_<name>` (10 caracteres hexadecimales del SHA-256 del ID del plugin), para evitar colisiones y cumplir los límites de nombres del proveedor | Sin prefijo |
+| Comando | `<plugin id>:<name>`, invocado como `/command acme.hello:name args` o `/acme.hello:name` | Sin prefijo (por ejemplo `/memory`) |
+| Efecto `internal` | Se degrada a `external` | Permitido |
+
+### Hooks de compactación {#compaction-hooks}
+
+```ts
+export default definePlugin({
+  id: "my.notes",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    api.compaction.register({
+      async beforeCompact() {
+        return { outputFields: { notes: "array of short strings worth keeping" } };
+      },
+      async afterCompact({ extracted }) {
+        const notes = Array.isArray(extracted.notes) ? extracted.notes : [];
+        return { report: { summary: `notes: ${notes.length}` } };
+      },
+    });
+  },
+});
+```
+
+- `beforeCompact(input)` recibe `sessionId`, `reason` (`manual` o `auto`), los `messages` que van a
+  reemplazarse, `focus` y `signal`. Puede devolver `instructions` (añadidas a las instrucciones del
+  resumidor) y `outputFields` (campos JSON adicionales de primer nivel, nombre → descripción,
+  solicitados en la misma llamada al resumidor).
+- `afterCompact(result)` recibe además `model`, `replaced`, `structured`, `checkpoint`,
+  `checkpointText` y `extracted` (los campos de este plugin, **sin validar**: valídelos usted mismo).
+  Puede devolver `injectContext` (texto añadido tras el checkpoint; manténgalo dentro de un
+  presupuesto) y `report` (`summary` se muestra literalmente).
+
+### Hooks de sesión y completados del modelo
+
+```ts
+api.session.onStart(async (info) => `Project notes for ${info.workspace}`);
+api.session.onEnd(async (info) => {
+  const summary = await api.model.complete({
+    system: "Summarize the session in one sentence.",
+    messages: [{ role: "user", text: `${info.messages.length} messages` }],
+    maxTokens: 200,
+    signal: info.signal,
+  });
+  api.state.set("lastSummary", summary);
+});
+```
+
+`SessionInfo` contiene `sessionId`, `model`, `workspace`, `reason` (`start`, `clear` o `exit`),
+`messages` y `signal`. `model.complete` usa el proveedor configurado (el modelo de la sesión cuando el
+plugin lo pasa) y no descuenta del presupuesto `limits.maxTokens`.
+
+### Puerto de almacenamiento
+
+```ts
+const db = api.storage.sqlite("/path/to/notes.sqlite");
+db.exec("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, text TEXT)");
+db.transaction(() => db.prepare("INSERT INTO notes (text) VALUES (?)").run("hello"));
+const rows = db.prepare("SELECT * FROM notes").all();
+```
+
+`SqlDatabase` es síncrono: `exec(sql)`, `prepare(sql)` (las sentencias se cachean por texto SQL y
+ofrecen `run`, `get`, `all`), `transaction(fn)` (transacción inmediata; las llamadas anidadas se unen
+a la exterior) y `close()`. FTS5 está disponible. El host proporciona el driver, por lo que los
+plugins nunca dependen de un runtime concreto.
+
+### Timeouts de hooks y aislamiento de fallos
+
+- Los hooks de compactación y de inicio de sesión se ejecutan con `pluginHooks.timeoutMs` (por
+  defecto 15 000 ms); los de fin de sesión, con `pluginHooks.sessionEndTimeoutMs` (por defecto
+  10 000 ms).
+- Cada hook recibe un `AbortSignal` que se aborta cuando vence el tiempo límite.
+- Un fallo o timeout se registra como evento `plugin_hook_failed` y el núcleo continúa sin la
+  contribución de ese plugin.
+- Los hooks se ejecutan en el mismo proceso: el timeout detiene la espera y señala el `AbortSignal`,
+  pero no puede detener código síncrono bloqueante.
+
+## Puntos de extensión {#extension-points}
+
+Los puntos de extensión permiten que un plugin reemplace una parte del host con su propio proveedor.
+Están tipados en `ExtensionPoints`; los puntos nuevos se añaden ahí sin romper los existentes.
+
+| Punto | Tipo de proveedor | Por defecto |
+| --- | --- | --- |
+| `mascot` | `MascotProvider`: `{ id, render(ctx: MascotContext) }` que devuelve un `string` o `string[]` | `DefaultAlisioMascot` (`alisio.default`) |
+| `startup-screen` | `StartupScreenProvider`: `{ id, render(ctx: StartupContext): string[] }` | `DefaultStartupScreen` (`alisio.default`) |
+
+Registre un proveedor de forma imperativa, o declárelo en el objeto del plugin:
+
+```ts
+import { definePlugin } from "@alisio/sdk";
+import { kiteMascot } from "./kite.js";
+
+// Imperative, with a priority
+export default definePlugin({
+  id: "kite-mascot",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    const dispose = api.extensions.register("mascot", kiteMascot, { priority: 10 });
+    // dispose() unregisters it; everything is also removed when the plugin unloads.
+  },
+});
+
+// Declarative, at priority 0
+export const declarative = definePlugin({
+  id: "kite-mascot-declarative",
+  version: "0.1.0",
+  apiVersion: 1,
+  extensions: { mascot: kiteMascot },
+  setup() {},
+});
+```
+
+- `api.extensions.register(point, provider, { priority })` devuelve una función que anula el
+  registro. `priority` es un número finito, `0` por defecto; un proveedor necesita un `id` y una
+  función `render`.
+- El campo declarativo `Plugin.extensions` es azúcar sintáctico para
+  `api.extensions.register(point, provider)` con prioridad `0`, aplicado antes de ejecutar `setup`.
+
+### Resolución
+
+Para cada punto, el host elige exactamente un proveedor, de forma determinista:
+
+1. la mayor `priority`;
+2. después, el `id` del plugin en orden lexicográfico (los plugins se identifican por `id`, no por el
+   nombre del paquete);
+3. después, el orden de registro dentro del mismo plugin.
+
+El orden de carga entre plugins nunca influye. Los valores por defecto integrados solo se usan cuando
+no hay nada registrado, o como reemplazo de un proveedor que falla. Cuando varios proveedores empatan
+en la prioridad ganadora, el host informa un diagnóstico `extension_conflict` con `point`, `winner` y
+`losers` (como IDs `plugin/provider`). Los conflictos y los proveedores resueltos se muestran en
+`/stats` y en `alisio plugins doctor`:
+
+```sh
+alisio plugins doctor --plugin ./dist/index.js
+```
+
+### Contextos tipados
+
+| Tipo | Campos |
+| --- | --- |
+| `TerminalCapabilities` | `color` (ANSI SGR permitido), `unicode` (no ASCII permitido), `columns`, `interactive` |
+| `MascotContext` | `terminal`, `version` |
+| `PluginMetadata` | `id`, `version`, `builtin` |
+| `StartupFact` | `label`, `value` |
+| `StartupContext` | `version`, `cwd` (ya abreviado), `model?`, `provider?` (solo el host, nunca credenciales), `userName?`, `terminal`, `plugins` (`PluginMetadata[]`), `mascot` (la mascota resuelta y validada), `tips`, `facts?` (datos del host como el acceso y el estado de la memoria) |
+
+`StartupContext.mascot` siempre puede llamarse con seguridad: una pantalla personalizada puede
+reutilizar la mascota ganadora.
+
+### Reglas de seguridad
+
+- Los proveedores reciben **solo su contexto**: no deben leer globales, variables de entorno ni el
+  sistema de archivos. Respete `terminal.color`, `terminal.unicode` y `terminal.columns`.
+- Un proveedor que lanza una excepción, devuelve algo distinto de un string o un array de strings,
+  devuelve demasiadas líneas (12 para una mascota, 60 para una pantalla) o tarda más de 250 ms se
+  reemplaza por el valor por defecto, y se registra un diagnóstico `plugin_hook_failed`. El
+  renderizado es síncrono, así que un proveedor lento no puede interrumpirse: su salida se descarta
+  después.
+- La salida se sanea: solo se conservan las secuencias de color SGR, y solo cuando `color` es true; se
+  eliminan las demás secuencias de escape y los caracteres de control; los tabuladores se convierten
+  en espacios; los caracteres no ASCII se convierten en `?` cuando `unicode` es false. Cada línea se
+  recorta a `columns`.
+- La pantalla por defecto se construye con funciones de sección reutilizables que exporta
+  `@alisio/core`: `titleSection`, `welcomeSection`, `infoSection`, `pluginsSection`, `tipsSection`,
+  `mascotSection`, `composeSideBySide`, `shortenPath` y `startupTips` (determinista para una semilla
+  dada). Muestra la mascota junto a la información cuando la terminal es lo bastante ancha, y apiladas
+  en caso contrario.
+
+### Ejemplo: mascota cometa
+
+El repositorio incluye un paquete de ejemplo en
+[`examples/plugins/custom-mascot`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-mascot)
+(`alisio-plugin-kite-mascot`, `id` de plugin `kite-mascot`). Solo depende de `@alisio/sdk`
+(dependencia peer) y distribuye JavaScript.
+
+```ts
+import { definePlugin, type MascotProvider, type StartupScreenProvider } from "@alisio/sdk";
+
+/** A kite riding the trade winds. Honors unicode/color/columns from the context only. */
+export const kiteMascot: MascotProvider = {
+  id: "kite",
+  render({ terminal }) {
+    if (terminal.columns < 40) return terminal.unicode ? "◇~ kite" : "<>~ kite";
+    const art = terminal.unicode
+      ? ["   ◢◣", "  ◢██◣", "  ◥██◤", "   ◥◤", "    ╲", "     ∿∿"]
+      : ["   /\\", "  /  \\", "  \\  /", "   \\/", "    \\", "     ~~"];
+    return terminal.color ? art.map((line) => `\u001b[35m${line}\u001b[0m`) : art;
+  },
+};
+
+/** Optional compact screen that reuses whichever mascot won resolution. */
+export const compactScreen: StartupScreenProvider = {
+  id: "kite.compact",
+  render(ctx) {
+    const mascot = [ctx.mascot.render({ terminal: ctx.terminal, version: ctx.version })].flat();
+    return [
+      ...mascot,
+      `Alisio ${ctx.version} · ${ctx.model ?? "no model"} · ${ctx.plugins.length} plugin(s)`,
+      ...ctx.tips.slice(0, 1),
+    ];
+  },
+};
+
+export default definePlugin({
+  id: "kite-mascot",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    // Priority 10 beats plugins registering at the default priority 0.
+    api.extensions.register("mascot", kiteMascot, { priority: 10 });
+    // Uncomment to also replace the whole startup screen:
+    // api.extensions.register("startup-screen", compactScreen);
+  },
+});
+```
+
+```sh
+npm run build
+alisio --plugin ./examples/plugins/custom-mascot/dist/index.js
+```
+
+## Cargar plugins {#loading-plugins}
+
+Los plugins solo se cargan desde orígenes de confianza explícita. Alisio nunca instala ni descarga
+plugins.
+
+| Origen | Confianza |
+| --- | --- |
+| `--plugin <path>`, `--plugin <package>` | Confianza explícita en esa entrada y sus dependencias |
+| `plugins` en el archivo de configuración | El propio archivo es de confianza (configuración global, `--config` o `--trust-project`) |
+| `<config home>/plugins/` (archivos o directorios) | Plugins globales: código personal de confianza |
+| `<workspace>/.alisio/plugins/` | Solo con `--trust-project` |
+
+```sh
+alisio --plugin ./my-plugin.js
+alisio --plugin alisio-plugin-foo
+```
+
+```json
+{ "plugins": ["alisio-plugin-foo"] }
+```
+
+`--read-only` desactiva los plugins ejecutables (externos). Los plugins integrados no se ven afectados.
+
+**Resolución.** Una entrada con forma de ruta (empieza por `.`, es absoluta, contiene `\`, termina en
+una extensión JS/TS, o contiene `/` sin empezar por `@`) es un archivo o directorio. Cualquier otra
+cosa es un nombre de paquete npm, que se busca en `node_modules` desde el directorio del proyecto
+hacia arriba y después en las raíces globales: las entradas de `NODE_PATH` y el prefijo global del
+Node/npm en ejecución.
+
+**La palabra clave `alisio-plugin` es obligatoria.** Un paquete sin `"keywords": ["alisio-plugin"]` en
+su `package.json` se rechaza, para que un error tipográfico no cargue un paquete no relacionado. La
+entrada se toma de `exports["."]` (condiciones `import`, `node` o `default`), después de `main` y, por
+último, de `./index.js`.
+
+Un directorio indicado como ruta debe contener un manifiesto `alisio-plugin.json` que declare su
+entrada (un paquete también puede incluirlo); la entrada debe permanecer dentro del directorio:
+
+```json
+{ "apiVersion": 1, "entry": "./index.js" }
+```
+
+Compruebe lo que registra un plugin con:
+
+```sh
+alisio plugins list
+alisio plugins doctor --plugin ./my-plugin.js
+```
+
+## Plugins TypeScript
+
+- Los plugins publicados en npm **deben distribuir JavaScript**.
+- Los plugins `.ts` locales cargados con `--plugin` funcionan en Bun (y en el binario independiente) y
+  en Node.js >= 22.18 mediante type stripping, que solo admite sintaxis borrable (sin `enum`,
+  `namespace` ni parameter properties).
+- En versiones anteriores de Node.js, Alisio falla con un error claro que pide Bun, Node.js >= 22.18 o
+  una compilación a JavaScript.
+
+## Paquete de plugin de ejemplo
+
+```text
+alisio-plugin-hello/
+├── package.json
+├── tsconfig.json
+└── src/
+    └── index.ts
+```
+
+`package.json`:
+
+```json
+{
+  "name": "alisio-plugin-hello",
+  "version": "0.1.0",
+  "description": "Example Alisio plugin",
+  "keywords": ["alisio-plugin"],
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1",
+    "typescript": "^5.9.0"
+  }
+}
+```
+
+`tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+`src/index.ts`:
+
+```ts
+import { definePlugin, textResult } from "@alisio/sdk";
+
+export default definePlugin({
+  id: "acme.hello",
+  version: "0.1.0",
+  apiVersion: 1,
+  setup(api) {
+    let greetings = 0;
+
+    api.tools.register({
+      name: "hello",
+      description: "Greets a person by name.",
+      effect: "read",
+      inputSchema: {
+        type: "object",
+        properties: { name: { type: "string" } },
+        required: ["name"],
+        additionalProperties: false,
+      },
+      async execute(input) {
+        greetings += 1;
+        api.ui.status("greetings", `hello ${greetings}`);
+        return textResult(`Hello, ${String(input.name)}!`);
+      },
+    });
+
+    api.commands.register("greetings", async () => `Greetings so far: ${greetings}`, {
+      description: "Show how many greetings were sent",
+    });
+  },
+});
+```
+
+Compílelo y pruébelo:
+
+```sh
+npm install
+npm run build
+alisio --plugin ./dist/index.js         # local build, as an explicit path
+npm publish                             # then: npm i -g alisio-plugin-hello
+alisio --plugin alisio-plugin-hello     # or add it to "plugins" in the configuration
+```
+
+En la TUI el comando está disponible como `/acme.hello:greetings`, y el modelo ve la herramienta con su
+nombre con prefijo.
