@@ -188,6 +188,31 @@ describe("publish script: argument parsing", () => {
     expect(() => parsePublishArgs(["--all", "--version", "not-semver"])).toThrow(/Invalid version/);
   });
 
+  it("parses the canonical pnpm and direct node forms equivalently", () => {
+    const forwarded = parsePublishArgs(["--", "--package", "cli", "--version", "0.1.0-alpha.6"]);
+    const direct = parsePublishArgs(["--package", "cli", "--version", "0.1.0-alpha.6"]);
+    expect(forwarded).toEqual(direct);
+    expect(forwarded).toMatchObject({
+      packages: ["cli"],
+      version: "0.1.0-alpha.6",
+      build: true,
+    });
+  });
+
+  it("skips leading, repeated and trailing -- separators as no-ops", () => {
+    expect(parsePublishArgs(["--", "--package", "cli"]).packages).toEqual(["cli"]);
+    expect(parsePublishArgs(["--", "--all"]).all).toBe(true);
+    expect(parsePublishArgs(["--", "--package", "cli", "--dry-run"]).dryRun).toBe(true);
+    expect(
+      parsePublishArgs(["--", "--", "--package", "cli", "--", "--version", "0.1.0-alpha.6", "--"]),
+    ).toMatchObject({ packages: ["cli"], version: "0.1.0-alpha.6" });
+    expect(parsePublishArgs(["--", "--package", "cli", "--no-build", "--"]).build).toBe(false);
+  });
+
+  it("still rejects unknown flags after skipped separators", () => {
+    expect(() => parsePublishArgs(["--", "--bogus"])).toThrow(/Unknown flag/);
+  });
+
   it("computes npm tarball names for scoped packages", () => {
     expect(tarballName("@alisio/sdk", "1.2.3")).toBe("alisio-sdk-1.2.3.tgz");
     expect(tarballName("@alisio/alisio-code", "0.1.0-alpha.4")).toBe(

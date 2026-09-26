@@ -6,6 +6,7 @@ import {
   configSchema,
   createApplication,
   loadConfig,
+  loadConfigWithProvenance,
   McpConnector,
   setMcpServerEnabled,
   ToolRegistry,
@@ -121,6 +122,41 @@ describe("layered configuration", () => {
       command: resolve(workspace, ".alisio/bin/project"),
       args: [resolve(workspace, "shared.json")],
     });
+  });
+});
+
+describe("legacy provider provenance", () => {
+  it.each([
+    ["the alisio setup placeholder", "YOUR_MODEL_ID"],
+    ["an empty model", ""],
+  ] as const)(
+    "flags a selected project layer with %s provider model as not overriding a saved profile",
+    async (_label, model) => {
+      const { workspace } = await fixture();
+      await json(join(workspace, ".alisio", "config.json"), {
+        provider: { baseURL: "https://project.example.test/v1", model },
+      });
+      const { provenance } = await loadConfigWithProvenance(workspace, { trustProject: true });
+      expect(provenance.selectedLayer).toMatchObject({ kind: "project", hasLegacyProvider: false });
+    },
+  );
+
+  it("flags a real selected project provider model as overriding a saved profile", async () => {
+    const { workspace } = await fixture();
+    await json(join(workspace, ".alisio", "config.json"), {
+      provider: { baseURL: "https://project.example.test/v1", model: "project-model" },
+    });
+    const { provenance } = await loadConfigWithProvenance(workspace, { trustProject: true });
+    expect(provenance.selectedLayer).toMatchObject({ kind: "project", hasLegacyProvider: true });
+  });
+
+  it("omits the selected layer when only global config applies", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      provider: { baseURL: "https://global.example.test/v1", model: "global-model" },
+    });
+    const { provenance } = await loadConfigWithProvenance(workspace);
+    expect(provenance.selectedLayer).toBeUndefined();
   });
 });
 

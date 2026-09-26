@@ -597,7 +597,15 @@ export async function discoverPlugins(root: string): Promise<string[]> {
     throw e;
   }
   return entries
-    .filter((e) => (e.isFile() && /\.[cm]?[jt]s$/.test(e.name)) || e.isDirectory())
+    .filter(
+      // A root may hold an `npm install --prefix` layout (`node_modules`, package.json/lock);
+      // npm packages there are resolved through the configured `plugins` array instead.
+      (e) =>
+        e.name !== "node_modules" &&
+        e.name !== "package.json" &&
+        e.name !== "package-lock.json" &&
+        ((e.isFile() && /\.[cm]?[jt]s$/.test(e.name)) || e.isDirectory()),
+    )
     .map((e) => join(root, e.name))
     .sort();
 }

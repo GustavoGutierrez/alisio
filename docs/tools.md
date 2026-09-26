@@ -33,6 +33,7 @@ each tool (`enabled`, `ask`, `disabled`).
 | `webfetch` | `external` | Read a URL as text/markdown/html (see [below](#webfetch)) |
 | `websearch` | `external` | Search the web (see [below](#websearch)) |
 | `execute` | `process` | Run a JS snippet that calls other tools ("Code Mode", see [below](#execute)) |
+| `plugin_install` | `process` | Install an npm plugin package into the global plugins directory (see [below](#plugin-install)) |
 
 Edits require a SHA-256 fingerprint of the file and an exact, unique match. Writes use a temporary
 file plus an atomic replace on the same filesystem. Mediated operations reject paths outside the
@@ -152,6 +153,23 @@ in-process Alisio tool. See [Not a sandbox](#not-a-sandbox).
 `execute` uses the `process` effect (reusing the existing gate rather than adding a new
 classification): running a JS snippet is arbitrary code execution in the same spirit as
 `run_process`/`shell`, and `--allow-process` is what a user already expects to gate "run stuff".
+
+## Installing plugins: plugin_install {#plugin-install}
+
+`plugin_install(spec)` installs an npm plugin package into Alisio's global plugins directory
+(`<config home>/plugins`) and adds its npm name to the global configuration's `plugins` array — the
+identical routine behind the `alisio install` command. `spec` accepts `npm:<package>[@<version>]` or
+a bare package name, validated before any network operation. It lets the model install a plugin on
+your request instead of you typing the command: the agent forms the correct spec and invokes the
+tool, and you keep the final say through the normal permission flow.
+
+It is a host-owned tool with the `process` effect: installing runs `npm install`, an unsandboxed
+subprocess that may execute the package's lifecycle scripts, so it goes through the same gate as
+`run_process`/`shell` — allowed outright with `--allow-process`, asked interactively in the TUI
+otherwise, and hard-denied (not even registered) under `--read-only`. The result is sanitized and
+returns the package name, installed version, config entry, install path and the project-trust
+remark. See [Writing plugins](/plugins#installing-plugins-from-npm) for the full story, including
+the headless `--yes` confirmation rules.
 
 ## Permission flags {#permission-flags}
 

@@ -101,6 +101,19 @@ funcional, no solo interfaces o stubs.
   clara ante fallos sin publicar en silencio el resto; documentado en [Publishing](/publishing).
 - Plugins como paquetes npm (`--plugin nombre` o `plugins: ["nombre"]`), resueltos desde el
   proyecto y luego las raíces globales; exigen la keyword `alisio-plugin`.
+- Instalador de plugins npm (`alisio install npm:<paquete>[@<versión>]` y herramienta del host
+  `plugin_install` para el agente): validación de la especificación antes de cualquier red
+  (charset seguro, sin `..`/rutas absolutas, prefijos desconocidos rechazados), instalación
+  GLOBAL con `npm install --prefix <config home>/plugins` y persistencia del NOMBRE npm en el
+  array `plugins` de `<config home>/config.json` (escritura atómica, campos no relacionados
+  conservados, sin duplicados); idempotencia con `--update` para refrescar a `@latest`;
+  confirmación previa de scripts de ciclo de vida en terminal interactiva, rechazo accionable en
+  headless/`--json` sin `--yes` (o `--trust-plugin`) y rechazo absoluto con `--read-only`;
+  salida de npm fallida saneada (sin tokens/secretos) con el comando de reintento exacto; la
+  misma rutina compartida para CLI y herramienta, con runner inyectable para pruebas sin red
+  (npm falso por shim de PATH o inyectado).`plugins list` muestra los paquetes instalados junto
+  a los plugins de archivos/directorios, y la resolución de paquetes añade `<config home>/plugins`
+  a las raíces globales (incluida su variante `node_modules/`).
 - Binario autónomo opcional (`pnpm build:binary`, Bun) y workflow de release con binarios
   linux-x64/arm64, darwin-x64/arm64 y windows-x64, `SHA256SUMS` e instalador `scripts/install.sh`.
 - Sitio de documentación bilingüe (VitePress, inglés y español) desplegado en GitHub Pages.
@@ -622,6 +635,15 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   plugin lo pasa) y no descuenta del presupuesto `limits.maxTokens`. Los hooks corren en
   proceso: el timeout aborta la espera y señala el `AbortSignal`, pero no puede detener
   código síncrono bloqueante.
+- Instalación de plugins (`alisio install`, herramienta `plugin_install`): solo npm y global —
+  los paquetes aterrizan en `<config home>/plugins` mediante `npm install --prefix` y su nombre
+  npm se guarda en el array `plugins` de la configuración global. Instalar es una acción por
+  usuario; la carga sigue la política existente de plugins ejecutables (confianza del proyecto
+  para la configuración y plugins del proyecto; `--read-only` impide cargar). No hay sandbox de
+  scripts: `npm install` puede ejecutar scripts de ciclo de vida con tus privilegios y la
+  herramienta solo avisa/pide confirmación (headless exige `--yes`/`--trust-plugin`). No se
+  soportan URLs de registro (`registry:`, `git:`, `file:`), ni resolución de dependencias propia
+  de Alisio: el paquete debe declarar la keyword `alisio-plugin` para poder cargarse.
 - Portapapeles: OSC 52 no puede confirmarse; la TUI lo informa como no verificado.
 - Pegado y adjuntos: el acceso al portapapeles de imágenes necesita un ayudante nativo de la
   plataforma (o `wl-paste` en Wayland); suele faltar en sesiones SSH simples. No hay

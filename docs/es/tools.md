@@ -33,6 +33,7 @@ estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 | `webfetch` | `external` | Leer una URL como texto/markdown/html (véase [más abajo](#webfetch)) |
 | `websearch` | `external` | Buscar en la web (véase [más abajo](#websearch)) |
 | `execute` | `process` | Ejecutar un fragmento JS que llama a otras herramientas ("Code Mode", véase [más abajo](#execute)) |
+| `plugin_install` | `process` | Instalar un paquete de plugin npm en el directorio global de plugins (véase [más abajo](#plugin-install)) |
 
 Las ediciones exigen una huella SHA-256 del archivo y una coincidencia exacta y única. Las escrituras
 usan un archivo temporal más un reemplazo atómico en el mismo filesystem. Las operaciones mediadas
@@ -166,6 +167,25 @@ sandbox](#no-es-un-sandbox).
 clasificación nueva): ejecutar un fragmento JS es ejecución de código arbitrario en el mismo
 espíritu que `run_process`/`shell`, y `--allow-process` es lo que un usuario ya espera que controle
 "ejecutar cosas".
+
+## Instalar plugins: plugin_install {#plugin-install}
+
+`plugin_install(spec)` instala un paquete de plugin npm en el directorio global de plugins de Alisio
+(`<config home>/plugins`) y añade su nombre npm al array `plugins` de la configuración global — la
+misma rutina que hay detrás del comando `alisio install`. `spec` acepta `npm:<paquete>[@<versión>]` o
+un nombre de paquete pelado, validado antes de cualquier operación de red. Permite que el modelo
+instale un plugin a petición tuya en lugar de que escribas tú el comando: el agente forma la
+especificación correcta e invoca la herramienta, y tú conservas la última palabra mediante el flujo
+de permisos habitual.
+
+Es una herramienta del host con el efecto `process`: instalar ejecuta `npm install`, un subproceso
+sin sandbox que puede ejecutar los scripts de ciclo de vida del paquete, así que pasa por la misma
+compuerta que `run_process`/`shell` — permitida directamente con `--allow-process`, preguntada de
+forma interactiva en la TUI en caso contrario, y denegada por completo (ni siquiera registrada) con
+`--read-only`. El resultado se sanea y devuelve el nombre del paquete, la versión instalada, la
+entrada de configuración, la ruta de instalación y la nota de confianza del proyecto. Consulte
+[Escribir plugins](/es/plugins#installing-plugins-from-npm) para la historia completa, incluida la
+regla de confirmación `--yes` en headless.
 
 ## Flags de permisos {#permission-flags}
 

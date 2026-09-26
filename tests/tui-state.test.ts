@@ -489,12 +489,12 @@ describe("event reduction", () => {
     expect(reservedCommandNames()).not.toContain("init");
   });
 
-  it("formats plugin navigation with non-color status and source markers", () => {
+  it("formats plugin navigation with non-color status, source markers and a General heading", () => {
     const builtin = {
       id: "memory",
       name: "Memory",
       description: "Persistent memory",
-      categories: [],
+      categories: [] as string[],
       builtin: true,
       source: "built-in",
       status: "active" as const,
@@ -512,12 +512,83 @@ describe("event reduction", () => {
     };
     expect(pluginCatalogItems([builtin, external])).toEqual([
       expect.objectContaining({
-        label: "[x] Memory · built-in",
+        label: "General · [x] Memory · built-in",
         description: expect.stringContaining("Persistent memory"),
       }),
       expect.objectContaining({ label: "[ ] Acme · project package: @acme/plugin" }),
     ]);
     expect(pluginToggleNeedsConfirmation(builtin)).toBe(false);
     expect(pluginToggleNeedsConfirmation(external)).toBe(true);
+  });
+
+  it("groups plugins by first category with a heading only on the group's first row", () => {
+    const base = {
+      description: "Plugin",
+      builtin: true,
+      source: "built-in",
+      status: "active" as const,
+      enabled: true,
+      manageable: true,
+    };
+    const items = pluginCatalogItems([
+      { ...base, id: "a", name: "Alpha", categories: ["model-provider"] },
+      { ...base, id: "b", name: "Beta", categories: ["memory"] },
+      { ...base, id: "c", name: "Gamma", categories: ["tools"] },
+      { ...base, id: "d", name: "Delta", categories: ["model-provider"] },
+    ]);
+    expect(items.map((item) => item.label)).toEqual([
+      "model-provider · [x] Alpha · built-in",
+      "[x] Delta · built-in",
+      "memory · [x] Beta · built-in",
+      "tools · [x] Gamma · built-in",
+    ]);
+    expect(items.map((item) => item.value)).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("falls back to General for empty categories and keeps the heading off subsequent rows", () => {
+    const base = {
+      description: "Plugin",
+      categories: [] as string[],
+      builtin: false,
+      source: "project",
+      status: "inactive" as const,
+      enabled: false,
+      manageable: true,
+    };
+    const items = pluginCatalogItems([
+      { ...base, id: "m", name: "Memory", builtin: true, source: "built-in" },
+      { ...base, id: "x", name: "Plugin X" },
+      { ...base, id: "y", name: "Plugin Y" },
+    ]);
+    expect(items.map((item) => item.label)).toEqual([
+      "General · [ ] Memory · built-in",
+      "[ ] Plugin X · project",
+      "[ ] Plugin Y · project",
+    ]);
+    expect(items.map((item) => item.value)).toEqual(["m", "x", "y"]);
+  });
+
+  it("preserves entry order within each group and keeps groups in first-seen order", () => {
+    const base = {
+      description: "Plugin",
+      builtin: true,
+      source: "built-in",
+      status: "active" as const,
+      enabled: true,
+      manageable: true,
+    };
+    const items = pluginCatalogItems([
+      { ...base, id: "third", name: "Third", categories: ["memory"] },
+      { ...base, id: "first", name: "First", categories: ["model-provider"] },
+      { ...base, id: "second", name: "Second", categories: ["model-provider"] },
+      { ...base, id: "fourth", name: "Fourth", categories: ["memory"] },
+    ]);
+    expect(items.map((item) => item.label)).toEqual([
+      "memory · [x] Third · built-in",
+      "[x] Fourth · built-in",
+      "model-provider · [x] First · built-in",
+      "[x] Second · built-in",
+    ]);
+    expect(items.map((item) => item.value)).toEqual(["third", "fourth", "first", "second"]);
   });
 });

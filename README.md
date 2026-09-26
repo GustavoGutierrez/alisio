@@ -34,7 +34,9 @@ extend it without touching the core.
 - **Persistent memory**: SQLite FTS5 observations, topic-key upserts, memory-aware compaction and
   session summaries, shipped as the disableable `@alisio/plugin-memory`.
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
-  completions and a storage port. Load plugins from a path or an npm package.
+  completions and a storage port. Load plugins from a path or an npm package — install them
+  globally with `alisio install npm:<package>` (or let the agent do it via the permissioned
+  `plugin_install` tool).
 - **Also**: headless JSONL mode, MCP servers, AGENTS.md scopes, Agent Skills, Herdr integration.
 - **Runs on Node.js >= 22.16 or Bun**; standalone binaries for Linux, macOS and Windows.
 

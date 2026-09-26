@@ -499,6 +499,66 @@ alisio plugins list
 alisio plugins doctor --plugin ./my-plugin.js
 ```
 
+## Installing plugins from npm {#installing-plugins-from-npm}
+
+The CLI can install an npm package into Alisio's GLOBAL plugins directory
+(`<config home>/plugins`, for example `~/.config/alisio/plugins`) and record its npm NAME in the
+global configuration's `plugins` array — the same entry you can write by hand today:
+
+```sh
+alisio install npm:plugin-openrouter          # latest version
+alisio install npm:@scope/plugin-x@1.2.3      # a pinned version
+alisio install plugin-openrouter              # bare names are the same as npm:
+alisio install npm:plugin-openrouter --update # refresh an installed plugin to @latest
+```
+
+The spec is validated before any network operation: `npm:<package>[@<version>]`, or a bare package
+name; only letters, digits, `.`, `_`, `-` are allowed, plus `/` for scoped names and `@` for a
+version. Unknown prefixes (`git:`, `file:`, `registry:` URLs, ...) are rejected with a clear error.
+**A failed install never reruns npm silently** and a failed npm output is sanitized (no
+tokens/secrets); the error names the package and the exact retry command.
+
+**Where it lands.** The package is installed with `npm install --prefix <config home>/plugins` into
+`<config home>/plugins/node_modules/<package>`, and its NAME (never the resolved filesystem path)
+is added to the `plugins` array of `<config home>/config.json` (atomic write, unrelated fields
+preserved, no duplicates). `alisio plugins list` shows installed packages alongside file/plugin
+directories.
+
+| Aspect | Behavior |
+| --- | --- |
+| Global scope | One install serves every project the user runs Alisio from |
+| Loading | The plugin loads as in-process, executable code wherever global plugins load; it must declare the `alisio-plugin` keyword to be loadable at all |
+| Project trust | A project's OWN configuration and plugins still load only in trusted projects (`--trust-project` or the one-time trust prompt) |
+| `--read-only` | Installing is refused and the plugin never loads (executable plugins are disabled) |
+| Reinstall | If the package is already installed, the command reports it and suggests `--update` instead of rerunning npm |
+| Scripts | `npm install` may run the package's lifecycle scripts with your privileges — Alisio warns and requires confirmation on an interactive terminal |
+| Headless / `--json` | Never prompts: without an explicit `--yes` (or `--trust-plugin`) it fails with an actionable error before running npm |
+| Errors | Sanitized npm output, package name and exact retry command in the final message |
+
+The install is a global, per-user action: it grants nothing to any project. Loading follows the
+existing executable-plugin policy — the one-time trust prompt (or `--trust-project`) is what lets a
+project load its own configuration and plugins, and `--read-only` disables executable plugins
+entirely.
+
+### The agent can install a plugin for you
+
+In the TUI the model can install a plugin on request through the host-owned `plugin_install` tool:
+it validates the spec, runs the **same** install routine as `alisio install`, and answers with the
+package name, installed version, config entry and path, plus the trust remark. The tool uses the
+`process` effect, so it goes through the ordinary permission gate — the approval prompt in the TUI,
+or `--allow-process` headless — and is never available under `--read-only`. See
+[Tools & permissions](/tools#plugin-install).
+
+```text
+You:   instala el plugin plugin-openrouter
+Agent: (calls plugin_install with spec "npm:plugin-openrouter", you approve it)
+Agent: Installed plugin "plugin-openrouter" v1.2.3 at
+       ~/.config/alisio/plugins/node_modules/plugin-openrouter and added it to the
+       "plugins" array of ~/.config/alisio/config.json. The plugin loads as trusted
+       personal code; --read-only keeps it from loading. Run `alisio plugins list`
+       to inspect.
+```
+
 ## TypeScript plugins
 
 - Plugins published to npm **must ship JavaScript**.

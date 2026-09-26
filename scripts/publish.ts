@@ -2,10 +2,13 @@
  * Publish the Alisio npm packages in dependency-safe order.
  *
  * Usage (from the repository root):
- *   pnpm publish -- --all
- *   pnpm publish -- --all --version 0.1.0-alpha.5
- *   pnpm publish -- --package cli --dry-run
- *   pnpm publish -- --package sdk --package core --version 0.2.0 --no-build
+ *   pnpm run publish -- --all
+ *   pnpm run publish -- --all --version 0.1.0-alpha.5
+ *   pnpm run publish -- --package cli --version 0.1.0-alpha.6
+ *   pnpm run publish -- --package sdk --package core --version 0.2.0 --no-build
+ *
+ * pnpm forwards a literal `--` separator to the script (`pnpm run publish -- <flags>`); the
+ * parser skips any `--` it sees, so the same flags work when invoking the script directly.
  *
  * Flags:
  *   --all              publish every publishable package (sdk, core, plugins, cli), in order
@@ -122,6 +125,9 @@ export function parsePublishArgs(argv: string[]): PublishOptions {
         break;
       case "--no-build":
         options.build = false;
+        break;
+      case "--":
+        // `pnpm run publish -- <flags>` forwards a literal `--` separator; skip it as a no-op.
         break;
       default:
         throw new Error(`Unknown flag: ${arg}`);

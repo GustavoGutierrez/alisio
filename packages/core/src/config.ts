@@ -197,7 +197,24 @@ export interface ConfigLoadResult {
   config: LoadedConfig;
   provenance: ConfigProvenance;
 }
-/** Whether legacy provider selection should take priority over a saved plugin profile for this run. */
+/** The `alisio setup` scaffold writes this placeholder; a model matching it is not usable. */
+const LEGACY_PROVIDER_MODEL_PLACEHOLDER = "YOUR_MODEL_ID";
+
+/**
+ * A legacy root `provider` is usable only when its parsed model is non-empty and not the
+ * `alisio setup` placeholder, so a scaffolded or empty project config never defeats a saved
+ * `/connect` profile.
+ */
+function isUsableLegacyModel(model: string): boolean {
+  const normalized = model.trim();
+  return normalized !== "" && normalized !== LEGACY_PROVIDER_MODEL_PLACEHOLDER;
+}
+
+/**
+ * Whether legacy provider selection should take priority over a saved plugin profile for this
+ * run: an explicit endpoint override, or a trusted project/explicit layer whose parsed root
+ * `provider.model` is actually usable (non-empty and not the `alisio setup` placeholder).
+ */
 export function overridesSavedProviderProfile(
   provenance: ConfigProvenance,
   hasEndpointOverride: boolean,
@@ -278,10 +295,12 @@ export async function loadConfigWithProvenance(
   global.config.skillOverrides = {};
   let config = global.config;
   let mcpSources = global.sources;
-  let selectedKeys: Set<string> | undefined;
+  // Parsed `provider.model` of the selected layer itself (before env/CLI overrides), used to
+  // decide whether its legacy root `provider` is usable against a saved `/connect` profile.
+  let selectedLegacyModel = "";
   if (selectedFile && selectedFile !== globalFile) {
     const selected = await parseLayer(selectedFile, options.file ? "explicit" : "project");
-    selectedKeys = selected.keys;
+    selectedLegacyModel = selected.config.provider.model;
     const overlaid = { ...config };
     for (const key of selected.keys) {
       if (key === "mcp" || key === "mcpServers") continue;
@@ -297,7 +316,7 @@ export async function loadConfigWithProvenance(
     mcpSources = { ...mcpSources, ...selected.sources };
     config = overlaid;
   } else if (selectedFile) {
-    selectedKeys = global.keys;
+    selectedLegacyModel = global.config.provider.model;
   }
   config.provider = providerSchema.parse({
     ...config.provider,
@@ -318,7 +337,7 @@ export async function loadConfigWithProvenance(
         ? {
             selectedLayer: {
               kind: options.file ? ("explicit" as const) : ("project" as const),
-              hasLegacyProvider: selectedKeys?.has("provider") ?? false,
+              hasLegacyProvider: isUsableLegacyModel(selectedLegacyModel),
             },
           }
         : {}),

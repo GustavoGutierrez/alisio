@@ -28,10 +28,12 @@ startup/headless compatibility. Metadata and errors never expose credentials.
 Legacy root `provider`, environment variables and CLI flags remain supported and are not rewritten.
 Programmatic `AppOptions.provider` has highest priority. Next, explicit endpoint overrides
 (`--base-url`, `--api-mode`, `OPENAI_BASE_URL`, `ALISIO_API_MODE`) or a trusted project/explicit
-layer that actually defines root `provider` select the legacy OpenAI-compatible provider for that
-run. MCP, plugin, skill and other settings alone do not. Otherwise the active `/connect` profile is
-restored; `--model` or `ALISIO_MODEL` may replace only its model. Global legacy `provider` is the
-fallback when no saved profile exists, so it does not permanently defeat a `/connect` selection.
+layer that defines a usable root `provider` — its parsed `provider.model` is non-empty and not the
+`YOUR_MODEL_ID` placeholder `alisio setup` writes — select the legacy OpenAI-compatible provider for
+that run; a placeholder or empty model never defeats a `/connect` selection. MCP, plugin, skill and
+other settings alone do not. Otherwise the active `/connect` profile is restored; `--model` or
+`ALISIO_MODEL` may replace only its model. Global legacy `provider` is the fallback when no saved
+profile exists, so it does not permanently defeat a `/connect` selection.
 Headless modes never prompt.
 
 Four provider choices are built in and enabled by default:
@@ -188,6 +190,13 @@ See [Writing plugins](/plugins#loading-plugins).
 ```json
 { "plugins": ["alisio-plugin-foo", "./plugins/local.js"] }
 ```
+
+Packages installed with `alisio install` land in the global plugins directory
+(`<config home>/plugins`, via `npm install --prefix`) and their npm names are appended to the
+GLOBAL configuration's `plugins` array automatically — see
+[Installing plugins from npm](/plugins#installing-plugins-from-npm). Path entries that point at the
+installed package are never written; npm names stay portable. `pluginOverrides` below can disable a
+project-installed package per project just like any other external plugin.
 
 `/plugins` stores project-local external overrides separately, keyed by the plugin's stable ID:
 

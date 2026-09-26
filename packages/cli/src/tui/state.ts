@@ -56,6 +56,7 @@ export interface PluginCatalogView {
   diagnostic?: string;
 }
 /** Text markers remain meaningful without color: [x] active, [ ] inactive, [!] failed, [*] pending. */
+/** Group headings are derived from the primary category (or "General") of each plugin. */
 export function pluginCatalogItems(entries: PluginCatalogView[]) {
   const marker = (entry: PluginCatalogView) =>
     entry.status === "active"
@@ -65,11 +66,18 @@ export function pluginCatalogItems(entries: PluginCatalogView[]) {
         : entry.status === "failed"
           ? "[!]"
           : "[*]";
-  return entries.map((entry) => ({
-    value: entry.id,
-    label: `${marker(entry)} ${entry.name} · ${entry.builtin ? "built-in" : entry.source}`,
-    description: `${entry.status}${entry.categories.length ? ` · ${entry.categories.join(", ")}` : ""} · ${entry.description}`,
-  }));
+  const grouped = new Map<string, PluginCatalogView[]>();
+  for (const entry of entries) {
+    const primary = entry.categories[0] ?? "General";
+    grouped.set(primary, [...(grouped.get(primary) ?? []), entry]);
+  }
+  return [...grouped].flatMap(([title, group]) =>
+    group.map((entry, index) => ({
+      value: entry.id,
+      label: `${index === 0 ? `${title} · ` : ""}${marker(entry)} ${entry.name} · ${entry.builtin ? "built-in" : entry.source}`,
+      description: `${entry.status}${entry.categories.length ? ` · ${entry.categories.join(", ")}` : ""} · ${entry.description}`,
+    })),
+  );
 }
 export const pluginToggleNeedsConfirmation = (entry: PluginCatalogView): boolean => !entry.builtin;
 export interface McpServerView {

@@ -63,6 +63,14 @@ it is not a statement that all of its release criteria are met.
   guarantee cleanup of every live registration and provider/session resource. External management
   requires project trust. A model-provider retained by the active provider or any live routed
   session, and plugins with live session-owned resources, are protected from disable actions.
+- **Plugin installation** (`alisio install`, host tool `plugin_install`): npm-only and GLOBAL —
+  packages land in `<config home>/plugins` via `npm install --prefix`, and their npm names are
+  persisted in the global `plugins` array. Installing is a per-user action; loading follows the
+  existing executable-plugin policy (a project's own config/plugins need project trust;
+  `--read-only` disables loading entirely). There is no script sandboxing: `npm install` may run
+  lifecycle scripts with your privileges and Alisio only warns/asks (headless runs require
+  `--yes`/`--trust-plugin`). Registry/git/file URLs are not supported, and Alisio does no own
+  dependency resolution — the package must declare the `alisio-plugin` keyword to be loadable.
 - **Startup screen**: the TUI chrome itself (header, bars) still uses Unicode glyphs under
   `TERM=dumb`; only the startup screen falls back to ASCII. Width counting treats every code point as
   one column, so wide East Asian or emoji glyphs in custom mascots may misalign.

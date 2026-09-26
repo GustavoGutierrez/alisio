@@ -433,13 +433,14 @@ for (const name of ["list", "validate"]) {
 }
 const plugins = program.command("plugins");
 plugins.command("list").action(async (_opts, cmd) => {
-  const { discoverPlugins } = await import("@alisio/core");
+  const { discoverPlugins, installedNpmPlugins } = await import("@alisio/core");
   const { configHome } = await import("@alisio/core");
   const { join, resolve } = await import("node:path");
+  const global = join(configHome(), "plugins");
   console.log(
     JSON.stringify(
       {
-        global: await discoverPlugins(join(configHome(), "plugins")),
+        global: [...(await discoverPlugins(global)), ...(await installedNpmPlugins(global))],
         project: await discoverPlugins(
           join(resolve(options(cmd).cwd ?? process.cwd()), ".alisio", "plugins"),
         ),
@@ -525,6 +526,33 @@ mcp
     } finally {
       await app.close();
     }
+  });
+program
+  .command("install")
+  .description(
+    "Install an npm plugin package into the global plugins directory (~/.config/alisio/plugins)",
+  )
+  .argument("<spec>", 'npm package spec, e.g. "npm:plugin-openrouter" or "plugin-openrouter@1.2.3"')
+  .option("-y, --yes", "Skip the pre-install confirmation (npm may run lifecycle scripts)")
+  .option("--trust-plugin", "Explicit trust for this global install (same as --yes)")
+  .option("--update", "Refresh an already-installed plugin to the latest version, keeping its name")
+  .action(async (spec: string, _options: unknown, cmd: Command) => {
+    const { cliInstall, configHome } = await import("@alisio/core");
+    const o = options(cmd) as import("@alisio/core").AppOptions & {
+      json?: boolean;
+      yes?: boolean;
+      trustPlugin?: boolean;
+      update?: boolean;
+    };
+    await cliInstall({
+      spec,
+      configHome: configHome(),
+      yes: !!o.yes || !!o.trustPlugin,
+      update: !!o.update,
+      readOnly: !!o.readOnly,
+      json: !!o.json,
+      interactive: !!process.stdin.isTTY && !!process.stdout.isTTY && !o.json,
+    });
   });
 try {
   await program.parseAsync();

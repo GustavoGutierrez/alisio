@@ -74,6 +74,23 @@ export {
   type PluginHostOptions,
   pluginPrefix,
 } from "./plugins/host.ts";
+export {
+  type CliInstallOptions,
+  cliInstall,
+  INSTALL_TIMEOUT_MS,
+  type InstallPluginInput,
+  type InstallPluginResult,
+  type InstallRunner,
+  installedNpmPlugins,
+  installPlugin,
+  npmInstallTarget,
+  type PluginSpec,
+  parsePluginSpec,
+  pluginTrustRemark,
+  printInstallResult,
+  registerPluginInstallTool,
+  sanitizeNpmError,
+} from "./plugins/install.ts";
 export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 export {
   availableProviderModels,

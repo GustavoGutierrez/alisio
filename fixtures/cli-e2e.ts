@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { serve } from "./http.ts";
@@ -189,6 +189,84 @@ try {
     "memory",
     "subagents",
   ]);
+
+  // `alisio install npm:<name>` installs into the global plugins directory through a PATH-shim fake
+  // npm (no network), persists the npm name in the global config, refuses headless without --yes
+  // and under --read-only, and `plugins list` shows the installed package.
+  const installDir = await mkdtemp(join(tmpdir(), `alisio-${mode}-install-`));
+  try {
+    const binDir = join(installDir, "bin");
+    await mkdir(binDir, { recursive: true });
+    const shimJs = join(binDir, "shim.js");
+    const callsFile = join(installDir, "config", "npm-calls.json");
+    await writeFile(
+      shimJs,
+      `import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2);
+const prefix = args[args.indexOf("--prefix") + 1];
+const target = args[args.length - 1];
+const at = target.lastIndexOf("@");
+const name = at > 0 ? target.slice(0, at) : target;
+const dir = join(prefix, "node_modules", name);
+mkdirSync(dir, { recursive: true });
+writeFileSync(join(dir, "package.json"), JSON.stringify({ name, version: "7.7.7", keywords: ["alisio-plugin"] }));
+writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
+`,
+    );
+    await writeFile(join(binDir, "npm"), `#!/bin/sh\nexec node ${JSON.stringify(shimJs)} "$@"\n`);
+    await chmod(join(binDir, "npm"), 0o755);
+    const installEnv = {
+      ...process.env,
+      PATH: `${binDir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
+      ALISIO_CONFIG_HOME: join(installDir, "config"),
+      ALISIO_STATE_HOME: join(installDir, "state"),
+      HERDR_ENV: "0",
+    };
+    const runInstall = async (args: string[], expectCode: number) => {
+      const [program = "", ...prefix] = command;
+      const child = spawn(program, [...prefix, ...args], {
+        cwd: directory,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: installEnv,
+      });
+      let stdout = "",
+        stderr = "";
+      child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+      const code = await new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
+      assert.equal(code, expectCode, stderr);
+      return { stdout, stderr };
+    };
+    const refused = await runInstall(["install", "npm:plugin-e2e"], 1);
+    assert.match(refused.stderr, /--yes/);
+    const readOnlyRefused = await runInstall(
+      ["install", "npm:plugin-e2e", "--yes", "--read-only"],
+      1,
+    );
+    assert.match(readOnlyRefused.stderr, /--read-only/);
+    const installed = await runInstall(["install", "npm:plugin-e2e", "--yes"], 0);
+    assert.match(installed.stdout, /plugin-e2e/);
+    const installConfig = JSON.parse(
+      await readFile(join(installDir, "config", "config.json"), "utf8"),
+    ) as { plugins: string[] };
+    assert.deepEqual(installConfig.plugins, ["plugin-e2e"]);
+    assert.deepEqual(JSON.parse(await readFile(callsFile, "utf8")), [
+      "install",
+      "--prefix",
+      join(installDir, "config", "plugins"),
+      "plugin-e2e",
+    ]);
+    const list = JSON.parse((await runInstall(["plugins", "list"], 0)).stdout) as {
+      global: string[];
+    };
+    assert.ok(
+      list.global.some((p) => p.includes("node_modules") && p.includes("plugin-e2e")),
+      `global plugins list did not include the installed package: ${list.global.join(",")}`,
+    );
+  } finally {
+    await rm(installDir, { recursive: true, force: true });
+  }
   // Headless prompt template: `run "/init"` renders the built-in template as the user turn.
   firstUserMessages.length = 0;
   await execute([
@@ -271,6 +349,7 @@ try {
         "headless prompt template /init; --read-only refusal",
         "alisio setup scaffolds config; alisio init is now an unknown command",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
+        "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
       ],
     }),
   );

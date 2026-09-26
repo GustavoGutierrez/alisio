@@ -353,6 +353,8 @@ export async function createApplication(options: AppOptions = {}) {
         resolveExtension: () => plugins.extensions.resolve("websearch"),
       },
     );
+    const { registerPluginInstallTool } = await import("./plugins/install.ts");
+    registerPluginInstallTool(registry, { readOnly: !!options.readOnly });
     if (options.allowMcp && !options.readOnly) mcp.register();
     if (options.allowAgents && !options.readOnly) herdr.registerTools(registry);
     const providerSettings = new ProviderSettingsStore();

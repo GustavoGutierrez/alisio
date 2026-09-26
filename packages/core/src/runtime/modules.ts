@@ -1,5 +1,6 @@
 /** Resolution of explicitly trusted plugins given as a path or an npm package name. */
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { configHome } from "../config.ts";
 import { readJson } from "./fs.ts";
 
 export const PLUGIN_KEYWORD = "alisio-plugin";
@@ -14,7 +15,9 @@ export function isPathSpec(spec: string): boolean {
     (!spec.startsWith("@") && spec.includes("/"))
   );
 }
-/** Global package roots: NODE_PATH entries and the prefix of the running Node/npm. */
+/** Global package roots: NODE_PATH entries, the prefix of the running Node/npm, and the
+ * Alisio global plugins directory (`<configHome>/plugins`), where `alisio install` puts npm
+ * plugin packages. */
 export function defaultGlobalRoots(): string[] {
   const prefix =
     process.env.npm_config_prefix ?? process.env.PREFIX ?? dirname(dirname(process.execPath));
@@ -25,6 +28,7 @@ export function defaultGlobalRoots(): string[] {
     process.platform === "win32"
       ? join(prefix, "node_modules")
       : join(prefix, "lib", "node_modules"),
+    join(configHome(), "plugins"),
   ];
 }
 interface Manifest {
@@ -68,8 +72,11 @@ export async function resolvePluginSpec(
     candidates.push(join(dir, "node_modules", spec));
     if (dirname(dir) === dir) break;
   }
-  for (const rootDir of options.globalRoots ?? defaultGlobalRoots())
+  for (const rootDir of options.globalRoots ?? defaultGlobalRoots()) {
     candidates.push(join(rootDir, spec));
+    // `alisio install` writes npm packages under <root>/node_modules/<spec>.
+    candidates.push(join(rootDir, "node_modules", spec));
+  }
   for (const dir of candidates) {
     searched.push(dir);
     const manifest = (await readJson(join(dir, "package.json"))) as Manifest | undefined;

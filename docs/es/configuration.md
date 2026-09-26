@@ -28,11 +28,13 @@ compatibilidad de arranque/headless. Los metadatos y errores nunca exponen crede
 La configuración raíz `provider`, las variables de entorno y los flags heredados siguen admitidos y
 no se reescriben. `AppOptions.provider` tiene máxima prioridad. Después, una anulación explícita del
 endpoint (`--base-url`, `--api-mode`, `OPENAI_BASE_URL`, `ALISIO_API_MODE`) o una capa de proyecto de
-confianza/explícita que realmente defina `provider` en la raíz selecciona el proveedor heredado
-compatible con OpenAI para esa ejecución. Los ajustes de MCP, plugins, skills u otros campos por sí
-solos no lo hacen. En caso contrario se restaura el perfil activo de `/connect`; `--model` o
-`ALISIO_MODEL` solo pueden reemplazar su modelo. El `provider` heredado global es el respaldo cuando
-no existe un perfil guardado, por lo que no anula de forma permanente una selección de `/connect`.
+confianza/explícita que defina un `provider` en la raíz utilizable — su `provider.model` analizado no
+está vacío y no es el marcador `YOUR_MODEL_ID` que escribe `alisio setup` — selecciona el proveedor
+heredado compatible con OpenAI para esa ejecución; un modelo vacío o marcador nunca anula una
+selección de `/connect`. Los ajustes de MCP, plugins, skills u otros campos por sí solos no lo hacen.
+En caso contrario se restaura el perfil activo de `/connect`; `--model` o `ALISIO_MODEL` solo pueden
+reemplazar su modelo. El `provider` heredado global es el respaldo cuando no existe un perfil
+guardado, por lo que no anula de forma permanente una selección de `/connect`.
 Los modos headless nunca preguntan.
 
 Hay cuatro proveedores integrados y activados por defecto:
@@ -187,6 +189,14 @@ paquetes npm. Consulte [Escribir plugins](/es/plugins#loading-plugins).
 ```json
 { "plugins": ["alisio-plugin-foo", "./plugins/local.js"] }
 ```
+
+Los paquetes instalados con `alisio install` aterrizan en el directorio global de plugins
+(`<config home>/plugins`, mediante `npm install --prefix`) y sus nombres npm se añaden
+automáticamente al array `plugins` de la configuración GLOBAL — consulte
+[Instalar plugins desde npm](/es/plugins#installing-plugins-from-npm). Nunca se escriben entradas de
+ruta que apunten al paquete instalado; los nombres npm siguen siendo portables.
+`pluginOverrides` de abajo puede desactivar un paquete instalado del proyecto en cada proyecto igual
+que cualquier otro plugin externo.
 
 `/plugins` guarda por separado las anulaciones externas del proyecto, indexadas por el ID estable
 del plugin:

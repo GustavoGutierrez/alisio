@@ -515,6 +515,68 @@ alisio plugins list
 alisio plugins doctor --plugin ./my-plugin.js
 ```
 
+## Instalar plugins desde npm {#installing-plugins-from-npm}
+
+La CLI puede instalar un paquete npm en el directorio GLOBAL de plugins de Alisio
+(`<config home>/plugins`, por ejemplo `~/.config/alisio/plugins`) y registrar su NOMBRE npm en el
+array `plugins` de la configuración global — la misma entrada que hoy puedes escribir a mano:
+
+```sh
+alisio install npm:plugin-openrouter          # última versión
+alisio install npm:@scope/plugin-x@1.2.3      # una versión fijada
+alisio install plugin-openrouter              # el nombre pelado es igual que npm:
+alisio install npm:plugin-openrouter --update # actualiza un plugin instalado a @latest
+```
+
+La especificación se valida antes de cualquier operación de red: `npm:<paquete>[@<versión>]`, o un
+nombre de paquete pelado; solo se permiten letras, dígitos, `.`, `_`, `-`, más `/` para nombres
+scoped y `@` para una versión. Los prefijos desconocidos (`git:`, `file:`, URLs `registry:`, ...) se
+rechazan con un error claro. **Un fallo de instalación nunca vuelve a ejecutar npm en silencio** y la
+salida de npm fallida se sanea (sin tokens/secretos); el error nombra el paquete y el comando de
+reintento exacto.
+
+**Dónde aterriza.** El paquete se instala con `npm install --prefix <config home>/plugins` en
+`<config home>/plugins/node_modules/<paquete>` y su NOMBRE (nunca la ruta resuelta en el filesystem)
+se añade al array `plugins` de `<config home>/config.json` (escritura atómica, campos no relacionados
+conservados, sin duplicados). `alisio plugins list` muestra los paquetes instalados junto a los
+plugins de archivos/directorios.
+
+| Aspecto | Comportamiento |
+| --- | --- |
+| Alcance global | Una instalación sirve a todos los proyectos desde los que ejecutes Alisio |
+| Carga | El plugin se carga como código ejecutable en proceso dondequiera que carguen los plugins globales; debe declarar la keyword `alisio-plugin` para poder cargarse |
+| Confianza del proyecto | La configuración y los plugins PROPIOS de un proyecto solo cargan en proyectos de confianza (`--trust-project` o el aviso de confianza de una sola vez) |
+| `--read-only` | Se rechaza instalar y el plugin nunca carga (los plugins ejecutables están desactivados) |
+| Reinstalación | Si el paquete ya está instalado, el comando lo indica y sugiere `--update` en lugar de volver a ejecutar npm |
+| Scripts | `npm install` puede ejecutar scripts de ciclo de vida del paquete con tus privilegios — Alisio avisa y exige confirmación en terminal interactiva |
+| Headless / `--json` | Nunca pregunta: sin un `--yes` explícito (o `--trust-plugin`) falla con un error accionable antes de ejecutar npm |
+| Errores | Salida npm saneada, nombre del paquete y comando de reintento exacto en el mensaje final |
+
+La instalación es una acción global del usuario: no concede nada a ningún proyecto. La carga sigue la
+política existente de plugins ejecutables — el aviso de confianza de una sola vez (o `--trust-project`)
+es lo que permite a un proyecto cargar su propia configuración y plugins, y `--read-only` desactiva
+los plugins ejecutables por completo.
+
+### El agente puede instalar un plugin por ti
+
+En la TUI, el modelo puede instalar un plugin a petición mediante la herramienta del host
+`plugin_install`: valida la especificación, ejecuta la **misma** rutina de instalación que
+`alisio install` y responde con el nombre del paquete, la versión instalada, la entrada de
+configuración y la ruta, más la nota de confianza. La herramienta usa el efecto `process`, así que
+pasa por la compuerta de permisos habitual — el aviso de aprobación en la TUI, o `--allow-process`
+en headless — y nunca está disponible con `--read-only`. Consulte
+[Herramientas y permisos](/es/tools#plugin-install).
+
+```text
+Tú:    instala el plugin plugin-openrouter
+Agente: (llama a plugin_install con spec "npm:plugin-openrouter", tú lo apruebas)
+Agente: Instalado el plugin "plugin-openrouter" v1.2.3 en
+        ~/.config/alisio/plugins/node_modules/plugin-openrouter y añadido al array
+        "plugins" de ~/.config/alisio/config.json. El plugin carga como código
+        personal de confianza; --read-only impide que cargue. Ejecuta `alisio plugins
+        list` para inspeccionarlo.
+```
+
 ## Plugins TypeScript
 
 - Los plugins publicados en npm **deben distribuir JavaScript**.
