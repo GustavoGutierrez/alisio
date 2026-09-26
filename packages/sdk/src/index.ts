@@ -141,6 +141,83 @@ export interface CompletionRequest {
   model?: string;
   signal?: AbortSignal;
 }
+export type SqlValue = string | number | bigint | null | Uint8Array;
+/** Row objects are plain; column types depend on the query, so they are typed loosely. */
+export type SqlRow = Record<string, any>;
+export interface SqlStatement {
+  run(...params: SqlValue[]): { changes: number | bigint; lastInsertRowid: number | bigint };
+  /** First row as a plain object, or undefined. */
+  get(...params: SqlValue[]): SqlRow | undefined;
+  all(...params: SqlValue[]): SqlRow[];
+}
+/**
+ * Storage port: a synchronous SQLite database (FTS5 available) provided by the host, so plugins
+ * never depend on a specific runtime driver.
+ */
+export interface SqlDatabase {
+  exec(sql: string): void;
+  /** Prepared statements are cached per SQL text. */
+  prepare(sql: string): SqlStatement;
+  /** Runs `fn` in an immediate transaction (nested calls join the outer one). */
+  transaction<T>(fn: () => T): T;
+  close(): void;
+}
+/** What the host knows about the terminal; providers must honor it (no globals, env or fs). */
+export interface TerminalCapabilities {
+  /** ANSI SGR colors allowed. When false, output must be plain text. */
+  color: boolean;
+  /** Non-ASCII glyphs allowed. When false, output must be ASCII. */
+  unicode: boolean;
+  columns: number;
+  interactive: boolean;
+}
+export interface MascotContext {
+  terminal: TerminalCapabilities;
+  version: string;
+}
+/** A small piece of character art; one string (may contain newlines) or lines. */
+export interface MascotProvider {
+  id: string;
+  render(ctx: MascotContext): string | string[];
+}
+export interface PluginMetadata {
+  id: string;
+  version: string;
+  builtin: boolean;
+}
+export interface StartupFact {
+  label: string;
+  value: string;
+}
+export interface StartupContext {
+  version: string;
+  cwd: string;
+  model?: string;
+  /** Provider host only (never credentials). */
+  provider?: string;
+  userName?: string;
+  terminal: TerminalCapabilities;
+  plugins: readonly PluginMetadata[];
+  /** The resolved (and validated) mascot, so custom screens can reuse it. */
+  mascot: MascotProvider;
+  tips: readonly string[];
+  /** Host-provided contextual facts such as permissions or plugin state. */
+  facts?: readonly StartupFact[];
+}
+/** Renders the startup screen as plain lines (ANSI SGR only when `terminal.color`). */
+export interface StartupScreenProvider {
+  id: string;
+  render(ctx: StartupContext): string[];
+}
+/** Typed map of extension points; new points are added here without breaking existing ones. */
+export interface ExtensionPoints {
+  mascot: MascotProvider;
+  "startup-screen": StartupScreenProvider;
+}
+export interface ExtensionOptions {
+  /** Higher wins (default 0). Ties break by plugin id, then registration order. */
+  priority?: number;
+}
 export interface CommandOptions {
   description?: string;
   argumentHint?: string;
@@ -168,13 +245,26 @@ export interface PluginAPI {
   };
   /** Provider-agnostic text completion; plugins never import provider SDKs. */
   model: { complete(request: CompletionRequest): Promise<string> };
+  /** Opens a private (0600) SQLite file, creating parent directories (0700). */
+  storage: { sqlite(path: string): SqlDatabase };
+  /** Provide an implementation for a named extension point (e.g. mascot, startup-screen). */
+  extensions: {
+    register<K extends keyof ExtensionPoints>(
+      point: K,
+      provider: ExtensionPoints[K],
+      options?: ExtensionOptions,
+    ): () => void;
+  };
   /** Short status text shown by interactive UIs (footer); `detail` feeds /stats. */
   ui: { status(key: string, text: string | undefined, detail?: string): void };
 }
 export interface Plugin {
+  /** Stable, unique plugin id (lowercase, dots and dashes). Plugins are identified by `id`. */
   id: string;
   version: string;
   apiVersion: 1;
+  /** Declarative sugar for `api.extensions.register(point, provider)` at priority 0. */
+  extensions?: { [K in keyof ExtensionPoints]?: ExtensionPoints[K] };
   setup(api: PluginAPI): void | Promise<void>;
   dispose?(): void | Promise<void>;
 }

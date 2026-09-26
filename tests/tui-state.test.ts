@@ -15,7 +15,7 @@ import {
   resolveCommand,
   shortenPath,
   summarizeToolArgs,
-} from "../apps/cli/src/tui/state.ts";
+} from "../packages/cli/src/tui/state.ts";
 
 let seq = 0;
 const ev = (type: string, data: unknown, at = "2026-01-01T00:00:00.000Z"): RunEvent => ({

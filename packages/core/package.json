@@ -1,0 +1,64 @@
+{
+  "name": "@alisio/core",
+  "version": "0.1.0-alpha.1",
+  "description": "Embeddable Alisio agent core: tool loop, context compaction, OpenAI-compatible provider, local tools with explicit permissions, MCP client, plugin host and SQLite session store. Runs on Node >=22.16 and Bun.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GustavoGutierrez/alisio.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "bugs": {
+    "url": "https://github.com/GustavoGutierrez/alisio/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "llm",
+    "agent-harness",
+    "openai-compatible",
+    "plugins",
+    "mcp",
+    "agent"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "alisio-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@alisio/sdk": "workspace:*",
+    "@modelcontextprotocol/client": "2.1.0",
+    "ajv": "8.20.0",
+    "openai": "7.23.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
+}

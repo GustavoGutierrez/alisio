@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderCheckpoint } from "../src/core/compaction.ts";
+import { renderCheckpoint } from "../packages/core/src/core/compaction.ts";
 import {
   estimateTokens,
   formatObservation,
@@ -12,8 +12,8 @@ import {
   renderInjection,
   renderMemoryContext,
   suggestTopicKey,
-} from "../src/plugins/builtin/memory/format.ts";
-import type { MemoryHit } from "../src/plugins/builtin/memory/types.ts";
+} from "../packages/plugin-memory/src/format.ts";
+import type { MemoryHit } from "../packages/plugin-memory/src/types.ts";
 
 const checkpoint = {
   goal: "Add memory to Alisio",

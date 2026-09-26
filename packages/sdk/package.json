@@ -1,7 +1,56 @@
 {
   "name": "@alisio/sdk",
   "version": "0.1.0-alpha.1",
+  "description": "Typed plugin SDK for Alisio: the stable contract for tools, commands, context, compaction and session hooks, model completions and storage. Types only plus tiny helpers; zero runtime dependencies.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GustavoGutierrez/alisio.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "bugs": {
+    "url": "https://github.com/GustavoGutierrez/alisio/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "llm",
+    "agent-harness",
+    "openai-compatible",
+    "plugins",
+    "sdk",
+    "typescript"
+  ],
   "type": "module",
-  "exports": "./src/index.ts",
-  "private": true
+  "exports": {
+    ".": {
+      "alisio-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
 }

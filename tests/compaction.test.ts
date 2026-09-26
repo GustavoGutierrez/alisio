@@ -8,7 +8,7 @@ import {
   renderCheckpoint,
   serializeForSummary,
   shouldCompact,
-} from "../src/core/compaction.ts";
+} from "../packages/core/src/core/compaction.ts";
 
 const call = (id: string, name = "read_file") => ({ id, name, arguments: `{"path":"${id}.ts"}` });
 const tool = (callId: string, text = "ok"): Message => ({

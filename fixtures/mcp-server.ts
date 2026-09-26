@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
+import { isMain } from "./http.ts";
 export function makeServer() {
   const server = new McpServer({ name: "alisio-test", version: "1.0.0" });
   server.registerTool(
@@ -20,7 +21,7 @@ export function makeServer() {
   );
   return server;
 }
-if (import.meta.main) {
+if (isMain(import.meta.url)) {
   const server = makeServer();
   await server.connect(new StdioServerTransport());
 }

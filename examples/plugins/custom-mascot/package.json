@@ -1,0 +1,37 @@
+{
+  "name": "alisio-plugin-kite-mascot",
+  "version": "0.1.0",
+  "description": "Example Alisio plugin: a kite mascot and a compact startup screen built on the extension points.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "keywords": [
+    "alisio-plugin",
+    "alisio",
+    "mascot",
+    "startup-screen"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "^0.1.0-alpha.1",
+    "typescript": "5.9.3"
+  }
+}

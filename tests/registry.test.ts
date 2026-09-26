@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ToolRegistry } from "../src/core/registry.ts";
+import { ToolRegistry } from "../packages/core/src/core/registry.ts";
 
 const tool = {
   name: "test",

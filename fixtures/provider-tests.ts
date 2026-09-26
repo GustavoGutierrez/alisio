@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import type { Message, ProviderEvent } from "@alisio/sdk";
-import { configSchema } from "../src/config.ts";
-import { OpenAICompatibleProvider } from "../src/providers/openai-compatible.ts";
+import { configSchema } from "../packages/core/src/config.ts";
+import { OpenAICompatibleProvider } from "../packages/core/src/providers/openai-compatible.ts";
+import { isMain, serve } from "./http.ts";
 
-let count = 0;
-const mode = process.argv[2] ?? "chat";
-const server = Bun.serve({
-  port: 0,
-  hostname: "127.0.0.1",
-  async fetch(req) {
+export async function runProviderTest(mode: string): Promise<{ mode: string; ok: boolean }> {
+  let count = 0;
+  const server = await serve(async (req) => {
     assert.equal(req.headers.get("authorization"), null);
     if (mode === "extensions") {
       if (req.method === "GET") {
@@ -118,61 +116,63 @@ const server = Bun.serve({
       events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("") + "data: [DONE]\n\n",
       { headers: { "Content-Type": "text/event-stream" } },
     );
-  },
-});
-try {
-  const config = configSchema.parse({
-    provider: {
-      model: "test-model",
-      baseURL: `http://127.0.0.1:${server.port}/v1`,
-      auth: "none",
-      apiMode: mode === "responses" ? "responses" : "chat",
-    },
   });
-  const provider = new OpenAICompatibleProvider(config.provider);
-  const request = {
-    instructions: "test",
-    messages: [{ role: "user" as const, text: "test" }],
-    tools: [],
-    maxOutputTokens: 128,
-    signal: AbortSignal.timeout(5000),
-  };
-  const consume = async (messages: Message[]) => {
-    const result: ProviderEvent[] = [];
-    for await (const event of provider.stream({ ...request, messages })) result.push(event);
-    return result;
-  };
-  if (mode === "extensions") {
-    const models = await provider.listModels(AbortSignal.timeout(5000));
-    assert.deepEqual(models, [{ id: "m-a", contextWindow: 64000 }, { id: "m-b" }]);
-    const events: ProviderEvent[] = [];
-    for await (const event of provider.stream({ ...request, model: "override-model" }))
-      events.push(event);
-    assert.deepEqual(events.slice(0, 2), [
-      { type: "reasoning_delta", delta: "think" },
-      { type: "text_delta", delta: "hi" },
-    ]);
-    const final = events.at(-1);
-    if (final?.type !== "completed") throw new Error("missing completion");
-    assert.equal(final.message.text, "hi");
-    assert.deepEqual(final.usage, { input: 50, output: 7, cachedInput: 32 });
-  } else if (mode === "incomplete")
-    await assert.rejects(() => consume(request.messages), /incomplete/);
-  else {
-    const events = await consume(request.messages);
-    const final = events.at(-1);
-    assert.equal(final?.type, "completed");
-    if (final?.type !== "completed") throw new Error("missing");
-    assert.equal(final.message.calls[0]?.id, "call_1");
-    assert.equal(final.message.calls[0]?.arguments, mode === "responses" ? "{}" : '{"x":1}');
-    const next = await consume([
-      ...request.messages,
-      final.message,
-      { role: "tool", callId: "call_1", result: { content: [{ type: "text", text: "ok" }] } },
-    ]);
-    assert.equal(next.at(-1)?.type, "completed");
+  try {
+    const config = configSchema.parse({
+      provider: {
+        model: "test-model",
+        baseURL: `http://127.0.0.1:${server.port}/v1`,
+        auth: "none",
+        apiMode: mode === "responses" ? "responses" : "chat",
+      },
+    });
+    const provider = new OpenAICompatibleProvider(config.provider);
+    const request = {
+      instructions: "test",
+      messages: [{ role: "user" as const, text: "test" }],
+      tools: [],
+      maxOutputTokens: 128,
+      signal: AbortSignal.timeout(5000),
+    };
+    const consume = async (messages: Message[]) => {
+      const result: ProviderEvent[] = [];
+      for await (const event of provider.stream({ ...request, messages })) result.push(event);
+      return result;
+    };
+    if (mode === "extensions") {
+      const models = await provider.listModels(AbortSignal.timeout(5000));
+      assert.deepEqual(models, [{ id: "m-a", contextWindow: 64000 }, { id: "m-b" }]);
+      const events: ProviderEvent[] = [];
+      for await (const event of provider.stream({ ...request, model: "override-model" }))
+        events.push(event);
+      assert.deepEqual(events.slice(0, 2), [
+        { type: "reasoning_delta", delta: "think" },
+        { type: "text_delta", delta: "hi" },
+      ]);
+      const final = events.at(-1);
+      if (final?.type !== "completed") throw new Error("missing completion");
+      assert.equal(final.message.text, "hi");
+      assert.deepEqual(final.usage, { input: 50, output: 7, cachedInput: 32 });
+    } else if (mode === "incomplete")
+      await assert.rejects(() => consume(request.messages), /incomplete/);
+    else {
+      const events = await consume(request.messages);
+      const final = events.at(-1);
+      assert.equal(final?.type, "completed");
+      if (final?.type !== "completed") throw new Error("missing");
+      assert.equal(final.message.calls[0]?.id, "call_1");
+      assert.equal(final.message.calls[0]?.arguments, mode === "responses" ? "{}" : '{"x":1}');
+      const next = await consume([
+        ...request.messages,
+        final.message,
+        { role: "tool", callId: "call_1", result: { content: [{ type: "text", text: "ok" }] } },
+      ]);
+      assert.equal(next.at(-1)?.type, "completed");
+    }
+    return { mode, ok: true };
+  } finally {
+    await server.close();
   }
-  console.log(JSON.stringify({ mode, ok: true }));
-} finally {
-  await server.stop(true);
 }
+if (isMain(import.meta.url))
+  console.log(JSON.stringify(await runProviderTest(process.argv[2] ?? "chat")));

@@ -1,0 +1,67 @@
+{
+  "name": "alisio",
+  "version": "0.1.0-alpha.1",
+  "description": "Alisio: an extensible, provider-agnostic coding-agent harness for your terminal. TUI, OpenAI-compatible providers, permissioned local tools, context compaction, persistent memory and a typed plugin SDK.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GustavoGutierrez/alisio.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "bugs": {
+    "url": "https://github.com/GustavoGutierrez/alisio/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "llm",
+    "agent-harness",
+    "openai-compatible",
+    "tui",
+    "cli",
+    "plugins",
+    "terminal"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "alisio-source": "./src/main.ts",
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    }
+  },
+  "types": "./dist/main.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": true,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "bin": {
+    "alisio": "./dist/main.js"
+  },
+  "dependencies": {
+    "@alisio/core": "workspace:*",
+    "@alisio/plugin-memory": "workspace:*",
+    "@alisio/sdk": "workspace:*",
+    "@earendil-works/pi-tui": "0.87.1",
+    "commander": "15.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/main.d.ts",
+        "import": "./dist/main.js"
+      }
+    }
+  }
+}

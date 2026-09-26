@@ -1,44 +1,46 @@
 {
-  "name": "alisio",
+  "name": "alisio-monorepo",
   "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev": "bun apps/cli/src/main.ts",
+    "dev": "bun --conditions=alisio-source packages/cli/src/main.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "vitest run",
-    "test:integration": "vitest run tests/integration.test.ts",
-    "build": "bun build apps/cli/src/main.ts --compile --outfile dist/alisio",
-    "bench": "bun scripts/bench.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:compiled",
-    "test:compiled": "bun fixtures/compiled-cli-test.ts",
-    "test:herdr": "bun fixtures/herdr-cli-test.ts"
-  },
-  "dependencies": {
-    "@alisio/sdk": "workspace:*",
-    "@earendil-works/pi-tui": "0.87.1",
-    "@modelcontextprotocol/client": "2.1.0",
-    "ajv": "8.20.0",
-    "commander": "15.0.0",
-    "openai": "7.23.0",
-    "yaml": "2.9.1",
-    "zod": "4.6.5"
+    "build": "pnpm -r --filter \"./packages/*\" run build",
+    "build:binary": "pnpm build && bun build packages/cli/dist/main.js --compile --outfile dist/alisio",
+    "test:cli": "node --experimental-strip-types --disable-warning=ExperimentalWarning fixtures/cli-e2e.ts node",
+    "test:compiled": "pnpm build:binary && node --experimental-strip-types --disable-warning=ExperimentalWarning fixtures/cli-e2e.ts binary",
+    "pack:check": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/pack-check.ts",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "bench": "node --experimental-strip-types scripts/bench.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:cli && pnpm test:compiled && pnpm pack:check && pnpm docs:build",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish",
+    "install:smoke": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/install-smoke.ts"
   },
   "devDependencies": {
+    "@alisio/core": "workspace:*",
+    "@alisio/plugin-memory": "workspace:*",
+    "@alisio/sdk": "workspace:*",
     "@biomejs/biome": "2.5.14",
     "@changesets/cli": "3.0.3",
     "@modelcontextprotocol/server": "2.1.0",
-    "@types/bun": "1.4.2",
     "@types/node": "26.6.2",
+    "alisio": "workspace:*",
     "bun": "1.4.2",
     "typescript": "7.0.2",
-    "vitest": "5.0.1"
+    "vitepress": "1.6.4",
+    "vitest": "5.0.1",
+    "zod": "4.6.5"
   },
   "engines": {
-    "node": ">=24",
+    "node": ">=22.16",
     "bun": ">=1.4.2"
-  }
+  },
+  "description": "Alisio monorepo (private root)"
 }

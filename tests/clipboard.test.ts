@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clipboardCommands, copyText, osc52 } from "../apps/cli/src/tui/clipboard.ts";
+import { clipboardCommands, copyText, osc52 } from "../packages/cli/src/tui/clipboard.ts";
 
 type Call = { command: string; args: string[]; input: string };
 const spawner = (results: Record<string, number | "missing">) => {

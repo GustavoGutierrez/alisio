@@ -1,29 +1,40 @@
-import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type ModelProvider, type ProviderEvent, textResult } from "@alisio/sdk";
-import { createApplication } from "../src/application.ts";
-import { configSchema, loadConfig } from "../src/config.ts";
-import { estimateTokens } from "../src/core/compaction.ts";
-import { ToolRegistry } from "../src/core/registry.ts";
-import { AgentRunner } from "../src/core/runner.ts";
-import { HerdrBridge } from "../src/integrations/herdr.ts";
-import { McpConnector } from "../src/mcp/connector.ts";
-import { createMemoryPlugin } from "../src/plugins/builtin/memory/index.ts";
-import { projectId, SQLiteMemoryStore } from "../src/plugins/builtin/memory/store.ts";
-import { PluginHost, pluginPrefix } from "../src/plugins/host.ts";
-import { OpenAICompatibleProvider } from "../src/providers/openai-compatible.ts";
-import { ProjectContext } from "../src/resources/context.ts";
-import { Skills } from "../src/resources/skills.ts";
-import { safePath } from "../src/runtime/paths.ts";
-import { runProcess } from "../src/runtime/process.ts";
-import { SQLiteStore } from "../src/runtime/store.ts";
-import { hash, objectSchema, registerStandard } from "../src/tools/standard.ts";
+import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
+import { createApplication } from "../packages/core/src/application.ts";
+import { configSchema, loadConfig } from "../packages/core/src/config.ts";
+import { estimateTokens } from "../packages/core/src/core/compaction.ts";
+import { ToolRegistry } from "../packages/core/src/core/registry.ts";
+import { AgentRunner } from "../packages/core/src/core/runner.ts";
+import { HerdrBridge } from "../packages/core/src/integrations/herdr.ts";
+import { McpConnector } from "../packages/core/src/mcp/connector.ts";
+import { PluginHost, pluginPrefix } from "../packages/core/src/plugins/host.ts";
+import { OpenAICompatibleProvider } from "../packages/core/src/providers/openai-compatible.ts";
+import { ProjectContext } from "../packages/core/src/resources/context.ts";
+import { Skills } from "../packages/core/src/resources/skills.ts";
+import { safePath } from "../packages/core/src/runtime/paths.ts";
+import { runProcess } from "../packages/core/src/runtime/process.ts";
+import { openDatabase } from "../packages/core/src/runtime/sqlite.ts";
+import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
+import { hash, objectSchema, registerStandard } from "../packages/core/src/tools/standard.ts";
+import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
+import {
+  SQLiteMemoryStore as MemoryStoreOnPort,
+  projectId,
+} from "../packages/plugin-memory/src/store.ts";
+import { isMain } from "./http.ts";
 
-const root = await mkdtemp(join(tmpdir(), "alisio-test-"));
+/** Memory store over the same SQLite adapter the host provides through the storage port. */
+class SQLiteMemoryStore extends MemoryStoreOnPort {
+  constructor(path: string, options?: ConstructorParameters<typeof MemoryStoreOnPort>[1]) {
+    super(openDatabase(path), options);
+  }
+}
+let root = "";
 const signal = () => AbortSignal.timeout(10000);
 const db = () => new SQLiteStore(join(root, `${crypto.randomUUID()}.sqlite`));
 const fixtures: Record<string, () => Promise<void>> = {
@@ -565,7 +576,7 @@ const fixtures: Record<string, () => Promise<void>> = {
       store = new SQLiteStore(path);
       assert.deepEqual(store.messages(s.id), expected);
       const persisted = store.db
-        .query("SELECT type FROM events WHERE session=? ORDER BY seq")
+        .prepare("SELECT type FROM events WHERE session=? ORDER BY seq")
         .all(s.id) as { type: string }[];
       assert.deepEqual(
         persisted.map((e) => e.type),
@@ -744,7 +755,7 @@ const fixtures: Record<string, () => Promise<void>> = {
   },
   async "store-migration"() {
     const path = join(root, "legacy.sqlite");
-    const legacy = new Database(path, { create: true, strict: true });
+    const legacy = openDatabase(path);
     legacy.exec(`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);
       INSERT INTO schema_migrations VALUES(1);
       CREATE TABLE sessions(id TEXT PRIMARY KEY,workspace TEXT,provider TEXT,model TEXT,locked_pid INTEGER);
@@ -759,7 +770,7 @@ const fixtures: Record<string, () => Promise<void>> = {
       const store = new SQLiteStore(path);
       try {
         assert.deepEqual(store.messages("old"), [{ role: "user", text: "legacy" }]);
-        const versions = store.db.query("SELECT version FROM schema_migrations").all() as {
+        const versions = store.db.prepare("SELECT version FROM schema_migrations").all() as {
           version: number;
         }[];
         assert.deepEqual(
@@ -946,7 +957,7 @@ const fixtures: Record<string, () => Promise<void>> = {
       assert.equal(stored?.title, "Token [REDACTED]");
       assert.equal(stored?.content, "key=[REDACTED] set");
       assert.ok(
-        !JSON.stringify(mem.db.query("SELECT * FROM observations").all()).includes("s3cr3t"),
+        !JSON.stringify(mem.db.prepare("SELECT * FROM observations").all()).includes("s3cr3t"),
       );
       const big = mem.save({
         ...base,
@@ -992,7 +1003,7 @@ const fixtures: Record<string, () => Promise<void>> = {
       assert.equal(mem.get(strong.id, "p1"), undefined);
       assert.ok(
         mem.db
-          .query("SELECT 1 FROM observations WHERE id=? AND deleted_at IS NOT NULL")
+          .prepare("SELECT 1 FROM observations WHERE id=? AND deleted_at IS NOT NULL")
           .get(strong.id),
       );
       mem.close();
@@ -1023,7 +1034,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         content: `c${i}`,
       });
       const versions = mem.db
-        .query("SELECT version FROM schema_migrations ORDER BY version")
+        .prepare("SELECT version FROM schema_migrations ORDER BY version")
         .all() as { version: number }[];
       assert.deepEqual(
         versions.map((v) => v.version),
@@ -1607,6 +1618,7 @@ const fixtures: Record<string, () => Promise<void>> = {
     const open = async (state: string, file: string, disablePlugins?: string[]) => {
       process.env.ALISIO_STATE_HOME = state;
       return createApplication({
+        builtins: BUILTIN_PLUGINS,
         cwd: root,
         config: file,
         provider,
@@ -1663,12 +1675,81 @@ const fixtures: Record<string, () => Promise<void>> = {
       /Unknown built-in plugin: nope/,
     );
   },
+  async "plugin-package"() {
+    const dir = join(root, "node_modules", "alisio-plugin-greeter");
+    await mkdir(join(dir, "dist"), { recursive: true });
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: "alisio-plugin-greeter",
+        version: "1.0.0",
+        type: "module",
+        keywords: ["alisio-plugin"],
+        exports: { ".": { import: "./dist/index.js" } },
+      }),
+    );
+    await writeFile(
+      join(dir, "dist", "index.js"),
+      'export default {id:"greeter",version:"1.0.0",apiVersion:1,setup(api){api.tools.register({name:"greet",description:"greet",effect:"read",inputSchema:{type:"object",properties:{}},async execute(){return {content:[{type:"text",text:"hi from npm"}]}}});api.commands.register("greet",async()=>"hi",{description:"Greets"})}}',
+    );
+    const store = db(),
+      registry = new ToolRegistry(),
+      host = new PluginHost(registry, store);
+    try {
+      await host.load("alisio-plugin-greeter", { from: join(root, "sub"), globalRoots: [] });
+      const tool = registry.get(`${pluginPrefix("greeter")}_greet`);
+      assert.match(
+        JSON.stringify(
+          await tool.execute({}, { signal: signal(), workspace: root, emit: () => {} }),
+        ),
+        /hi from npm/,
+      );
+      await assert.rejects(
+        () => host.load("alisio-plugin-absent", { from: root, globalRoots: [] }),
+        /not found/,
+      );
+    } finally {
+      await host.close();
+      store.close();
+    }
+    // Through configuration: explicit config file lists the package by name.
+    const config = join(root, "config.json");
+    await writeFile(
+      config,
+      JSON.stringify({
+        provider: { baseURL: "http://127.0.0.1:9/v1", model: "test", auth: "none" },
+        plugins: ["alisio-plugin-greeter"],
+      }),
+    );
+    process.env.ALISIO_STATE_HOME = join(root, "state");
+    const app = await createApplication({
+      cwd: root,
+      config,
+      noHerdr: true,
+      db: join(root, "app.sqlite"),
+      disablePlugins: [],
+      provider: { id: "test", model: "test", async *stream() {} },
+    });
+    try {
+      assert.ok(app.plugins.commands.has("greeter:greet"));
+      assert.equal(app.plugins.externalCount, 1);
+      assert.equal(app.runner.policy.external, true);
+    } finally {
+      await app.close();
+    }
+  },
 };
-const scenario = process.argv[2];
-try {
-  if (!scenario || !fixtures[scenario]) throw new Error(`Unknown scenario ${scenario}`);
-  await fixtures[scenario]();
-  console.log(JSON.stringify({ scenario, ok: true }));
-} finally {
-  await rm(root, { recursive: true, force: true });
+export const scenarioNames = Object.keys(fixtures);
+/** Runs one scenario with a fresh temporary root (in-process under Node or Bun). */
+export async function runScenario(name: string): Promise<{ scenario: string; ok: boolean }> {
+  const fixture = fixtures[name];
+  if (!fixture) throw new Error(`Unknown scenario ${name}`);
+  root = await mkdtemp(join(tmpdir(), "alisio-test-"));
+  try {
+    await fixture();
+    return { scenario: name, ok: true };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
+if (isMain(import.meta.url)) console.log(JSON.stringify(await runScenario(process.argv[2] ?? "")));

@@ -4,9 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ToolRegistry } from "../src/core/registry.ts";
-import { HerdrBridge } from "../src/integrations/herdr.ts";
-import { runProcess } from "../src/runtime/process.ts";
+import { ToolRegistry } from "../packages/core/src/core/registry.ts";
+import { HerdrBridge } from "../packages/core/src/integrations/herdr.ts";
+import { runProcess } from "../packages/core/src/runtime/process.ts";
 
 const binary = process.env.HERDR_TEST_BIN;
 if (!binary) throw new Error("HERDR_TEST_BIN is required");
