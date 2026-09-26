@@ -37,7 +37,9 @@ extend it without touching the core.
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned
   `plugin_install` tool).
-- **Also**: headless JSONL mode, MCP servers, AGENTS.md scopes, Agent Skills, Herdr integration.
+- **Also**: headless JSONL mode, MCP servers (with an optional persistent global `mcp.allow` consent
+  that auto-connects enabled servers on every start, or per-session grants from the TUI), AGENTS.md
+  scopes, Agent Skills, Herdr integration.
 - **Runs on Node.js >= 22.16 or Bun**; standalone binaries for Linux, macOS and Windows.
 
 ## Install

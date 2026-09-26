@@ -44,7 +44,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 
 | Zona | Contenido |
 | --- | --- |
-| Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp`; `read-only`) |
+| Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
 | Barra de estado | Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
@@ -53,12 +53,14 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
 La barra de contexto mide **la misma métrica efectiva que usa el motor** para la compactación
-automática. Con una ventana de contexto conocida (`provider.contextWindow`, el campo
-`context_window`/`context_length` de `GET /models`), el total es esa ventana y la barra se pone roja
-en `threshold` de ella (por defecto 85 %). Cuando la ventana es desconocida — o se declara
-absurdamente grande (ver [Compactación de contexto](/es/compaction)) — el total es el presupuesto de
-caracteres de respaldo (`limits.maxContextChars / 4` tokens estimados) y se muestra con el sufijo
-`char budget`, poniéndose roja en el 100 % de ahí, exactamente donde compacta el respaldo.
+automática. Con una ventana de contexto conocida (el campo `context_window`/`context_length` de
+`GET /models`, o `provider.contextWindow` para el modelo configurado), el total es esa ventana y la
+barra se pone roja en `threshold` de ella (por defecto 85 %). El catálogo se carga de forma perezosa
+al arrancar y se refresca tras cada cambio de proveedor/modelo, de modo que la ventana real del
+modelo activo se muestra siempre que el descubrimiento la exponga. Cuando la ventana no puede
+conocerse, la barra muestra un honesto `~9.9k / ?` en lugar de un total o porcentaje inventado: el
+presupuesto de caracteres de respaldo sigue siendo una salvaguarda de compactación interna del
+motor, nunca un total mostrado.
 El contexto usado es el último `prompt + completion` informado por el proveedor; sin `usage`, se
 muestra una estimación marcada con `~` (unos 4 caracteres por token).
 
@@ -79,7 +81,7 @@ Al escribir `/` se abre el autocompletado.
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
 | `/plugins` (`/plugin`) | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo |
 | `/skills` (`/skill`) | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
-| `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial, Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI. `--read-only` lo bloquea |
+| `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |

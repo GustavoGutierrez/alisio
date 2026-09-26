@@ -14,6 +14,7 @@ import {
   configHome,
   loadConfigWithProvenance,
   overridesSavedProviderProfile,
+  setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
@@ -138,6 +139,10 @@ export async function createApplication(options: AppOptions = {}) {
     baseURL: options.baseURL,
     apiMode: options.apiMode,
   });
+  // Global-only consent: `mcp.allow` is read from the user layer; the merged config never carries
+  // a project value (see loadConfigWithProvenance), so a project cannot grant itself MCP consent.
+  const mcpAllow = config.mcp.allow === true;
+  let persistedMcpAllow = mcpAllow;
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
   const registry = new ToolRegistry(),
     skills = new Skills({ overrides: config.skillOverrides }),
@@ -153,12 +158,12 @@ export async function createApplication(options: AppOptions = {}) {
       config.mcp.servers,
       registry,
       workspace,
-      options.readOnly ? "read-only" : options.allowMcp ? "allowed" : "disabled",
+      options.readOnly ? "read-only" : options.allowMcp || mcpAllow ? "allowed" : "disabled",
       config.mcpSources,
     );
   let mcpRuntimePermission: "granted" | "not-granted" | "read-only" = options.readOnly
     ? "read-only"
-    : options.allowMcp
+    : options.allowMcp || mcpAllow
       ? "granted"
       : "not-granted";
   const herdr = options.noHerdr
@@ -355,7 +360,7 @@ export async function createApplication(options: AppOptions = {}) {
     );
     const { registerPluginInstallTool } = await import("./plugins/install.ts");
     registerPluginInstallTool(registry, { readOnly: !!options.readOnly });
-    if (options.allowMcp && !options.readOnly) mcp.register();
+    if ((options.allowMcp || mcpAllow) && !options.readOnly) mcp.register();
     if (options.allowAgents && !options.readOnly) herdr.registerTools(registry);
     const providerSettings = new ProviderSettingsStore();
     const saved = options.provider ? undefined : await providerSettings.active();
@@ -440,10 +445,29 @@ export async function createApplication(options: AppOptions = {}) {
         );
     }
     const models = new Map<string, ModelInfo>();
+    // Lazily (re)loads the active provider's catalog exactly once, so the ACTIVE model's
+    // contextWindow becomes known for the context bar without waiting for an explicit
+    // /model picker or autocomplete call. Failed or absent discovery stays retryable.
+    let modelsLoading: Promise<ModelInfo[]> | undefined;
+    const ensureModels = (): Promise<ModelInfo[]> | undefined => {
+      if (!provider.listModels || modelsLoading) return modelsLoading;
+      modelsLoading = loadModels(AbortSignal.timeout(10_000));
+      modelsLoading.catch(() => {
+        if (modelsLoading) modelsLoading = undefined;
+      });
+      return modelsLoading;
+    };
     // Priority: explicit configuration for the configured model, then GET /models.
-    const contextWindow = (model: string) =>
-      (model === config.provider.model ? config.provider.contextWindow : undefined) ??
-      models.get(model)?.contextWindow;
+    const contextWindow = (model: string) => {
+      const explicit = model === config.provider.model ? config.provider.contextWindow : undefined;
+      if (explicit !== undefined) return explicit;
+      const known = models.get(model)?.contextWindow;
+      if (known !== undefined) return known;
+      // Background prime: this call stays synchronous (the runner and the bar are sync), and
+      // once the catalog lands the map is populated for every later lookup.
+      void ensureModels();
+      return undefined;
+    };
     const loadModels = async (signal: AbortSignal): Promise<ModelInfo[]> => {
       if (!provider.listModels) return [];
       const list = await provider.listModels(signal);
@@ -582,6 +606,7 @@ export async function createApplication(options: AppOptions = {}) {
         !options.readOnly &&
         (!!options.allowExternal ||
           !!options.allowMcp ||
+          mcpAllow ||
           !!options.allowAgents ||
           plugins.externalCount > 0 ||
           registry.list().some((t) => t.name.startsWith("p_"))),
@@ -665,6 +690,23 @@ export async function createApplication(options: AppOptions = {}) {
       }
       return expanded;
     };
+    // Startup auto-connect: when runtime permission is granted (--allow-mcp or global mcp.allow),
+    // connect every enabled server exactly like pressing Connect for each. Failures are per-server,
+    // sanitized and never fatal to startup.
+    const mcpStartupFailures: string[] = [];
+    if (mcpRuntimePermission === "granted") {
+      for (const [name, server] of Object.entries(config.mcp.servers)) {
+        if (!server.enabled) continue;
+        try {
+          await mcp.connect(name, AbortSignal.timeout(15_000));
+        } catch {
+          const diagnostic =
+            mcp.info(name).diagnostic ??
+            "Connection failed; inspect the server separately for details";
+          mcpStartupFailures.push(`MCP server "${name}" did not auto-connect: ${diagnostic}`);
+        }
+      }
+    }
     return {
       workspace,
       config,
@@ -765,6 +807,17 @@ export async function createApplication(options: AppOptions = {}) {
       mcpRuntimePermission() {
         return mcpRuntimePermission;
       },
+      /** Whether global MCP consent (`mcp.allow`) is persisted for this user right now. */
+      mcpAllowPersisted() {
+        return persistedMcpAllow;
+      },
+      /**
+       * Sanitized per-server failures collected while auto-connecting enabled servers at startup
+       * (only when runtime permission was granted). Never includes credentials or command paths.
+       */
+      mcpStartupFailures() {
+        return [...mcpStartupFailures];
+      },
       /** Host-owned interactive consent boundary. Headless callers remain blocked unless flagged. */
       grantMcpRuntimePermission(request: { source: "interactive-tui"; confirmed: boolean }) {
         if (!request.confirmed) return mcpRuntimePermission;
@@ -776,6 +829,31 @@ export async function createApplication(options: AppOptions = {}) {
         runtimePolicy.external = true;
         mcpRuntimePermission = "granted";
         return mcpRuntimePermission;
+      },
+      /** Persist global consent atomically, then grant runtime permission for this process. */
+      async rememberGlobalMcpConsent(): Promise<void> {
+        if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
+        await setGlobalMcpAllow({ allow: true });
+        persistedMcpAllow = true;
+        this.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
+      },
+      /**
+       * Clear the persisted global consent atomically and drop the runtime permission (disconnecting
+       * servers as cleanup does). An explicit this-run `--allow-mcp` flag keeps the grant alive.
+       */
+      async revokeGlobalMcpConsent(): Promise<void> {
+        if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
+        await setGlobalMcpAllow({ allow: false });
+        persistedMcpAllow = false;
+        if (options.allowMcp) return;
+        if (mcpRuntimePermission !== "granted") return;
+        await mcp.revokeRuntimePermission();
+        mcpRuntimePermission = "not-granted";
+        runtimePolicy.external =
+          !!options.allowExternal ||
+          !!options.allowAgents ||
+          plugins.externalCount > 0 ||
+          registry.list().some((t) => t.name.startsWith("p_"));
       },
       /** Persist an MCP toggle in its defining layer, then safely update this process. */
       async setMcpEnabled(id: string, enabled: boolean, connect = false) {
@@ -870,6 +948,7 @@ export async function createApplication(options: AppOptions = {}) {
           providerError = undefined;
           providerInfo = { id, profile, persisted: true, profileName };
           models.clear();
+          modelsLoading = undefined;
           catalogCache = undefined;
         } catch (error) {
           await Promise.resolve(candidate.dispose?.()).catch(() => {});

@@ -44,6 +44,11 @@ Editable files and the initial read scan are limited to 1 MiB; tool outputs are 
 truncated result is marked explicitly. Independent reads run in batches of up to four; operations
 with effects are serialized.
 
+`list_files` and `search_text` need the `rg` executable on `PATH`. When it is missing, the tools
+and `alisio doctor` report how to install it: `sudo apt install ripgrep` (Debian/Ubuntu),
+`brew install ripgrep` (macOS), `winget install BurntSushi.ripgrep.MSVC` or
+`scoop install ripgrep` (Windows).
+
 Built-in plugins add more tools: `memory_*` from [Persistent memory](/memory) and `task`,
 `task_status`, `task_wait` and `send_message` from [Subagents](/subagents), all with the `internal`
 effect.
@@ -240,6 +245,14 @@ MCP servers use canonical `mcp.servers` or compatible `mcpServers` configuration
 disconnected until requested. Headless, JSON, readline, doctor and embedded uses require
 `--allow-mcp`/`allowMcp`; in the interactive TUI, choosing **Connect** or **Enable** first presents a
 session-only process/network consent. `--read-only` always blocks MCP.
+
+The `mcp.allow` user preference grants the same process/network consent **persistently across
+sessions**: every start (TUI and headless) begins granted, shows `mcp:on`, and auto-connects
+enabled servers. It is read only from the global/user configuration layer (`<config home>/config.json`)
+and elevates startup permission exactly like `--allow-mcp`; `--read-only` still wins over both. A
+project `.alisio/config.json` value is ignored for this decision. Granting persists across sessions,
+so only enable it when you trust every configured server — MCP servers run unsandboxed with your
+user privileges.
 Stdio servers are unsandboxed subprocesses; direct `env` values are scoped to that child and are not
 shown in diagnostics.
 

@@ -44,6 +44,11 @@ Los archivos editables y el escaneo inicial de lectura están limitados a 1 MiB;
 herramientas se acotan y un resultado truncado se indica explícitamente. Las lecturas independientes
 se ejecutan en lotes de hasta cuatro; las operaciones con efectos se serializan.
 
+`list_files` y `search_text` necesitan el ejecutable `rg` en el `PATH`. Cuando falta, las
+herramientas y `alisio doctor` indican cómo instalarlo: `sudo apt install ripgrep`
+(Debian/Ubuntu), `brew install ripgrep` (macOS), `winget install BurntSushi.ripgrep.MSVC` o
+`scoop install ripgrep` (Windows).
+
 Los plugins integrados añaden más herramientas: `memory_*` de [Memoria persistente](/es/memory) y
 `task`, `task_status`, `task_wait` y `send_message` de [Subagentes](/es/subagents), todas con el
 efecto `internal`.
@@ -260,8 +265,17 @@ Los servidores MCP usan la configuración canónica `mcp.servers` o la compatibl
 Permanecen desconectados hasta que se solicitan. Los modos headless, JSON, readline y doctor, y el
 uso embebido, requieren `--allow-mcp`/`allowMcp`; en la TUI interactiva, **Conectar** o **Activar**
 presenta primero un consentimiento de proceso/red válido solo para esa sesión. `--read-only` siempre
-bloquea MCP. Los servidores stdio son subprocesos sin sandbox; los valores `env` directos quedan
-limitados a ese proceso hijo y no aparecen en diagnósticos.
+bloquea MCP.
+
+La preferencia de usuario `mcp.allow` concede el mismo consentimiento de proceso/red de forma
+**persistente entre sesiones**: cada inicio (TUI y headless) comienza concedido, muestra `mcp:on`, y
+auto-conecta los servidores activados. Solo se lee de la capa global/de usuario
+(`<config home>/config.json`) y eleva el permiso inicial igual que `--allow-mcp`; `--read-only`
+prevalece sobre ambos. Un valor en `.alisio/config.json` de un proyecto se ignora para esta decisión.
+Concederlo persiste entre sesiones: actívelo solo si confía en cada servidor configurado, porque los
+servidores MCP se ejecutan sin sandbox con sus privilegios de usuario. Los servidores stdio son
+subprocesos sin sandbox; los valores `env` directos quedan limitados a ese proceso hijo y no aparecen
+en diagnósticos.
 
 - `mcp_connect` conecta bajo demanda y registra las herramientas del servidor; `mcp_resource` y
   `mcp_prompt` permiten listar y consultar recursos y prompts.

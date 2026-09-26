@@ -8,6 +8,7 @@ import {
   loadConfig,
   loadConfigWithProvenance,
   McpConnector,
+  setGlobalMcpAllow,
   setMcpServerEnabled,
   ToolRegistry,
 } from "../packages/core/src/index.ts";
@@ -218,6 +219,54 @@ describe("MCP configuration compatibility", () => {
       env: { PRIVATE_FIXTURE: "unchanged" },
       enabled: false,
     });
+  });
+
+  it("sets and clears the global mcp.allow preference atomically, preserving unrelated fields", async () => {
+    const { global } = await fixture();
+    const file = join(global, "config.json");
+    await json(file, {
+      skills: ["./keep"],
+      mcp: { servers: { s: { command: "node" } }, allow: false },
+    });
+    await setGlobalMcpAllow({ allow: true });
+    const granted = JSON.parse(await readFile(file, "utf8"));
+    expect(granted.skills).toEqual(["./keep"]);
+    expect(granted.mcp.allow).toBe(true);
+    expect(granted.mcp.servers.s.command).toBe("node");
+    await setGlobalMcpAllow({ allow: false });
+    const cleared = JSON.parse(await readFile(file, "utf8"));
+    expect(cleared.mcp.allow).toBeUndefined();
+    expect(cleared.mcp.servers.s.command).toBe("node");
+    expect(cleared.skills).toEqual(["./keep"]);
+    // Clearing an mcp object that only held `allow` removes the whole key.
+    await writeFile(file, JSON.stringify({ mcp: { allow: true } }));
+    await setGlobalMcpAllow({ allow: false });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ schemaVersion: 1 });
+  });
+
+  it("accepts mcp.allow as a boolean and rejects non-boolean values", () => {
+    expect(configSchema.parse({ mcp: { allow: true } }).mcp.allow).toBe(true);
+    expect(configSchema.parse({ mcp: { allow: false } }).mcp.allow).toBe(false);
+    expect(configSchema.parse({ mcp: {} }).mcp.allow).toBeUndefined();
+    expect(() => configSchema.parse({ mcp: { allow: 1 } })).toThrow();
+  });
+
+  it("keeps the global mcp.allow while a selected project layer value is ignored", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      mcp: { allow: true, servers: { remote: { url: "https://example.invalid/mcp" } } },
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      mcp: { allow: false, servers: { local: { command: "node" } } },
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.mcp.allow).toBe(true);
+    expect(Object.keys(config.mcp.servers).sort()).toEqual(["local", "remote"]);
+    // Without a global allow, a project-only allow:true never grants consent.
+    await json(join(global, "config.json"), {});
+    await json(join(workspace, ".alisio", "config.json"), { mcp: { allow: true } });
+    const projectOnly = await loadConfig(workspace, { trustProject: true });
+    expect(projectOnly.mcp.allow).toBeUndefined();
   });
 
   it.each([

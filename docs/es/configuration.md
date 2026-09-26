@@ -129,8 +129,9 @@ declaradas por encima de `2_000_000` tokens se tratan como desconocidas para que
 `ventana × threshold` gigantesco no oculte la presión real) — se recurre al presupuesto de
 caracteres: la estimación de caracteres en bruto (`~caracteres / 4`, unos 4 caracteres por token)
 que alcanza `maxContextChars / 4` también compacta (un informe de tokens del proveedor nunca
-dispara el respaldo por sí solo). La barra de contexto de la TUI refleja esta misma métrica
-efectiva (ver [Interfaz de terminal](/es/tui)).
+dispara el respaldo por sí solo). La barra de contexto de la TUI muestra la misma ventana conocida,
+o un honesto `?` cuando es desconocida (ver [Interfaz de terminal](/es/tui)); el respaldo de
+caracteres anterior es una salvaguarda del motor, nunca un total mostrado.
 
 Consulte [Compactación de contexto](/es/compaction).
 
@@ -314,6 +315,40 @@ guarda en la configuración. Los modos no TUI y los consumidores programáticos 
 `--allow-mcp` o `allowMcp`; `--read-only` siempre prohíbe MCP. Un servidor stdio es un
 subproceso con sus privilegios de usuario, **no un sandbox**. Confíe únicamente en la configuración y
 el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
+
+### Consentimiento global (`mcp.allow`)
+
+Defina `"mcp": { "allow": true }` en **su configuración de usuario**
+(`<config home>/config.json`, por defecto `~/.config/alisio/config.json`) para conceder
+consentimiento de proceso/red MCP **entre sesiones para este usuario**: cada inicio de Alisio (TUI
+interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, la cabecera muestra
+`mcp:on`, y cada servidor marcado como `enabled` se conecta automáticamente, igual que pulsar
+**Conectar** en cada uno. Esto evita la pregunta por sesión en cada reinicio.
+
+```json
+{
+  "mcp": {
+    "allow": true,
+    "servers": {
+      "devforge": { "command": "/ruta/a/devforge-mcp" }
+    }
+  }
+}
+```
+
+- `mcp.allow` se **lee solo de la capa global/de usuario**; un valor en `.alisio/config.json` de un
+  proyecto se ignora deliberadamente, para que un proyecto no pueda concederse consentimiento de red.
+- Ausente o `false` mantiene el comportamiento actual: el permiso no está concedido al iniciar, la TUI
+  puede concederlo por sesión, y los usos headless/programáticos siguen exigiendo `--allow-mcp`
+  (que continúa funcionando como concesión explícita por ejecución, equivalente a `mcp.allow: true`
+  en esa ejecución).
+- `--read-only` siempre bloquea MCP por completo, independientemente de `mcp.allow`; ni siquiera se
+  ofrece.
+- Concederlo persiste entre sesiones y auto-conecta los servidores activados. Los servidores MCP
+  se ejecutan sin sandbox con sus privilegios de usuario: active el consentimiento global solo si
+  confía en cada servidor que configure.
+- El gestor `/mcp` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulte
+  [Interfaz de terminal](/es/tui#mcp).
 
 ## Variables de entorno
 

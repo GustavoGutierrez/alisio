@@ -16,7 +16,7 @@ import type { ProjectContext } from "../resources/context.ts";
 import type { Skills } from "../resources/skills.ts";
 import { fileSize, readHead, readText } from "../runtime/fs.ts";
 import { safePath } from "../runtime/paths.ts";
-import { runProcess } from "../runtime/process.ts";
+import { isMissingCommand, RIPGREP_INSTALL_HINT, runProcess } from "../runtime/process.ts";
 import { EXECUTE_TIMEOUT_MS, MAX_NESTED_CALLS, runExecute } from "./execute.ts";
 import { searchWithFallback, type WebsearchConfig } from "./search.ts";
 import {
@@ -34,6 +34,18 @@ export const objectSchema = (
   required: string[] = [],
 ): JsonSchema => ({ type: "object", properties, required, additionalProperties: false });
 export const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+/** Runs ripgrep and turns a missing binary into an actionable install message. */
+async function runRipgrep(
+  args: string[],
+  options: Parameters<typeof runProcess>[2],
+): Promise<Awaited<ReturnType<typeof runProcess>>> {
+  try {
+    return await runProcess("rg", args, options);
+  } catch (error) {
+    if (isMissingCommand(error)) throw new Error(RIPGREP_INSTALL_HINT);
+    throw error;
+  }
+}
 async function existing(path: string): Promise<string | undefined> {
   const size = await fileSize(path);
   if (size === undefined) return;
@@ -173,8 +185,7 @@ export function registerStandard(
     paths: filePaths,
     async execute(i, c) {
       const path = await safePath(c.workspace, String(i.path ?? "."));
-      const result = await runProcess(
-        "rg",
+      const result = await runRipgrep(
         ["--files", "--glob", "!.git", "--glob", "!node_modules", "--", path],
         { cwd: c.workspace, signal: c.signal, maxBytes: 200_000 },
       );
@@ -207,8 +218,7 @@ export function registerStandard(
     paths: filePaths,
     async execute(i, c) {
       const path = await safePath(c.workspace, String(i.path ?? "."));
-      const r = await runProcess(
-        "rg",
+      const r = await runRipgrep(
         [
           "--json",
           "--max-count",

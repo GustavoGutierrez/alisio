@@ -20,6 +20,7 @@ import {
 import { projectId, SQLiteMemoryStore } from "./store.ts";
 import { memoryContextText, memoryTools } from "./tools.ts";
 import type { MemoryScope } from "./types.ts";
+import { loadVersion } from "./version.ts";
 
 export interface MemoryPluginContext {
   workspace: string;
@@ -68,7 +69,7 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
     id: "memory",
     name: "Memory",
     description: "Persistent memory and memory-aware context compaction",
-    version: "0.1.0",
+    version: loadVersion(import.meta.url),
     apiVersion: 1,
     async setup(api) {
       const project = await projectId(context.workspace);

@@ -131,7 +131,8 @@ unknown — or absurdly large (declared windows beyond `2_000_000` tokens are tr
 a gigantic `window × threshold` never hides real pressure) — the char budget falls back: the raw
 character estimate (`~chars / 4`, about 4 characters per token) reaching `maxContextChars / 4`
 also compacts (a provider's token report never triggers the fallback on its own). The TUI context
-bar mirrors this same effective metric (see [Terminal UI](/tui#layout)).
+bar shows the same known window, or an honest `?` when it is unknown (see [Terminal UI](/tui#layout));
+the char fallback above is an engine guardrail, never a displayed total.
 
 See [Context compaction](/compaction).
 
@@ -306,6 +307,38 @@ not written to configuration. Non-TUI and programmatic callers still require `--
 `allowMcp`; `--read-only` always prohibits MCP. A stdio server is a subprocess with
 your user privileges, **not a sandbox**. Only trust the configuration and executable you run. See
 [Tools & permissions](/tools#mcp).
+
+### Global consent (`mcp.allow`)
+
+Set `"mcp": { "allow": true }` in **your user configuration**
+(`<config home>/config.json`, default `~/.config/alisio/config.json`) to grant MCP process/network
+consent **across sessions for this user**: every Alisio start (interactive TUI and headless) begins
+with MCP runtime permission already granted, the header shows `mcp:on`, and every server marked
+`enabled` auto-connects, exactly like pressing **Connect** for each. This avoids the per-session
+prompt on every restart.
+
+```json
+{
+  "mcp": {
+    "allow": true,
+    "servers": {
+      "devforge": { "command": "/path/to/devforge-mcp" }
+    }
+  }
+}
+```
+
+- `mcp.allow` is **read from the global/user layer only**; a value in a project `.alisio/config.json`
+  is deliberately ignored, so a project cannot grant itself network consent.
+- Absent or `false` keeps today's behavior: permission is not granted at startup, the TUI may still
+  grant it for the session, and headless/programmatic runs still require `--allow-mcp` (which keeps
+  working as an explicit per-run grant, equivalent to `mcp.allow: true` for that run).
+- `--read-only` always hard-blocks MCP regardless of `mcp.allow`; it is never even offered.
+- Granting it persists across sessions and auto-connects enabled servers. MCP servers run
+  unsandboxed with your user privileges, so only enable global consent when you trust every server
+  you configure.
+- The TUI `/mcp` manager can set this (Grant and remember) and revoke it; see
+  [Terminal UI](/tui#mcp).
 
 ## Environment variables
 

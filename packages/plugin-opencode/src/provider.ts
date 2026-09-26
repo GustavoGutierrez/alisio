@@ -8,6 +8,7 @@ import type {
   ToolDefinition,
   Usage,
 } from "@alisio/sdk";
+import { loadVersion } from "./version.ts";
 
 export type OpenCodeProtocol = "responses" | "chat" | "messages";
 export type OpenCodeProduct = "opencode" | "opencode-go";
@@ -168,6 +169,8 @@ export interface OpenCodeGatewayConfig {
 type Json = Record<string, any>;
 const dataUrl = (a: Attachment) => `data:${a.mimeType};base64,${a.data}`;
 const modelId = (id: string) => id.replace(/^opencode(?:-go)?\//, "");
+/** Default user agent derives from the package manifest at runtime; never a hardcoded version. */
+const DEFAULT_USER_AGENT = `alisio/${loadVersion(import.meta.url)}`;
 
 async function* sse(response: Response): AsyncIterable<Json> {
   if (!response.ok) throw new Error(`OpenCode request failed: HTTP ${response.status}`);
@@ -254,7 +257,7 @@ export class OpenCodeGatewayProvider implements ModelProvider {
     this.displayName = config.product === "opencode-go" ? "OpenCode Go" : "OpenCode Console";
     this.classify = config.classify;
     this.baseURL = config.baseURL.replace(/\/$/, "");
-    this.userAgent = config.userAgent ?? "alisio/0.1.0-alpha.1";
+    this.userAgent = config.userAgent ?? DEFAULT_USER_AGENT;
     const url = new URL(this.baseURL);
     if (url.protocol !== "https:" && url.hostname !== "127.0.0.1" && url.hostname !== "localhost")
       throw new Error("OpenCode base URL must use HTTPS");

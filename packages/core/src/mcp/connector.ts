@@ -5,6 +5,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type { McpServerSource, ServerConfig } from "../config.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { objectSchema } from "../tools/standard.ts";
+import { loadVersion } from "../version.ts";
 
 export type McpStatus =
   | "disabled"
@@ -201,6 +202,12 @@ export class McpConnector {
     this.availability = "allowed";
     this.register();
   }
+  /** Drop the runtime grant: disconnect every server and unregister the bridge (used on revoke). */
+  async revokeRuntimePermission(): Promise<void> {
+    await Promise.all([...this.clients.keys()].map((name) => this.disconnect(name)));
+    for (const undo of this.bridgeUndo.splice(0).reverse()) undo();
+    this.availability = "disabled";
+  }
   runtimePermission(): McpServerInfo["runtimePermission"] {
     return this.availability === "allowed"
       ? "granted"
@@ -274,7 +281,10 @@ export class McpConnector {
     }
     this.statuses.set(name, "connecting");
     this.diagnostics.delete(name);
-    const client = new Client({ name: "alisio", version: "0.1.0-alpha.1" }, { capabilities: {} });
+    const client = new Client(
+      { name: "alisio", version: loadVersion(import.meta.url) },
+      { capabilities: {} },
+    );
     const undo: Array<() => void> = [];
     const generation = Symbol(name);
     const transport =

@@ -177,6 +177,17 @@ export async function runTui(options: TuiOptions): Promise<void> {
       modelList = undefined;
       throw e;
     }));
+  /**
+   * Reloads the active-provider catalog and repaints when it lands, so the context bar learns
+   * the ACTIVE model's real window (previously only the first /model picker or autocomplete
+   * call loaded it, leaving a fabricated 40k total on screen). Called at startup and after
+   * every provider/model switch; the bar honestly shows `?` until the catalog arrives.
+   */
+  const primeModels = () => {
+    void models()
+      .then(() => tui.requestRender())
+      .catch(() => {});
+  };
   const terminal = new ProcessTerminal();
   const copy = async (text: string) =>
     copyText(text, {
@@ -268,7 +279,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     const child = viewedState();
     const budget = app.contextBudget(child?.model ?? view.model);
     const pct =
-      child?.context && budget
+      child?.context && budget?.total
         ? ` · ctx ${Math.round((child.context.used / budget.total) * 100)}%`
         : "";
     const tokens = child
@@ -333,6 +344,9 @@ export async function runTui(options: TuiOptions): Promise<void> {
       { component: bottom, basis: "auto", shrink: 1, minSize: 3 },
     ]),
   );
+  // Prime the active provider's catalog so the context bar shows the model's real window
+  // (or an honest `?`) instead of a fabricated total; repaint when the catalog lands.
+  primeModels();
 
   const sync = () => {
     main.sync(view.items);
@@ -758,6 +772,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     reset(initialViewState(model));
     notice(`Connected to ${registration.name} with model ${model}. Started a fresh session.`);
     refreshEstimate();
+    primeModels();
   };
   const chooseModel = async () => {
     const catalogs = await app.configuredProviderCatalogs(AbortSignal.timeout(20_000));
@@ -792,6 +807,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
                 `Provider changed to ${app.providers.get(selected.provider)?.name ?? selected.provider} with model ${selected.model}. Started a fresh session.`,
               );
               refreshEstimate();
+              primeModels();
             })
             .catch(error);
         },
@@ -901,12 +917,61 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const manageMcp = () => {
     const openCatalog = () => {
       const entries = app.mcp.list();
-      if (!entries.length) return notice("No MCP servers are configured");
+      const serverItems = mcpServerItems(entries);
+      const items: { value: string; label: string; description: string }[] = [
+        ...serverItems,
+        ...(app.mcpAllowPersisted()
+          ? [
+              {
+                value: "!revoke-global",
+                label: "Revoke global MCP consent",
+                description: "Clear mcp.allow from your user configuration and disconnect servers",
+              },
+            ]
+          : []),
+      ];
+      if (!items.length) return notice("No MCP servers are configured");
       showPicker(
         new Picker(
           `MCP servers (${entries.length})`,
-          mcpServerItems(entries),
+          items,
           (item) => {
+            if (item.value === "!revoke-global") {
+              showPicker(
+                new Picker(
+                  "Revoke global MCP consent?",
+                  [
+                    {
+                      value: "revoke",
+                      label: "Revoke and disconnect",
+                      description:
+                        "Clears mcp.allow; future Alisio starts will not auto-grant or auto-connect MCP servers",
+                    },
+                    {
+                      value: "cancel",
+                      label: "Cancel",
+                      description: "Keep global MCP consent enabled",
+                    },
+                  ],
+                  (choice) => {
+                    if (choice.value !== "revoke") return openCatalog();
+                    void app
+                      .revokeGlobalMcpConsent()
+                      .then(() =>
+                        notice(
+                          "Global MCP consent revoked. Runtime permission dropped and configured servers disconnected.",
+                        ),
+                      )
+                      .catch(error)
+                      .finally(openCatalog);
+                  },
+                  openCatalog,
+                  false,
+                  "Removes mcp.allow from your user configuration (~/.config/alisio/config.json) atomically. This run's --allow-mcp flag, if given, keeps permission for this session.",
+                ),
+              );
+              return;
+            }
             const selected = app.mcp.info(item.value);
             const source =
               selected.source.kind === "global"
@@ -1016,12 +1081,17 @@ export async function runTui(options: TuiOptions): Promise<void> {
       if (app.mcpRuntimePermission() === "granted") return run();
       showPicker(
         new Picker(
-          "Grant MCP access for this session?",
+          "Grant MCP access?",
           [
             {
-              value: "grant",
-              label: "Grant and continue",
-              description: "May start the configured process or network connection",
+              value: "grant-session",
+              label: "Grant for this session only",
+              description: "May start the configured process or network connection; not saved",
+            },
+            {
+              value: "grant-remember",
+              label: "Grant and remember for this user (global)",
+              description: "Persists mcp.allow in your user configuration for every session",
             },
             {
               value: "cancel",
@@ -1030,19 +1100,34 @@ export async function runTui(options: TuiOptions): Promise<void> {
             },
           ],
           (choice) => {
-            if (choice.value !== "grant") return openCatalog();
-            try {
-              app.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
-              notice("MCP process/network access granted for this Alisio session only.");
-              run();
-            } catch (cause) {
-              error(cause);
-              openCatalog();
+            if (choice.value === "cancel") return openCatalog();
+            if (choice.value === "grant-session") {
+              try {
+                app.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
+                notice("MCP process/network access granted for this Alisio session only.");
+                run();
+              } catch (cause) {
+                error(cause);
+                openCatalog();
+              }
+              return;
             }
+            void app
+              .rememberGlobalMcpConsent()
+              .then(() => {
+                notice(
+                  "MCP process/network access granted globally (mcp.allow) for this user. Enabled servers will auto-connect on every start.",
+                );
+                run();
+              })
+              .catch((cause) => {
+                error(cause);
+                openCatalog();
+              });
           },
           openCatalog,
           false,
-          "This grant is not saved. Configured server enablement is persisted separately. MCP servers and their tools run with your user privileges.",
+          "Session-only lasts until Alisio exits. Remembering writes mcp.allow=true to your user configuration so every start grants MCP access and auto-connects enabled servers, including headless runs. MCP servers and their tools run with your user privileges.",
         ),
       );
     };
@@ -1568,6 +1653,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       transcript.addChild(banner);
     }
     tui.start();
+    for (const failure of app.mcpStartupFailures()) notice(failure);
     sync();
     refreshEstimate();
     // Discover context windows in the background; failures only mean "unknown".

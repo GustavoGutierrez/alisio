@@ -43,7 +43,7 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 
 | Area | Content |
 | --- | --- |
-| Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp`; `read-only`) |
+| Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
 | Status bar | Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
@@ -52,11 +52,13 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 Errors appear in red inside the conversation without closing the TUI.
 
 The context bar measures the **same effective metric the engine uses** for auto-compaction. With a
-known context window (`provider.contextWindow`, the `context_window`/`context_length` field of
-`GET /models`), the total is that window and the bar turns red at `threshold` of it (default 85 %).
-When the window is unknown — or declared absurdly large (see [Context compaction](/compaction)) —
-the total is the char-budget fallback (`limits.maxContextChars / 4` estimated tokens) and is shown
-with a `char budget` suffix, turning red at 100 % there, exactly where the fallback compacts.
+known context window (the `context_window`/`context_length` field of `GET /models`, or
+`provider.contextWindow` for the configured model), the total is that window and the bar turns red
+at `threshold` of it (default 85 %). The catalog is loaded lazily at startup and refreshed after
+every provider/model switch, so the active model's real window is shown whenever discovery exposes
+it. When the window genuinely cannot be known, the bar shows an honest `~9.9k / ?` instead of a
+fabricated total or percentage — the char-budget fallback remains an auto-compaction guardrail
+inside the engine, never a displayed total.
 Used context is the last `prompt + completion` reported by the provider; without `usage`, an
 estimate marked with `~` (about 4 characters per token) is shown.
 
@@ -77,7 +79,7 @@ Typing `/` opens autocompletion.
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
 | `/plugins` (`/plugin`) | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled |
 | `/skills` (`/skill`) | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
-| `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp`, Connect/Enable shows process/network consequences and can grant access for this TUI session only. `--read-only` blocks it |
+| `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp` (or global `mcp.allow`), Connect/Enable shows process/network consequences and can grant access for this TUI session only, or remember it globally (`mcp.allow`) for every session. A "Revoke global MCP consent" row clears that preference and disconnects servers. `--read-only` blocks it |
 | `/copy` | Copy the last assistant response to the clipboard |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |

@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 const FALLBACK = "dev";
 
 /**
- * Reads the package version at runtime so --version, doctor, plugin metadata and MCP client
- * metadata stay in sync with the published package without a build-time constant to update.
+ * Reads this plugin package's version at runtime so plugin metadata, user-agent defaults and CLI
+ * reports stay in sync with the published package without a build-time constant to update.
  * The manifest is resolved relative to the module (`src/version.ts` → `../package.json` in the
  * source tree; `dist/version.js` → `../package.json` of the installed package). Standalone
  * binaries inject the version at build time via ALISIO_PACKAGE_VERSION (scripts/binary-build.ts).

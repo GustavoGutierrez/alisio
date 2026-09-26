@@ -1,0 +1,131 @@
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { loadVersion as loadCliVersion } from "../packages/cli/src/version.ts";
+import { loadVersion as loadCoreVersion } from "../packages/core/src/version.ts";
+import { createDeepSeekPlugin } from "../packages/plugin-deepseek/src/index.ts";
+import { loadVersion as loadDeepSeekVersion } from "../packages/plugin-deepseek/src/version.ts";
+import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
+import { loadVersion as loadMemoryVersion } from "../packages/plugin-memory/src/version.ts";
+import { createOpenAICompatiblePlugin } from "../packages/plugin-openai-compatible/src/index.ts";
+import { loadVersion as loadOpenAICompatibleVersion } from "../packages/plugin-openai-compatible/src/version.ts";
+import { createOpenCodePlugin } from "../packages/plugin-opencode/src/index.ts";
+import { loadVersion as loadOpenCodeVersion } from "../packages/plugin-opencode/src/version.ts";
+import { createOpenCodeGoPlugin } from "../packages/plugin-opencode-go/src/index.ts";
+import { loadVersion as loadOpenCodeGoVersion } from "../packages/plugin-opencode-go/src/version.ts";
+import { createSubagentsPlugin } from "../packages/plugin-subagents/src/index.ts";
+import { loadVersion as loadSubagentsVersion } from "../packages/plugin-subagents/src/version.ts";
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe("package version loading", () => {
+  it("honors the ALISIO_PACKAGE_VERSION build-time injection before the manifest", () => {
+    // The real manifests of these packages are readable; the injected env still wins.
+    vi.stubEnv("ALISIO_PACKAGE_VERSION", "9.8.7-injected");
+    expect(loadCliVersion(import.meta.url)).toBe("9.8.7-injected");
+    expect(loadCoreVersion(import.meta.url)).toBe("9.8.7-injected");
+    expect(loadOpenCodeVersion(import.meta.url)).toBe("9.8.7-injected");
+  });
+
+  it("reads the version from the package manifest next to the module", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "alisio-version-manifest-"));
+    await writeJson(join(dir, "package.json"), { version: "7.6.5-manifest" });
+    // `fromHere` points into the temp package; `../package.json` resolves to that manifest.
+    const fromHere = pathToFileURL(join(dir, "src", "loader.ts")).href;
+    expect(loadCliVersion(fromHere)).toBe("7.6.5-manifest");
+    expect(loadCoreVersion(fromHere)).toBe("7.6.5-manifest");
+  });
+
+  it("returns dev when neither the injection nor the manifest is available", () => {
+    vi.stubEnv("ALISIO_PACKAGE_VERSION", "");
+    const missing = pathToFileURL(
+      join(tmpdir(), "alisio-version-missing", "src", "loader.ts"),
+    ).href;
+    for (const load of [
+      loadCliVersion,
+      loadCoreVersion,
+      loadDeepSeekVersion,
+      loadMemoryVersion,
+      loadOpenAICompatibleVersion,
+      loadOpenCodeVersion,
+      loadOpenCodeGoVersion,
+      loadSubagentsVersion,
+    ])
+      expect(load(missing)).toBe("dev");
+  });
+});
+
+describe("plugin metadata version source", () => {
+  it("exposes each plugin's runtime version as its metadata version", async () => {
+    // Metadata now derives from the loader; a stale literal would never reach here. The
+    // expectation follows each package's manifest so it stays in sync forever.
+    const manifestVersion = async (packageDir: string) =>
+      (
+        JSON.parse(
+          await readFile(join(repoRoot(), "packages", packageDir, "package.json"), "utf8"),
+        ) as { version?: string }
+      ).version ?? "dev";
+    expect(createOpenCodePlugin().version).toBe(await manifestVersion("plugin-opencode"));
+    expect(createOpenCodeGoPlugin().version).toBe(await manifestVersion("plugin-opencode-go"));
+    expect(createDeepSeekPlugin().version).toBe(await manifestVersion("plugin-deepseek"));
+    expect(createOpenAICompatiblePlugin().version).toBe(
+      await manifestVersion("plugin-openai-compatible"),
+    );
+    expect(createMemoryPlugin({}, { workspace: ".", stateHome: ".", configDir: "." }).version).toBe(
+      await manifestVersion("plugin-memory"),
+    );
+    expect(
+      createSubagentsPlugin(
+        {},
+        {
+          workspace: ".",
+          stateHome: ".",
+          configHome: ".",
+          configDir: ".",
+          home: ".",
+          trusted: false,
+        },
+      ).version,
+    ).toBe(await manifestVersion("plugin-subagents"));
+  });
+});
+
+describe("no stale version literals in package sources", () => {
+  it("keeps every packages/*/src file free of publish-version literals", async () => {
+    // Regression: plugin metadata versions, user-agent defaults and the MCP client used to
+    // hardcode "0.1.0-alpha.1" / "0.1.0", silently desyncing from the published packages.
+    // Only version.ts-compatible loaders may carry versions, and they do not: their only
+    // fallback is the development marker "dev". Any future literal match fails this test.
+    const root = resolve(import.meta.dirname ?? ".", "..", "packages");
+    const offenders: string[] = [];
+    for (const name of await readdir(root)) {
+      const src = join(root, name, "src");
+      for (const file of await walkTs(src)) {
+        const text = await readFile(file, "utf8");
+        const line = text.split("\n").find((line) => /0\.1\.0(-alpha\.\d+)?/.test(line));
+        if (line) offenders.push(`${relative(root, file)}: ${line.trim()}`);
+      }
+    }
+    expect(offenders.join("\n") || "no stale version literals").toBe("no stale version literals");
+  });
+});
+
+/** Repository root (parent of tests/). */
+function repoRoot(): string {
+  return resolve(import.meta.dirname ?? ".", "..");
+}
+
+/** Recursively lists TypeScript files under a directory (empty when it does not exist). */
+async function walkTs(dir: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...(await walkTs(path)));
+    else if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path);
+  }
+  return files;
+}
+const writeJson = (path: string, value: unknown) =>
+  import("node:fs/promises").then(({ writeFile }) => writeFile(path, JSON.stringify(value)));

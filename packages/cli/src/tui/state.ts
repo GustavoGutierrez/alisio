@@ -203,10 +203,10 @@ export function contextPercent(used: number, total: number | undefined): number 
 }
 /** The effective total the context bar measures against, and what it is derived from. */
 export interface ContextBudget {
-  /** Effective total in tokens (model window, or the char budget converted to tokens). */
-  total: number;
-  /** Basis of the total: the model's context window, or the char-budget fallback. */
-  basis: "window" | "chars";
+  /** Effective total in tokens: the model's context window, or absent when it is unknown. */
+  total?: number;
+  /** Basis of the total: the model's context window, or unknown (no fabricated total). */
+  basis: "window" | "unknown";
   /** Percentage of `total` at which the engine auto-compacts; the bar turns red there. */
   compactionAt: number;
 }
@@ -214,15 +214,15 @@ export function formatContext(
   used: number,
   total: number | undefined,
   estimated: boolean,
-  basis?: "window" | "chars",
+  basis?: "window" | "unknown",
 ) {
   const prefix = `${estimated ? "~" : ""}${formatTokens(used)} / `;
+  // Honest unknown: the model window could not be known, so the bar shows `?` instead of a
+  // fabricated total or percentage.
+  if (basis === "unknown") return `${prefix}?`;
   const pct = contextPercent(used, total);
   if (pct === undefined || !total) return `${prefix}unknown`;
-  // The `~` marks an estimate; the "char budget" suffix tells the user the bar is measured
-  // against the fallback (est. tokens from limits.maxContextChars), not a model window.
-  const basisSuffix = basis === "chars" ? " char budget" : "";
-  return `${prefix}${formatTokens(total)} (${Math.round(pct)}%)${basisSuffix}`;
+  return `${prefix}${formatTokens(total)} (${Math.round(pct)}%)`;
 }
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;

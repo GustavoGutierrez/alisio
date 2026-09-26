@@ -146,9 +146,9 @@ describe("formatters", () => {
     expect(formatContext(500, undefined, false)).toBe("500 / unknown");
   });
 
-  it("marks the char-budget basis when there is no model window", () => {
-    expect(formatContext(40_000, 40_000, true, "chars")).toBe("~40k / 40k (100%) char budget");
-    expect(formatContext(12_300, 40_000, true, "chars")).toBe("~12.3k / 40k (31%) char budget");
+  it("shows an honest ? (no percentage) when the model window is unknown", () => {
+    expect(formatContext(9_900, undefined, true, "unknown")).toBe("~9.9k / ?");
+    expect(formatContext(40_000, undefined, false, "unknown")).toBe("40k / ?");
     expect(formatContext(12_300, 128_000, false, "window")).toBe("12.3k / 128k (10%)");
   });
 

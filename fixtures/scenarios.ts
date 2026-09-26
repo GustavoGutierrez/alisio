@@ -21,6 +21,7 @@ import { McpConnector } from "../packages/core/src/mcp/connector.ts";
 import { PluginHost, pluginPrefix } from "../packages/core/src/plugins/host.ts";
 import { ProjectContext } from "../packages/core/src/resources/context.ts";
 import { Skills } from "../packages/core/src/resources/skills.ts";
+import { which } from "../packages/core/src/runtime/fs.ts";
 import { safePath } from "../packages/core/src/runtime/paths.ts";
 import { runProcess } from "../packages/core/src/runtime/process.ts";
 import { openDatabase } from "../packages/core/src/runtime/sqlite.ts";
@@ -153,6 +154,14 @@ const fixtures: Record<string, () => Promise<void>> = {
     assert.equal(await readFile(join(root, "a"), "utf8"), "same same");
   },
   async search() {
+    // Standalone runs (bun fixtures/scenarios.ts search) skip cleanly when ripgrep is missing;
+    // the Vitest integration test also reports this as a skip (see tests/integration.test.ts).
+    if (!(await which("rg"))) {
+      process.stderr.write(
+        "search scenario skipped: ripgrep (rg) is not installed; install it (see `alisio doctor`)\n",
+      );
+      return;
+    }
     const reg = new ToolRegistry();
     registerStandard(reg, root, new Skills(), new ProjectContext(root));
     await writeFile(join(root, "a.txt"), "needle");

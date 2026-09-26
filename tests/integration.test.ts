@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -11,14 +11,27 @@ const env = {
   ALISIO_API_MODE: "",
 };
 
+/**
+ * The `search` scenario needs the ripgrep binary on PATH. When it is missing the test must SKIP
+ * cleanly (never fail); when rg exists the scenario still runs and fails on genuine breakage.
+ */
+const rgAvailable = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
+const searchTitle = rgAvailable
+  ? "search"
+  : "search (skipped: ripgrep not installed; see alisio doctor for install commands)";
+
 describe("integration contracts on Node", () => {
   beforeAll(() => {
     Object.assign(process.env, env);
   });
   for (const scenario of scenarioNames)
-    it(scenario, async () => {
-      expect(await runScenario(scenario)).toEqual({ scenario, ok: true });
-    }, 20_000);
+    it.skipIf(scenario === "search" && !rgAvailable)(
+      scenario === "search" ? searchTitle : scenario,
+      async () => {
+        expect(await runScenario(scenario)).toEqual({ scenario, ok: true });
+      },
+      20_000,
+    );
 });
 
 // The same fixtures still run on Bun (the standalone binary runtime) for storage, plugins and memory.

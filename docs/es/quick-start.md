@@ -72,7 +72,9 @@ alisio doctor --config ./my-api.json
 ```
 
 `doctor` muestra la versión, el runtime, la plataforma, el workspace, las rutas de Git y ripgrep, y la
-configuración del proveedor, incluido si la variable de la clave está definida. Nunca muestra la clave.
+configuración del proveedor, incluido si la variable de la clave está definida. Si falta ripgrep,
+también imprime los comandos de instalación por plataforma (lo usan `search_text`/`list_files`).
+Nunca muestra la clave.
 
 ## 4. Ejecutar
 

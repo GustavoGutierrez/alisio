@@ -9,8 +9,8 @@ import {
 } from "@alisio/sdk";
 import {
   checkpointInstructions,
-  effectiveContextBudget,
   estimateTokens,
+  MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
   shouldCompactContext,
@@ -207,27 +207,26 @@ export class AgentRunner {
     );
   }
   /**
-   * The effective context budget a session's auto-compaction and the TUI context bar both use:
-   * the model window when known (and not beyond `MAX_TRUSTED_WINDOW`), otherwise the char budget
-   * converted to estimated tokens. `compactionAt` is the percentage of `total` where auto
-   * compaction triggers, so the bar turns red exactly where the engine compacts.
+   * The effective context budget the TUI context bar displays. The model window is the total
+   * when known (and not beyond `MAX_TRUSTED_WINDOW`); otherwise the bar reports an honest
+   * unknown (`basis: "unknown"`, no fabricated total). `compactionAt` is the percentage of
+   * `total` where auto-compaction triggers, so the bar turns red exactly where the engine
+   * compacts. The engine's own auto-compaction guardrail still falls back to the char budget
+   * internally (see `shouldCompactContext`) — that fallback is never shown as a fake total.
    */
   contextBudget(model: string): {
-    total: number;
-    basis: "window" | "chars";
+    total?: number;
+    basis: "window" | "unknown";
     compactionAt: number;
   } {
-    const budget = effectiveContextBudget(
-      this.options.contextWindow?.(model),
-      this.options.maxContextChars ?? 160_000,
-    );
-    return {
-      ...budget,
-      compactionAt:
-        budget.basis === "window"
-          ? Math.round((this.options.compaction?.threshold ?? 0.85) * 100)
-          : 100,
-    };
+    const window = this.options.contextWindow?.(model);
+    if (window !== undefined && window > 0 && window <= MAX_TRUSTED_WINDOW)
+      return {
+        total: window,
+        basis: "window",
+        compactionAt: Math.round((this.options.compaction?.threshold ?? 0.85) * 100),
+      };
+    return { total: undefined, basis: "unknown", compactionAt: 100 };
   }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {

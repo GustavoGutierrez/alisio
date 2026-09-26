@@ -3,7 +3,7 @@
  * `node` mode runs packages/cli/dist/main.js with plain Node; `binary` runs dist/alisio (Bun).
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -75,6 +75,31 @@ const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   if (checkStderr) assert.doesNotMatch(stderr, /MASCOT-MARKER|SCREEN-MARKER|Alisio v/);
   return stdout;
 };
+/** Like `execute` but returns stderr too (for diagnostics such as the ripgrep hint). */
+const executeWithStderr = async (args: string[]) => {
+  const [program = "", ...prefix] = command;
+  const child = spawn(program, [...prefix, ...args], {
+    cwd: directory,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ALISIO_CONFIG_HOME: join(directory, "global"),
+      ALISIO_STATE_HOME: join(directory, "state"),
+      ALISIO_MODEL: "",
+      OPENAI_BASE_URL: "",
+      ALISIO_API_MODE: "",
+      HERDR_ENV: "0",
+    },
+  });
+  let stdout = "",
+    stderr = "";
+  child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  const code = await new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
+  assert.equal(code, 0, stderr);
+  return { stdout, stderr };
+};
+const rgAvailable = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 try {
   await writeFile(join(directory, "note.txt"), "fixture content");
   await writeFile(
@@ -319,6 +344,17 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
     );
     const doctorUntrusted = JSON.parse(await execute(["doctor", "--cwd", setupDirectory]));
     assert.equal(doctorUntrusted.provider.baseURL, "https://api.openai.com/v1");
+    // Doctor explains how to install ripgrep when it is missing; no hint needed when present.
+    if (!rgAvailable) {
+      const { stdout: doctorStdout, stderr: doctorStderr } = await executeWithStderr([
+        "doctor",
+        "--cwd",
+        setupDirectory,
+      ]);
+      assert.deepEqual(JSON.parse(doctorStdout).ripgrep, null);
+      assert.match(doctorStderr, /apt install ripgrep/);
+      assert.match(doctorStderr, /brew install ripgrep/);
+    }
     const trustList = JSON.parse(await execute(["trust", "list"], false, 0).catch(() => "[]"));
     assert.ok(
       !trustList.some((e: { workspace: string }) => e.workspace.includes(setupDirectory)),

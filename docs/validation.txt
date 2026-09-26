@@ -11,5 +11,6 @@ $ bun build apps/cli/src/main.ts --compile --outfile dist/alisio
 $ bun fixtures/compiled-cli-test.ts
 {"ok":true,"checks":["compiled CLI HTTP tool loop","JSONL output","external TypeScript plugin with dependency","session persistence"]}
 
-Nota: la prueba 'search' requiere ripgrep (rg) en PATH; sin él falla por el entorno.
+Nota: la prueba 'search' requiere ripgrep (rg) en PATH; sin él se omite limpiamente (skip) en vez de
+fallar, y `alisio doctor`/`search_text`/`list_files` indican cómo instalarlo.
 Verificación manual de la TUI y de la memoria: ver docs/implementation-status.md.

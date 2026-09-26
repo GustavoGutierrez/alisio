@@ -24,8 +24,16 @@ it is not a statement that all of its release criteria are met.
   Configured servers connect lazily and stdio runs with the user's privileges; neither MCP nor its
   subprocess transport is a sandbox. Semantic names and descriptions improve model routing but do
   not guarantee automatic tool selection; explicitly name `server/tool` when the call is required.
+  Repeated-consent behavior is now configurable: the global `mcp.allow` preference grants MCP
+  consent persistently and auto-connects enabled servers at every start; a per-session TUI grant is
+  the alternative when `mcp.allow` is unset. Granting persists across sessions: a server that
+  auto-connects at startup runs unsandboxed under your user privileges whenever enabled.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
 - Hardening against hostile processes and filesystem races. No OS sandbox is offered.
+- **Persistent MCP consent**: `mcp.allow: true` grants MCP process/network consent for this user
+  across sessions and auto-connects enabled servers at every start (TUI and headless). It is only
+  read from the global configuration layer and is never overridden by a project value; `--read-only`
+  still hard-blocks MCP. TUI grants ("session only") never touch the configuration file.
 
 ## Known limits
 
@@ -172,8 +180,10 @@ and the config schema accepts the new field with its default.
 The coherent context metric was verified with mocked providers (Vitest, no network): the runner
 auto-compacts on the char-budget fallback when the window is unknown, does NOT compact early when a
 large window is known (the DeepSeek ~1M-window vs 160k-char mismatch), compacts at `window ×
-threshold`, and treats declared windows beyond 2M tokens as unknown; the TUI bar turns red exactly
-at the compaction point and marks the char-budget basis. The publish script is covered by focused
+threshold`, and treats declared windows beyond 2M tokens as unknown; `app.contextBudget` reports
+the model window when the catalog exposes it (lazily loaded, refreshed on model switch) and an
+honest `basis: "unknown"` with no fabricated total otherwise, and the TUI bar renders `~9.9k / ?`
+for that case (formatting Vitest). The publish script is covered by focused
 unit tests (ordering, leak check, dry-run side effects, version bump, unknown package) with temp
 dirs and no network; `docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`
 (the tool-flow diagram referenced from the tools pages) is an untracked binary asset that must be

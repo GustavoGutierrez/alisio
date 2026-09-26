@@ -21,6 +21,7 @@ export {
   loadConfigWithProvenance,
   type McpServerSource,
   overridesSavedProviderProfile,
+  setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
@@ -136,7 +137,12 @@ export {
   resolvePluginSpec,
 } from "./runtime/modules.ts";
 export { findWorkspace, safePath } from "./runtime/paths.ts";
-export { type ProcessResult, runProcess } from "./runtime/process.ts";
+export {
+  isMissingCommand,
+  type ProcessResult,
+  RIPGREP_INSTALL_HINT,
+  runProcess,
+} from "./runtime/process.ts";
 export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
 export { ChildSessions, type ChildSessionsOptions } from "./sessions/children.ts";

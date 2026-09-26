@@ -71,7 +71,8 @@ alisio doctor --config ./my-api.json
 ```
 
 `doctor` prints the version, runtime, platform, workspace, Git and ripgrep paths, and the provider
-settings, including whether the key variable is set. It never prints the key.
+settings, including whether the key variable is set. When ripgrep is missing, it also prints the
+per-platform install commands (it powers `search_text`/`list_files`). It never prints the key.
 
 ## 4. Run
 

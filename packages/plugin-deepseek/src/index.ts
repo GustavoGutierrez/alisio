@@ -1,5 +1,6 @@
 import { definePlugin, type Plugin, type ProviderCreateRequest } from "@alisio/sdk";
 import { type DeepSeekConfig, DeepSeekProvider } from "./provider.ts";
+import { loadVersion } from "./version.ts";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const profileString = (request: ProviderCreateRequest, key: string, fallback: string) =>
@@ -11,7 +12,7 @@ export function createDeepSeekPlugin(): Plugin {
     name: "DeepSeek",
     description: "Dedicated DeepSeek Chat Completions and Responses provider",
     categories: ["model-provider"],
-    version: "0.1.0-alpha.1",
+    version: loadVersion(import.meta.url),
     apiVersion: 1,
     setup(api) {
       api.providers.register({

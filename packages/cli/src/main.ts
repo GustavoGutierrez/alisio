@@ -137,6 +137,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         process.stderr.write(`\n→ ${(event.data as { name: string }).name}\n`);
     },
   });
+  for (const failure of app.mcpStartupFailures()) process.stderr.write(`[startup] ${failure}\n`);
   const controller = new AbortController();
   const interrupt = () => controller.abort(new Error("Interrupted"));
   process.on("SIGINT", interrupt);
@@ -279,6 +280,7 @@ program.command("doctor").action(async (_opts, cmd) => {
     loadConfigWithProvenance,
     overridesSavedProviderProfile,
     ProviderSettingsStore,
+    RIPGREP_INSTALL_HINT,
     which,
   } = await import("@alisio/core");
   const o = options(cmd);
@@ -324,6 +326,10 @@ program.command("doctor").action(async (_opts, cmd) => {
     },
   };
   console.log(JSON.stringify(status, null, 2));
+  if (!status.ripgrep)
+    process.stderr.write(
+      `\nWarning: ripgrep (rg) is not installed; search_text and list_files will not work. ${RIPGREP_INSTALL_HINT}\n`,
+    );
   if (!model || model === "YOUR_MODEL_ID")
     console.error(
       "\nNo model configured yet: set provider.model in your config, --model, or ALISIO_MODEL " +

@@ -5,6 +5,27 @@ export interface ProcessResult {
   exitCode: number;
   truncated: boolean;
 }
+/**
+ * Detect a spawn failure caused by a missing executable (`ENOENT`), so tools can explain how to
+ * install the dependency instead of surfacing the raw OS error.
+ */
+export function isMissingCommand(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+/** Per-platform install commands for the ripgrep dependency. */
+export const RIPGREP_INSTALL_HINT =
+  "Install ripgrep (rg): `sudo apt install ripgrep` (Debian/Ubuntu), " +
+  "`brew install ripgrep` (macOS), `winget install BurntSushi.ripgrep.MSVC` or " +
+  "`scoop install ripgrep` (Windows). It powers the search_text and list_files tools.";
+/** Human-readable detection status for `alisio doctor`. */
+export function ripgrepDiagnostic(found: boolean): string | undefined {
+  return found ? undefined : RIPGREP_INSTALL_HINT;
+}
 export async function runProcess(
   command: string,
   args: string[],

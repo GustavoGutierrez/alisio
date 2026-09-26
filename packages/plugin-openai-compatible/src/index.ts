@@ -5,6 +5,7 @@ import {
   type ProviderCreateRequest,
 } from "@alisio/sdk";
 import { type OpenAICompatibleConfig, OpenAICompatibleProvider } from "./provider.ts";
+import { loadVersion } from "./version.ts";
 
 const defaults: OpenAICompatibleConfig = {
   baseURL: "https://api.openai.com/v1",
@@ -27,7 +28,7 @@ export function createOpenAICompatiblePlugin(): Plugin {
     name: "OpenAI compatible",
     description: "OpenAI Chat Completions or Responses compatible endpoint",
     categories: ["model-provider"],
-    version: "0.1.0-alpha.1",
+    version: loadVersion(import.meta.url),
     apiVersion: 1,
     setup(api) {
       api.providers.register({

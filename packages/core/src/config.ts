@@ -89,7 +89,14 @@ const configObjectSchema = z
     /** Project-local enable/disable overrides for effective non-plugin skills. */
     skillOverrides: z.record(z.string(), z.object({ enabled: z.boolean() }).strict()).default({}),
     mcp: z
-      .object({ servers: serversSchema(compatibleServerSchema).default({}) })
+      .object({
+        servers: serversSchema(compatibleServerSchema).default({}),
+        /**
+         * Global-only user preference: grants MCP process/network consent across sessions.
+         * Only the user (global) configuration layer is consulted; a project value is ignored.
+         */
+        allow: z.boolean().optional(),
+      })
       .strict()
       .default({ servers: {} }),
     /** Compatibility with the common MCP client configuration shape. */
@@ -176,7 +183,7 @@ const configObjectSchema = z
   });
 export const configSchema = configObjectSchema.transform(({ mcpServers, ...config }) => ({
   ...config,
-  mcp: { servers: { ...config.mcp.servers, ...mcpServers } },
+  mcp: { ...config.mcp, servers: { ...config.mcp.servers, ...mcpServers } },
 }));
 export type Config = z.infer<typeof configSchema>;
 export type ServerConfig = z.infer<typeof serverSchema>;
@@ -310,7 +317,10 @@ export async function loadConfigWithProvenance(
         )[key];
     }
     if (selected.keys.has("mcp") || selected.keys.has("mcpServers"))
+      // Only servers merge upward; `mcp.allow` is a global/user preference and is deliberately
+      // dropped from the selected layer so a project can never grant itself network consent.
       overlaid.mcp = {
+        ...config.mcp,
         servers: { ...config.mcp.servers, ...selected.config.mcp.servers },
       };
     mcpSources = { ...mcpSources, ...selected.sources };
@@ -389,6 +399,48 @@ export async function setMcpServerEnabled(input: {
     ...(current as Record<string, unknown>),
     enabled: input.enabled,
   };
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, file);
+    await chmod(file, 0o600);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return file;
+}
+
+/** Atomically sets or clears the global `mcp.allow` consent preference in the user config file. */
+export async function setGlobalMcpAllow(input: { allow: boolean }): Promise<string> {
+  const file = join(configHome(), "config.json");
+  let raw: Record<string, unknown> = {};
+  if (await exists(file)) {
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("Global Alisio configuration must be a JSON object");
+    raw = parsed as Record<string, unknown>;
+  }
+  if (input.allow) {
+    const current =
+      raw.mcp && typeof raw.mcp === "object" && !Array.isArray(raw.mcp)
+        ? (raw.mcp as Record<string, unknown>)
+        : {};
+    raw.mcp = { ...current, allow: true };
+  } else if (raw.mcp && typeof raw.mcp === "object" && !Array.isArray(raw.mcp)) {
+    const mcp = { ...(raw.mcp as Record<string, unknown>) };
+    delete mcp.allow;
+    if (Object.keys(mcp).length) raw.mcp = mcp;
+    else delete raw.mcp;
+  }
+  raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
   const handle = await open(temporary, "wx", 0o600);

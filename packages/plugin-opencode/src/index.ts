@@ -1,5 +1,6 @@
 import { definePlugin, type Plugin, type ProviderCreateRequest } from "@alisio/sdk";
 import { OpenCodeProvider } from "./provider.ts";
+import { loadVersion } from "./version.ts";
 
 const profileString = (request: ProviderCreateRequest, key: string) =>
   typeof request.profile[key] === "string" ? String(request.profile[key]) : "";
@@ -10,7 +11,7 @@ export function createOpenCodePlugin(): Plugin {
     name: "OpenCode Console (Zen)",
     description: "OpenCode Console gateway for Responses, Chat, and Messages models",
     categories: ["model-provider"],
-    version: "0.1.0-alpha.1",
+    version: loadVersion(import.meta.url),
     apiVersion: 1,
     setup(api) {
       api.providers.register({

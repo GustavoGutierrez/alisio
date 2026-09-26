@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import { createDeepSeekPlugin, DeepSeekProvider } from "@alisio/plugin-deepseek";
 import { OpenAICompatibleProvider } from "@alisio/plugin-openai-compatible";
@@ -14,6 +16,26 @@ import {
 import type { ModelProvider, Plugin, ProviderRegistration } from "@alisio/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
+
+/**
+ * The default user agent is derived from the plugin package manifest at runtime (never a
+ * hardcoded literal), so the expectation follows the manifest to stay in sync forever.
+ */
+const opencodeGoVersion =
+  (
+    JSON.parse(
+      readFileSync(
+        join(
+          resolve(import.meta.dirname ?? "."),
+          "..",
+          "packages",
+          "plugin-opencode-go",
+          "package.json",
+        ),
+        "utf8",
+      ),
+    ) as { version?: string }
+  ).version ?? "dev";
 
 const sse = (events: unknown[]) =>
   new Response(
@@ -643,7 +665,7 @@ describe("OpenCode Go provider", () => {
       const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
         const headers = new Headers(init?.headers);
         expect(headers.get("authorization")).toBe(`Bearer ${fakeKey}`);
-        expect(headers.get("user-agent")).toBe("alisio/0.1.0-alpha.1");
+        expect(headers.get("user-agent")).toBe(`alisio/${opencodeGoVersion}`);
         expect(headers.get("x-opencode-session")).toBe("00000000-0000-4000-8000-000000000001");
         return sse([...events]);
       });

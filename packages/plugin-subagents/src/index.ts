@@ -8,6 +8,7 @@ import { type SubagentsConfig, subagentsConfigSchema } from "./config.ts";
 import { type AgentDefinition, discoverAgents } from "./definitions.ts";
 import * as gitOps from "./git.ts";
 import { SubagentManager } from "./manager.ts";
+import { loadVersion } from "./version.ts";
 
 export type { AgentDefinition } from "./definitions.ts";
 export { BUILTIN_AGENTS, discoverAgents, parseAgentDefinition } from "./definitions.ts";
@@ -49,7 +50,7 @@ export function createSubagentsPlugin(
     id: "subagents",
     name: "Subagents",
     description: "Delegation to specialized agents in isolated child sessions",
-    version: "0.1.0",
+    version: loadVersion(import.meta.url),
     apiVersion: 1,
     async setup(api) {
       const found = await discoverAgents({

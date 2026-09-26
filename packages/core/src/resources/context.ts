@@ -3,7 +3,7 @@
  *
  * - Global: `<config home>/AGENTS.override.md` or `<config home>/AGENTS.md`.
  * - Project: one file per directory from the workspace root down to cwd, choosing
- *   AGENTS.override.md > AGENTS.md > AGENT.md (legacy alias kept from 0.1.0-alpha.1) >
+ *   AGENTS.override.md > AGENTS.md > AGENT.md (legacy alias from the earliest alphas) >
  *   CLAUDE.md (only with `claudeMdFallback`). Concatenated root-first so the closest is last.
  * - Nested files below other directories are attached lazily when tools touch paths under them,
  *   once per session per file (re-attached if the file changes).

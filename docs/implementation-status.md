@@ -39,7 +39,8 @@ funcional, no solo interfaces o stubs.
   ausencia de autenticación y diferencias de parámetros de tokens.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
   bloqueo de sesión y recuperación conservadora de efectos inciertos.
-- Herramientas locales: lectura, escritura/edición con hash, ripgrep, procesos, shell y Git.
+- Herramientas locales: lectura, escritura/edición con hash, ripgrep (con mensaje de instalación
+  por plataforma si `rg` falta, en las herramientas y en `alisio doctor`), procesos, shell y Git.
 - AGENTS.md según la convención agents.md: global `<config>/AGENTS.md` (con `AGENTS.override.md`
   que lo reemplaza); recorrido desde la raíz hasta el cwd con un archivo por directorio
   (`AGENTS.override.md` > `AGENTS.md` > `AGENT.md` como alias heredado > `CLAUDE.md` solo con
@@ -77,6 +78,15 @@ funcional, no solo interfaces o stubs.
   canónica `mcp.servers` y alias compatible `mcpServers`; conexión diferida bajo `--allow-mcp` en
   usos no TUI o mediante consentimiento explícito válido solo para la sesión TUI actual; bloqueo
   absoluto con `--read-only`.
+  Consentimiento global persistente `mcp.allow` (booleano en la configuración de usuario, solo capa
+  global): al iniciar con permiso concedido (`--allow-mcp` o `mcp.allow:true`), los servidores
+  `enabled` se auto-conectan como si se pulsara Conectar en cada uno, con fallos por servidor,
+  saneados y no fatales al arranque (expuestos como `mcpStartupFailures` y avisos de la TUI/headless);
+  el proyecto nunca puede concederse consentimiento (`mcp.allow` de capa seleccionada se ignora);
+  `--read-only` prevalece y bloquea también concesión, recuerdo y revocación. En `/mcp`, el diálogo
+  de consentimiento ofrece "Conceder solo para esta sesión" o "Conceder y recordar (global)"; la
+  escritura global es atómica y conserva campos no relacionados; una acción "Revocar consentimiento
+  MCP global" limpia `mcp.allow` y elimina el permiso de ejecución desconectando los servidores.
   Gestor TUI `/mcp` agrupado por origen real, con estados, detalles saneados, catálogo y anotaciones
   de herramientas; distingue activación configurada, permiso de ejecución, conexión y herramientas
   cargadas. La conexión/reconexión registra nombres semánticos seguros como
@@ -142,10 +152,16 @@ funcional, no solo interfaces o stubs.
   `examples/plugins/custom-mascot/`.
 - TUI con `@earendil-works/pi-tui` 0.87.1 (pantalla alternativa, renderizado diferencial):
   cabecera con modelo/host/permisos, conversación con Markdown, bloques de herramientas con
-  spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens, comandos
+  spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens (ventana real
+  del modelo cuando el catálogo la expone; `~9.9k / ?` honesto cuando no), comandos
   `/help /model /compact /stats /clear /sessions /resume /tools /exit` con autocompletado,
   interrupción con Esc y aprobación interactiva de `write`/`process`. `--no-tui` conserva
   el modo readline.
+- Versión en tiempo de ejecución por paquete: metadatos de plugins, `user-agent` por defecto y el
+  cliente MCP leen la versión de su propio `package.json` (con la inyección
+  `ALISIO_PACKAGE_VERSION` para binarios autónomos y `dev` como último recurso); la cabecera de la
+  TUI, el banner y `--version` comparten el mismo valor del CLI, sin literales que puedan
+  desincronizarse de la publicación.
 - Compactación de contexto en el núcleo (manual y automática por umbral), con resumen del
   proveedor actual, emparejamiento de llamadas/resultados preservado y persistencia
   transaccional (migración 2: columna `messages.compacted`).
@@ -296,6 +312,11 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo y capacidades multimedia MCP. `/mcp` permite reconexión explícita y bearer
   mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.
+  El comportamiento de consentimiento repetido es ahora configurable: la preferencia global
+  `mcp.allow` concede consentimiento MCP de forma persistente y auto-conecta los servidores
+  activados en cada inicio; la concesión por sesión en la TUI es la alternativa cuando `mcp.allow`
+  no está definido. Conceder persiste entre sesiones: un servidor que auto-conecta al arranque se
+  ejecuta sin sandbox con los privilegios del usuario cada vez que está activado.
 - OpenTelemetry remoto, métricas de memoria y benchmarks de repositorios grandes.
 - Endurecer frente a procesos hostiles y carreras de filesystem. No se ofrece sandbox OS.
 
@@ -396,9 +417,23 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   la ventana conocida es grande (el desajuste DeepSeek ~1M de ventana frente a 160k de caracteres),
   compacta en `ventana × threshold` aunque esté muy por debajo del presupuesto de caracteres, y
   trata las ventanas declaradas por encima de 2M de tokens como desconocidas para que el respaldo
-  siga protegiendo; la barra de la TUI se pone roja exactamente en el punto de compactación y marca
-  la base `char budget` cuando no hay ventana (Vitest de reducción/formateo). `app.contextBudget`
-  expone el presupuesto efectivo y el punto de compactación a la TUI.
+  siga protegiendo. `app.contextBudget` informa la ventana del modelo cuando el catálogo la expone
+  (carga perezosa de `GET /models` y refresco tras el cambio de modelo; verificado con fixturas
+  oficiales de DeepSeek/OpenCode) y una base honesta `basis: "unknown"` sin total inventado en caso
+  contrario; la barra de la TUI pinta `~9.9k / ?` para ese caso (Vitest de reducción/formateo) y
+  expone el punto de compactación a la TUI.
+- Versión en tiempo de ejecución (Vitest): un cargador por paquete lee la versión del propio
+  `package.json` (`ALISIO_PACKAGE_VERSION` gana en binarios autónomos; `dev` si no hay manifest ni
+  inyección). Metadatos de plugins, `user-agent` por defecto y el cliente MCP dejan de llevar
+  literales de versión; un test de regresión falla si cualquier fuente de `packages/*/src` vuelve a
+  contener una literal de versión de publicación.
+- MCP: la auto-conexión de arranque con `mcp.allow:true` (o `--allow-mcp`) se verifica de extremo a
+  extremo por stdio con una fixtura real: cada servidor `enabled` conecta sin tocar `/mcp`, los
+  `disabled` no, los definidos en un `.alisio/config.json` de proyecto de confianza también, y
+  `--read-only` lo bloquea todo.
+- ripgrep ausente: el escenario `search` de integración se salta limpiamente cuando `rg` no está en
+  el PATH (Vitest `skipIf` y guard en la fixtura independiente); `search_text`/`list_files` y
+  `alisio doctor` explican cómo instalarlo por plataforma en lugar de un ENOENT crudo.
 - Script de publicación (`scripts/publish.ts`, Vitest con directorios temporales y sin red): orden
   sdk → core → cli, rechazo del chequeo de fugas (manifiesto `workspace:`), dry-run sin efectos
   secundarios (no escribe ni publica), matemática del bump de versión (escritura atómica y
@@ -661,8 +696,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   catálogo; un cambio pendiente del plugin conserva la skill bloqueada y marca su origen como
   pendiente de reinicio. Los diagnósticos headless pueden incluir rutas de confianza; la TUI no.
 - `provider.contextWindow` se aplica solo al modelo configurado; tras `/model`, la ventana
-  proviene de `GET /models` o queda como desconocida (y la compactación automática por
-  umbral se desactiva para ese modelo, salvo por `limits.maxContextChars`).
+  proviene de `GET /models` (el catálogo se carga de forma perezosa al arrancar y se refresca tras
+  cada cambio de proveedor/modelo) o queda como desconocida: la barra de contexto muestra un
+  honesto `~9.9k / ?` sin total inventado, y la compactación automática por umbral se desactiva
+  para ese modelo salvo por `limits.maxContextChars` (salvaguarda interna, nunca total mostrado).
 - La compactación usa el proveedor actual; su consumo de tokens no se suma al presupuesto
   `limits.maxTokens`. Las estimaciones antes/después son aproximadas (≈4 caracteres/token).
   Los items opacos de Responses del tramo resumido se descartan; los conservados no cambian.
