@@ -153,7 +153,7 @@ try {
   );
   assert.equal(plugins.tools.length, 1);
   assert.deepEqual(plugins.commands, ["compiled:hi"]);
-  assert.deepEqual(plugins.builtin, ["memory"]);
+  assert.deepEqual(plugins.builtin, ["memory", "subagents"]);
   // Headless prompt template: `run "/init"` renders the built-in template as the user turn.
   firstUserMessages.length = 0;
   await execute([

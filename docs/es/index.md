@@ -42,7 +42,8 @@ Incluye:
 - Una TUI interactiva y una CLI headless (`alisio run`, eventos JSONL, reanudación de sesiones).
 - Herramientas locales para leer, buscar, editar, ejecutar procesos y Git, controladas por permisos explícitos.
 - Compactación de contexto y un plugin integrado de memoria persistente.
-- Instrucciones jerárquicas `AGENTS.md` y Agent Skills.
+- Subagentes: delegación en agentes especializados en sesiones hijas, con un árbol de agentes en vivo.
+- [Instrucciones jerárquicas `AGENTS.md` y Agent Skills](/es/context).
 - Un cliente MCP (stdio y Streamable HTTP) y una integración con Herdr.
 - Un SDK de plugins tipado (`@alisio/sdk`) para herramientas, comandos, hooks y almacenamiento.
 

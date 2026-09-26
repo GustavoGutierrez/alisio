@@ -117,6 +117,36 @@ describe("process runner (node:child_process)", () => {
   });
 });
 
+describe("process cancellation grace", () => {
+  it("sends SIGTERM first so well-behaved processes can exit", async () => {
+    const controller = new AbortController();
+    const started = Date.now();
+    const pending = runProcess(
+      process.execPath,
+      [
+        "-e",
+        "process.on('SIGTERM',()=>{console.log('bye');process.exit(0)});setInterval(()=>{},1000)",
+      ],
+      { cwd: root, signal: controller.signal, killGraceMs: 5_000 },
+    );
+    setTimeout(() => controller.abort(new Error("stop")), 300);
+    await expect(pending).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+  it("escalates to SIGKILL after the grace period", async () => {
+    const controller = new AbortController();
+    const started = Date.now();
+    const pending = runProcess(
+      process.execPath,
+      ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
+      { cwd: root, signal: controller.signal, killGraceMs: 400 },
+    );
+    setTimeout(() => controller.abort(new Error("stop")), 300);
+    await expect(pending).rejects.toThrow();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(650);
+  });
+});
+
 describe("plugin specs", () => {
   it("distinguishes paths from package names", () => {
     for (const s of ["./p.ts", "../p.js", "/abs/p.js", "plugins/p.ts", "p.mjs", "C:\\p\\x.js"])

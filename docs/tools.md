@@ -24,7 +24,7 @@ each tool (`enabled`, `ask`, `disabled`).
 | `git_status` | `read` | `git status --porcelain=v1` |
 | `git_diff` | `read` | `git diff --no-ext-diff --no-textconv` |
 | `skill_load`, `skill_search`, `skill_resource` | `read` | Agent Skills catalog, activation and resources |
-| `context_explain` | `read` | Explain which `AGENTS.md` scopes apply to a path |
+| `context_explain` | `read` | Explain which `AGENTS.md` files apply to a path (see [Context](/context)) |
 | `write_file` | `write` | Write a file |
 | `edit_file` | `write` | Replace an exact, unique match in a file |
 | `run_process` | `process` | Run a command with an argument array |
@@ -38,6 +38,10 @@ and it does not confine a free shell.
 Editable files and the initial read scan are limited to 1 MiB; tool outputs are bounded and a
 truncated result is marked explicitly. Independent reads run in batches of up to four; operations
 with effects are serialized.
+
+Built-in plugins add more tools: `memory_*` from [Persistent memory](/memory) and `task`,
+`task_status`, `task_wait` and `send_message` from [Subagents](/subagents), all with the `internal`
+effect.
 
 ## Permission flags
 

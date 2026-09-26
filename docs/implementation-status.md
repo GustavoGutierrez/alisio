@@ -13,8 +13,33 @@ funcional, no solo interfaces o stubs.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
   bloqueo de sesión y recuperación conservadora de efectos inciertos.
 - Herramientas locales: lectura, escritura/edición con hash, ripgrep, procesos, shell y Git.
-- AGENTS.md jerárquico (alias AGENT.md y Agente.md), invalidación y reconsideración antes de nuevas operaciones por ruta.
-- Agent Skills: descubrimiento, validación, catálogo progresivo, activación y recursos.
+- AGENTS.md según la convención agents.md: global `<config>/AGENTS.md` (con `AGENTS.override.md`
+  que lo reemplaza); recorrido desde la raíz hasta el cwd con un archivo por directorio
+  (`AGENTS.override.md` > `AGENTS.md` > `AGENT.md` como alias heredado > `CLAUDE.md` solo con
+  `context.claudeMdFallback`); orden raíz → cercano con cabecera "el más cercano gana; las
+  instrucciones explícitas del usuario prevalecen"; archivos anidados adjuntados de forma
+  perezosa una vez por sesión y archivo; límite total de 32 KiB conservando los más cercanos.
+  `Agente.md` deja de leerse.
+- Agent Skills: `.agents/skills`, `.alisio/skills` y `.claude/skills` desde el cwd hasta la raíz
+  (solo proyectos de confianza), rutas configuradas, `~/.agents/skills` y `<config>/skills`, y
+  plugins; el proyecto prevalece con aviso y ganador determinista; validación de nombres según la
+  especificación (el desajuste con el directorio solo avisa); profundidad ≤ 5 y ≤ 2000
+  directorios; catálogo progresivo, activación y recursos.
+- Presupuesto de tokens proporcional: `limits.maxTokens` es opcional; por defecto 8 × ventana de
+  contexto (entre 400k y 8M) o 1M si la ventana es desconocida.
+- Plugin integrado `subagents` (`@alisio/plugin-subagents`, desactivable): definiciones de agentes
+  en Markdown + YAML con precedencia CLI > proyecto > `.agents/agents` (convención especulativa) >
+  compatibilidad `.claude/agents` y `.opencode/agent(s)` > usuario > plugins > integrados
+  (`general`, `explore`, `plan`); herramientas `task`, `task_status`, `task_wait` y
+  `send_message`; sesiones hijas persistidas con padre, profundidad, estado y uso (migración 3);
+  contexto nuevo por hijo; límites de profundidad (se retira `task`), concurrencia, cola acotada,
+  turnos, tiempo y tokens; permisos solo restrictivos con aprobaciones que suben a la TUI con la
+  ruta del agente; cancelación en cascada con SIGTERM y SIGKILL tras 5 s; hijos interrumpidos al
+  reiniciar y reanudables con `task_id`; notificaciones de tareas en segundo plano; escrituras en
+  paralelo en git con worktree por subagente (merge/discard), escritura serial o directorio
+  compartido; panel de árbol de agentes con navegación por flechas y vistas de solo lectura.
+- Puntos de extensión genéricos: `api.sessions`, `api.ui.panel/select/open/interactive`,
+  `api.resources.agents/list`, `ToolDefinition.concurrent`, contexto de sesión en comandos.
 - Plugins locales y manifiestos de directorio: herramientas, comandos, eventos, contexto,
   skills, estado y desregistro/cleanup.
 - MCP oficial v2: stdio, Streamable HTTP, herramientas, recursos, prompts y cierre.
@@ -127,6 +152,28 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   y Pages no se ejecutaron en GitHub. Binarios macOS/Windows/arm64 no probados (compilación
   cruzada de Bun).
 
+## Subagentes, AGENTS.md y skills: alcance de la verificación
+
+- Vitest (Node): cargador de AGENTS.md (override, orden, adjunto perezoso por sesión, límite de
+  32 KiB, CLAUDE.md desactivado por defecto, explain); skills (rutas, confianza, colisiones,
+  nombres, profundidad y límite de directorios); presupuesto proporcional y una ejecución del
+  tamaño de `/init` que ya no se agota; periodo de gracia SIGTERM → SIGKILL; definiciones de
+  agentes (formato, compatibilidad Claude Code y opencode, precedencia, confianza, integrados);
+  reductor de foco del panel. Con proveedor simulado: paralelismo y aislamiento de contexto,
+  envoltura y límite de resultados, retirada de `task` al límite de profundidad, cola llena,
+  error estructurado, permisos (solo lectura heredada), plugin desactivado, `send_message` a un
+  hijo en ejecución, espera acotada y rechazo de esperar a un ancestro, notificación en segundo
+  plano, cancelación en cascada con muerte forzada de un proceso, reanudación tras marcar
+  interrumpido, worktrees en un repositorio real (dos ramas, merge, conflicto con merge abortado
+  y descarte), orden serial y el paso de `ask` a `serial` sin terminal interactiva.
+- Pseudo-terminal: panel con 4 agentes (uno anidado), acorde Ctrl+X ↓, ↓ desde el editor vacío,
+  flechas en el panel, apertura de vistas de solo lectura, navegación padre/hijo/hermanos,
+  colapsar, confirmación de Ctrl+K, `/agents`, y la pregunta de worktrees con dos escritores.
+- DeepSeek real (`deepseek-flash`, `--read-only`): dos `explore` en paralelo resumidos por el
+  padre, y un caso anidado `general` → `explore` persistido con profundidades 1 y 2.
+- No verificado: fusión real de worktrees con DeepSeek, Windows/macOS, rendimiento con muchos
+  agentes simultáneos.
+
 ## Plantillas y `/init`: alcance de la verificación
 
 - Vitest: parseo y validación del frontmatter, sustitución de argumentos, precedencia y
@@ -204,6 +251,11 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `node --env-file=.env`. Los plugins `.ts` locales requieren Bun o Node >=22.18; los paquetes
   npm de plugins deben publicarse en JavaScript. La condición de export `alisio-source` solo
   se usa en desarrollo dentro del monorepo y no se publica.
+- Subagentes: los mensajes en cola (`send_message`, notificaciones) viven en memoria y se pierden
+  al salir; una notificación en segundo plano llega con el siguiente turno del padre; las skills
+  de una definición no se preinyectan (se pide cargarlas con `skill_load`); los worktrees solo se
+  usan cuando se solapan escritores; `/agents merge` exige árbol limpio y no resuelve conflictos;
+  el panel muestra las tareas iniciadas en este proceso; `kill` equivale a `cancel`.
 - Plantillas: sin inclusiones ni parciales, sin ejecución de comandos ni inyección de archivos;
   solo `$1`..`$9` posicionales; `/init` depende del modelo para limitarse a hechos verificados y
   consume bastantes tokens en repositorios grandes (`limits.maxTokens`).

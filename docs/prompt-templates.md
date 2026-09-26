@@ -186,9 +186,11 @@ alisio run "/init focus on the plugin SDK" --allow-write
 and now prints a hint pointing to `/init`.
 
 ::: tip Larger repositories
-Exploration re-sends the growing context on every turn, and `limits.maxTokens` (default `100000`) is
-a cumulative budget per run. On larger repositories, raise it in your configuration. In a real run
-against DeepSeek, the edits landed but the final summary hit the budget.
+Exploration re-sends the growing context on every turn, and `limits.maxTokens` is a cumulative
+budget per run. It now defaults to a budget proportional to the context window (see
+[Configuration](/configuration#limits)); if you set an explicit value, keep it generous on larger
+repositories. In a real run against DeepSeek with the earlier fixed budget of 100000 tokens, the
+edits landed but the final summary hit the budget.
 :::
 
 ## Limits

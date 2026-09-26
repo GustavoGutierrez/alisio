@@ -37,7 +37,13 @@ export type {
   SessionStore,
 } from "./core/contracts.ts";
 export { ToolRegistry } from "./core/registry.ts";
-export { AgentRunner, type CompactionResult, type RunnerOptions } from "./core/runner.ts";
+export {
+  AgentRunner,
+  type CompactionResult,
+  defaultTokenBudget,
+  type RunnerOptions,
+  type RunOptions,
+} from "./core/runner.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
 export { McpConnector } from "./mcp/connector.ts";
@@ -48,7 +54,11 @@ export {
   pluginPrefix,
 } from "./plugins/host.ts";
 export { OpenAICompatibleProvider } from "./providers/openai-compatible.ts";
-export { ProjectContext } from "./resources/context.ts";
+export {
+  type InstructionFile,
+  ProjectContext,
+  type ProjectContextOptions,
+} from "./resources/context.ts";
 export {
   expandSlashPrompt,
   loadPromptTemplates,
@@ -62,7 +72,13 @@ export {
   renderPromptTemplate,
   splitArguments,
 } from "./resources/prompts.ts";
-export { Skills } from "./resources/skills.ts";
+export {
+  type Skill,
+  type SkillRoot,
+  type SkillScope,
+  Skills,
+  skillRoots,
+} from "./resources/skills.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {
   defaultGlobalRoots,
@@ -74,6 +90,7 @@ export { findWorkspace, safePath } from "./runtime/paths.ts";
 export { type ProcessResult, runProcess } from "./runtime/process.ts";
 export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
+export { ChildSessions, type ChildSessionsOptions } from "./sessions/children.ts";
 export {
   composeSideBySide,
   DefaultAlisioMascot,

@@ -1,0 +1,67 @@
+{
+  "name": "@alisio/plugin-subagents",
+  "version": "0.1.0-alpha.1",
+  "description": "Subagents for Alisio: delegate tasks to specialized agents in separate child sessions with narrowed permissions, parallel execution, git worktree isolation and a live agent tree. Built-in, disableable plugin.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GustavoGutierrez/alisio.git",
+    "directory": "packages/plugin-subagents"
+  },
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "bugs": {
+    "url": "https://github.com/GustavoGutierrez/alisio/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "llm",
+    "agent-harness",
+    "openai-compatible",
+    "alisio-plugin",
+    "plugins",
+    "subagents",
+    "multi-agent"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "alisio-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "workspace:^"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
+}

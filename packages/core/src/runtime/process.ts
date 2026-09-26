@@ -15,6 +15,8 @@ export async function runProcess(
     maxBytes?: number;
     env?: Record<string, string>;
     onData?: (chunk: string) => void;
+    /** On cancellation: SIGTERM the process group, then SIGKILL after this grace (default 5s). */
+    killGraceMs?: number;
   },
 ): Promise<ProcessResult> {
   options.signal.throwIfAborted();
@@ -48,6 +50,18 @@ export async function runProcess(
       finished = true;
     },
   );
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Graceful stop for cancellations: SIGTERM the group, SIGKILL if still alive after the grace. */
+  const terminate = () => {
+    if (finished || child.pid === undefined) return;
+    if (process.platform === "win32") return kill();
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      return kill();
+    }
+    graceTimer = setTimeout(kill, options.killGraceMs ?? 5_000);
+  };
   const kill = () => {
     if (finished || child.pid === undefined) return;
     try {
@@ -60,8 +74,8 @@ export async function runProcess(
       child.kill("SIGKILL");
     }
   };
-  signal.addEventListener("abort", kill, { once: true });
-  if (signal.aborted) kill();
+  signal.addEventListener("abort", terminate, { once: true });
+  if (signal.aborted) terminate();
   let size = 0,
     truncated = false;
   const max = options.maxBytes ?? 32_000;
@@ -103,7 +117,8 @@ export async function runProcess(
     signal.throwIfAborted();
     return { stdout, stderr, exitCode, truncated };
   } finally {
-    signal.removeEventListener("abort", kill);
+    signal.removeEventListener("abort", terminate);
+    clearTimeout(graceTimer);
     kill();
   }
 }

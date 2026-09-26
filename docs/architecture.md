@@ -1,38 +1,40 @@
 # Architecture
 
-Alisio is a pnpm monorepo with four packages.
+Alisio is a pnpm monorepo with five packages.
 
 ```text
-                      ┌──────────────────────────────┐
-                      │ @alisio/sdk                  │
-                      │ plugin contract, zero deps   │
-                      └──────────────▲───────────────┘
-                 depends on          │           peer dependency
-        ┌────────────────────────────┼────────────────────────────┐
-        │                            │                            │
-┌───────┴──────────────────────┐     │     ┌──────────────────────┴───────┐
-│ @alisio/core                 │     │     │ @alisio/plugin-memory        │
-│ runner, compaction, provider,│     │     │ @alisio/sdk (peer) + zod     │
-│ tools, runtime adapters      │     │     │ uses the storage port        │
-│ (node:sqlite, fs,            │     │     └──────────────▲───────────────┘
-│ child_process), plugin host, │     │                    │
-│ config, createApplication    │     │                    │
-└───────▲──────────────────────┘     │                    │
-        │                            │                    │
-        │             ┌──────────────┴───────────────┐    │
-        └─────────────┤ alisio (CLI)                 ├────┘
-                      │ bin, TUI, clipboard,         │
-                      │ built-in registry wiring     │
-                      │ plugin-memory                │
-                      └──────────────────────────────┘
+                         ┌──────────────────────────────┐
+                         │ @alisio/sdk                  │
+                         │ plugin contract, zero deps   │
+                         └──────────────▲───────────────┘
+            depends on                  │                peer dependency
+   ┌────────────────────────────────────┼─────────────────────┬──────────────────────┐
+   │                                    │                     │                      │
+┌──┴───────────────────────────┐        │      ┌──────────────┴───────────┐ ┌────────┴─────────────────┐
+│ @alisio/core                 │        │      │ @alisio/plugin-memory    │ │ @alisio/plugin-subagents │
+│ runner, compaction, provider,│        │      │ sdk (peer) + zod         │ │ sdk (peer) + yaml + zod  │
+│ tools, runtime adapters      │        │      │ uses the storage port    │ │ uses api.sessions        │
+│ (node:sqlite, fs,            │        │      └──────────────▲───────────┘ └────────▲─────────────────┘
+│ child_process), plugin host, │        │                     │                      │
+│ child sessions, config,      │        │                     │                      │
+│ createApplication            │        │                     │                      │
+└──▲───────────────────────────┘        │                     │                      │
+   │                     ┌──────────────┴───────────────┐     │                      │
+   └─────────────────────┤ alisio (CLI)                 ├─────┴──────────────────────┘
+                         │ bin, TUI, clipboard,         │
+                         │ built-in registry wiring     │
+                         │ plugin-memory and            │
+                         │ plugin-subagents             │
+                         └──────────────────────────────┘
 ```
 
 | Package | Role | Depends on |
 | --- | --- | --- |
 | `@alisio/sdk` | Public plugin contract: types plus `definePlugin` and `textResult`. No runtime or provider imports | Nothing |
-| `@alisio/core` | Agent runner and tool loop, compaction, OpenAI-compatible provider, standard tools, runtime adapters (`node:sqlite`, `fs`, `child_process`), plugin host, extension registry, startup rendering, configuration, MCP client, Herdr bridge and `createApplication` | `@alisio/sdk`, `openai`, MCP client, `ajv`, `yaml`, `zod` |
+| `@alisio/core` | Agent runner and tool loop, compaction, OpenAI-compatible provider, standard tools, runtime adapters (`node:sqlite`, `fs`, `child_process`), plugin host, child sessions service, extension registry, startup rendering, configuration, MCP client, Herdr bridge and `createApplication` | `@alisio/sdk`, `openai`, MCP client, `ajv`, `yaml`, `zod` |
 | `@alisio/plugin-memory` | Built-in persistent memory plugin | `@alisio/sdk` (peer), `zod` |
-| `alisio` | CLI: `bin`, TUI, clipboard adapter and the built-in plugin registry that wires `plugin-memory` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+| `@alisio/plugin-subagents` | Built-in [subagents](/subagents) plugin: agent definitions, delegation tools, limits, git worktrees and the agent tree | `@alisio/sdk` (peer), `yaml`, `zod` |
+| `alisio` | CLI: `bin`, TUI, clipboard adapter and the built-in plugin registry that wires `plugin-memory` and `plugin-subagents` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/plugin-subagents`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
 
 Provider SDKs and runtime-specific imports stay out of the public SDK and the agent-core contracts.
 
@@ -55,6 +57,17 @@ depends on nothing but the SDK and `zod`.
 
 The core contains no references to memory: the CLI passes its registry to `createApplication`. Adding
 another built-in means appending an entry to that registry.
+
+## Child sessions
+
+`@alisio/core` provides a generic child sessions service (`packages/core/src/sessions/children.ts`),
+exposed to plugins as `api.sessions`. A child session is a persisted conversation with a parent link
+that runs through the same runner with narrowed permissions: tools, capabilities and approvals are
+intersected with the parent's, a read-only parent makes the subtree read-only, and aborting a parent
+aborts its running descendants. On startup, children left running or queued are marked
+`interrupted`. The service contains no agent logic: definitions, limits, queues, git worktrees and the
+agent tree live in `@alisio/plugin-subagents`, and the TUI only renders generic panels
+(`api.ui.panel`) and read-only session views. See [Child sessions](/plugins#child-sessions).
 
 ## Extension registry
 

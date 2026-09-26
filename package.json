@@ -26,6 +26,7 @@
   "devDependencies": {
     "@alisio/core": "workspace:*",
     "@alisio/plugin-memory": "workspace:*",
+    "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
     "@biomejs/biome": "2.5.14",
     "@changesets/cli": "3.0.3",

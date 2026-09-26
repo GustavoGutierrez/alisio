@@ -12,10 +12,11 @@ import { discoverPlugins, PluginHost } from "./plugins/host.ts";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible.ts";
 import { ProjectContext } from "./resources/context.ts";
 import { expandSlashPrompt, loadPromptTemplates, promptSources } from "./resources/prompts.ts";
-import { Skills } from "./resources/skills.ts";
+import { Skills, skillRoots } from "./resources/skills.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
+import { ChildSessions } from "./sessions/children.ts";
 export interface AppOptions {
   cwd?: string;
   config?: string;
@@ -39,6 +40,8 @@ export interface AppOptions {
   builtinPrompts?: Array<{ name: string; text: string }>;
   /** Names templates may not take (e.g. the UI's own slash commands). */
   reservedPromptNames?: string[];
+  /** Options merged over `builtinPlugins.<id>` from the configuration (e.g. CLI flags). */
+  pluginOptions?: Record<string, Record<string, unknown>>;
   /** Built-in plugin ids to disable (e.g. `memory`). */
   disablePlugins?: string[];
   /** Interactive approval for write/process tools; ignored in read-only mode. */
@@ -46,7 +49,12 @@ export interface AppOptions {
 }
 export interface BuiltinContext {
   workspace: string;
+  cwd: string;
   stateHome: string;
+  configHome: string;
+  home: string;
+  /** Project-level resources may load (--trust-project or an explicit --config). */
+  trusted: boolean;
   /** Directory of the configuration file, for relative paths in plugin options. */
   configDir: string;
 }
@@ -79,7 +87,12 @@ export async function createApplication(options: AppOptions = {}) {
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
   const registry = new ToolRegistry(),
     skills = new Skills(),
-    context = new ProjectContext(workspace, join(configHome(), "AGENTS.md"), cwd),
+    context = new ProjectContext(workspace, {
+      globalDir: configHome(),
+      cwd,
+      claudeMdFallback: config.context.claudeMdFallback,
+      maxBytes: config.context.maxBytes,
+    }),
     plugins = new PluginHost(registry, store, config.pluginHooks),
     mcp = new McpConnector(config.mcp.servers, registry, workspace);
   const herdr = options.noHerdr
@@ -89,7 +102,11 @@ export async function createApplication(options: AppOptions = {}) {
     // First-party built-ins load through the trusted path, also under --read-only.
     const builtinContext = {
       workspace,
+      cwd,
       stateHome: stateHome(),
+      configHome: configHome(),
+      home: homedir(),
+      trusted: !!options.trustProject || !!options.config,
       configDir: dirname(
         configFile(
           workspace,
@@ -103,7 +120,13 @@ export async function createApplication(options: AppOptions = {}) {
       options.disablePlugins,
     ))
       await plugins.activate(
-        builtin.create(config.builtinPlugins[builtin.id] ?? {}, builtinContext),
+        builtin.create(
+          {
+            ...(config.builtinPlugins[builtin.id] ?? {}),
+            ...(options.pluginOptions?.[builtin.id] ?? {}),
+          },
+          builtinContext,
+        ),
         workspace,
         { builtin: true },
       );
@@ -119,18 +142,18 @@ export async function createApplication(options: AppOptions = {}) {
       // Package names resolve from the workspace, then global node_modules.
       for (const spec of [...new Set(paths)]) await plugins.load(spec, { from: workspace });
     }
-    const skillRoots = [...config.skills];
-    let scope = cwd;
-    while (true) {
-      skillRoots.push(join(scope, ".agents", "skills"));
-      if (scope === workspace) break;
-      scope = dirname(scope);
-    }
-    await skills.discover([
-      ...skillRoots,
-      join(homedir(), ".agents", "skills"),
-      ...plugins.skillRoots,
-    ]);
+    // Project skills follow the config trust model (--trust-project or an explicit --config).
+    await skills.discover(
+      skillRoots({
+        workspace,
+        cwd,
+        home: homedir(),
+        configHome: configHome(),
+        trusted: !!options.trustProject || !!options.config,
+        configSkills: config.skills,
+        pluginRoots: plugins.skillRoots,
+      }),
+    );
     context.extras.push(async () => skills.catalog(), ...plugins.contexts);
     const { registerStandard } = await import("./tools/standard.ts");
     registerStandard(registry, workspace, skills, context);
@@ -177,6 +200,32 @@ export async function createApplication(options: AppOptions = {}) {
         options.onEvent?.(event);
       },
     });
+    // Child sessions (generic delegation service for plugins). Contexts are cached per workspace
+    // so a child in a git worktree reads that worktree's AGENTS.md files.
+    const contexts = new Map<string, ProjectContext>([[workspace, context]]);
+    plugins.setSessions(
+      new ChildSessions({
+        store,
+        runner,
+        providerId: provider.id,
+        rootPolicy: () => runner.policy,
+        rootApprovals: runner.approvals,
+        readOnly: !!options.readOnly,
+        contextFor: (root) => {
+          let found = contexts.get(root);
+          if (!found) {
+            found = new ProjectContext(root, {
+              globalDir: configHome(),
+              claudeMdFallback: config.context.claudeMdFallback,
+              maxBytes: config.context.maxBytes,
+            });
+            found.extras.push(...context.extras);
+            contexts.set(root, found);
+          }
+          return found;
+        },
+      }),
+    );
     // Project prompts follow the config trust model: --trust-project or an explicit --config.
     const prompts = await loadPromptTemplates(
       promptSources({

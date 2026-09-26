@@ -52,10 +52,12 @@ removed automatically when it is unloaded.
 | Member | Description |
 | --- | --- |
 | `tools.register(tool)` | Registers a tool (`ToolDefinition`) |
-| `commands.register(name, handler, options?)` | Registers a command; `handler(args: string) => Promise<string>` returns the text shown to the user. `options`: `{ description?, argumentHint? }`, shown in `/help` and autocompletion |
+| `commands.register(name, handler, options?)` | Registers a command; `handler(args: string, context?: { sessionId? }) => Promise<string>` returns the text shown to the user (`sessionId` is the interactive UI's current session, when known). `options`: `{ description?, argumentHint? }`, shown in `/help` and autocompletion |
 | `events.on(handler)` | Observes versioned run events (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
 | `context.register(provider)` | `() => Promise<string>`; adds text to the model context |
 | `resources.skills(path)` | Adds an Agent Skills root (relative to the plugin file) |
+| `resources.agents(path)` | Adds a directory of agent definitions for delegation plugins (see [Subagents](/subagents#discovery-and-precedence)) |
+| `resources.list(kind)` | Directories registered by every plugin for `skills`, `prompts` or `agents`, with the plugin ID |
 | `resources.prompts(path)` | Adds a directory of [prompt templates](/prompt-templates#templates-from-plugins) (`*.md`, relative to the plugin file) |
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
@@ -65,6 +67,11 @@ removed automatically when it is unloaded.
 | `model.complete(request)` | Provider-agnostic text completion: `{ system, messages, maxTokens?, model?, signal? }` → `Promise<string>` |
 | `extensions.register(point, provider, options?)` | Provides an implementation for an [extension point](#extension-points) (`mascot`, `startup-screen`); `options`: `{ priority? }` |
 | `ui.status(key, text, detail?)` | Short status text in the TUI status bar; `detail` appears in `/stats`; `text: undefined` clears it |
+| `ui.panel(id, provider)` | A collapsible tree panel (`PanelProvider`), interactive UIs only |
+| `ui.select(request)` | Asks the user to choose (`SelectRequest`: `title`, `options` with `value`, `label`, `description?`); resolves `undefined` without an interactive UI |
+| `ui.open(sessionId)` | Opens a session in a read-only view; returns `false` without an interactive UI |
+| `ui.interactive()` | `true` when an interactive UI can answer `select` |
+| `sessions.*` | Child sessions, see [below](#child-sessions) |
 
 ### Tools
 
@@ -75,11 +82,14 @@ interface ToolDefinition {
   inputSchema: JsonSchema;
   effect?: "read" | "write" | "process" | "external" | "internal";
   paths?: (input: Record<string, unknown>) => string[];
+  concurrent?: boolean;
   execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }
 ```
 
-`ToolContext` provides `signal`, `workspace`, `emit(data)` and `session`. Return
+`concurrent: true` lets a call run concurrently with other read or concurrent calls of the same turn
+(the delegation tools use it). `ToolContext` provides `signal`, `workspace`, `emit(data)` and
+`session`. Return
 `textResult(text, isError?)`. The effect controls permissions ([Tools & permissions](/tools)):
 unknown or plugin operations default to `external`; only declare `read` for side-effect-free tools.
 
@@ -153,6 +163,67 @@ const rows = db.prepare("SELECT * FROM notes").all();
 offer `run`, `get`, `all`), `transaction(fn)` (immediate transaction; nested calls join the outer
 one) and `close()`. FTS5 is available. The host provides the driver, so plugins never depend on a
 specific runtime.
+
+### Child sessions {#child-sessions}
+
+`api.sessions` is a generic service for delegated work: a child session is a separate, persisted
+conversation (fresh context) with a parent link, run by the same runner with **narrowed**
+permissions. A child can never gain a capability, tool or approval its parent lacks, and aborting a
+parent run aborts its running descendants. The core contains no agent logic; the
+[subagents](/subagents) plugin is built on this service.
+
+| Member | Description |
+| --- | --- |
+| `spawn(spec)` | Creates a child session (`ChildSessionSpec`) and returns `ChildSessionInfo` |
+| `run(id, prompt, { signal? })` | Runs a turn in the child; resolves a `ChildRunResult` (`status`, `text`, `usage`, `error?`) |
+| `get(id)`, `children(parentId)` | Session info (`id`, `parentId`, `depth`, `agent`, `title`, `status`, `model`, `workspace`, `usage`, `capabilities`, timestamps) |
+| `ancestors(id)` | Ancestor IDs, nearest first |
+| `cancel(id)` | Cancels a run and all running descendants; returns how many were running |
+| `enqueue(id, text)` | Queues a user message for the session's next turn (or next run when idle) |
+| `isRunning(id)` | Whether the session is running |
+| `capabilities(id)` | Effective `write`, `process`, `approvals` and `readOnly` |
+| `model(id)`, `workspace(id)` | Model a new child would inherit; the session's workspace |
+| `setStatus(id, status)` | Sets a `SessionStatus`: `queued`, `running`, `completed`, `failed`, `cancelled` or `interrupted` |
+
+`ChildSessionSpec` fields: `parentId`, `id?`, `title`, `agent` (label shown in UIs and approvals),
+`instructions?`, `tools?: { allow?, deny? }` (`*` allows every parent tool), `model?`, `readOnly?`,
+`permission?: { write?, process? }` (`allow`, `ask` or `deny`), `workspace?` (for example a git
+worktree), `maxTurns?`, `timeoutMs?` and `maxTokens?`.
+
+```ts
+api.tools.register({
+  name: "second_opinion",
+  description: "Ask a read-only child session to review a file.",
+  effect: "external",
+  concurrent: true,
+  inputSchema: {
+    type: "object",
+    properties: { path: { type: "string" } },
+    required: ["path"],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    if (!ctx.session) return textResult("needs a session", true);
+    const child = api.sessions.spawn({
+      parentId: ctx.session,
+      title: `Review ${String(input.path)}`,
+      agent: "reviewer",
+      instructions: "Review the file and report bugs only.",
+      tools: { allow: ["read_file", "search_text"] },
+      readOnly: true,
+      maxTurns: 10,
+    });
+    const result = await api.sessions.run(child.id, `Review ${String(input.path)}`, {
+      signal: ctx.signal,
+    });
+    return textResult(result.text || result.error || result.status, result.status !== "completed");
+  },
+});
+```
+
+`PanelProvider` has a `title`, `nodes({ sessionId })` returning `PanelNode`s (`id`, `parentId?`,
+`label`, `color?`, `status`, `startedAt?`, `endedAt?`, `tokens?`, `detail?`, `sessionId?`) and an
+optional `action("cancel" | "background", nodeId, { sessionId })`.
 
 ### Hook timeouts and failure isolation
 

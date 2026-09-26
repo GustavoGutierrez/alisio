@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import type { AppOptions, ApprovalDecision, ApprovalRequest } from "@alisio/core";
-import type { ModelInfo, RunEvent } from "@alisio/sdk";
+import type { ModelInfo, PanelNode, RunEvent } from "@alisio/sdk";
 import {
   CombinedAutocompleteProvider,
   type Component,
@@ -18,15 +18,17 @@ import {
 } from "@earendil-works/pi-tui";
 import { copyText, nodeSpawn } from "./clipboard.ts";
 import {
-  AssistantBlock,
   BannerBlock,
   clock,
   componentFor,
   Footer,
   Header,
   type HeaderInfo,
-  ToolBlock,
+  Switch,
+  TranscriptSync,
+  TreePanel,
 } from "./components.ts";
+import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import {
   addItem,
   COMMANDS,
@@ -147,8 +149,12 @@ export async function runTui(options: TuiOptions): Promise<void> {
       return result.ok ? true : copyMessage(result);
     },
   });
-  const transcript = new Container();
-  const rendered: Array<{ item: TranscriptItem; component: Component }> = [];
+  const main = new TranscriptSync();
+  const transcript = main.container;
+  // Read-only views of child sessions (subagents), fed by their events.
+  const childViews = new Map<string, ViewState>();
+  const childView = new TranscriptSync();
+  let panelState = initialPanelState();
   const startupDiagnostics: import("@alisio/core").StartupDiagnostic[] = [];
   let hint: string | undefined;
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -177,28 +183,87 @@ export async function runTui(options: TuiOptions): Promise<void> {
     };
   };
   const header = new Header(headerInfo, () => view);
+  const panelEntry = () => [...app.plugins.panels.values()][0];
+  const panelNodes = (): PanelNode[] => {
+    try {
+      return panelEntry()?.provider.nodes({ sessionId: session }) ?? [];
+    } catch {
+      return [];
+    }
+  };
+  const viewedState = () =>
+    panelState.focus === "view" && panelState.viewing
+      ? childViews.get(panelState.viewing)
+      : undefined;
+  const viewHint = () => {
+    const nodes = panelNodes();
+    const node = nodes.find((n) => n.id === panelState.viewing);
+    if (!node) return "Esc back";
+    const path: string[] = [];
+    for (
+      let cur: PanelNode | undefined = node;
+      cur;
+      cur = nodes.find((n) => n.id === cur?.parentId)
+    )
+      path.unshift(cur.label);
+    const siblings = nodes.filter((n) => n.parentId === node.parentId);
+    const child = viewedState();
+    const window = app.contextWindow(child?.model ?? view.model);
+    const pct =
+      child?.context && window ? ` · ctx ${Math.round((child.context.used / window) * 100)}%` : "";
+    const tokens = child
+      ? ` · ↑${formatTokens(child.stats.input)} ↓${formatTokens(child.stats.output)}`
+      : "";
+    return `viewing ${path.join(" › ")} · ${siblings.indexOf(node) + 1}/${siblings.length}${pct}${tokens} · ↑ parent ↓ child ←→ siblings · Esc back · Ctrl+K cancel`;
+  };
+  const panelHint = () =>
+    panelState.focus === "panel"
+      ? "agents: ↑↓ move · → expand/enter · ← collapse/parent · Enter open · Ctrl+K cancel · Esc/Tab editor"
+      : panelState.focus === "view"
+        ? viewHint()
+        : undefined;
   const footer = new Footer(
-    () => view,
-    () => app.contextWindow(view.model),
-    () => hint,
+    () => viewedState() ?? view,
+    () => app.contextWindow((viewedState() ?? view).model),
+    () => panelHint() ?? hint,
     () => [...app.plugins.status.values()].map((s) => s.text),
   );
+  const treePanel = new TreePanel(() => {
+    const entry = panelEntry();
+    if (!entry) return undefined;
+    const nodes = panelNodes();
+    return {
+      title: entry.provider.title,
+      rows: visibleRows(nodes, panelState.collapsed).map((r) => ({
+        ...r,
+        collapsed: panelState.collapsed.has(r.node.id),
+      })),
+      total: nodes,
+      focused: panelState.focus !== "editor",
+      ...(panelState.selected ? { selected: panelState.selected } : {}),
+      ...(panelState.confirm ? { confirm: panelState.confirm } : {}),
+    };
+  });
   app.plugins.onStatusChange = () => tui.requestRender();
   const pickerSlot = new Container();
   const editor = new Editor(tui, editorTheme, { paddingX: 1 });
   const bottom = new Container();
   bottom.addChild(pickerSlot);
   bottom.addChild(editor);
+  bottom.addChild(treePanel);
   bottom.addChild(footer);
   tui.setLayoutRoot(
     new VStack([
       { component: header, basis: "auto" },
       {
-        component: new ScrollView(transcript, {
-          follow: "end",
-          primary: true,
-          overscroll: "chain",
-        }),
+        component: new ScrollView(
+          new Switch(() => (viewedState() ? childView.container : transcript)),
+          {
+            follow: "end",
+            primary: true,
+            overscroll: "chain",
+          },
+        ),
         basis: 0,
         grow: 1,
         minSize: 1,
@@ -208,31 +273,36 @@ export async function runTui(options: TuiOptions): Promise<void> {
   );
 
   const sync = () => {
-    if (view.items.length < rendered.length) {
-      transcript.clear();
-      rendered.length = 0;
-    }
-    view.items.forEach((item, index) => {
-      const entry = rendered[index];
-      if (!entry) {
-        const component = componentFor(item);
-        transcript.addChild(component);
-        rendered.push({ item, component });
-      } else if (entry.item !== item) {
-        if (entry.component instanceof AssistantBlock && item.kind === "assistant")
-          entry.component.update(item);
-        else if (entry.component instanceof ToolBlock && item.kind === "tool")
-          entry.component.item = item;
-        entry.item = item;
-      }
-    });
+    main.sync(view.items);
     tui.requestRender();
   };
   const reset = (next: ViewState) => {
     view = next;
-    transcript.clear();
-    rendered.length = 0;
+    main.reset();
     sync();
+  };
+  const openChild = (sessionId: string) => {
+    if (!childViews.has(sessionId)) {
+      let base = initialViewState(view.model);
+      try {
+        base = { ...base, items: itemsFromHistory(app.store.messages(sessionId)) };
+      } catch {
+        /* unknown session */
+      }
+      childViews.set(sessionId, base);
+    }
+    childView.reset();
+    childView.sync(childViews.get(sessionId)?.items ?? []);
+    tui.requestRender();
+  };
+  const applyPanel = (result: ReturnType<typeof reducePanel>) => {
+    panelState = result.state;
+    const effect = result.effect;
+    if (effect?.type === "open") openChild(effect.sessionId);
+    if (effect?.type === "cancel")
+      void panelEntry()?.provider.action?.("cancel", effect.id, { sessionId: session });
+    if (effect?.type === "cancel") flashHint("Cancelling agent and its descendants…");
+    tui.requestRender();
   };
   const push = (item: TranscriptItem) => {
     view = addItem(view, item);
@@ -244,7 +314,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const info = (text: string) => push({ kind: "info", text });
   let terminalEvent = false;
   dispatch = (event) => {
-    if (event.sessionId !== session) return;
+    if (event.sessionId !== session) {
+      // Child session (e.g. a subagent): keep a view model for its read-only view.
+      const child = childViews.get(event.sessionId) ?? initialViewState(view.model);
+      childViews.set(event.sessionId, reduceEvent(child, event));
+      if (panelState.viewing === event.sessionId)
+        childView.sync(childViews.get(event.sessionId)?.items ?? []);
+      tui.requestRender();
+      return;
+    }
     if (["run_completed", "run_failed", "run_cancelled", "compaction_failed"].includes(event.type))
       terminalEvent = true;
     view = reduceEvent(view, event);
@@ -293,7 +371,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       request.signal.addEventListener("abort", onAbort, { once: true });
       showPicker(
         new Picker(
-          `Allow ${request.call.name} (${request.effect}): ${summarizeToolArgs(request.call.name, request.call.arguments)}?`,
+          `${request.label ? `[${request.label}] ` : ""}Allow ${request.call.name} (${request.effect}): ${summarizeToolArgs(request.call.name, request.call.arguments)}?`,
           [
             { value: "once", label: "Allow once" },
             { value: "session", label: `Always allow ${request.effect} in this session` },
@@ -616,7 +694,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
         default:
           // Plugin commands are routed generically (built-ins unprefixed, others `id:name`).
           if (app.plugins.commands.has(parsed.name))
-            return info(await (app.plugins.commands.get(parsed.name)?.(parsed.args) ?? ""));
+            return info(
+              await (app.plugins.commands.get(parsed.name)?.(parsed.args, { sessionId: session }) ??
+                ""),
+            );
           return error(`Unknown command /${parsed.name}. Type /help.`);
       }
     } catch (e) {
@@ -672,8 +753,97 @@ export async function runTui(options: TuiOptions): Promise<void> {
     ),
   );
 
+  // Interactive services for plugins: choices (e.g. worktree isolation) and session views.
+  app.plugins.setInteractiveUI({
+    select: (request) =>
+      new Promise<string | undefined>((resolve) => {
+        showPicker(
+          new Picker(
+            request.title,
+            request.options.map((o) => ({
+              value: o.value,
+              label: o.label,
+              ...(o.description ? { description: o.description } : {}),
+            })),
+            (item) => {
+              closePicker();
+              resolve(item.value);
+            },
+            () => {
+              closePicker();
+              resolve(undefined);
+            },
+          ),
+        );
+      }),
+    open: (sessionId) => {
+      const node = panelNodes().find((n) => n.sessionId === sessionId);
+      panelState = {
+        ...panelState,
+        focus: "view",
+        viewing: node?.id ?? sessionId,
+        selected: node?.id ?? sessionId,
+      };
+      openChild(sessionId);
+      return true;
+    },
+  });
+  const panelKey = (data: string): string | undefined => {
+    if (matchesKey(data, Key.up)) return "up";
+    if (matchesKey(data, Key.down)) return "down";
+    if (matchesKey(data, Key.left)) return "left";
+    if (matchesKey(data, Key.right)) return "right";
+    if (matchesKey(data, Key.enter)) return "enter";
+    if (matchesKey(data, Key.escape)) return "escape";
+    if (matchesKey(data, Key.tab)) return "tab";
+    if (matchesKey(data, Key.ctrl("k"))) return "cancel";
+    if (data === "y" || data === "Y") return "yes";
+    if (data === "n" || data === "N") return "no";
+    return undefined;
+  };
   let lastCtrlC = 0;
   tui.addInputListener((data) => {
+    if (!picker) {
+      if (matchesKey(data, Key.ctrl("x"))) {
+        const r = reducePanel(panelState, { type: "ctrlX", now: Date.now() }, panelNodes());
+        if (!r.handled) flashHint("No agents to navigate yet");
+        else applyPanel(r);
+        return { consume: true };
+      }
+      if (matchesKey(data, Key.ctrl("b")) && busy) {
+        void panelEntry()?.provider.action?.("background", undefined, { sessionId: session });
+        flashHint("Moved running foreground agents to the background");
+        return { consume: true };
+      }
+      if (panelState.focus !== "editor" || panelState.confirm) {
+        const key = panelKey(data);
+        if (key || panelState.focus === "view") {
+          const r = reducePanel(
+            panelState,
+            { type: "key", key: key ?? "other", now: Date.now() },
+            panelNodes(),
+          );
+          applyPanel(r);
+          if (r.handled || panelState.focus === "view") return { consume: true };
+          return undefined;
+        }
+        // Typing returns focus to the editor.
+        panelState = { ...panelState, focus: "editor" };
+        tui.requestRender();
+        return undefined;
+      }
+      if (matchesKey(data, Key.down) && !editor.getText() && !editor.isShowingAutocomplete()) {
+        const r = reducePanel(
+          panelState,
+          { type: "key", key: "down", now: Date.now(), editorEmpty: true },
+          panelNodes(),
+        );
+        if (r.handled) {
+          applyPanel(r);
+          return { consume: true };
+        }
+      }
+    }
     if (matchesKey(data, Key.escape)) {
       if (busy && !picker && !editor.isShowingAutocomplete()) {
         controller?.abort(new Error("Interrupted by user"));
@@ -714,7 +884,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
 
   const ticker = setInterval(() => {
     clock.now = Date.now();
-    if (busy || view.items.some((i) => i.kind === "tool" && i.status === "running")) {
+    if (
+      busy ||
+      view.items.some((i) => i.kind === "tool" && i.status === "running") ||
+      panelNodes().some((n) => n.status === "running")
+    ) {
       clock.frame++;
       tui.requestRender();
     }

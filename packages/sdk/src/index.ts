@@ -70,6 +70,8 @@ export interface ToolDefinition {
   inputSchema: JsonSchema;
   /** Unknown/plugin operations default to external; only declare read for side-effect-free tools. */
   effect?: Effect;
+  /** May run concurrently with other read/concurrent calls of the same turn (e.g. delegation). */
+  concurrent?: boolean;
   paths?: (input: Record<string, unknown>) => string[];
   execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }
@@ -222,6 +224,94 @@ export interface ExtensionOptions {
   /** Higher wins (default 0). Ties break by plugin id, then registration order. */
   priority?: number;
 }
+/** Lifecycle of a child session (delegated work). */
+export type SessionStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+/** Capability narrowing for a child session: it can never exceed its parent. */
+export type PermissionLevel = "allow" | "ask" | "deny";
+export interface ChildSessionSpec {
+  parentId: string;
+  /** Optional preassigned id (UUID), e.g. to name a git branch before spawning. */
+  id?: string;
+  title: string;
+  /** Free-form label shown in UIs and approvals (e.g. an agent name). */
+  agent: string;
+  /** System instructions appended for this child (persona and rules). */
+  instructions?: string;
+  /** Tool names; `*` allows every tool the parent has. Applied on top of the parent's tools. */
+  tools?: { allow?: string[]; deny?: string[] };
+  /** Child model; defaults to the parent's current model. */
+  model?: string;
+  readOnly?: boolean;
+  permission?: { write?: PermissionLevel; process?: PermissionLevel };
+  /** Workspace root for the child (e.g. a git worktree); defaults to the parent's. */
+  workspace?: string;
+  maxTurns?: number;
+  timeoutMs?: number;
+  maxTokens?: number;
+}
+export interface ChildSessionInfo {
+  id: string;
+  parentId: string;
+  depth: number;
+  agent: string;
+  title: string;
+  status: SessionStatus;
+  model: string;
+  workspace: string;
+  usage: { input: number; output: number };
+  /** Effective capabilities after narrowing. */
+  capabilities: { write: boolean; process: boolean; approvals: boolean };
+  createdAt: number;
+  updatedAt: number;
+}
+export interface ChildRunResult {
+  id: string;
+  status: SessionStatus;
+  text: string;
+  usage: { input: number; output: number };
+  error?: string;
+}
+/** Generic tree node contributed to an interactive panel (e.g. running agents). */
+export interface PanelNode {
+  id: string;
+  parentId?: string;
+  label: string;
+  /** Named color: red, green, yellow, blue, magenta, cyan, gray. */
+  color?: string;
+  status: string;
+  startedAt?: number;
+  endedAt?: number;
+  tokens?: number;
+  /** One-line live summary. */
+  detail?: string;
+  /** Session to open in a read-only view when the node is selected. */
+  sessionId?: string;
+}
+export interface PanelProvider {
+  title: string;
+  /** Nodes under the given root session, parents before children. */
+  nodes(context: { sessionId: string }): PanelNode[];
+  /** UI actions: cancel a node (and its subtree) or move foreground work to the background. */
+  action?(
+    action: "cancel" | "background",
+    nodeId: string | undefined,
+    context: { sessionId: string },
+  ): void | Promise<void>;
+}
+export interface SelectRequest {
+  title: string;
+  options: Array<{ value: string; label: string; description?: string }>;
+}
+/** Where a command was invoked (the interactive UI's current session, when known). */
+export interface CommandContext {
+  sessionId?: string;
+}
 export interface CommandOptions {
   description?: string;
   argumentHint?: string;
@@ -231,13 +321,20 @@ export interface PluginAPI {
   commands: {
     register(
       name: string,
-      handler: (args: string) => Promise<string>,
+      handler: (args: string, context?: CommandContext) => Promise<string>,
       options?: CommandOptions,
     ): () => void;
   };
   events: { on(handler: (event: Readonly<RunEvent>) => void): () => void };
   context: { register(provider: () => Promise<string>): () => void };
-  resources: { skills(path: string): void; prompts(path: string): void };
+  resources: {
+    skills(path: string): void;
+    prompts(path: string): void;
+    /** A directory of agent definitions (Markdown + frontmatter) for delegation plugins. */
+    agents(path: string): void;
+    /** Directories registered by every plugin for a resource kind, with the plugin id. */
+    list(kind: "skills" | "prompts" | "agents"): Array<{ plugin: string; dir: string }>;
+  };
   state: { get(key: string): unknown; set(key: string, value: unknown): void };
   /** Contribute to core context compaction (hooks run with a host timeout; failures are isolated). */
   compaction: { register(hooks: CompactionHooks): () => void };
@@ -259,8 +356,46 @@ export interface PluginAPI {
       options?: ExtensionOptions,
     ): () => void;
   };
-  /** Short status text shown by interactive UIs (footer); `detail` feeds /stats. */
-  ui: { status(key: string, text: string | undefined, detail?: string): void };
+  /**
+   * Child sessions: separate conversations (fresh context) that run with narrowed permissions,
+   * persisted with parent links. Aborting a parent run aborts running descendants.
+   */
+  sessions: {
+    spawn(spec: ChildSessionSpec): ChildSessionInfo;
+    run(id: string, prompt: string, options?: { signal?: AbortSignal }): Promise<ChildRunResult>;
+    get(id: string): ChildSessionInfo | undefined;
+    children(parentId: string): ChildSessionInfo[];
+    /** Ancestor ids, nearest first (empty for a root session). */
+    ancestors(id: string): string[];
+    /** Cancels a session's run and all running descendants; returns how many were running. */
+    cancel(id: string): number;
+    /** Queues a user message for the session's next turn (or next run when idle). */
+    enqueue(id: string, text: string): void;
+    isRunning(id: string): boolean;
+    /** Effective capabilities of a (root or child) session. */
+    capabilities(id: string): {
+      write: boolean;
+      process: boolean;
+      approvals: boolean;
+      readOnly: boolean;
+    };
+    /** Model a new child would inherit from this session. */
+    model(id: string): string;
+    workspace(id: string): string;
+    setStatus(id: string, status: SessionStatus): void;
+  };
+  ui: {
+    /** Short status text shown by interactive UIs (footer); `detail` feeds /stats. */
+    status(key: string, text: string | undefined, detail?: string): void;
+    /** A collapsible tree panel (interactive UIs only). */
+    panel(id: string, provider: PanelProvider): () => void;
+    /** Ask the user to choose; resolves undefined when no interactive UI is available. */
+    select(request: SelectRequest): Promise<string | undefined>;
+    /** Open a session in a read-only view (interactive UIs only). */
+    open(sessionId: string): boolean;
+    /** True when an interactive UI can answer `select`. */
+    interactive(): boolean;
+  };
 }
 export interface Plugin {
   /** Stable, unique plugin id (lowercase, dots and dashes). Plugins are identified by `id`. */

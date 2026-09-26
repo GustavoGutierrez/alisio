@@ -190,10 +190,11 @@ alisio run "/init focus on the plugin SDK" --allow-write
 ahora muestra una sugerencia que remite a `/init`.
 
 ::: tip Repositorios grandes
-La exploración reenvía el contexto creciente en cada turno, y `limits.maxTokens` (por defecto
-`100000`) es un presupuesto acumulado por ejecución. En repositorios grandes, auméntelo en su
-configuración. En una ejecución real con DeepSeek, las ediciones se aplicaron pero el resumen final
-agotó el presupuesto.
+La exploración reenvía el contexto creciente en cada turno, y `limits.maxTokens` es un presupuesto
+acumulado por ejecución. Ahora, por defecto, es proporcional a la ventana de contexto (consulte
+[Configuración](/es/configuration#limits)); si fija un valor explícito, que sea holgado en repositorios
+grandes. En una ejecución real con DeepSeek con el antiguo presupuesto fijo de 100000 tokens, las
+ediciones se aplicaron pero el resumen final agotó el presupuesto.
 :::
 
 ## Límites

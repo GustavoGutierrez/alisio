@@ -77,6 +77,7 @@ Al escribir `/` se abre el autocompletado.
 | `/skill:name request` | Carga una skill y envía la solicitud |
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
+| `/agents …` | Comando del plugin integrado de subagentes: lista, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; consulte [Subagentes](/es/subagents#in-the-tui) |
 
 `/init` es una plantilla de prompt, no el comando `alisio init`: `alisio init` solo escribe un
 `.alisio/config.json` de ejemplo. Las demás [plantillas de prompts](/es/prompt-templates) aparecen en
@@ -101,6 +102,36 @@ En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name r
 | Ctrl+C | Borrar la entrada; interrumpir un turno activo; pulsado dos veces con la entrada vacía, salir |
 | Ctrl+D | Salir cuando la entrada está vacía |
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
+| Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
+| Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
+| Ctrl+K | Cancelar el agente seleccionado o visualizado |
+
+## Panel de agentes {#agent-panel}
+
+Cuando se ejecutan [subagentes](/es/subagents), aparece bajo el editor un panel en árbol plegable. Su
+cabecera muestra cuántos agentes están en ejecución, en cola y terminados; cada fila muestra un icono
+de estado, el nombre y el color del agente, el tiempo transcurrido, los tokens y un resumen en vivo de
+una línea. La sangría muestra padre → hijo.
+
+| Foco | Tecla | Acción |
+| --- | --- | --- |
+| Editor | Ctrl+X, o ↓ con el editor vacío cuando hay agentes | Enfocar el panel |
+| Editor | Ctrl+X y después ↓ en menos de 800 ms | Abrir directamente el primer agente |
+| Panel | ↑ / ↓ | Mover la selección |
+| Panel | → | Expandir, o entrar en los hijos |
+| Panel | ← | Plegar, o ir al padre |
+| Panel | Enter | Abrir la conversación del agente en una vista de solo lectura |
+| Panel | Esc, Tab | Volver al editor |
+| Vista de hijo | ↑ | Agente padre (desde un agente de primer nivel, vuelve a la conversación raíz) |
+| Vista de hijo | ↓ | Primer hijo |
+| Vista de hijo | ← / → | Hermano anterior / siguiente |
+| Vista de hijo | Esc | Volver a la conversación raíz |
+| Panel o vista de hijo | Ctrl+K | Cancelar el agente seleccionado o visualizado (pide s/n —`y`/`n`— cuando tiene descendientes) |
+| Cualquiera | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución |
+
+En una vista de hijo, el pie muestra la ruta del agente, su índice y el total, el porcentaje de
+contexto, los tokens y sugerencias de teclas. Escribir mientras el panel tiene el foco devuelve el
+foco al editor.
 
 ## Copiar al seleccionar
 

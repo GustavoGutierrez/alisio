@@ -50,6 +50,12 @@ it is not a statement that all of its release criteria are met.
 - **Startup screen**: the TUI chrome itself (header, bars) still uses Unicode glyphs under
   `TERM=dumb`; only the startup screen falls back to ASCII. Width counting treats every code point as
   one column, so wide East Asian or emoji glyphs in custom mascots may misalign.
+- **Subagents**: messages sent with `send_message` wait in an in-memory inbox and are lost if the
+  process exits; a background completion is delivered with the parent's next turn (with your next
+  message when the parent is idle); `skills` in a definition are loaded through a `skill_load`
+  instruction, not pre-injected; `/agents merge` needs a clean working tree; worktrees are only
+  created when write-capable children actually overlap; the agent panel and `/agents` show the tasks
+  started in the current process.
 - **Prompt templates**: no template includes or partials, no shell execution or file injection in
   templates, `$10` and higher are not supported, and positional arguments are plain text only.
 - **Clipboard**: OSC 52 cannot be confirmed; the TUI reports it as unverified.

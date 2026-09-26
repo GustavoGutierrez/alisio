@@ -52,6 +52,35 @@ export interface RunnerOptions {
   /** Generic hooks (implemented by the plugin host) for compaction and session start. */
   extensions?: RunnerExtensions;
 }
+/**
+ * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
+ * and `toolFilter` are applied on top of the runner's policy and tools.
+ */
+export interface RunOptions {
+  /** What UIs show instead of the prompt (e.g. `/init`). */
+  display?: string;
+  /** Extra system instructions for this run (e.g. an agent persona). */
+  instructions?: string;
+  toolFilter?: (tool: ToolDefinition) => boolean;
+  policy?: Policy;
+  /** Allow interactive approvals for this run (default: when the runner has a handler). */
+  approvals?: boolean;
+  /** Shown with approval requests, e.g. the agent path of a child session. */
+  label?: string;
+  workspace?: string;
+  context?: ContextSource;
+  maxTurns?: number;
+  maxTokens?: number;
+  timeoutMs?: number;
+}
+/**
+ * Default cumulative token budget for one run: several context windows (each turn re-sends the
+ * context), clamped; 1M tokens when the window is unknown.
+ */
+export function defaultTokenBudget(contextWindow?: number): number {
+  if (!contextWindow || contextWindow <= 0) return 1_000_000;
+  return Math.min(8_000_000, Math.max(400_000, contextWindow * 8));
+}
 /** Extension output appended to history is capped regardless of what hooks return. */
 const MAX_INJECT_CHARS = 24_000;
 const allowed = (policy: Policy, effect: string) =>
@@ -64,7 +93,10 @@ export interface CompactionResult {
 }
 type Emit = (type: string, data: unknown) => void;
 export class AgentRunner {
-  private busy = false;
+  /** Sessions with an active run or compaction (one at a time per session). */
+  private active = new Map<string, AbortController>();
+  /** Messages queued for a session's next turn (e.g. input for a running child). */
+  private inbox = new Map<string, string[]>();
   /** Last provider-reported context size per session and the history length it covered. */
   private reported = new Map<string, { tokens: number; count: number }>();
   constructor(private options: RunnerOptions) {}
@@ -98,14 +130,49 @@ export class AgentRunner {
       }
     };
   }
-  /** Tools offered to the model under the current policy. */
-  availableTools(): ToolDefinition[] {
+  /** Tools offered to the model under the current policy (and optional run narrowing). */
+  availableTools(run: RunOptions = {}): ToolDefinition[] {
     const o = this.options;
+    const policy = run.policy ?? o.policy;
+    const approvals = !!o.approve && run.approvals !== false;
     return o.registry.list().filter((t) => {
+      if (run.toolFilter && !run.toolFilter(t)) return false;
       const effect = t.effect ?? "external";
-      if (allowed(o.policy, effect)) return true;
-      return !!o.approve && (effect === "write" || effect === "process");
+      if (allowed(policy, effect)) return true;
+      return approvals && (effect === "write" || effect === "process");
     });
+  }
+  /** Abort signal of the session's active run, if any (used to cascade cancellation). */
+  signal(sessionId: string): AbortSignal | undefined {
+    return this.active.get(sessionId)?.signal;
+  }
+  isRunning(sessionId: string): boolean {
+    return this.active.has(sessionId);
+  }
+  /** Aborts the active run (or compaction) of a session. */
+  abort(sessionId: string, reason: unknown = new Error("Cancelled")): boolean {
+    const controller = this.active.get(sessionId);
+    if (!controller) return false;
+    controller.abort(reason);
+    return true;
+  }
+  /** Queues text as a user message for the session's next turn (or next run when idle). */
+  enqueue(sessionId: string, text: string): void {
+    const queue = this.inbox.get(sessionId) ?? [];
+    queue.push(text.slice(0, 50_000));
+    this.inbox.set(sessionId, queue.slice(-20));
+  }
+  private drain(sessionId: string): string[] {
+    const queue = this.inbox.get(sessionId) ?? [];
+    this.inbox.delete(sessionId);
+    return queue;
+  }
+  private claim(sessionId: string): AbortController {
+    if (this.active.has(sessionId))
+      throw new Error("Session is busy; await the current run or cancel it");
+    const controller = new AbortController();
+    this.active.set(sessionId, controller);
+    return controller;
   }
   private toolsText(tools: ToolDefinition[]): string {
     return JSON.stringify(
@@ -114,7 +181,7 @@ export class AgentRunner {
   }
   /** Estimated tokens the next request of a session would send. */
   async estimateContext(sessionId: string): Promise<number> {
-    const instructions = await this.options.context.instructions();
+    const instructions = await this.options.context.instructions(sessionId);
     return (
       estimateTokens(instructions) +
       estimateTokens(this.options.store.messages(sessionId)) +
@@ -136,12 +203,15 @@ export class AgentRunner {
     sessionId: string,
     request: { focus?: string; signal?: AbortSignal } = {},
   ): Promise<CompactionResult | undefined> {
-    if (this.busy) throw new Error("Runner is busy; await current run or cancel it");
-    this.busy = true;
+    const controller = this.claim(sessionId);
     const o = this.options;
     let acquired = false;
     const timeout = AbortSignal.timeout(o.timeoutMs ?? 300_000);
-    const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
+    const signal = AbortSignal.any([
+      controller.signal,
+      timeout,
+      ...(request.signal ? [request.signal] : []),
+    ]);
     try {
       o.store.acquire(sessionId);
       acquired = true;
@@ -157,7 +227,7 @@ export class AgentRunner {
       );
     } finally {
       if (acquired) o.store.release(sessionId);
-      this.busy = false;
+      this.active.delete(sessionId);
     }
   }
   private async compactLocked(
@@ -261,23 +331,36 @@ export class AgentRunner {
     sessionId: string,
     prompt: string,
     signal?: AbortSignal,
-    options: { display?: string } = {},
-  ): Promise<{ sessionId: string; text: string; status: string }> {
-    if (this.busy) throw new Error("Runner is busy; await current run or cancel it");
-    this.busy = true;
+    options: RunOptions = {},
+  ): Promise<{
+    sessionId: string;
+    text: string;
+    status: string;
+    usage: { input: number; output: number };
+  }> {
+    const controller = this.claim(sessionId);
     const o = this.options,
       emit = this.emitter(sessionId);
     let tokens = 0,
       lastText = "",
       acquired = false;
-    const timeout = AbortSignal.timeout(o.timeoutMs ?? 300_000);
-    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const usageTotal = { input: 0, output: 0 };
+    const timeout = AbortSignal.timeout(options.timeoutMs ?? o.timeoutMs ?? 300_000);
+    const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
+    const context = options.context ?? o.context;
+    const workspace = options.workspace ?? o.workspace;
+    const policy = options.policy ?? o.policy;
+    const approvals = !!o.approve && options.approvals !== false;
+    const withPersona = async () => {
+      const base = await context.instructions(sessionId);
+      return options.instructions ? `${base}\n\n${options.instructions}` : base;
+    };
     try {
       o.store.acquire(sessionId);
       acquired = true;
       o.store.reconcile(sessionId);
       const session = o.store.get(sessionId);
-      if (session.provider !== o.provider.id || session.workspace !== o.workspace)
+      if (session.provider !== o.provider.id || session.workspace !== workspace)
         throw new Error("Session provider/workspace mismatch");
       // The session records the model; switching models is explicit via setModel.
       const model = session.model;
@@ -288,7 +371,7 @@ export class AgentRunner {
           const start = await o.extensions.sessionStart({
             sessionId,
             model,
-            workspace: o.workspace,
+            workspace,
           });
           for (const f of start.failures) emit("plugin_hook_failed", { ...f, continued: true });
           const text = start.inject
@@ -312,18 +395,26 @@ export class AgentRunner {
         }
         combined.throwIfAborted();
       }
+      for (const queued of this.drain(sessionId))
+        o.store.append(sessionId, { role: "user", text: queued });
       o.store.append(sessionId, {
         role: "user",
         text: prompt,
         ...(options.display ? { display: options.display } : {}),
       });
       emit("run_started", { model });
+      const budget =
+        options.maxTokens ?? o.maxTokens ?? defaultTokenBudget(o.contextWindow?.(model));
       const compaction = o.compaction ?? {};
-      for (let turn = 0; turn < (o.maxTurns ?? 20); turn++) {
+      for (let turn = 0; turn < (options.maxTurns ?? o.maxTurns ?? 20); turn++) {
         combined.throwIfAborted();
-        let instructions = await o.context.instructions();
+        // Input queued while the run was working (e.g. a parent's message to a child).
+        if (turn > 0)
+          for (const queued of this.drain(sessionId))
+            o.store.append(sessionId, { role: "user", text: queued });
+        let instructions = await withPersona();
         let messages = o.store.messages(sessionId);
-        const tools = this.availableTools();
+        const tools = this.availableTools(options);
         const toolsText = this.toolsText(tools);
         const chars = () =>
           instructions.length + JSON.stringify(messages).length + toolsText.length;
@@ -339,7 +430,7 @@ export class AgentRunner {
           shouldCompact(used(), o.contextWindow?.(model), compaction.threshold ?? 0.85);
         if (overWindow || (overChars && compaction.auto !== false)) {
           await this.compactLocked(sessionId, emit, model, combined, "auto");
-          instructions = await o.context.instructions();
+          instructions = await withPersona();
           messages = o.store.messages(sessionId);
         }
         if (chars() > (o.maxContextChars ?? 160_000))
@@ -364,6 +455,8 @@ export class AgentRunner {
             completion = e.message;
             usage = e.usage;
             tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
+            usageTotal.input += e.usage?.input ?? 0;
+            usageTotal.output += e.usage?.output ?? 0;
           }
         }
         if (!completion) throw new Error("Provider stream ended without a completed response");
@@ -392,7 +485,7 @@ export class AgentRunner {
         });
         if (!completion.calls.length) {
           emit("run_completed", { tokens, text: lastText });
-          return { sessionId, text: lastText, status: "completed" };
+          return { sessionId, text: lastText, status: "completed", usage: usageTotal };
         }
         const prepared = completion.calls.map((call) => {
           try {
@@ -403,10 +496,12 @@ export class AgentRunner {
             return { call, error: String(error) };
           }
         });
-        // Resolve all scopes before any tool executes. Changes return to the model for reconsideration.
+        // Resolve scopes before tools execute. New nested instructions are attached to the first
+        // read result; state-changing calls return to the model for reconsideration instead.
         let contextUpdate: string | undefined;
         const paths = prepared.flatMap((p) => p.tool?.paths?.(p.input ?? {}) ?? []);
-        if (paths.length) contextUpdate = await o.context.beforePaths(paths);
+        if (paths.length) contextUpdate = await context.beforePaths(paths, sessionId);
+        let pendingUpdate = contextUpdate;
         const execute = async (p: (typeof prepared)[number]): Promise<ToolResult> => {
           const { call } = p;
           let result: ToolResult;
@@ -416,33 +511,41 @@ export class AgentRunner {
             combined.throwIfAborted();
             if (p.error) throw new Error(p.error);
             if (!p.tool || !p.input) throw new Error("Invalid tool");
-            if (contextUpdate)
+            const effect = p.tool.effect ?? "external";
+            if (contextUpdate && effect !== "read")
               throw new Error(
                 `Context changed; reconsider this call before retrying.\n${contextUpdate}`,
               );
-            if (tokens >= (o.maxTokens ?? 100_000))
-              throw new Error("Token budget exhausted; tool was not executed");
-            const effect = p.tool.effect ?? "external";
-            if (!allowed(o.policy, effect)) {
-              if (!o.approve || (effect !== "write" && effect !== "process"))
+            if (tokens >= budget) throw new Error("Token budget exhausted; tool was not executed");
+            if (options.toolFilter && !options.toolFilter(p.tool))
+              throw new Error(`Tool ${call.name} is not available in this session`);
+            if (!allowed(policy, effect)) {
+              if (!o.approve || !approvals || (effect !== "write" && effect !== "process"))
                 throw new Error(`Capability denied: ${effect}`);
-              emit("approval_requested", { id: call.id, name: call.name, effect });
+              emit("approval_requested", {
+                id: call.id,
+                name: call.name,
+                effect,
+                ...(options.label ? { label: options.label } : {}),
+              });
               const decision = await o.approve({
                 call,
                 effect,
                 input: p.input,
                 signal: combined,
+                session: sessionId,
+                ...(options.label ? { label: options.label } : {}),
               });
               combined.throwIfAborted();
               emit("approval_resolved", { id: call.id, name: call.name, effect, decision });
               if (decision === "deny")
                 throw new Error(`Capability ${effect} denied by the user for this call`);
-              if (decision === "session") o.policy[effect] = true;
+              if (decision === "session") policy[effect] = true;
             }
             o.store.beginCall(sessionId, call);
             result = await p.tool.execute(p.input, {
               signal: combined,
-              workspace: o.workspace,
+              workspace,
               session: sessionId,
               emit: (data) => emit("tool_progress", { id: call.id, data }),
             });
@@ -451,6 +554,16 @@ export class AgentRunner {
                 `${JSON.stringify(result).slice(0, 40_000)}\n[tool output truncated]`,
                 result.isError,
               );
+            if (pendingUpdate && effect === "read") {
+              result = {
+                ...result,
+                content: [
+                  ...result.content,
+                  { type: "text", text: `\n<instructions>\n${pendingUpdate}\n</instructions>` },
+                ],
+              };
+              pendingUpdate = undefined;
+            }
             o.store.endCall(sessionId, call, result);
           } catch (error) {
             result = textResult(error instanceof Error ? error.message : String(error), true);
@@ -470,15 +583,17 @@ export class AgentRunner {
           return result;
         };
         const results: ToolResult[] = [];
-        // Bounded parallel batches only for consecutive declared read operations.
+        // Bounded parallel batches for consecutive read or explicitly concurrent tools.
+        const parallel = (p: (typeof prepared)[number] | undefined) =>
+          !!p?.tool && (p.tool.effect === "read" || p.tool.concurrent === true);
         for (let i = 0; i < prepared.length; ) {
           const current = prepared[i];
           if (!current) break;
-          if (current.tool?.effect === "read") {
+          if (parallel(current)) {
             const batch: typeof prepared = [];
             while (
               i < prepared.length &&
-              prepared[i]?.tool?.effect === "read" &&
+              parallel(prepared[i]) &&
               batch.length < (o.readConcurrency ?? 4)
             ) {
               const p = prepared[i++];
@@ -496,7 +611,7 @@ export class AgentRunner {
             r = results[i];
           if (c && r) o.store.append(sessionId, { role: "tool", callId: c.id, result: r });
         }
-        if (tokens >= (o.maxTokens ?? 100_000)) throw new Error("Token budget exhausted");
+        if (tokens >= budget) throw new Error("Token budget exhausted");
       }
       throw new Error("Maximum turns reached");
     } catch (error) {
@@ -508,7 +623,7 @@ export class AgentRunner {
       throw error;
     } finally {
       if (acquired) o.store.release(sessionId);
-      this.busy = false;
+      this.active.delete(sessionId);
     }
   }
 }

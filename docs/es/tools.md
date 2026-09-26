@@ -24,7 +24,7 @@ estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 | `git_status` | `read` | `git status --porcelain=v1` |
 | `git_diff` | `read` | `git diff --no-ext-diff --no-textconv` |
 | `skill_load`, `skill_search`, `skill_resource` | `read` | Catálogo, activación y recursos de Agent Skills |
-| `context_explain` | `read` | Explicar qué alcances de `AGENTS.md` se aplican a una ruta |
+| `context_explain` | `read` | Explicar qué archivos `AGENTS.md` se aplican a una ruta (consulte [Contexto](/es/context)) |
 | `write_file` | `write` | Escribir un archivo |
 | `edit_file` | `write` | Reemplazar una coincidencia exacta y única en un archivo |
 | `run_process` | `process` | Ejecutar un comando con un array de argumentos |
@@ -38,6 +38,10 @@ rutas concurrentemente, ni confina una shell libre.
 Los archivos editables y el escaneo inicial de lectura están limitados a 1 MiB; las salidas de
 herramientas se acotan y un resultado truncado se indica explícitamente. Las lecturas independientes
 se ejecutan en lotes de hasta cuatro; las operaciones con efectos se serializan.
+
+Los plugins integrados añaden más herramientas: `memory_*` de [Memoria persistente](/es/memory) y
+`task`, `task_status`, `task_wait` y `send_message` de [Subagentes](/es/subagents), todas con el
+efecto `internal`.
 
 ## Flags de permisos
 

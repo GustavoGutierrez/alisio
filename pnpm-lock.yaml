@@ -14,6 +14,9 @@ importers:
       '@alisio/plugin-memory':
         specifier: workspace:*
         version: link:packages/plugin-memory
+      '@alisio/plugin-subagents':
+        specifier: workspace:*
+        version: link:packages/plugin-subagents
       '@alisio/sdk':
         specifier: workspace:*
         version: link:packages/sdk
@@ -56,6 +59,9 @@ importers:
       '@alisio/plugin-memory':
         specifier: workspace:*
         version: link:../plugin-memory
+      '@alisio/plugin-subagents':
+        specifier: workspace:*
+        version: link:../plugin-subagents
       '@alisio/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -89,6 +95,19 @@ importers:
 
   packages/plugin-memory:
     dependencies:
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@alisio/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+
+  packages/plugin-subagents:
+    dependencies:
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
       zod:
         specifier: 4.6.5
         version: 4.6.5

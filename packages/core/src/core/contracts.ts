@@ -4,6 +4,28 @@ export interface Session {
   workspace: string;
   provider: string;
   model: string;
+  /** Child sessions only. */
+  parentId?: string;
+  depth?: number;
+  agent?: string;
+  status?: import("@alisio/sdk").SessionStatus;
+  title?: string;
+  usage?: { input: number; output: number };
+  /** Persisted child spec (narrowing, limits) so resumed runs keep the same restrictions. */
+  options?: Record<string, unknown>;
+  createdAt?: number;
+  updatedAt?: number;
+}
+export interface ChildSessionRecord {
+  id?: string;
+  parentId: string;
+  workspace: string;
+  provider: string;
+  model: string;
+  agent: string;
+  title: string;
+  depth: number;
+  options: Record<string, unknown>;
 }
 export interface SessionStore {
   create(workspace: string, provider: string, model: string): Session;
@@ -11,6 +33,17 @@ export interface SessionStore {
   list(): Session[];
   messages(id: string): Message[];
   append(id: string, message: Message): void;
+  createChild(record: ChildSessionRecord): Session;
+  children(parentId: string): Session[];
+  updateSession(
+    id: string,
+    patch: {
+      status?: import("@alisio/sdk").SessionStatus;
+      usage?: { input: number; output: number };
+    },
+  ): void;
+  /** Marks queued/running child sessions not locked by a live process as interrupted. */
+  interruptStale(): number;
   /** Record the model used for subsequent turns of the session. */
   setModel(id: string, model: string): void;
   /**
@@ -26,8 +59,10 @@ export interface SessionStore {
   event(id: string, runId: string, type: string, data: unknown): void;
 }
 export interface ContextSource {
-  instructions(): Promise<string>;
-  beforePaths(paths: string[]): Promise<string | undefined>;
+  /** System instructions; `sessionId` scopes lazily attached nested instructions. */
+  instructions(sessionId?: string): Promise<string>;
+  /** Instructions newly relevant to paths a tool is about to touch (once per session). */
+  beforePaths(paths: string[], sessionId?: string): Promise<string | undefined>;
 }
 export interface Policy {
   write: boolean;
@@ -37,6 +72,10 @@ export interface Policy {
 export type ApprovalDecision = "once" | "session" | "deny";
 export interface ApprovalRequest {
   call: ToolCall;
+  /** Session asking (a child session when delegated). */
+  session?: string;
+  /** Who is asking, e.g. an agent path such as "general › explore". */
+  label?: string;
   effect: "write" | "process";
   input: Record<string, unknown>;
   signal: AbortSignal;

@@ -33,6 +33,29 @@ export class SQLiteStore implements SessionStore {
           this.db.exec("ALTER TABLE messages ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0");
         this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(2)");
       });
+    if (!has(3))
+      this.db.transaction(() => {
+        // Child sessions: parent link, depth, agent label, lifecycle status, usage and spec.
+        const columns = new Set(
+          (this.db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[]).map(
+            (c) => c.name,
+          ),
+        );
+        const add = (name: string, type: string) => {
+          if (!columns.has(name)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
+        };
+        add("parent_id", "TEXT");
+        add("depth", "INTEGER NOT NULL DEFAULT 0");
+        add("agent", "TEXT");
+        add("status", "TEXT");
+        add("title", "TEXT");
+        add("usage", "TEXT");
+        add("options", "TEXT");
+        add("created_at", "INTEGER");
+        add("updated_at", "INTEGER");
+        this.db.exec("CREATE INDEX IF NOT EXISTS sessions_parent ON sessions(parent_id)");
+        this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(3)");
+      });
   }
   create(workspace: string, provider: string, model: string): Session {
     const id = crypto.randomUUID();
@@ -41,17 +64,97 @@ export class SQLiteStore implements SessionStore {
       .run(id, workspace, provider, model);
     return { id, workspace, provider, model };
   }
-  get(id: string): Session {
-    const row = this.db
-      .prepare("SELECT id,workspace,provider,model FROM sessions WHERE id=?")
-      .get(id) as Session | null;
-    if (!row) throw new Error(`Session not found: ${id}`);
-    return row;
+  private row(r: Record<string, unknown>): Session {
+    return {
+      id: String(r.id),
+      workspace: String(r.workspace),
+      provider: String(r.provider),
+      model: String(r.model),
+      ...(r.parent_id ? { parentId: String(r.parent_id) } : {}),
+      ...(r.parent_id ? { depth: Number(r.depth ?? 0) } : {}),
+      ...(r.agent ? { agent: String(r.agent) } : {}),
+      ...(r.status ? { status: r.status as Session["status"] } : {}),
+      ...(r.title ? { title: String(r.title) } : {}),
+      ...(r.usage ? { usage: JSON.parse(String(r.usage)) } : {}),
+      ...(r.options ? { options: JSON.parse(String(r.options)) } : {}),
+      ...(r.created_at ? { createdAt: Number(r.created_at) } : {}),
+      ...(r.updated_at ? { updatedAt: Number(r.updated_at) } : {}),
+    };
   }
+  get(id: string): Session {
+    const row = this.db.prepare("SELECT * FROM sessions WHERE id=?").get(id);
+    if (!row) throw new Error(`Session not found: ${id}`);
+    return this.row(row);
+  }
+  /** Root sessions (children are listed through `children`). */
   list(): Session[] {
     return this.db
-      .prepare("SELECT id,workspace,provider,model FROM sessions ORDER BY rowid DESC")
-      .all() as Session[];
+      .prepare("SELECT * FROM sessions WHERE parent_id IS NULL ORDER BY rowid DESC")
+      .all()
+      .map((r) => this.row(r));
+  }
+  createChild(record: import("../core/contracts.ts").ChildSessionRecord): Session {
+    const id = record.id ?? crypto.randomUUID();
+    const now = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO sessions(id,workspace,provider,model,parent_id,depth,agent,status,title,usage,options,created_at,updated_at)
+         VALUES(?,?,?,?,?,?,?,'queued',?,?,?,?,?)`,
+      )
+      .run(
+        id,
+        record.workspace,
+        record.provider,
+        record.model,
+        record.parentId,
+        record.depth,
+        record.agent,
+        record.title,
+        JSON.stringify({ input: 0, output: 0 }),
+        JSON.stringify(record.options),
+        now,
+        now,
+      );
+    return this.get(id);
+  }
+  children(parentId: string): Session[] {
+    return this.db
+      .prepare("SELECT * FROM sessions WHERE parent_id=? ORDER BY created_at, rowid")
+      .all(parentId)
+      .map((r) => this.row(r));
+  }
+  updateSession(
+    id: string,
+    patch: { status?: Session["status"]; usage?: { input: number; output: number } },
+  ): void {
+    if (patch.status)
+      this.db
+        .prepare("UPDATE sessions SET status=?, updated_at=? WHERE id=?")
+        .run(patch.status, Date.now(), id);
+    if (patch.usage)
+      this.db
+        .prepare("UPDATE sessions SET usage=?, updated_at=? WHERE id=?")
+        .run(JSON.stringify(patch.usage), Date.now(), id);
+  }
+  interruptStale(): number {
+    let count = 0;
+    const rows = this.db
+      .prepare("SELECT id, locked_pid FROM sessions WHERE status IN ('queued','running')")
+      .all() as { id: string; locked_pid: number | null }[];
+    for (const row of rows) {
+      if (row.locked_pid && row.locked_pid !== process.pid) {
+        try {
+          process.kill(row.locked_pid, 0);
+          continue; // Another live process owns it.
+        } catch {
+          /* dead owner */
+        }
+      }
+      if (row.locked_pid === process.pid) continue;
+      this.updateSession(row.id, { status: "interrupted" });
+      count++;
+    }
+    return count;
   }
   messages(id: string): Message[] {
     return (

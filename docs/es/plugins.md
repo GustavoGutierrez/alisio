@@ -52,10 +52,12 @@ plugin se elimina automáticamente cuando se descarga.
 | Miembro | Descripción |
 | --- | --- |
 | `tools.register(tool)` | Registra una herramienta (`ToolDefinition`) |
-| `commands.register(name, handler, options?)` | Registra un comando; `handler(args: string) => Promise<string>` devuelve el texto que se muestra al usuario. `options`: `{ description?, argumentHint? }`, mostrados en `/help` y en el autocompletado |
+| `commands.register(name, handler, options?)` | Registra un comando; `handler(args: string, context?: { sessionId? }) => Promise<string>` devuelve el texto que se muestra al usuario (`sessionId` es la sesión actual de la interfaz interactiva, cuando se conoce). `options`: `{ description?, argumentHint? }`, mostrados en `/help` y en el autocompletado |
 | `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
 | `context.register(provider)` | `() => Promise<string>`; añade texto al contexto del modelo |
 | `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del plugin) |
+| `resources.agents(path)` | Añade un directorio de definiciones de agentes para plugins de delegación (consulte [Subagentes](/es/subagents#discovery-and-precedence)) |
+| `resources.list(kind)` | Directorios registrados por todos los plugins para `skills`, `prompts` o `agents`, con el ID del plugin |
 | `resources.prompts(path)` | Añade un directorio de [plantillas de prompts](/es/prompt-templates#templates-from-plugins) (`*.md`, relativo al archivo del plugin) |
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
@@ -65,6 +67,11 @@ plugin se elimina automáticamente cuando se descarga.
 | `model.complete(request)` | Completado de texto agnóstico del proveedor: `{ system, messages, maxTokens?, model?, signal? }` → `Promise<string>` |
 | `extensions.register(point, provider, options?)` | Proporciona una implementación para un [punto de extensión](#extension-points) (`mascot`, `startup-screen`); `options`: `{ priority? }` |
 | `ui.status(key, text, detail?)` | Texto breve en la barra de estado de la TUI; `detail` aparece en `/stats`; `text: undefined` lo elimina |
+| `ui.panel(id, provider)` | Un panel en árbol plegable (`PanelProvider`), solo en interfaces interactivas |
+| `ui.select(request)` | Pide al usuario que elija (`SelectRequest`: `title`, `options` con `value`, `label`, `description?`); resuelve `undefined` sin interfaz interactiva |
+| `ui.open(sessionId)` | Abre una sesión en una vista de solo lectura; devuelve `false` sin interfaz interactiva |
+| `ui.interactive()` | `true` cuando una interfaz interactiva puede responder a `select` |
+| `sessions.*` | Sesiones hijas, ver [más abajo](#child-sessions) |
 
 ### Herramientas
 
@@ -75,11 +82,14 @@ interface ToolDefinition {
   inputSchema: JsonSchema;
   effect?: "read" | "write" | "process" | "external" | "internal";
   paths?: (input: Record<string, unknown>) => string[];
+  concurrent?: boolean;
   execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }
 ```
 
-`ToolContext` proporciona `signal`, `workspace`, `emit(data)` y `session`. Devuelva
+`concurrent: true` permite que una llamada se ejecute a la vez que otras llamadas de lectura o
+concurrentes del mismo turno (las herramientas de delegación lo usan). `ToolContext` proporciona
+`signal`, `workspace`, `emit(data)` y `session`. Devuelva
 `textResult(text, isError?)`. El efecto controla los permisos ([Herramientas y permisos](/es/tools)):
 las operaciones desconocidas o de plugins usan `external` por defecto; declare `read` solo para
 herramientas sin efectos secundarios.
@@ -154,6 +164,68 @@ const rows = db.prepare("SELECT * FROM notes").all();
 ofrecen `run`, `get`, `all`), `transaction(fn)` (transacción inmediata; las llamadas anidadas se unen
 a la exterior) y `close()`. FTS5 está disponible. El host proporciona el driver, por lo que los
 plugins nunca dependen de un runtime concreto.
+
+### Sesiones hijas {#child-sessions}
+
+`api.sessions` es un servicio genérico para trabajo delegado: una sesión hija es una conversación
+separada y persistida (contexto nuevo) con un vínculo a su padre, ejecutada por el mismo runner con
+permisos **reducidos**. Un hijo nunca puede obtener una capacidad, herramienta o aprobación que su
+padre no tenga, y abortar la ejecución de un padre aborta sus descendientes en ejecución. El núcleo no
+contiene lógica de agentes; el plugin de [subagentes](/es/subagents) está construido sobre este
+servicio.
+
+| Miembro | Descripción |
+| --- | --- |
+| `spawn(spec)` | Crea una sesión hija (`ChildSessionSpec`) y devuelve `ChildSessionInfo` |
+| `run(id, prompt, { signal? })` | Ejecuta un turno en el hijo; resuelve un `ChildRunResult` (`status`, `text`, `usage`, `error?`) |
+| `get(id)`, `children(parentId)` | Información de la sesión (`id`, `parentId`, `depth`, `agent`, `title`, `status`, `model`, `workspace`, `usage`, `capabilities`, marcas de tiempo) |
+| `ancestors(id)` | IDs de los ancestros, del más cercano al más lejano |
+| `cancel(id)` | Cancela una ejecución y todos sus descendientes en ejecución; devuelve cuántos estaban en ejecución |
+| `enqueue(id, text)` | Encola un mensaje de usuario para el siguiente turno de la sesión (o la siguiente ejecución si está inactiva) |
+| `isRunning(id)` | Si la sesión está en ejecución |
+| `capabilities(id)` | `write`, `process`, `approvals` y `readOnly` efectivos |
+| `model(id)`, `workspace(id)` | Modelo que heredaría un hijo nuevo; workspace de la sesión |
+| `setStatus(id, status)` | Establece un `SessionStatus`: `queued`, `running`, `completed`, `failed`, `cancelled` o `interrupted` |
+
+Campos de `ChildSessionSpec`: `parentId`, `id?`, `title`, `agent` (etiqueta que se muestra en las
+interfaces y las aprobaciones), `instructions?`, `tools?: { allow?, deny? }` (`*` permite todas las
+herramientas del padre), `model?`, `readOnly?`, `permission?: { write?, process? }` (`allow`, `ask`
+o `deny`), `workspace?` (por ejemplo, un worktree de git), `maxTurns?`, `timeoutMs?` y `maxTokens?`.
+
+```ts
+api.tools.register({
+  name: "second_opinion",
+  description: "Ask a read-only child session to review a file.",
+  effect: "external",
+  concurrent: true,
+  inputSchema: {
+    type: "object",
+    properties: { path: { type: "string" } },
+    required: ["path"],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    if (!ctx.session) return textResult("needs a session", true);
+    const child = api.sessions.spawn({
+      parentId: ctx.session,
+      title: `Review ${String(input.path)}`,
+      agent: "reviewer",
+      instructions: "Review the file and report bugs only.",
+      tools: { allow: ["read_file", "search_text"] },
+      readOnly: true,
+      maxTurns: 10,
+    });
+    const result = await api.sessions.run(child.id, `Review ${String(input.path)}`, {
+      signal: ctx.signal,
+    });
+    return textResult(result.text || result.error || result.status, result.status !== "completed");
+  },
+});
+```
+
+`PanelProvider` tiene un `title`, `nodes({ sessionId })`, que devuelve `PanelNode`s (`id`,
+`parentId?`, `label`, `color?`, `status`, `startedAt?`, `endedAt?`, `tokens?`, `detail?`,
+`sessionId?`), y un `action("cancel" | "background", nodeId, { sessionId })` opcional.
 
 ### Timeouts de hooks y aislamiento de fallos
 

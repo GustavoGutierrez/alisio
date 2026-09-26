@@ -6,11 +6,17 @@
  */
 import type { BuiltinPlugin } from "@alisio/core";
 import { createMemoryPlugin } from "@alisio/plugin-memory";
+import { createSubagentsPlugin } from "@alisio/plugin-subagents";
 
 export const BUILTIN_PLUGINS: BuiltinPlugin[] = [
   {
     id: "memory",
     description: "Engram-style persistent memory (SQLite + FTS5), memory-aware compaction",
     create: createMemoryPlugin,
+  },
+  {
+    id: "subagents",
+    description: "Delegation to specialized subagents in child sessions (task tool, agent tree)",
+    create: createSubagentsPlugin,
   },
 ];

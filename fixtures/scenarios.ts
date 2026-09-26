@@ -60,10 +60,10 @@ const fixtures: Record<string, () => Promise<void>> = {
     await writeFile(join(root, "src", "AGENTS.md"), "Changed rules");
     assert.match((await context.beforePaths(["src/code.ts"])) ?? "", /Changed rules/);
     assert.equal((await context.explain(".")).length, 1);
-    await writeFile(join(root, "src", "Agente.md"), "Spanish filename rules");
-    assert.doesNotMatch(await context.instructions(), /Spanish filename rules/);
+    // Agente.md is not a recognized name; AGENT.md remains a legacy alias.
     await rm(join(root, "src", "AGENTS.md"));
-    assert.match((await context.beforePaths(["src/code.ts"])) ?? "", /Spanish filename rules/);
+    await writeFile(join(root, "src", "Agente.md"), "Spanish filename rules");
+    assert.equal(await context.beforePaths(["src/code.ts"], "fresh"), undefined);
     await writeFile(join(root, "src", "AGENT.md"), "Alternate filename rules");
     assert.match((await context.beforePaths(["src/code.ts"])) ?? "", /Alternate filename rules/);
   },
@@ -776,7 +776,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         }[];
         assert.deepEqual(
           versions.map((v) => v.version),
-          [1, 2],
+          [1, 2, 3],
         );
       } finally {
         store.close();
@@ -1039,7 +1039,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         .all() as { version: number }[];
       assert.deepEqual(
         versions.map((v) => v.version),
-        [1, 2, 100],
+        [1, 2, 3, 100],
       );
       mem.close();
     }
@@ -1958,6 +1958,63 @@ const fixtures: Record<string, () => Promise<void>> = {
     } finally {
       if (previous === undefined) delete process.env.ALISIO_CONFIG_HOME;
       else process.env.ALISIO_CONFIG_HOME = previous;
+    }
+  },
+  async "token-budget"() {
+    // An /init-sized run: 12 exploring turns of ~40k tokens each (480k cumulative).
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "look",
+      effect: "read",
+      description: "look",
+      inputSchema: objectSchema({}),
+      async execute() {
+        return textResult("seen");
+      },
+    });
+    const make = (maxTokens?: number) => {
+      let round = 0;
+      const store = db();
+      const provider: ModelProvider = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          round++;
+          yield {
+            type: "completed",
+            message: {
+              role: "assistant",
+              text: round > 12 ? "done" : "",
+              calls: round > 12 ? [] : [{ id: `l${round}`, name: "look", arguments: "{}" }],
+            },
+            usage: { input: 39_000, output: 1_000 },
+          };
+        },
+      };
+      const runner = new AgentRunner({
+        provider,
+        registry,
+        store,
+        context: new ProjectContext(root),
+        workspace: root,
+        policy: { write: false, process: false, external: false },
+        ...(maxTokens ? { maxTokens } : {}),
+      });
+      return { runner, store };
+    };
+    const auto = make();
+    try {
+      const s = auto.store.create(root, "test", "test");
+      assert.equal((await auto.runner.run(s.id, "explore")).text, "done");
+    } finally {
+      auto.store.close();
+    }
+    const fixed = make(100_000);
+    try {
+      const s = fixed.store.create(root, "test", "test");
+      await assert.rejects(() => fixed.runner.run(s.id, "explore"), /Token budget exhausted/);
+    } finally {
+      fixed.store.close();
     }
   },
 };

@@ -55,7 +55,7 @@ Precedencia del proveedor: archivo seleccionado → variables de entorno → fla
 | `timeoutMs` | `300000` | Tiempo límite de la ejecución en milisegundos (mínimo 100); incluye las esperas de aprobación |
 | `maxContextChars` | `160000` | Límite de longitud del contexto en caracteres; también activa la compactación |
 | `maxOutputTokens` | `4096` | Tokens de salida por petición |
-| `maxTokens` | `100000` | Presupuesto de tokens informados por ejecución |
+| `maxTokens` | proporcional | Presupuesto acumulado opcional de tokens informados por ejecución. Por defecto: 8 × la ventana de contexto del modelo, acotado a 400000–8000000; 1000000 cuando la ventana es desconocida |
 
 ## `compaction`
 
@@ -67,10 +67,24 @@ Precedencia del proveedor: archivo seleccionado → variables de entorno → fla
 
 Consulte [Compactación de contexto](/es/compaction).
 
+## `context`
+
+```json
+{ "context": { "claudeMdFallback": false, "maxBytes": 32768 } }
+```
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `claudeMdFallback` | `false` | Usar `CLAUDE.md` en directorios sin archivo `AGENTS` |
+| `maxBytes` | `32768` | Bytes totales de contenido `AGENTS.md` inyectado (1024–1048576); se conservan los archivos más cercanos |
+
+Consulte [Contexto: AGENTS.md y skills](/es/context).
+
 ## `builtinPlugins`
 
 Opciones de los plugins integrados, indexadas por ID de plugin. Cada entrada acepta `enabled`; cada
-plugin valida el resto de su sección. Hoy el único plugin integrado es `memory`:
+plugin valida el resto de su sección. Los plugins integrados son `memory` y `subagents`; las
+opciones de `subagents` se detallan en [Subagentes](/es/subagents#limits). Opciones de `memory`:
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
@@ -107,12 +121,9 @@ Raíces adicionales de Agent Skills, resueltas respecto al archivo de configurac
 { "skills": ["./skills"] }
 ```
 
-Las skills también se descubren en `.agents/skills/<name>/SKILL.md` (desde el directorio de trabajo
-hasta la raíz del workspace), en `~/.agents/skills/` y en los recursos de plugins. Inicialmente solo
-se incluyen el nombre y la descripción; el cuerpo se carga con la herramienta `skill_load` o con
-`/skill:name`, y los archivos de apoyo con `skill_resource`. Se validan el YAML, el nombre, la
-descripción y la coincidencia entre nombre y directorio (`alisio skills validate`). `.pi/skills` no
-se importa automáticamente.
+También se buscan las raíces de proyecto (`.agents/skills`, `.alisio/skills`, `.claude/skills`, solo
+en proyectos de confianza), las raíces de usuario y las skills de plugins. Consulte
+[Contexto: AGENTS.md y skills](/es/context#skills).
 
 ## Plantillas de prompts
 
@@ -197,7 +208,8 @@ Flags globales (válidos para todos los comandos):
 | `--db <path>` | Base de datos de sesiones |
 | `--json` | Emite eventos JSONL versionados |
 | `--no-tui` | Usa el modo interactivo readline sencillo en lugar de la TUI |
-| `--disable-plugin <ids...>` | Desactiva plugins integrados (por ejemplo `memory`) |
+| `--disable-plugin <ids...>` | Desactiva plugins integrados (`memory`, `subagents`) |
+| `--agents <json>` | Definiciones adicionales de subagentes en JSON: `{"name":{"description":"...","prompt":"..."}}` |
 | `--no-banner` | No muestra la pantalla de inicio |
 | `--quiet` | Suprime la salida no esencial (pantalla de inicio, sugerencias) |
 | `-V`, `--version` | Muestra la versión |
@@ -224,8 +236,5 @@ Comandos:
 
 ## `AGENTS.md`
 
-En cada directorio se usa el primer archivo disponible, en este orden: `AGENTS.md`, `AGENT.md`,
-`Agente.md`. Alisio los resuelve desde la raíz Git (o el directorio de trabajo si no hay Git) hasta la
-ruta sobre la que se opera. Las instrucciones nuevas se presentan al modelo antes de una operación
-que necesite reconsideración, y los alcances se etiquetan por directorio.
-`alisio context explain <path>` muestra el resultado.
+Los archivos de instrucciones (`AGENTS.override.md`, `AGENTS.md`, el heredado `AGENT.md` y,
+opcionalmente, `CLAUDE.md`) se describen en [Contexto: AGENTS.md y skills](/es/context#agents-md).

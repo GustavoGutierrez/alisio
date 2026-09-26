@@ -3,15 +3,18 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  CommandContext,
   CommandOptions,
   CompactionHooks,
   CompletionRequest,
   ExtensionPoints,
   Message,
+  PanelProvider,
   Plugin,
   PluginAPI,
   PluginMetadata,
   RunEvent,
+  SelectRequest,
   SessionInfo,
 } from "@alisio/sdk";
 import { z } from "zod";
@@ -34,7 +37,7 @@ export interface PluginHostOptions {
 }
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 export class PluginHost implements RunnerExtensions {
-  commands = new Map<string, (args: string) => Promise<string>>();
+  commands = new Map<string, (args: string, context?: CommandContext) => Promise<string>>();
   commandInfo = new Map<string, CommandOptions & { plugin: string; builtin: boolean }>();
   /** Ids of active built-in plugins. */
   builtins = new Set<string>();
@@ -55,6 +58,30 @@ export class PluginHost implements RunnerExtensions {
   skillRoots: string[] = [];
   /** Prompt template directories registered by plugins, with their plugin id. */
   promptSources: Array<{ plugin: string; dir: string }> = [];
+  /** Agent definition directories registered by plugins, with their plugin id. */
+  agentSources: Array<{ plugin: string; dir: string }> = [];
+  /** Tree panels contributed by plugins, keyed `plugin:id`. */
+  panels = new Map<string, { plugin: string; provider: PanelProvider }>();
+  private sessionsImpl?: PluginAPI["sessions"];
+  private uiImpl?: {
+    select(request: SelectRequest): Promise<string | undefined>;
+    open(sessionId: string): boolean;
+  };
+  /** Binds the child session service once the runner exists. */
+  setSessions(sessions: PluginAPI["sessions"]) {
+    this.sessionsImpl = sessions;
+  }
+  /** Binds interactive UI services (the TUI); without them select resolves undefined. */
+  setInteractiveUI(ui: {
+    select(request: SelectRequest): Promise<string | undefined>;
+    open(sessionId: string): boolean;
+  }) {
+    this.uiImpl = ui;
+  }
+  get sessions(): PluginAPI["sessions"] {
+    if (!this.sessionsImpl) throw new Error("Child sessions are not available yet");
+    return this.sessionsImpl;
+  }
   get promptRoots(): string[] {
     return this.promptSources.map((s) => s.dir);
   }
@@ -183,6 +210,20 @@ export class PluginHost implements RunnerExtensions {
             this.promptSources = this.promptSources.filter((x) => x !== entry);
           });
         },
+        agents: (path) => {
+          const entry = { plugin: plugin.id, dir: resolve(base, path) };
+          this.agentSources.push(entry);
+          track(() => {
+            this.agentSources = this.agentSources.filter((x) => x !== entry);
+          });
+        },
+        list: (kind) =>
+          (kind === "skills"
+            ? this.skillRoots.map((dir) => ({ plugin: "", dir }))
+            : kind === "prompts"
+              ? this.promptSources
+              : this.agentSources
+          ).map((x) => ({ ...x })),
       },
       state: {
         get: (key) => this.state.getState(plugin.id, key),
@@ -245,7 +286,31 @@ export class PluginHost implements RunnerExtensions {
             }),
           ),
       },
+      sessions: {
+        spawn: (spec) => this.sessions.spawn(spec),
+        run: (id, prompt, options) => this.sessions.run(id, prompt, options),
+        get: (id) => this.sessions.get(id),
+        children: (parentId) => this.sessions.children(parentId),
+        ancestors: (id) => this.sessions.ancestors(id),
+        cancel: (id) => this.sessions.cancel(id),
+        enqueue: (id, text) => this.sessions.enqueue(id, text),
+        isRunning: (id) => this.sessions.isRunning(id),
+        capabilities: (id) => this.sessions.capabilities(id),
+        model: (id) => this.sessions.model(id),
+        workspace: (id) => this.sessions.workspace(id),
+        setStatus: (id, status) => this.sessions.setStatus(id, status),
+      },
       ui: {
+        panel: (id, provider) => {
+          const key = `${plugin.id}:${id}`;
+          this.panels.set(key, { plugin: plugin.id, provider });
+          return track(() => {
+            this.panels.delete(key);
+          });
+        },
+        select: async (request) => (this.uiImpl ? this.uiImpl.select(request) : undefined),
+        open: (sessionId) => this.uiImpl?.open(sessionId) ?? false,
+        interactive: () => !!this.uiImpl,
         status: (key, text, detail) => {
           const id = `${plugin.id}:${key}`;
           if (text === undefined) this.status.delete(id);

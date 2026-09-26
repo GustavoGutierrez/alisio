@@ -1,5 +1,7 @@
+import type { PanelNode } from "@alisio/sdk";
 import {
   type Component,
+  Container,
   Markdown,
   truncateToWidth,
   visibleWidth,
@@ -311,5 +313,110 @@ export class BannerBlock implements Component {
     if (this.cache?.width !== width)
       this.cache = { width, lines: [...this.renderLines(width), ""] };
     return fit(this.cache.lines, width);
+  }
+}
+
+/** Keeps a container of transcript components in step with view-model items. */
+export class TranscriptSync {
+  readonly container = new Container();
+  private rendered: Array<{ item: TranscriptItem; component: Component }> = [];
+  sync(items: TranscriptItem[]): void {
+    if (items.length < this.rendered.length) this.reset();
+    items.forEach((item, index) => {
+      const entry = this.rendered[index];
+      if (!entry) {
+        const component = componentFor(item);
+        this.container.addChild(component);
+        this.rendered.push({ item, component });
+      } else if (entry.item !== item) {
+        if (entry.component instanceof AssistantBlock && item.kind === "assistant")
+          entry.component.update(item);
+        else if (entry.component instanceof ToolBlock && item.kind === "tool")
+          entry.component.item = item;
+        entry.item = item;
+      }
+    });
+  }
+  reset(): void {
+    this.container.clear();
+    this.rendered = [];
+  }
+}
+/** Renders one of several components (main conversation or a read-only child view). */
+export class Switch implements Component {
+  constructor(private pick: () => Component) {}
+  invalidate(): void {
+    this.pick().invalidate();
+  }
+  render(width: number): string[] {
+    return this.pick().render(width);
+  }
+}
+
+const NAMED: Record<string, (t: string) => string> = {
+  red: style.red,
+  green: style.green,
+  yellow: style.yellow,
+  blue: style.blue,
+  magenta: style.magenta,
+  cyan: style.cyan,
+  gray: style.gray,
+};
+const STATUS_ICON: Record<string, [string, (t: string) => string]> = {
+  queued: ["◷", style.gray],
+  completed: ["✓", style.green],
+  failed: ["✗", style.red],
+  cancelled: ["⊘", style.yellow],
+  interrupted: ["⚠", style.yellow],
+};
+export interface TreePanelView {
+  title: string;
+  rows: Array<{ node: PanelNode; depth: number; hasChildren: boolean; collapsed: boolean }>;
+  total: PanelNode[];
+  focused: boolean;
+  selected?: string;
+  confirm?: { id: string; count: number };
+}
+/** Collapsible tree panel under the editor (generic; fed by plugin panel providers). */
+export class TreePanel implements Component {
+  constructor(private view: () => TreePanelView | undefined) {}
+  invalidate(): void {}
+  render(width: number): string[] {
+    const v = this.view();
+    if (!v || !v.total.length) return [];
+    const count = (s: string) => v.total.filter((n) => n.status === s).length;
+    const running = count("running"),
+      queued = count("queued"),
+      done = v.total.filter((n) => !["running", "queued"].includes(n.status)).length;
+    const expanded = v.focused || running + queued > 0;
+    const head = `${expanded ? "▾" : "▸"} ${style.bold(v.title)} ${v.total.length} ${style.gray("·")} ${style.cyan(`▶ ${running} running`)} ${style.gray("·")} ${style.gray(`◷ ${queued} queued`)} ${style.gray("·")} ${style.green(`✓ ${done} finished`)}${v.focused ? "" : style.dim("  (Ctrl+X to navigate)")}`;
+    const lines = [head];
+    if (expanded) {
+      const selectedIndex = Math.max(
+        0,
+        v.rows.findIndex((r) => r.node.id === v.selected),
+      );
+      const max = 8;
+      const start = Math.max(0, Math.min(selectedIndex - Math.floor(max / 2), v.rows.length - max));
+      for (const row of v.rows.slice(start, start + max)) {
+        const n = row.node;
+        const [icon, paint] =
+          n.status === "running"
+            ? [SPINNER[clock.frame % SPINNER.length] ?? "…", style.cyan]
+            : (STATUS_ICON[n.status] ?? ["•", style.gray]);
+        const elapsed = n.startedAt ? formatDuration((n.endedAt ?? clock.now) - n.startedAt) : "";
+        const name = (NAMED[n.color ?? ""] ?? style.bold)(n.label);
+        const branch = row.hasChildren ? (row.collapsed ? "▸ " : "▾ ") : "  ";
+        let line = `${"  ".repeat(row.depth + 1)}${branch}${paint(icon)} ${name} ${style.gray([elapsed, n.tokens ? `${formatTokens(n.tokens)} tok` : ""].filter(Boolean).join(" · "))} ${style.dim(n.detail ?? "")}`;
+        line = truncateToWidth(line, width);
+        if (v.focused && n.id === v.selected) line = `\x1b[7m${line}\x1b[27m`;
+        lines.push(line);
+      }
+      if (v.rows.length > max)
+        lines.push(style.gray(`    … ${v.rows.length - max} more (↑↓ to scroll)`));
+      if (v.confirm)
+        lines.push(style.yellow(`  Cancel this agent and ${v.confirm.count} descendant(s)? y/n`));
+    }
+    return fit(lines, width);
   }
 }

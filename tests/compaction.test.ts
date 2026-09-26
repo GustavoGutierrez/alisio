@@ -172,3 +172,13 @@ describe("structured checkpoint", () => {
     expect(checkpointInstructions()).not.toMatch(/observations|memory/i);
   });
 });
+
+describe("proportional token budget", () => {
+  it("scales with the context window, clamped, with a fallback when unknown", async () => {
+    const { defaultTokenBudget } = await import("../packages/core/src/core/runner.ts");
+    expect(defaultTokenBudget(undefined)).toBe(1_000_000);
+    expect(defaultTokenBudget(32_000)).toBe(400_000);
+    expect(defaultTokenBudget(128_000)).toBe(1_024_000);
+    expect(defaultTokenBudget(1_048_576)).toBe(8_000_000);
+  });
+});

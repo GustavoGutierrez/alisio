@@ -67,8 +67,8 @@ export function registerStandard(
       ["path"],
     ),
     paths: filePaths,
-    async execute(i) {
-      const path = await safePath(workspace, String(i.path));
+    async execute(i, c) {
+      const path = await safePath(c.workspace, String(i.path));
       const size = await fileSize(path);
       if (size === undefined) throw new Error(`File not found: ${String(i.path)}`);
       const raw = await readHead(path, 1_048_576);
@@ -102,10 +102,10 @@ export function registerStandard(
       ["path", "content", "expectedHash"],
     ),
     paths: filePaths,
-    async execute(i) {
+    async execute(i, c) {
       const content = String(i.content);
       if (Buffer.byteLength(content) > 1_048_576) throw new Error("Write exceeds 1 MiB");
-      await atomicWrite(workspace, String(i.path), content, i.expectedHash as string | null);
+      await atomicWrite(c.workspace, String(i.path), content, i.expectedHash as string | null);
       return textResult(JSON.stringify({ path: i.path, sha256: hash(content) }));
     },
   });
@@ -119,8 +119,8 @@ export function registerStandard(
       ["path", "oldText", "newText", "expectedHash"],
     ),
     paths: filePaths,
-    async execute(i) {
-      const path = await safePath(workspace, String(i.path)),
+    async execute(i, c) {
+      const path = await safePath(c.workspace, String(i.path)),
         before = await existing(path);
       if (before === undefined) throw new Error("File not found");
       const needle = String(i.oldText),
@@ -129,7 +129,7 @@ export function registerStandard(
         throw new Error("Edit must match exactly one occurrence");
       const after =
         before.slice(0, index) + String(i.newText) + before.slice(index + needle.length);
-      await atomicWrite(workspace, path, after, String(i.expectedHash));
+      await atomicWrite(c.workspace, path, after, String(i.expectedHash));
       return textResult(JSON.stringify({ path: i.path, sha256: hash(after) }));
     },
   });
@@ -144,18 +144,18 @@ export function registerStandard(
     }),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(workspace, String(i.path ?? "."));
+      const path = await safePath(c.workspace, String(i.path ?? "."));
       const result = await runProcess(
         "rg",
         ["--files", "--glob", "!.git", "--glob", "!node_modules", "--", path],
-        { cwd: workspace, signal: c.signal, maxBytes: 200_000 },
+        { cwd: c.workspace, signal: c.signal, maxBytes: 200_000 },
       );
       if (result.exitCode > 1 && !result.truncated) throw new Error(result.stderr);
       const all = result.stdout
           .trim()
           .split("\n")
           .filter(Boolean)
-          .map((p) => relative(workspace, p))
+          .map((p) => relative(c.workspace, p))
           .sort(),
         offset = Number(i.offset ?? 0),
         limit = Number(i.limit ?? 100);
@@ -178,7 +178,7 @@ export function registerStandard(
     ]),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(workspace, String(i.path ?? "."));
+      const path = await safePath(c.workspace, String(i.path ?? "."));
       const r = await runProcess(
         "rg",
         [
@@ -194,7 +194,7 @@ export function registerStandard(
           String(i.pattern),
           path,
         ],
-        { cwd: workspace, signal: c.signal },
+        { cwd: c.workspace, signal: c.signal },
       );
       if (r.exitCode > 1 && !r.truncated) throw new Error(r.stderr);
       return textResult(JSON.stringify(r));
@@ -217,7 +217,7 @@ export function registerStandard(
       return textResult(
         JSON.stringify(
           await runProcess(String(i.command), i.args as string[], {
-            cwd: workspace,
+            cwd: c.workspace,
             signal: c.signal,
             timeoutMs: Number(i.timeoutMs ?? 30000),
             onData: c.emit,
@@ -240,7 +240,7 @@ export function registerStandard(
             process.platform === "win32"
               ? ["/d", "/s", "/c", String(i.command)]
               : ["-c", String(i.command)],
-            { cwd: workspace, signal: c.signal, onData: c.emit },
+            { cwd: c.workspace, signal: c.signal, onData: c.emit },
           ),
         ),
       );
@@ -257,7 +257,7 @@ export function registerStandard(
       inputSchema: objectSchema({}),
       async execute(_i, c) {
         const r = await runProcess("git", ["--no-pager", ...args], {
-          cwd: workspace,
+          cwd: c.workspace,
           signal: c.signal,
         });
         if (r.exitCode !== 0) throw new Error(r.stderr);

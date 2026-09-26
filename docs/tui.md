@@ -76,6 +76,7 @@ Typing `/` opens autocompletion.
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
 | `/memory …` | Command of the built-in memory plugin; see [Persistent memory](/memory) |
+| `/agents …` | Command of the built-in subagents plugin: list, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; see [Subagents](/subagents#in-the-tui) |
 
 `/init` is a prompt template, not the `alisio init` command: `alisio init` only writes an example
 `.alisio/config.json`. Other [prompt templates](/prompt-templates) appear in their own section of
@@ -100,6 +101,34 @@ In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name requ
 | Ctrl+C | Clear the input; interrupt an active turn; pressed twice on an empty input, exit |
 | Ctrl+D | Exit when the input is empty |
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
+| Ctrl+X | Focus the [agent panel](#agent-panel) |
+| Ctrl+B | Move running foreground agents to the background (during a turn) |
+| Ctrl+K | Cancel the selected or viewed agent |
+
+## Agent panel {#agent-panel}
+
+When [subagents](/subagents) run, a collapsible tree panel appears under the editor. Its header shows
+how many agents are running, queued and finished; each row shows a status icon, the agent name and
+color, the elapsed time, tokens and a one-line live summary. Indentation shows parent → child.
+
+| Focus | Key | Action |
+| --- | --- | --- |
+| Editor | Ctrl+X, or ↓ on an empty editor when agents exist | Focus the panel |
+| Editor | Ctrl+X then ↓ within 800 ms | Open the first agent directly |
+| Panel | ↑ / ↓ | Move the selection |
+| Panel | → | Expand, or enter the children |
+| Panel | ← | Collapse, or go to the parent |
+| Panel | Enter | Open the agent's conversation in a read-only view |
+| Panel | Esc, Tab | Back to the editor |
+| Child view | ↑ | Parent agent (from a top-level agent, back to the root conversation) |
+| Child view | ↓ | First child |
+| Child view | ← / → | Previous / next sibling |
+| Child view | Esc | Back to the root conversation |
+| Panel or child view | Ctrl+K | Cancel the selected or viewed agent (asks y/n when it has descendants) |
+| Any | Ctrl+B | Move running foreground agents to the background |
+
+In a child view the footer shows the agent path, its index and the total, context percentage, tokens
+and key hints. Typing while the panel is focused returns focus to the editor.
 
 ## Copy on select
 

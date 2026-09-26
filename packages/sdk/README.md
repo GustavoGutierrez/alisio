@@ -60,6 +60,17 @@ Review $1 carefully. Extra focus: $ARGUMENTS
 Precedence: built-in < plugin < user (`~/.config/alisio/prompts`) < trusted project
 (`.alisio/prompts`).
 
+## Child sessions, panels and choices
+
+Generic building blocks used by the built-in subagents plugin and available to any plugin:
+
+- `api.sessions.spawn/run/cancel/enqueue/...`: child sessions with a parent link, fresh context
+  and narrowed permissions (a child never exceeds its parent); aborting a parent aborts them.
+- `api.ui.panel(id, { title, nodes, action })`: a collapsible tree under the TUI editor.
+- `api.ui.select({ title, options })`: ask the user (resolves `undefined` headless).
+- `api.ui.open(sessionId)`, `api.resources.agents(dir)`, `api.resources.list(kind)`.
+- `ToolDefinition.concurrent`: run alongside other read/concurrent calls of the same turn.
+
 The API covers tools, commands, events, context providers, compaction hooks, session start/end
 hooks, provider-agnostic `model.complete`, a SQLite storage port and UI status. Publish plugins as
 JavaScript with the `alisio-plugin` keyword and `@alisio/sdk` as a peer dependency. Guide:

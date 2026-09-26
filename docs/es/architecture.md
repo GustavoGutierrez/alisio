@@ -1,38 +1,40 @@
 # Arquitectura
 
-Alisio es un monorepo pnpm con cuatro paquetes.
+Alisio es un monorepo pnpm con cinco paquetes.
 
 ```text
-                      ┌──────────────────────────────┐
-                      │ @alisio/sdk                  │
-                      │ plugin contract, zero deps   │
-                      └──────────────▲───────────────┘
-                 depends on          │           peer dependency
-        ┌────────────────────────────┼────────────────────────────┐
-        │                            │                            │
-┌───────┴──────────────────────┐     │     ┌──────────────────────┴───────┐
-│ @alisio/core                 │     │     │ @alisio/plugin-memory        │
-│ runner, compaction, provider,│     │     │ @alisio/sdk (peer) + zod     │
-│ tools, runtime adapters      │     │     │ uses the storage port        │
-│ (node:sqlite, fs,            │     │     └──────────────▲───────────────┘
-│ child_process), plugin host, │     │                    │
-│ config, createApplication    │     │                    │
-└───────▲──────────────────────┘     │                    │
-        │                            │                    │
-        │             ┌──────────────┴───────────────┐    │
-        └─────────────┤ alisio (CLI)                 ├────┘
-                      │ bin, TUI, clipboard,         │
-                      │ built-in registry wiring     │
-                      │ plugin-memory                │
-                      └──────────────────────────────┘
+                         ┌──────────────────────────────┐
+                         │ @alisio/sdk                  │
+                         │ plugin contract, zero deps   │
+                         └──────────────▲───────────────┘
+            depends on                  │                peer dependency
+   ┌────────────────────────────────────┼─────────────────────┬──────────────────────┐
+   │                                    │                     │                      │
+┌──┴───────────────────────────┐        │      ┌──────────────┴───────────┐ ┌────────┴─────────────────┐
+│ @alisio/core                 │        │      │ @alisio/plugin-memory    │ │ @alisio/plugin-subagents │
+│ runner, compaction, provider,│        │      │ sdk (peer) + zod         │ │ sdk (peer) + yaml + zod  │
+│ tools, runtime adapters      │        │      │ uses the storage port    │ │ uses api.sessions        │
+│ (node:sqlite, fs,            │        │      └──────────────▲───────────┘ └────────▲─────────────────┘
+│ child_process), plugin host, │        │                     │                      │
+│ child sessions, config,      │        │                     │                      │
+│ createApplication            │        │                     │                      │
+└──▲───────────────────────────┘        │                     │                      │
+   │                     ┌──────────────┴───────────────┐     │                      │
+   └─────────────────────┤ alisio (CLI)                 ├─────┴──────────────────────┘
+                         │ bin, TUI, clipboard,         │
+                         │ built-in registry wiring     │
+                         │ plugin-memory and            │
+                         │ plugin-subagents             │
+                         └──────────────────────────────┘
 ```
 
 | Paquete | Función | Depende de |
 | --- | --- | --- |
 | `@alisio/sdk` | Contrato público de plugins: tipos más `definePlugin` y `textResult`. Sin imports de runtime ni de proveedores | Nada |
-| `@alisio/core` | Runner del agente y ciclo de herramientas, compactación, proveedor compatible con OpenAI, herramientas estándar, adaptadores de runtime (`node:sqlite`, `fs`, `child_process`), host de plugins, registro de extensiones, renderizado de inicio, configuración, cliente MCP, puente Herdr y `createApplication` | `@alisio/sdk`, `openai`, cliente MCP, `ajv`, `yaml`, `zod` |
+| `@alisio/core` | Runner del agente y ciclo de herramientas, compactación, proveedor compatible con OpenAI, herramientas estándar, adaptadores de runtime (`node:sqlite`, `fs`, `child_process`), host de plugins, servicio de sesiones hijas, registro de extensiones, renderizado de inicio, configuración, cliente MCP, puente Herdr y `createApplication` | `@alisio/sdk`, `openai`, cliente MCP, `ajv`, `yaml`, `zod` |
 | `@alisio/plugin-memory` | Plugin integrado de memoria persistente | `@alisio/sdk` (peer), `zod` |
-| `alisio` | CLI: `bin`, TUI, adaptador de portapapeles y el registro de plugins integrados que conecta `plugin-memory` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+| `@alisio/plugin-subagents` | Plugin integrado de [subagentes](/es/subagents): definiciones de agentes, herramientas de delegación, límites, worktrees de git y el árbol de agentes | `@alisio/sdk` (peer), `yaml`, `zod` |
+| `alisio` | CLI: `bin`, TUI, adaptador de portapapeles y el registro de plugins integrados que conecta `plugin-memory` y `plugin-subagents` | `@alisio/core`, `@alisio/plugin-memory`, `@alisio/plugin-subagents`, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
 
 Los SDKs de proveedores y los imports específicos de un runtime quedan fuera del SDK público y de los
 contratos del núcleo del agente.
@@ -56,6 +58,18 @@ puerto, y por eso solo depende del SDK y de `zod`.
 
 El núcleo no contiene referencias a la memoria: la CLI pasa su registro a `createApplication`. Añadir
 otro plugin integrado consiste en agregar una entrada a ese registro.
+
+## Sesiones hijas
+
+`@alisio/core` proporciona un servicio genérico de sesiones hijas (`packages/core/src/sessions/children.ts`),
+expuesto a los plugins como `api.sessions`. Una sesión hija es una conversación persistida con un
+vínculo a su padre que se ejecuta con el mismo runner y permisos reducidos: las herramientas, las
+capacidades y las aprobaciones se intersecan con las del padre, un padre de solo lectura hace que todo
+el subárbol sea de solo lectura, y abortar un padre aborta sus descendientes en ejecución. Al arrancar,
+los hijos que quedaron en ejecución o en cola se marcan como `interrupted`. El servicio no contiene
+lógica de agentes: las definiciones, los límites, las colas, los worktrees de git y el árbol de agentes
+están en `@alisio/plugin-subagents`, y la TUI solo renderiza paneles genéricos (`api.ui.panel`) y vistas
+de sesión de solo lectura. Consulte [Sesiones hijas](/es/plugins#child-sessions).
 
 ## Registro de extensiones
 

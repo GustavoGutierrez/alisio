@@ -2,6 +2,14 @@
 import { Command } from "commander";
 
 const VERSION = "0.1.0-alpha.1";
+function parseAgents(json: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(json);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(
+      '--agents expects a JSON object: {"name":{"description":"...","prompt":"..."}}',
+    );
+  return value as Record<string, unknown>;
+}
 /** Built-in plugins and prompt templates, and the slash names templates may not take. */
 async function cliDefaults() {
   const [{ BUILTIN_PLUGINS }, { BUILTIN_PROMPTS }, { reservedCommandNames }] = await Promise.all([
@@ -38,6 +46,10 @@ program
   .option("--no-tui", "Use the plain readline interactive mode instead of the TUI")
   .option("--disable-plugin <ids...>", "Disable built-in plugins (for example: memory)")
   .option("--no-banner", "Do not show the startup screen")
+  .option(
+    "--agents <json>",
+    'Extra subagent definitions as JSON: {"name":{"description":"...","prompt":"..."}}',
+  )
   .option("--quiet", "Suppress non-essential output (startup screen, hints)");
 const options = (cmd: Command) => {
   const o = cmd.optsWithGlobals();
@@ -46,6 +58,9 @@ const options = (cmd: Command) => {
     baseURL: o.baseUrl,
     noHerdr: o.herdr === false,
     disablePlugins: o.disablePlugin,
+    ...(o.agents
+      ? { pluginOptions: { subagents: { agents: parseAgents(String(o.agents)) } } }
+      : {}),
   } as import("@alisio/core").AppOptions & { json?: boolean; quiet?: boolean; banner?: boolean };
 };
 async function run(cmd: Command, prompt?: string, sessionId?: string) {
@@ -289,23 +304,23 @@ for (const name of ["list", "validate"]) {
     .command(name)
     .argument("[path]")
     .action(async (path, _opts, cmd) => {
-      const { Skills } = await import("@alisio/core");
-      const { loadConfig } = await import("@alisio/core");
-      const { resolve, join, dirname } = await import("node:path");
+      const { Skills, configHome, findWorkspace, loadConfig, skillRoots } = await import(
+        "@alisio/core"
+      );
+      const { resolve } = await import("node:path");
       const { homedir } = await import("node:os");
-      const { findWorkspace } = await import("@alisio/core");
       const o = options(cmd),
         cwd = resolve(o.cwd ?? process.cwd()),
         root = await findWorkspace(cwd);
       const config = await loadConfig(root, { file: o.config, trustProject: o.trustProject });
-      const roots = [...config.skills];
-      let scope = cwd;
-      while (true) {
-        roots.push(join(scope, ".agents", "skills"));
-        if (scope === root) break;
-        scope = dirname(scope);
-      }
-      roots.push(join(homedir(), ".agents", "skills"));
+      const roots = skillRoots({
+        workspace: root,
+        cwd,
+        home: homedir(),
+        configHome: configHome(),
+        trusted: !!o.trustProject || !!o.config,
+        configSkills: config.skills,
+      });
       const catalog = new Skills();
       await catalog.discover(path ? [resolve(cwd, path)] : roots);
       console.log(

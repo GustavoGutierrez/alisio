@@ -54,7 +54,7 @@ Provider precedence: selected file → environment variables → CLI flags.
 | `timeoutMs` | `300000` | Run timeout in milliseconds (minimum 100); includes approval waits |
 | `maxContextChars` | `160000` | Context length limit in characters; also triggers compaction |
 | `maxOutputTokens` | `4096` | Output tokens per request |
-| `maxTokens` | `100000` | Budget of reported tokens per run |
+| `maxTokens` | proportional | Optional cumulative budget of reported tokens per run. Default: 8 × the model's context window, clamped to 400000–8000000; 1000000 when the window is unknown |
 
 ## `compaction`
 
@@ -66,10 +66,24 @@ Provider precedence: selected file → environment variables → CLI flags.
 
 See [Context compaction](/compaction).
 
+## `context`
+
+```json
+{ "context": { "claudeMdFallback": false, "maxBytes": 32768 } }
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `claudeMdFallback` | `false` | Use `CLAUDE.md` in directories without an `AGENTS` file |
+| `maxBytes` | `32768` | Total bytes of `AGENTS.md` content injected (1024–1048576); the closest files are kept |
+
+See [Context: AGENTS.md and skills](/context).
+
 ## `builtinPlugins`
 
 Options for built-in plugins, keyed by plugin ID. Every entry accepts `enabled`; each plugin
-validates the rest of its section. The only built-in plugin today is `memory`:
+validates the rest of its section. The built-in plugins are `memory` and `subagents`; the
+`subagents` options are listed in [Subagents](/subagents#limits). `memory` options:
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -106,11 +120,8 @@ Extra Agent Skills roots, resolved relative to the configuration file.
 { "skills": ["./skills"] }
 ```
 
-Skills are also discovered in `.agents/skills/<name>/SKILL.md` (from the working directory up to the
-workspace root), `~/.agents/skills/` and plugin resources. Only the name and description are included
-initially; the body is loaded with the `skill_load` tool or `/skill:name`, and supporting files with
-`skill_resource`. YAML, name, description and the name/directory match are validated
-(`alisio skills validate`). `.pi/skills` is not imported automatically.
+Project roots (`.agents/skills`, `.alisio/skills`, `.claude/skills`, trusted projects only), user
+roots and plugin skills are also searched. See [Context: AGENTS.md and skills](/context#skills).
 
 ## Prompt templates
 
@@ -192,7 +203,8 @@ Global flags (valid for every command):
 | `--db <path>` | Session database |
 | `--json` | Emit versioned JSONL events |
 | `--no-tui` | Use the plain readline interactive mode instead of the TUI |
-| `--disable-plugin <ids...>` | Disable built-in plugins (for example `memory`) |
+| `--disable-plugin <ids...>` | Disable built-in plugins (`memory`, `subagents`) |
+| `--agents <json>` | Extra subagent definitions as JSON: `{"name":{"description":"...","prompt":"..."}}` |
 | `--no-banner` | Do not show the startup screen |
 | `--quiet` | Suppress non-essential output (startup screen, hints) |
 | `-V`, `--version` | Print the version |
@@ -219,7 +231,5 @@ Commands:
 
 ## `AGENTS.md`
 
-In each directory the first available file is used, in this order: `AGENTS.md`, `AGENT.md`,
-`Agente.md`. Alisio resolves them from the Git root (or the working directory without Git) down to the
-path being operated on. New instructions are presented to the model before an operation that needs
-reconsideration, and scopes are labeled by directory. `alisio context explain <path>` shows the result.
+Instruction files (`AGENTS.override.md`, `AGENTS.md`, legacy `AGENT.md` and optionally
+`CLAUDE.md`) are described in [Context: AGENTS.md and skills](/context#agents-md).

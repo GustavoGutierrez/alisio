@@ -48,6 +48,20 @@ export const configSchema = z
       })
       .strict()
       .default(() => ({ timeoutMs: 15_000, sessionEndTimeoutMs: 10_000 })),
+    context: z
+      .object({
+        /** Use CLAUDE.md where a directory has no AGENTS.md (off by default). */
+        claudeMdFallback: z.boolean().default(false),
+        /** Total bytes of AGENTS.md content injected (closest files kept). */
+        maxBytes: z
+          .number()
+          .int()
+          .min(1024)
+          .max(1_048_576)
+          .default(32 * 1024),
+      })
+      .strict()
+      .default(() => ({ claudeMdFallback: false, maxBytes: 32 * 1024 })),
     compaction: z
       .object({
         auto: z.boolean().default(true),
@@ -62,14 +76,14 @@ export const configSchema = z
         timeoutMs: z.number().int().min(100).default(300000),
         maxContextChars: z.number().int().positive().default(160000),
         maxOutputTokens: z.number().int().positive().default(4096),
-        maxTokens: z.number().int().positive().default(100000),
+        /** Cumulative tokens per run; default is proportional to the context window. */
+        maxTokens: z.number().int().positive().optional(),
       })
       .default(() => ({
         maxTurns: 20,
         timeoutMs: 300000,
         maxContextChars: 160000,
         maxOutputTokens: 4096,
-        maxTokens: 100000,
       })),
   })
   .strict();
