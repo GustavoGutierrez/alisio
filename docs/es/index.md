@@ -5,6 +5,9 @@ hero:
   name: Alisio
   text: Velocidad y eficiencia para construir
   tagline: Un arnés de agentes de programación extensible y agnóstico del proveedor para su terminal.
+  image:
+    src: /assets/logo.png
+    alt: Mascota de Alisio
   actions:
     - theme: brand
       text: Inicio rápido
@@ -32,6 +35,8 @@ features:
 ---
 
 ## ¿Qué es Alisio?
+
+![Banner de Alisio](</assets/banner.png>)
 
 Alisio es un arnés de agentes de programación con núcleo propio en TypeScript. Se conecta a cualquier
 endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en su terminal,
