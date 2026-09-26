@@ -104,6 +104,8 @@ In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name requ
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |
 | Ctrl+K | Cancel the selected or viewed agent |
+| Ctrl+V | Attach a clipboard image (see [Paste](#paste-text-and-images)) |
+| Ctrl+R | Remove the most recently attached image |
 
 ## Agent panel {#agent-panel}
 
@@ -145,6 +147,59 @@ If none works, Alisio sends an OSC 52 escape sequence and reports it as **unveri
 terminal cannot confirm it. `/copy` copies the last assistant response the same way.
 
 While mouse capture is active, native terminal selection usually requires **Shift+drag**.
+
+## Paste: text and images {#paste-text-and-images}
+
+**Text.** Pasting, including multi-line text, inserts as a single atomic edit at the cursor: it
+never fragments into keystrokes, never submits early on an embedded newline, and undoes in one
+step. Long pastes (over 10 lines or 1000 characters) collapse into a marker like
+`[paste #1 +42 lines]` that expands back to the full text when the message is sent. This comes
+from the editor component itself (bracketed paste), not from Alisio-specific code.
+
+**Images.** `Ctrl+V` attaches whatever image is on the system clipboard to the message you are
+composing:
+
+| Key | Action |
+| --- | --- |
+| Ctrl+V | Attach the clipboard image (PNG, JPEG, GIF or WebP) |
+| Ctrl+R | Remove the most recently attached image |
+
+Attached images appear above the editor: as an inline thumbnail on terminals that support the
+Kitty or iTerm2 graphics protocol, otherwise as a compact line such as
+`[1] image/png 1024x768, 42.0 KB`. Up to **4 attachments** per message, **5 MB** raw bytes per
+image; going over either limit shows an inline message and rejects only the offending image — it
+never crashes the TUI. Attachments ride along with the very next message you send (any command
+that reaches the model, including a rendered prompt template) and are cleared afterward.
+
+Sent attachments become standard OpenAI-compatible vision content parts (`image_url` in chat mode,
+`input_image` in Responses mode) alongside your text, using the provider already configured —
+there is no separate vision setting. Alisio does not check whether a model supports images before
+sending; if it does not, the provider's own rejection appears as a normal inline error, the same
+as any other request failure. Attachments are persisted with the message, so `/resume` and
+compaction both see them; a summarized (discarded) image is described to the checkpoint model by
+its type and dimensions only — its bytes are never sent again and never appear in the checkpoint
+text.
+
+Image clipboard access depends on a native platform helper and is not guaranteed everywhere:
+
+| Platform | Native image clipboard | Typical gaps |
+| --- | --- | --- |
+| Linux (X11) | Yes, via a bundled helper | Falls back to `wl-paste` on Wayland; unavailable over plain SSH without X11 forwarding or a running Wayland/X11 session |
+| Linux (Wayland) | Via `wl-paste` | Same SSH/remote-session limitation |
+| macOS | Yes, via a bundled helper | Not verified over SSH by this project |
+| Windows | Yes, via a bundled helper | Not verified over SSH by this project |
+
+When no helper is available, `Ctrl+V` does nothing harmful: it reports that image clipboard access
+is not available and leaves the input untouched. This is common in remote/headless sessions, since
+image clipboard access needs a local display server or native platform APIs that a bare SSH session
+does not provide.
+
+**`--no-tui` (readline) mode.** Images are not supported there at all: no rendering and no
+clipboard wiring. Single-line text paste works exactly like typing. Multi-line paste does **not**
+paste atomically: Node's plain `readline` interface has no bracketed-paste support, so each
+embedded newline is treated as its own Enter, submitting one message per line instead of one
+combined message. Use the full TUI (the default on an interactive terminal) for multi-line or
+image paste.
 
 ## Interactive approvals
 

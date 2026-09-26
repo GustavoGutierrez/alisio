@@ -1,8 +1,20 @@
-import type { ModelInfo, ModelProvider, ProviderEvent, ToolCall, Usage } from "@alisio/sdk";
+import type {
+  Attachment,
+  ModelInfo,
+  ModelProvider,
+  ProviderEvent,
+  ToolCall,
+  Usage,
+} from "@alisio/sdk";
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { ResponseInputItem } from "openai/resources/responses/responses";
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionMessageParam,
+} from "openai/resources/chat/completions";
+import type { ResponseInputContent, ResponseInputItem } from "openai/resources/responses/responses";
 import type { Config } from "../config.ts";
+
+const dataUrl = (a: Attachment) => `data:${a.mimeType};base64,${a.data}`;
 export class OpenAICompatibleProvider implements ModelProvider {
   readonly id: string;
   readonly model: string;
@@ -49,8 +61,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
       { role: "system", content: request.instructions },
     ];
     for (const m of request.messages) {
-      if (m.role === "user") messages.push({ role: "user", content: m.text });
-      else if (m.role === "tool")
+      if (m.role === "user") {
+        if (m.attachments?.length) {
+          const parts: ChatCompletionContentPart[] = [];
+          if (m.text.trim()) parts.push({ type: "text", text: m.text });
+          for (const a of m.attachments)
+            parts.push({ type: "image_url", image_url: { url: dataUrl(a) } });
+          messages.push({ role: "user", content: parts });
+        } else messages.push({ role: "user", content: m.text });
+      } else if (m.role === "tool")
         messages.push({ role: "tool", tool_call_id: m.callId, content: JSON.stringify(m.result) });
       else
         messages.push({
@@ -135,8 +154,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
   ): AsyncIterable<ProviderEvent> {
     const input: ResponseInputItem[] = [];
     for (const m of request.messages) {
-      if (m.role === "user") input.push({ role: "user", content: m.text });
-      else if (m.role === "tool")
+      if (m.role === "user") {
+        if (m.attachments?.length) {
+          const content: ResponseInputContent[] = [];
+          if (m.text.trim()) content.push({ type: "input_text", text: m.text });
+          for (const a of m.attachments)
+            content.push({ type: "input_image", image_url: dataUrl(a), detail: "auto" });
+          input.push({ role: "user", content });
+        } else input.push({ role: "user", content: m.text });
+      } else if (m.role === "tool")
         input.push({
           type: "function_call_output",
           call_id: m.callId,

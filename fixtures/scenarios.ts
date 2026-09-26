@@ -2017,6 +2017,76 @@ const fixtures: Record<string, () => Promise<void>> = {
       fixed.store.close();
     }
   },
+  async attachments() {
+    const path = join(root, "attachments.sqlite");
+    let store = new SQLiteStore(path);
+    const oldImage = {
+      kind: "image" as const,
+      mimeType: "image/png",
+      data: "b2xkLXNlY3JldC1ieXRlcw==",
+      bytes: 4000,
+      width: 100,
+      height: 50,
+    };
+    const keptImage = {
+      kind: "image" as const,
+      mimeType: "image/jpeg",
+      data: "a2VwdC1zZWNyZXQtYnl0ZXM=",
+      bytes: 8192,
+      width: 640,
+      height: 480,
+    };
+    let summaryRequestText = "";
+    const provider: ModelProvider = {
+      id: "test",
+      model: "test",
+      async *stream(request) {
+        summaryRequestText = JSON.stringify(request.messages);
+        yield {
+          type: "completed",
+          message: { role: "assistant", text: "SUMMARY of earlier work", calls: [] },
+        };
+      },
+    };
+    try {
+      const s = store.create(root, "test", "test");
+      store.append(s.id, { role: "user", text: "look at this old one", attachments: [oldImage] });
+      store.append(s.id, { role: "assistant", text: "an old reply", calls: [] });
+      store.append(s.id, { role: "user", text: "look at this kept one", attachments: [keptImage] });
+      const runner = new AgentRunner({
+        provider,
+        registry: new ToolRegistry(),
+        store,
+        context: new ProjectContext(root),
+        workspace: root,
+        policy: { write: false, process: false, external: false },
+        compaction: { keepTurns: 1 },
+      });
+      const result = await runner.compact(s.id);
+      assert.ok(result);
+      // The summarized (discarded) image is described by mime/dimensions only, in the model's
+      // own request; its raw base64 never reaches the summarizer or the checkpoint text.
+      assert.match(summaryRequestText, /ATTACHMENT: image\/png 100x50, 4000 bytes/);
+      assert.doesNotMatch(summaryRequestText, new RegExp(oldImage.data));
+      // The checkpoint itself (whatever the model wrote) still never carries raw bytes forward.
+      assert.doesNotMatch(result.summary.text, new RegExp(oldImage.data));
+      // The kept (recent) message's attachment is untouched: full bytes, still a real turn.
+      const kept = store.messages(s.id);
+      assert.deepEqual(kept, [
+        { role: "user", text: result.summary.text, summary: true },
+        { role: "user", text: "look at this kept one", attachments: [keptImage] },
+      ]);
+      // Resume: closing and reopening the store round-trips the attachment exactly.
+      store.close();
+      store = new SQLiteStore(path);
+      const resumed = store.messages(s.id);
+      const resumedUser = resumed[1];
+      assert.ok(resumedUser?.role === "user");
+      assert.deepEqual(resumedUser?.attachments, [keptImage]);
+    } finally {
+      store.close();
+    }
+  },
 };
 export const scenarioNames = Object.keys(fixtures);
 /** Runs one scenario with a fresh temporary root (in-process under Node or Bun). */

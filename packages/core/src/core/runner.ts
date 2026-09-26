@@ -1,4 +1,5 @@
 import {
+  type Attachment,
   type Message,
   type ModelProvider,
   type RunEvent,
@@ -59,6 +60,8 @@ export interface RunnerOptions {
 export interface RunOptions {
   /** What UIs show instead of the prompt (e.g. `/init`). */
   display?: string;
+  /** Images attached to this turn's user message, sent as vision content parts. */
+  attachments?: Attachment[];
   /** Extra system instructions for this run (e.g. an agent persona). */
   instructions?: string;
   toolFilter?: (tool: ToolDefinition) => boolean;
@@ -401,6 +404,7 @@ export class AgentRunner {
         role: "user",
         text: prompt,
         ...(options.display ? { display: options.display } : {}),
+        ...(options.attachments?.length ? { attachments: options.attachments } : {}),
       });
       emit("run_started", { model });
       const budget =

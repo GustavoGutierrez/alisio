@@ -79,9 +79,14 @@ const clip = (text: string, max: number) =>
 export function serializeForSummary(messages: Message[], maxItemChars = 4_000): string {
   const lines: string[] = [];
   for (const m of messages) {
-    if (m.role === "user")
+    if (m.role === "user") {
       lines.push(`${m.summary ? "PREVIOUS SUMMARY" : "USER"}: ${clip(m.text, maxItemChars)}`);
-    else if (m.role === "assistant") {
+      // Attachments never reach the summarizer as bytes: only mime type and dimensions, as text.
+      for (const a of m.attachments ?? [])
+        lines.push(
+          `ATTACHMENT: ${a.mimeType}${a.width && a.height ? ` ${a.width}x${a.height}` : ""}, ${a.bytes} bytes`,
+        );
+    } else if (m.role === "assistant") {
       if (m.text) lines.push(`ASSISTANT: ${clip(m.text, maxItemChars)}`);
       for (const c of m.calls)
         lines.push(`TOOL CALL ${c.id} ${c.name}: ${clip(c.arguments, maxItemChars)}`);

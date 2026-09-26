@@ -105,6 +105,21 @@ funcional, no solo interfaces o stubs.
 - TUI: copiar al seleccionar (ratón capturado) con adaptador de portapapeles aislado y
   respaldo OSC 52 declarado como no verificable; `/copy`; comandos de plugins enrutados
   genéricamente; estado de plugins en la barra y en `/stats`.
+- Pegado de texto e imágenes en la TUI: el pegado de texto (incluido multilínea) ya llega como
+  una única edición atómica gracias al propio componente del editor (pegado con corchetes), sin
+  fragmentarse ni enviar antes de tiempo; los pegados largos colapsan en un marcador
+  `[paste #N ...]`. `Ctrl+V` adjunta la imagen del portapapeles del sistema (PNG/JPEG/GIF/WebP,
+  detección por cabecera; sin reimplementar el sniffing ni las secuencias Kitty/iTerm2, se
+  reutilizan las de pi-tui) y `Ctrl+R` quita la última adjuntada; se muestran sobre el editor
+  como miniatura en línea cuando la terminal es capaz, o como una línea compacta
+  (`[N] image/png WxH, X.X KB`) en caso contrario. Límite de 5 MB por imagen y 4 adjuntos por
+  mensaje, aplicado en la TUI (no en `@alisio/core`). Se envían como partes de contenido de
+  visión compatibles con OpenAI (`image_url` en chat, `input_image` en Responses) junto al SDK
+  `openai`; no hay comprobación previa de si el modelo admite visión — se intenta siempre y un
+  rechazo del proveedor se muestra como un error en línea normal. Los adjuntos se persisten con
+  el mensaje (`Message.attachments` en `@alisio/sdk`); la compactación describe una imagen
+  resumida solo por tipo MIME y dimensiones, nunca reenvía ni conserva sus bytes en el
+  checkpoint.
 - Cambio de modelo por sesión (`AgentRunner.setModel`, `sessions.model`); el proveedor acepta
   un modelo por petición. Catálogo `GET /models` con ventana de contexto cuando el proveedor
   la informa, tokens en caché (`prompt_tokens_details.cached_tokens` o
@@ -245,6 +260,43 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No verificado: copia real mediante `xclip`/`wl-copy`/`pbcopy`/Windows (para no modificar
   el portapapeles del usuario); compactación automática con DeepSeek real; Windows/macOS.
 
+## Pegado y adjuntos de imagen: alcance de la verificación
+
+- Vitest: sniffing de PNG/JPEG/GIF/WebP por cabecera, límites de tamaño (5 MB) y cantidad (4),
+  captions compactas, mensajes de rechazo, mapeo al tipo `Attachment` del SDK, y el flujo de
+  `Ctrl+V` sin portapapeles (no-op explicado), con `getImage()` devolviendo `null` (vacío) o
+  `undefined` (no disponible) tratados por separado, y un fallo de lectura capturado sin lanzar.
+  Compactación: un adjunto en el tramo resumido se describe al modelo solo por tipo MIME y
+  dimensiones (nunca sus bytes en base64), y uno conservado sobrevive intacto. Persistencia:
+  cierre y reapertura de la base reproduce el adjunto byte a byte (JSON genérico existente,
+  sin cambios de esquema). Proveedor: las partes `image_url` (chat) e `input_image` (Responses)
+  se verifican contra un servidor HTTP local con la forma exacta que espera cada modo.
+- Verificación real en pseudo-terminal (Linux, X11 disponible en este entorno) con el binario
+  construido: un pegado multilínea real con marcadores de pegado con corchetes se insertó como
+  una sola operación, sin fragmentarse ni enviarse antes de tiempo, y se envió correctamente al
+  presionar Enter. Se colocó una imagen PNG real (no simulada) en el portapapeles X11 con
+  `xclip`, `Ctrl+V` la adjuntó mostrando la línea compacta `[1] image/png 2x2, 0.1 KB` (el
+  terminal de prueba no soporta gráficos Kitty/iTerm2), `Ctrl+R` la quitó, y al reenviarla y
+  enviar el mensaje la petición HTTP capturada contenía la parte `image_url` con los bytes
+  base64 decodificados **idénticos** a los del PNG original.
+- Modo `--no-tui`: verificado con el mismo binario. El pegado de una sola línea funciona igual
+  que escribir. Un pegado real de varias líneas (sin marcadores, tal como lo entrega una
+  terminal real a un programa que nunca activó el pegado con corchetes) se fragmenta: cada línea
+  se envía como un mensaje independiente, confirmado por la petición capturada. `Ctrl+V` es un
+  no-op inocuo (el byte se descarta, sin insertar nada ni bloquear).
+- DeepSeek real (`deepseek-flash`, llamada directa al proveedor con `node --env-file=.env`,
+  sin imprimir la clave): una imagen PNG real de 64×64 (fondo azul con una franja diagonal
+  blanca) enviada como `image_url` obtuvo una respuesta correcta y específica
+  ("The background is blue, and yes, it contains a thin white diagonal stripe..."), confirmando
+  que `deepseek-flash` admite contenido de visión con el formato exacto que produce esta
+  implementación. Con un servidor local que devuelve 400 para contenido de imagen, el SDK
+  `openai` lanza un `BadRequestError` con mensaje legible que el runner ya convierte en un
+  `run_failed` limpio (sin caída ni traza cruda).
+- No verificado: recepción de imágenes por el portapapeles nativo en macOS o Windows (sin acceso
+  a esas plataformas); miniaturas en línea reales en una terminal con protocolo Kitty o iTerm2
+  (el entorno de prueba solo tiene xterm-256color, así que solo se ejerció la ruta de
+  compatibilidad de texto).
+
 ## Límites conocidos
 
 - Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
@@ -288,6 +340,14 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   proceso: el timeout aborta la espera y señala el `AbortSignal`, pero no puede detener
   código síncrono bloqueante.
 - Portapapeles: OSC 52 no puede confirmarse; la TUI lo informa como no verificado.
+- Pegado y adjuntos: el acceso al portapapeles de imágenes necesita un ayudante nativo de la
+  plataforma (o `wl-paste` en Wayland); suele faltar en sesiones SSH simples. No hay
+  comprobación de capacidades antes de enviar una imagen: el rechazo del propio modelo aparece
+  como un error en línea normal. Los límites de 5 MB por imagen y 4 adjuntos por mensaje los
+  aplica la TUI, no `@alisio/core` (quien use el runner directamente puede enviar más o mayores).
+  El pegado de varias líneas en modo `--no-tui` no es atómico: `readline` de Node no admite
+  pegado con corchetes, así que cada salto de línea envía su propio mensaje; el pegado de una
+  sola línea no se ve afectado. Las imágenes no tienen ningún soporte en modo `--no-tui`.
 - TUI: las estadísticas de `/stats` cubren solo el proceso actual de la TUI para la sesión
   activa; no se reconstruyen desde eventos persistidos. La TUI necesita una terminal con
   pantalla alternativa; en otros casos use `--no-tui` o `run`.

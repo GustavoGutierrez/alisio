@@ -49,7 +49,45 @@ export async function runProviderTest(mode: string): Promise<{ mode: string; ok:
       choices: [{ index: 0, delta, finish_reason }],
     });
     let events: unknown[] = [];
-    if (mode === "responses") {
+    if (mode === "vision") {
+      assert.match(req.url, /\/chat\/completions$/);
+      const messages = body.messages as Array<{ role: string; content: unknown }>;
+      const last = messages.at(-1);
+      assert.deepEqual(last?.content, [
+        { type: "text", text: "look at this" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,QQ==" } },
+      ]);
+      events = [chat({ content: "I see a red square" }, "stop")];
+    } else if (mode === "vision-responses") {
+      assert.match(req.url, /\/responses$/);
+      const input = body.input as Array<{ role: string; content: unknown }>;
+      const last = input.at(-1);
+      assert.deepEqual(last?.content, [
+        { type: "input_text", text: "look at this" },
+        { type: "input_image", image_url: "data:image/png;base64,QQ==", detail: "auto" },
+      ]);
+      events = [
+        {
+          type: "response.completed",
+          response: {
+            id: "r1",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                id: "msg_1",
+                status: "completed",
+                role: "assistant",
+                content: [{ type: "output_text", text: "I see a red square", annotations: [] }],
+              },
+            ],
+            usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+          },
+        },
+      ];
+    } else if (mode === "responses") {
       assert.match(req.url, /\/responses$/);
       assert.equal(body.store, false);
       if (count === 2) assert.match(JSON.stringify(body.input), /encrypted_content/);
@@ -123,7 +161,7 @@ export async function runProviderTest(mode: string): Promise<{ mode: string; ok:
         model: "test-model",
         baseURL: `http://127.0.0.1:${server.port}/v1`,
         auth: "none",
-        apiMode: mode === "responses" ? "responses" : "chat",
+        apiMode: mode === "responses" || mode === "vision-responses" ? "responses" : "chat",
       },
     });
     const provider = new OpenAICompatibleProvider(config.provider);
@@ -155,7 +193,19 @@ export async function runProviderTest(mode: string): Promise<{ mode: string; ok:
       assert.deepEqual(final.usage, { input: 50, output: 7, cachedInput: 32 });
     } else if (mode === "incomplete")
       await assert.rejects(() => consume(request.messages), /incomplete/);
-    else {
+    else if (mode === "vision" || mode === "vision-responses") {
+      const events = await consume([
+        {
+          role: "user",
+          text: "look at this",
+          attachments: [{ kind: "image", mimeType: "image/png", data: "QQ==", bytes: 1 }],
+        },
+      ]);
+      const final = events.at(-1);
+      assert.equal(final?.type, "completed");
+      if (final?.type !== "completed") throw new Error("missing");
+      assert.equal(final.message.text, "I see a red square");
+    } else {
       const events = await consume(request.messages);
       const final = events.at(-1);
       assert.equal(final?.type, "completed");

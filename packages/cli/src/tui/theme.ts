@@ -1,4 +1,9 @@
-import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@earendil-works/pi-tui";
+import type {
+  EditorTheme,
+  ImageTheme,
+  MarkdownTheme,
+  SelectListTheme,
+} from "@earendil-works/pi-tui";
 import type { Level } from "./state.ts";
 
 const enabled = !process.env.NO_COLOR;
@@ -52,4 +57,7 @@ export const selectListTheme: SelectListTheme = {
 export const editorTheme: EditorTheme = {
   borderColor: (t) => style.gray(t),
   selectList: selectListTheme,
+};
+export const imageTheme: ImageTheme = {
+  fallbackColor: (t) => style.gray(t),
 };

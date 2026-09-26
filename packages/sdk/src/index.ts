@@ -14,13 +14,26 @@ export interface ToolResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 }
+/**
+ * An image attached to a user message. Persisted verbatim in the session store; sent to the
+ * provider as a vision content part alongside the text. Never carried into a compaction summary
+ * (only its mime type and dimensions are, as plain text) so raw bytes never reach the model twice.
+ */
+export interface Attachment {
+  kind: "image";
+  mimeType: string;
+  /** Base64-encoded bytes, no `data:` prefix. */
+  data: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+}
 export type Message =
-  /** `summary` marks a compaction summary that replaced earlier history. */
   /**
    * `summary` marks injected context (e.g. a compaction checkpoint); `display` is what UIs show
    * instead of `text` (e.g. `/init` for an expanded prompt template). Providers ignore both.
    */
-  | { role: "user"; text: string; summary?: boolean; display?: string }
+  | { role: "user"; text: string; summary?: boolean; display?: string; attachments?: Attachment[] }
   | { role: "assistant"; text: string; calls: ToolCall[]; providerData?: unknown[] }
   | { role: "tool"; callId: string; result: ToolResult };
 export interface Usage {

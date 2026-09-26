@@ -6,6 +6,8 @@ import {
   type Component,
   Container,
   Editor,
+  getImageDimensions,
+  getNativeClipboard,
   Key,
   matchesKey,
   ProcessTerminal,
@@ -16,8 +18,17 @@ import {
   truncateToWidth,
   VStack,
 } from "@earendil-works/pi-tui";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_IMAGE_BYTES,
+  type PendingAttachment,
+  pasteImageFromClipboard,
+  removeLastAttachment,
+  toApiAttachment,
+} from "./attachments.ts";
 import { copyText, nodeSpawn } from "./clipboard.ts";
 import {
+  AttachmentsBar,
   BannerBlock,
   clock,
   componentFor,
@@ -119,6 +130,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     app.runner.setModel(session, options.model);
   let view: ViewState = initialViewState(app.store.get(session).model);
   if (options.session) view = { ...view, items: itemsFromHistory(app.store.messages(session)) };
+  let pendingAttachments: PendingAttachment[] = [];
 
   let modelList: Promise<ModelInfo[]> | undefined;
   /** Cached GET /models; a failure clears the cache so a later call can retry. */
@@ -246,9 +258,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
   });
   app.plugins.onStatusChange = () => tui.requestRender();
   const pickerSlot = new Container();
+  const attachmentsBar = new AttachmentsBar(() => pendingAttachments);
   const editor = new Editor(tui, editorTheme, { paddingX: 1 });
   const bottom = new Container();
   bottom.addChild(pickerSlot);
+  bottom.addChild(attachmentsBar);
   bottom.addChild(editor);
   bottom.addChild(treePanel);
   bottom.addChild(footer);
@@ -404,9 +418,16 @@ export async function runTui(options: TuiOptions): Promise<void> {
     }
   };
   const runPrompt = (display: string, prompt: string, persistDisplay?: string) => {
+    // Any pending clipboard-pasted images ride along with the very next turn, then are cleared.
+    const attachments = pendingAttachments.map(toApiAttachment);
+    pendingAttachments = [];
+    attachmentsBar.invalidate();
     push({ kind: "user", text: display });
     return task((signal) =>
-      app.runner.run(session, prompt, signal, persistDisplay ? { display: persistDisplay } : {}),
+      app.runner.run(session, prompt, signal, {
+        ...(persistDisplay ? { display: persistDisplay } : {}),
+        ...(attachments.length ? { attachments } : {}),
+      }),
     );
   };
 
@@ -591,7 +612,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
       "- `/init` (above) writes AGENTS.md; the shell command `alisio init` only scaffolds `.alisio/config.json`",
       "- `/command plugin.id:name args` — run a plugin command",
       "",
-      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · PgUp/PgDn or mouse wheel scroll",
+      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents",
+      `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
   const mutating = new Set(["model", "compact", "clear", "resume"]);
@@ -801,8 +823,43 @@ export async function runTui(options: TuiOptions): Promise<void> {
     if (data === "n" || data === "N") return "no";
     return undefined;
   };
+  // Ctrl+V: attach a clipboard image (Ctrl+R removes the most recently attached one). Text
+  // paste needs no wiring here: pi-tui's Editor already handles bracketed paste atomically.
+  const attachmentLimits = {
+    maxBytes: MAX_IMAGE_BYTES,
+    maxCount: MAX_ATTACHMENTS_PER_MESSAGE,
+    dimensions: getImageDimensions,
+  };
+  const pasteImage = async () => {
+    const result = await pasteImageFromClipboard(
+      getNativeClipboard(),
+      pendingAttachments,
+      attachmentLimits,
+    );
+    pendingAttachments = result.list;
+    if (result.message) flashHint(result.message);
+    attachmentsBar.invalidate();
+    tui.requestRender();
+  };
+  const removeAttachment = () => {
+    const { list, removed } = removeLastAttachment(pendingAttachments);
+    pendingAttachments = list;
+    if (removed) flashHint(`Removed attachment: ${removed.mimeType}`);
+    attachmentsBar.invalidate();
+    tui.requestRender();
+  };
   let lastCtrlC = 0;
   tui.addInputListener((data) => {
+    if (!picker && panelState.focus === "editor") {
+      if (matchesKey(data, Key.ctrl("v"))) {
+        void pasteImage();
+        return { consume: true };
+      }
+      if (matchesKey(data, Key.ctrl("r")) && pendingAttachments.length) {
+        removeAttachment();
+        return { consume: true };
+      }
+    }
     if (!picker) {
       if (matchesKey(data, Key.ctrl("x"))) {
         const r = reducePanel(panelState, { type: "ctrlX", now: Date.now() }, panelNodes());

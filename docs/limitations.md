@@ -59,6 +59,15 @@ it is not a statement that all of its release criteria are met.
 - **Prompt templates**: no template includes or partials, no shell execution or file injection in
   templates, `$10` and higher are not supported, and positional arguments are plain text only.
 - **Clipboard**: OSC 52 cannot be confirmed; the TUI reports it as unverified.
+- **Paste and attachments**: image clipboard access needs a native platform helper (or `wl-paste`
+  on Wayland); it is commonly unavailable over plain SSH. There is no capability check before
+  sending an image to a model: an unsupported model's own rejection surfaces as a normal inline
+  error. Attachments are capped at 4 per message and 5 MB raw bytes each, enforced by the TUI, not
+  by `@alisio/core` (an embedder calling the runner directly can send larger or more attachments).
+  Multi-line paste in `--no-tui` (readline) mode is not atomic: Node's `readline` has no
+  bracketed-paste support, so each embedded newline submits its own message instead of one
+  combined message; single-line paste is unaffected. Images are not supported at all in `--no-tui`
+  mode.
 - **TUI**: `/stats` covers only the current TUI process for the active session; it is not rebuilt from
   persisted events. The TUI needs a terminal with an alternate screen; otherwise use `--no-tui` or
   `run`.

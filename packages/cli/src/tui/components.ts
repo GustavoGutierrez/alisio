@@ -2,11 +2,18 @@ import type { PanelNode } from "@alisio/sdk";
 import {
   type Component,
   Container,
+  getCapabilities,
+  Image,
   Markdown,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
+import {
+  attachmentCaption,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  type PendingAttachment,
+} from "./attachments.ts";
 import {
   contextLevel,
   contextPercent,
@@ -18,7 +25,7 @@ import {
   type TranscriptItem,
   type ViewState,
 } from "./state.ts";
-import { levelColor, markdownTheme, style } from "./theme.ts";
+import { imageTheme, levelColor, markdownTheme, style } from "./theme.ts";
 
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /** Shared animation clock advanced by the app while work is running. */
@@ -417,6 +424,47 @@ export class TreePanel implements Component {
       if (v.confirm)
         lines.push(style.yellow(`  Cancel this agent and ${v.confirm.count} descendant(s)? y/n`));
     }
+    return fit(lines, width);
+  }
+}
+
+/**
+ * Pending image attachments shown above the editor: an inline thumbnail (Kitty/iTerm2) when the
+ * terminal supports it, otherwise a compact one-line fallback. Empty when there are none.
+ */
+export class AttachmentsBar implements Component {
+  private thumbnails = new Map<string, Image>();
+  constructor(private items: () => PendingAttachment[]) {}
+  invalidate(): void {
+    for (const image of this.thumbnails.values()) image.invalidate();
+  }
+  render(width: number): string[] {
+    const items = this.items();
+    if (!items.length) return [];
+    const capable = !!getCapabilities().images;
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    items.forEach((a, i) => {
+      seen.add(a.id);
+      lines.push(style.gray(truncateToWidth(attachmentCaption(a, i), width)));
+      if (capable) {
+        let thumbnail = this.thumbnails.get(a.id);
+        if (!thumbnail) {
+          thumbnail = new Image(a.data, a.mimeType, imageTheme, {
+            maxWidthCells: Math.min(24, width),
+            maxHeightCells: 3,
+          });
+          this.thumbnails.set(a.id, thumbnail);
+        }
+        lines.push(...thumbnail.render(width));
+      }
+    });
+    for (const id of [...this.thumbnails.keys()]) if (!seen.has(id)) this.thumbnails.delete(id);
+    lines.push(
+      style.dim(
+        `Ctrl+V paste image · Ctrl+R remove last (${items.length}/${MAX_ATTACHMENTS_PER_MESSAGE})`,
+      ),
+    );
     return fit(lines, width);
   }
 }

@@ -115,6 +115,29 @@ describe("summary input and thresholds", () => {
     expect(text).not.toContain("SECRET-OPAQUE");
   });
 
+  it("describes an attachment by mime type and dimensions, never its raw bytes", () => {
+    const secretBase64 = "QQ==".repeat(1000);
+    const text = serializeForSummary([
+      {
+        role: "user",
+        text: "look at this",
+        attachments: [
+          {
+            kind: "image",
+            mimeType: "image/png",
+            data: secretBase64,
+            bytes: 4000,
+            width: 800,
+            height: 600,
+          },
+        ],
+      },
+    ]);
+    expect(text).toContain("look at this");
+    expect(text).toContain("ATTACHMENT: image/png 800x600, 4000 bytes");
+    expect(text).not.toContain(secretBase64);
+  });
+
   it("estimates tokens and applies thresholds only with a known window", () => {
     expect(estimateTokens("abcd".repeat(100))).toBe(100);
     expect(estimateTokens(history)).toBeGreaterThan(0);

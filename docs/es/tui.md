@@ -105,6 +105,8 @@ En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name r
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
 | Ctrl+K | Cancelar el agente seleccionado o visualizado |
+| Ctrl+V | Adjuntar una imagen del portapapeles (véase [Pegar](#paste-text-and-images)) |
+| Ctrl+R | Quitar la última imagen adjuntada |
 
 ## Panel de agentes {#agent-panel}
 
@@ -150,6 +152,62 @@ manera.
 
 Mientras la captura del ratón está activa, la selección nativa de la terminal suele requerir
 **Shift+arrastrar**.
+
+## Pegar: texto e imágenes {#paste-text-and-images}
+
+**Texto.** Pegar, incluido texto de varias líneas, se inserta como una única edición atómica en el
+cursor: nunca se fragmenta en pulsaciones, nunca se envía antes de tiempo por un salto de línea
+incluido, y se deshace en un solo paso. Los pegados largos (más de 10 líneas o 1000 caracteres) se
+colapsan en un marcador como `[paste #1 +42 lines]` que se expande al texto completo al enviar el
+mensaje. Esto proviene del propio componente del editor (pegado con corchetes), no de código
+específico de Alisio.
+
+**Imágenes.** `Ctrl+V` adjunta al mensaje en composición la imagen que haya en el portapapeles del
+sistema:
+
+| Tecla | Acción |
+| --- | --- |
+| Ctrl+V | Adjuntar la imagen del portapapeles (PNG, JPEG, GIF o WebP) |
+| Ctrl+R | Quitar la última imagen adjuntada |
+
+Las imágenes adjuntas aparecen sobre el editor: como miniatura en línea en terminales que admiten el
+protocolo gráfico Kitty o iTerm2, o si no, como una línea compacta como
+`[1] image/png 1024x768, 42.0 KB`. Hasta **4 adjuntos** por mensaje, **5 MB** de bytes crudos por
+imagen; superar cualquiera de los dos límites muestra un mensaje en línea y rechaza solo la imagen
+que lo excede — nunca bloquea la TUI. Los adjuntos viajan con el siguiente mensaje que se envíe
+(cualquier comando que llegue al modelo, incluida una plantilla de prompt renderizada) y se
+limpian después.
+
+Los adjuntos enviados se convierten en partes de contenido de visión compatibles con OpenAI
+(`image_url` en modo chat, `input_image` en modo Responses) junto al texto, usando el proveedor ya
+configurado — no existe una opción de visión aparte. Alisio no comprueba si un modelo admite
+imágenes antes de enviarlas; si no las admite, el rechazo del propio proveedor aparece como un
+error en línea normal, igual que cualquier otro fallo de la petición. Los adjuntos se persisten
+junto con el mensaje, así que `/resume` y la compactación los ven; una imagen resumida (descartada)
+se describe al modelo del checkpoint solo por su tipo y dimensiones — sus bytes nunca se reenvían
+ni aparecen en el texto del checkpoint.
+
+El acceso al portapapeles de imágenes depende de un ayudante nativo de la plataforma y no está
+garantizado en todos los casos:
+
+| Plataforma | Portapapeles de imagen nativo | Limitaciones habituales |
+| --- | --- | --- |
+| Linux (X11) | Sí, mediante un ayudante incluido | Recurre a `wl-paste` en Wayland; no disponible por SSH simple sin reenvío de X11 ni una sesión Wayland/X11 activa |
+| Linux (Wayland) | Vía `wl-paste` | Misma limitación con sesiones remotas/SSH |
+| macOS | Sí, mediante un ayudante incluido | No verificado por SSH en este proyecto |
+| Windows | Sí, mediante un ayudante incluido | No verificado por SSH en este proyecto |
+
+Cuando no hay ningún ayudante disponible, `Ctrl+V` no hace nada dañino: informa de que el acceso al
+portapapeles de imágenes no está disponible y deja la entrada intacta. Esto es habitual en sesiones
+remotas o sin interfaz gráfica, porque el acceso al portapapeles de imágenes necesita un servidor de
+pantalla local o APIs nativas de la plataforma que una sesión SSH simple no ofrece.
+
+**Modo `--no-tui` (readline).** Ahí no hay soporte de imágenes en absoluto: ni renderizado ni
+integración con el portapapeles. El pegado de una sola línea de texto funciona igual que escribir.
+El pegado de varias líneas **no** se pega de forma atómica: la interfaz `readline` simple de Node no
+admite pegado con corchetes, así que cada salto de línea incluido se trata como su propio Enter, y
+se envía un mensaje por línea en lugar de un único mensaje combinado. Use la TUI completa (la
+opción por defecto en una terminal interactiva) para pegar varias líneas o imágenes.
 
 ## Aprobaciones interactivas {#interactive-approvals}
 
