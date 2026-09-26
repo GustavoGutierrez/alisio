@@ -5,3 +5,4 @@ dist/
 *.sqlite*
 coverage/
 .atl/
+packages/core/probe.mjs
