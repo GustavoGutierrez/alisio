@@ -32,7 +32,8 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
 
 - **Manual**: `/compact [focus]` in the TUI, with optional focus instructions.
 - **Automatic**: before a model call, when the used context reaches `threshold` of a **known**
-  context window (`provider.contextWindow` or `GET /models`). When the window is unknown — or a
+  context window (`provider.contextWindow`, the active `/connect` profile's `values.contextWindow`,
+  or `GET /models`). When the window is unknown — or a
   declared window is absurdly large (beyond `2_000_000` tokens, so `window × threshold` cannot hide
   real pressure) — Alisio falls back to `limits.maxContextChars`: est. tokens (≈ characters / 4)
   reaching `maxContextChars / 4` also compacts. Exactly one of the two applies, so the TUI context
@@ -56,7 +57,8 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
 | `keepTurns` | `2` | Recent turns kept verbatim (0–20) |
 | `maxOutputTokens` | `16000` | Output token budget for the summarizer call; independent of `limits.maxOutputTokens` |
 
-The context window comes from `provider.contextWindow` or `GET /models`. Compaction token usage is
+The context window comes from `provider.contextWindow`, the active `/connect` profile's
+`values.contextWindow`, or `GET /models`. Compaction token usage is
 not counted against `limits.maxTokens`, and before/after estimates are approximate (about 4
 characters per token).
 

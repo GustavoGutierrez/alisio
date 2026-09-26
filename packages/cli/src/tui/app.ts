@@ -762,9 +762,32 @@ export async function runTui(options: TuiOptions): Promise<void> {
         placeholder: "provider-model-id",
         hint: "The provider returned no model catalog",
         step: inputFields.length + 1,
-        steps: inputFields.length + 1,
+        steps: inputFields.length + 2,
       });
     if (!model) return;
+    // Local servers like llama.cpp omit `context_window` from GET /models, so the bar would show
+    // an honest `?`. When the discovered catalog cannot name the window (or is empty), ask ONE
+    // optional numeric override and persist it in the profile values when provided.
+    const catalogEntry = discovered.find((candidate) => candidate.id === model);
+    if (!catalogEntry?.contextWindow) {
+      const windowStep = discovered.length ? inputFields.length + 1 : inputFields.length + 2;
+      const entered = await askInput({
+        provider: registration.name,
+        label: "Context window in tokens (optional)",
+        initial: profile.contextWindow === undefined ? "" : String(profile.contextWindow),
+        placeholder: "131072",
+        hint: "For local servers that omit context_window; leave empty to keep the saved value or stay unknown",
+        step: windowStep,
+        steps: windowStep,
+      });
+      if (entered === undefined) return;
+      if (entered.trim()) {
+        const parsed = Number(entered.trim());
+        if (!Number.isInteger(parsed) || parsed <= 0)
+          return error("Context window must be a positive number of tokens");
+        profile.contextWindow = parsed;
+      }
+    }
     await app.activateProvider(providerId, profile, credentials, model);
     activeProvider = app.providerInfo;
     modelList = undefined;

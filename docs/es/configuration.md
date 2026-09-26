@@ -8,6 +8,15 @@ En la TUI, `/connect` escribe los perfiles no secretos y el proveedor/modelo act
 donde se admiten permisos POSIX. Es protección del sistema de archivos, **no cifrado**. Las claves
 nunca aparecen en `doctor`, el inicio, los eventos ni el estado de plugins.
 
+Los `values` de un perfil pueden incluir un `contextWindow` opcional (en **tokens**) para el modelo
+de ese perfil. Existe para servidores locales compatibles con OpenAI (por ejemplo llama.cpp) cuyo
+`GET /models` omite `context_window`: con él, la barra de contexto y la compactación automática usan
+la ventana real en lugar de un honesto `?`. `/connect` lo pregunta cuando el catálogo descubierto no
+informa la ventana del modelo seleccionado. La ventana efectiva de un modelo es, por prioridad: el
+`provider.contextWindow` heredado (solo para el modelo configurado), luego el
+`values.contextWindow` del perfil activo (intención del usuario: prevalece sobre el catálogo) y
+luego el `context_window` del propio catálogo.
+
 `/model` y `/models` abren el mismo selector global. Agrupa por título de proveedor todos los
 perfiles creados mediante `/connect`, marca la pareja proveedor/modelo activa y mantiene disponibles
 los perfiles sanos si falla otro catálogo. Elegir una pareja distinta la persiste e inicia una sesión

@@ -32,7 +32,8 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
 
 - **Manual**: `/compact [focus]` en la TUI, con instrucciones de foco opcionales.
 - **Automática**: antes de una llamada al modelo, cuando el contexto usado alcanza `threshold` de una
-  ventana de contexto **conocida** (`provider.contextWindow` o `GET /models`). Cuando la ventana es
+  ventana de contexto **conocida** (`provider.contextWindow`, el `values.contextWindow` del perfil
+  activo de `/connect`, o `GET /models`). Cuando la ventana es
   desconocida — o una ventana declarada es absurdamente grande (más de `2_000_000` tokens, para que
   `ventana × threshold` no oculte la presión real) — Alisio recurre a `limits.maxContextChars`:
   los tokens estimados (≈ caracteres / 4) que alcanzan `maxContextChars / 4` también compactan.
@@ -57,7 +58,8 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
 | `keepTurns` | `2` | Turnos recientes conservados sin cambios (0–20) |
 | `maxOutputTokens` | `16000` | Presupuesto de tokens de salida para la llamada del resumidor; independiente de `limits.maxOutputTokens` |
 
-La ventana de contexto proviene de `provider.contextWindow` o de `GET /models`. El consumo de tokens de
+La ventana de contexto proviene de `provider.contextWindow`, del `values.contextWindow` del perfil
+activo de `/connect`, o de `GET /models`. El consumo de tokens de
 la compactación no se descuenta de `limits.maxTokens`, y las estimaciones antes/después son
 aproximadas (unos 4 caracteres por token).
 

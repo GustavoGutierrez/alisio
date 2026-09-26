@@ -12,6 +12,9 @@ funcional, no solo interfaces o stubs.
   `openai-compatible:<modo>:<baseURL normalizada>`). `/connect` permite elegir proveedor,
   configuración y modelo; persiste globalmente el perfil sin secretos en `providers.json` y las
   credenciales en `credentials.json` (escritura atómica, `0600`, directorio `0700`; no cifrado).
+  Cuando el catálogo no informa la ventana de contexto del modelo seleccionado (servidores locales
+  como llama.cpp), `/connect` pregunta un `contextWindow` opcional en tokens que se guarda en los
+  `values` del perfil y alimenta la barra de contexto.
   El arranque sin proveedor permite onboarding; headless nunca pregunta. Cada cambio inicia una
   sesión nueva para no mezclar continuación opaca. Se mantienen config/env/flags heredados y la
   máxima prioridad de `AppOptions.provider`. Un perfil activo de `/connect` se restaura entre
@@ -696,10 +699,15 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   catálogo; un cambio pendiente del plugin conserva la skill bloqueada y marca su origen como
   pendiente de reinicio. Los diagnósticos headless pueden incluir rutas de confianza; la TUI no.
 - `provider.contextWindow` se aplica solo al modelo configurado; tras `/model`, la ventana
-  proviene de `GET /models` (el catálogo se carga de forma perezosa al arrancar y se refresca tras
-  cada cambio de proveedor/modelo) o queda como desconocida: la barra de contexto muestra un
-  honesto `~9.9k / ?` sin total inventado, y la compactación automática por umbral se desactiva
-  para ese modelo salvo por `limits.maxContextChars` (salvaguarda interna, nunca total mostrado).
+  proviene del override `values.contextWindow` del perfil activo de `/connect` (preguntado en
+  `/connect` cuando el catálogo no informa la ventana del modelo seleccionado, pensado para
+  servidores locales como llama.cpp que omiten `context_window`; prevalece sobre el catálogo por
+  intención del usuario), de `GET /models` (el catálogo se carga de forma perezosa al arrancar y se
+  refresca tras cada cambio de proveedor/modelo) o queda como desconocida: la barra de contexto
+  muestra un honesto `~9.9k / ?` sin total inventado, y la compactación automática por umbral se
+  desactiva para ese modelo salvo por `limits.maxContextChars` (salvaguarda interna, nunca total
+  mostrado). La cobertura usa perfiles guardados y activación de `/connect` con catálogos ficticios;
+  la entrada interactiva de `/connect` se verifica por tipos y manualmente, no con pruebas de UI.
 - La compactación usa el proveedor actual; su consumo de tokens no se suma al presupuesto
   `limits.maxTokens`. Las estimaciones antes/después son aproximadas (≈4 caracteres/token).
   Los items opacos de Responses del tramo resumido se descartan; los conservados no cambian.

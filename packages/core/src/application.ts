@@ -6,6 +6,7 @@ import type {
   ModelProvider,
   Plugin,
   PluginCategory,
+  ProviderConfigurationValue,
   ResolvedProviderModel,
   RunEvent,
 } from "@alisio/sdk";
@@ -128,6 +129,18 @@ export function enabledBuiltins(
 const nonBlank = (value: string | undefined): string | undefined => {
   const normalized = value?.trim();
   return normalized || undefined;
+};
+/**
+ * Per-profile optional context-window override, in tokens (for local OpenAI-compatible servers
+ * like llama.cpp whose `GET /models` omits `context_window`). Numbers are used directly; strings
+ * (for example hand-edited providers.json) are parsed. Absent or unparseable means "no override".
+ */
+const parseProfileContextWindow = (
+  value: ProviderConfigurationValue | undefined,
+): number | undefined => {
+  if (value === undefined) return undefined;
+  const window = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(window) && window > 0 ? window : undefined;
 };
 export async function createApplication(options: AppOptions = {}) {
   const cwd = resolve(options.cwd ?? process.cwd()),
@@ -457,10 +470,16 @@ export async function createApplication(options: AppOptions = {}) {
       });
       return modelsLoading;
     };
-    // Priority: explicit configuration for the configured model, then GET /models.
+    // Priority: explicit configuration for the configured model, then the active saved profile's
+    // per-model override (user intent for local servers that omit context_window), then GET /models.
     const contextWindow = (model: string) => {
       const explicit = model === config.provider.model ? config.provider.contextWindow : undefined;
       if (explicit !== undefined) return explicit;
+      const override =
+        providerInfo?.persisted && model === provider.model
+          ? parseProfileContextWindow(providerInfo.profile.contextWindow)
+          : undefined;
+      if (override !== undefined) return override;
       const known = models.get(model)?.contextWindow;
       if (known !== undefined) return known;
       // Background prime: this call stays synchronous (the runner and the bar are sync), and

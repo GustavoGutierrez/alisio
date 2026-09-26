@@ -103,11 +103,17 @@ it is not a statement that all of its release criteria are met.
 - **TUI**: `/stats` covers only the current TUI process for the active session; it is not rebuilt from
   persisted events. The TUI needs a terminal with an alternate screen; otherwise use `--no-tui` or
   `run`.
-- `provider.contextWindow` applies only to the configured model; after `/model`, the window comes from
-  `GET /models` or stays unknown. Auto-compaction uses ONE effective budget: with a known window it
+- `provider.contextWindow` applies only to the configured model; after `/model`, the window comes
+  from the active `/connect` profile's `values.contextWindow` override (asked in `/connect` when
+  the catalog does not report the selected model's window, meant for local servers like llama.cpp
+  that omit `context_window`; it wins over the catalog by user intent), from
+  `GET /models` (the catalog loads lazily at startup and refreshes after every provider/model
+  switch), or stays unknown. Auto-compaction uses ONE effective budget: with a known window it
   triggers at `threshold` of that window only; with an unknown window (or one declared beyond
   `2_000_000` tokens) it falls back to `limits.maxContextChars` (est. tokens at `maxContextChars / 4`),
   which also stays as the post-compaction hard limit. The TUI context bar reflects the same budget.
+  Coverage uses saved profiles and `/connect` activation with fake catalogs; the interactive
+  `/connect` input is verified by types and manually, not by UI tests.
 - **Compaction** uses the current provider; its token usage is not added to the `limits.maxTokens`
   budget. Before/after estimates are approximate (about 4 characters per token). Responses opaque
   items of the summarized span are discarded; kept ones do not change. A session with uncertain tool

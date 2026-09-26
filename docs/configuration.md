@@ -8,6 +8,14 @@ In the TUI, `/connect` writes non-secret profiles and the active provider/model 
 `0700` where POSIX permissions are supported. This is filesystem protection, **not encryption**.
 Keys are never shown by `doctor`, startup output, events or plugin state.
 
+A profile's `values` may include an optional `contextWindow` (in **tokens**) for that profile's
+model. It exists for local OpenAI-compatible servers (for example llama.cpp) whose `GET /models`
+omits `context_window`: with it, the context bar and auto-compaction use the real window instead of
+an honest `?`. `/connect` asks for it whenever the discovered catalog does not report the selected
+model's window. The effective window for a model is, in priority: the legacy `provider.contextWindow`
+(configured model only), then the active profile's `values.contextWindow` (user intent — it wins
+over the catalog), then the catalog's own `context_window`.
+
 `/model` and `/models` open the same global selector. It groups every profile created through
 `/connect` by provider title, marks the active provider/model pair, and keeps healthy profiles
 selectable when another catalog is unavailable. Selecting a different pair persists it and starts a

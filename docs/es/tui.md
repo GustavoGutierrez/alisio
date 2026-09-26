@@ -54,13 +54,16 @@ Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
 La barra de contexto mide **la misma métrica efectiva que usa el motor** para la compactación
 automática. Con una ventana de contexto conocida (el campo `context_window`/`context_length` de
-`GET /models`, o `provider.contextWindow` para el modelo configurado), el total es esa ventana y la
+`GET /models`, `provider.contextWindow` para el modelo configurado, o el override
+`values.contextWindow` del perfil activo de `/connect` para su modelo), el total es esa ventana y la
 barra se pone roja en `threshold` de ella (por defecto 85 %). El catálogo se carga de forma perezosa
 al arrancar y se refresca tras cada cambio de proveedor/modelo, de modo que la ventana real del
-modelo activo se muestra siempre que el descubrimiento la exponga. Cuando la ventana no puede
-conocerse, la barra muestra un honesto `~9.9k / ?` en lugar de un total o porcentaje inventado: el
-presupuesto de caracteres de respaldo sigue siendo una salvaguarda de compactación interna del
-motor, nunca un total mostrado.
+modelo activo se muestra siempre que el descubrimiento la exponga. El override por perfil existe
+para servidores locales (por ejemplo llama.cpp) que omiten `context_window`: `/connect` lo pregunta
+en tokens cuando el catálogo no puede indicar la ventana del modelo seleccionado, y el override
+prevalece sobre el catálogo. Cuando la ventana no puede conocerse, la barra muestra un honesto
+`~9.9k / ?` en lugar de un total o porcentaje inventado: el presupuesto de caracteres de respaldo
+sigue siendo una salvaguarda de compactación interna del motor, nunca un total mostrado.
 El contexto usado es el último `prompt + completion` informado por el proveedor; sin `usage`, se
 muestra una estimación marcada con `~` (unos 4 caracteres por token).
 

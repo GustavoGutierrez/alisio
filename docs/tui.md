@@ -52,13 +52,16 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 Errors appear in red inside the conversation without closing the TUI.
 
 The context bar measures the **same effective metric the engine uses** for auto-compaction. With a
-known context window (the `context_window`/`context_length` field of `GET /models`, or
-`provider.contextWindow` for the configured model), the total is that window and the bar turns red
+known context window (the `context_window`/`context_length` field of `GET /models`,
+`provider.contextWindow` for the configured model, or the active `/connect` profile's
+`values.contextWindow` override for its model), the total is that window and the bar turns red
 at `threshold` of it (default 85 %). The catalog is loaded lazily at startup and refreshed after
 every provider/model switch, so the active model's real window is shown whenever discovery exposes
-it. When the window genuinely cannot be known, the bar shows an honest `~9.9k / ?` instead of a
-fabricated total or percentage — the char-budget fallback remains an auto-compaction guardrail
-inside the engine, never a displayed total.
+it. The per-profile override exists for local servers (for example llama.cpp) that omit
+`context_window`: `/connect` asks for it in tokens when the catalog cannot name the selected model's
+window, and the override wins over the catalog. When the window genuinely cannot be known, the bar
+shows an honest `~9.9k / ?` instead of a fabricated total or percentage — the char-budget fallback
+remains an auto-compaction guardrail inside the engine, never a displayed total.
 Used context is the last `prompt + completion` reported by the provider; without `usage`, an
 estimate marked with `~` (about 4 characters per token) is shown.
 
