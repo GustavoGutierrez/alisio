@@ -77,12 +77,19 @@ The documentation site is bilingual (English and Spanish). The detailed implemen
 
 ## Packages
 
-| Package | Purpose |
-| --- | --- |
-| [`alisio`](packages/cli) | The CLI and TUI you install (`alisio` bin) |
-| [`@alisio/core`](packages/core) | Embeddable agent core: runner, compaction, provider, tools, plugin host |
-| [`@alisio/sdk`](packages/sdk) | Typed plugin contract, zero runtime dependencies |
-| [`@alisio/plugin-memory`](packages/plugin-memory) | Built-in persistent memory plugin |
+All packages are published under the [alisio npm organization](https://www.npmjs.com/settings/alisio/packages):
+
+| Package | npm | Purpose |
+| --- | --- | --- |
+| [`alisio-code`](packages/cli) | [npm](https://www.npmjs.com/package/@alisio/alisio-code) | The CLI and TUI you install (`alisio` bin) |
+| [`@alisio/core`](packages/core) | [npm](https://www.npmjs.com/package/@alisio/core) | Embeddable agent core: runner, compaction, provider, tools, plugin host |
+| [`@alisio/sdk`](packages/sdk) | [npm](https://www.npmjs.com/package/@alisio/sdk) | Typed plugin contract, zero runtime dependencies |
+| [`@alisio/plugin-memory`](packages/plugin-memory) | [npm](https://www.npmjs.com/package/@alisio/plugin-memory) | Built-in persistent memory plugin |
+| [`@alisio/plugin-subagents`](packages/plugin-subagents) | [npm](https://www.npmjs.com/package/@alisio/plugin-subagents) | Subagent delegation plugin |
+| [`@alisio/plugin-deepseek`](packages/plugin-deepseek) | [npm](https://www.npmjs.com/package/@alisio/plugin-deepseek) | Dedicated DeepSeek model provider |
+| [`@alisio/plugin-openai-compatible`](packages/plugin-openai-compatible) | [npm](https://www.npmjs.com/package/@alisio/plugin-openai-compatible) | Generic OpenAI-compatible model provider |
+| [`@alisio/plugin-opencode`](packages/plugin-opencode) | [npm](https://www.npmjs.com/package/@alisio/plugin-opencode) | OpenCode Zen model provider |
+| [`@alisio/plugin-opencode-go`](packages/plugin-opencode-go) | [npm](https://www.npmjs.com/package/@alisio/plugin-opencode-go) | OpenCode Go model provider |
 
 ## Development
 
