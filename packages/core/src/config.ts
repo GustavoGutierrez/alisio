@@ -169,6 +169,13 @@ const configObjectSchema = z
         maxContextChars: 160000,
         maxOutputTokens: 4096,
       })),
+    tui: z
+      .object({
+        /** Horizontal padding (columns) around the editor input box. */
+        paddingX: z.number().int().min(0).max(4).default(1),
+      })
+      .strict()
+      .default(() => ({ paddingX: 1 })),
   })
   .strict()
   .superRefine((config, context) => {
@@ -440,6 +447,88 @@ export async function setGlobalMcpAllow(input: { allow: boolean }): Promise<stri
     if (Object.keys(mcp).length) raw.mcp = mcp;
     else delete raw.mcp;
   }
+  raw.schemaVersion ??= 1;
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, file);
+    await chmod(file, 0o600);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+  return file;
+}
+
+/**
+ * The user-facing settings writable through the atomic `setConfigValue` writer, with their zod
+ * leaf validators derived from the config schema. Only these keys are accepted; every other
+ * config path stays out of reach of the settings menu (unknown keys are rejected, never created).
+ */
+const SETTABLE_SECTIONS = {
+  compaction: configObjectSchema.shape.compaction.removeDefault(),
+  context: configObjectSchema.shape.context.removeDefault(),
+  limits: configObjectSchema.shape.limits.removeDefault(),
+  tui: configObjectSchema.shape.tui.removeDefault(),
+} as const;
+const SETTABLE_KEYS = {
+  "compaction.auto": SETTABLE_SECTIONS.compaction.shape.auto,
+  "compaction.threshold": SETTABLE_SECTIONS.compaction.shape.threshold,
+  "compaction.keepTurns": SETTABLE_SECTIONS.compaction.shape.keepTurns,
+  "compaction.maxOutputTokens": SETTABLE_SECTIONS.compaction.shape.maxOutputTokens,
+  "context.claudeMdFallback": SETTABLE_SECTIONS.context.shape.claudeMdFallback,
+  "limits.maxTurns": SETTABLE_SECTIONS.limits.shape.maxTurns,
+  "limits.maxOutputTokens": SETTABLE_SECTIONS.limits.shape.maxOutputTokens,
+  "limits.maxContextChars": SETTABLE_SECTIONS.limits.shape.maxContextChars,
+  "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
+} as const satisfies Record<string, z.ZodTypeAny>;
+export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
+export function isSettableSettingKey(key: string): key is SettableSettingKey {
+  return Object.prototype.hasOwnProperty.call(SETTABLE_KEYS, key);
+}
+
+/**
+ * Atomically sets one user-facing setting in the global config file (`<config home>/config.json`)
+ * while preserving every unrelated JSON field. The value is validated against the same zod leaf
+ * used by `configSchema`, so a write can never produce a config the loader would reject. The
+ * caller is responsible for applying the change to the running process (see `application.ts`).
+ */
+export async function setConfigValue(input: {
+  key: SettableSettingKey;
+  value: unknown;
+}): Promise<string> {
+  const validator = SETTABLE_KEYS[input.key];
+  if (!validator) throw new Error(`Unknown setting key: ${input.key}`);
+  const parsed = validator.safeParse(input.value);
+  if (!parsed.success) {
+    const detail = parsed.error.issues[0];
+    throw new Error(
+      detail
+        ? `Invalid value for ${input.key}: ${detail.path.join(".") || "value"} ${detail.message}`
+        : `Invalid value for ${input.key}`,
+    );
+  }
+  const file = join(configHome(), "config.json");
+  let raw: Record<string, unknown> = {};
+  if (await exists(file)) {
+    const existing: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!existing || typeof existing !== "object" || Array.isArray(existing))
+      throw new Error("Global Alisio configuration must be a JSON object");
+    raw = existing as Record<string, unknown>;
+  }
+  const [section, leaf] = input.key.split(".") as [string, string];
+  const container =
+    raw[section] && typeof raw[section] === "object" && !Array.isArray(raw[section])
+      ? (raw[section] as Record<string, unknown>)
+      : {};
+  raw[section] = { ...container, [leaf]: parsed.data };
   raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;

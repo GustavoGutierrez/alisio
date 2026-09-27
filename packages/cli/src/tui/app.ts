@@ -1,5 +1,10 @@
 import { homedir } from "node:os";
-import type { AppOptions, ApprovalDecision, ApprovalRequest } from "@alisio/core";
+import type {
+  AppOptions,
+  ApprovalDecision,
+  ApprovalRequest,
+  SettableSettingKey,
+} from "@alisio/core";
 import type {
   AskQuestionsRequest,
   AskQuestionsResult,
@@ -51,6 +56,8 @@ import { ConnectInputPrompt } from "./connect-input.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
+import { type SettingRow, type SettingsNavigationAction, settingsMenuRows } from "./settings.ts";
+import { SettingsMenu } from "./settings-menu.ts";
 import { SkillsManager } from "./skills-manager.ts";
 import {
   addItem,
@@ -74,6 +81,7 @@ import {
   resolveCommand,
   shortenPath,
   shortId,
+  slashCompletionCommands,
   summarizeToolArgs,
   type TranscriptItem,
   type ViewState,
@@ -318,7 +326,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   app.plugins.onStatusChange = () => tui.requestRender();
   const pickerSlot = new Container();
   const attachmentsBar = new AttachmentsBar(() => pendingAttachments);
-  const editor = new Editor(tui, editorTheme, { paddingX: 1 });
+  const editor = new Editor(tui, editorTheme, { paddingX: app.config.tui.paddingX });
   const bottom = new Container();
   bottom.addChild(pickerSlot);
   bottom.addChild(attachmentsBar);
@@ -419,7 +427,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
   let busy = false,
     controller: AbortController | undefined,
     pending: Promise<unknown> | undefined,
-    picker: Component | undefined;
+    picker: Component | undefined,
+    settingsMenu: SettingsMenu | undefined;
   const showPicker = (next: Component) => {
     picker = next;
     pickerSlot.clear();
@@ -429,6 +438,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   };
   const closePicker = () => {
     picker = undefined;
+    settingsMenu = undefined;
     pickerSlot.clear();
     tui.setFocus(editor);
     tui.requestRender();
@@ -1156,6 +1166,136 @@ export async function runTui(options: TuiOptions): Promise<void> {
     };
     openCatalog();
   };
+  /**
+   * Navigation rows at the bottom of `/settings`: they route to the existing managers and one-shot
+   * actions exactly like the old picker, so every prior entry stays reachable. `compact` and
+   * `stats` finish here and re-open the settings list (mirroring managePlugins' openCatalog loop);
+   * rows that delegate to another manager (provider/model, connect, plugins, skills, MCP) leave
+   * the list and that manager owns its Esc/back behavior.
+   */
+  const SETTINGS_NAVIGATION: SettingsNavigationAction[] = [
+    {
+      id: "model",
+      label: "Provider & model",
+      description: "Switch the active provider and model",
+    },
+    {
+      id: "connect",
+      label: "Connect provider",
+      description: "Configure a provider and choose its active model",
+    },
+    {
+      id: "compact",
+      label: "Compact context now",
+      description: "Summarize older history with the current model, then return here",
+    },
+    { id: "plugins", label: "Plugins", description: "Browse and manage project plugins" },
+    { id: "skills", label: "Skills", description: "Browse and manage effective skills" },
+    { id: "mcp", label: "MCP servers", description: "Browse and manage MCP servers" },
+    {
+      id: "stats",
+      label: "Session statistics",
+      description: "View session statistics, then return here",
+    },
+  ];
+  /**
+   * Central `/settings` (`/prefs`) menu: an OpenCode-style list of REAL, wired preferences
+   * (compaction, context fallback, MCP consent, limits, editor padding) with a live type-to-search
+   * filter, Enter/Space to cycle a value, a `(n/total)` counter, and a footer describing the
+   * highlighted row. Esc returns to the editor. Every setting persists to the GLOBAL user config
+   * through `app.updateSetting` (or the MCP consent path) and is applied to the running process
+   * where supported; rows rebuild from the live config after each change.
+   */
+  const openSettings = () => {
+    const providerName = app.providers.get(activeProvider?.id ?? "")?.name;
+    const current = view.model
+      ? providerName
+        ? `${providerName} · ${view.model}`
+        : view.model
+      : "";
+    const build = () =>
+      settingsMenuRows(
+        {
+          config: app.config,
+          mcpAllowPersisted: app.mcpAllowPersisted(),
+          readOnly: !!options.readOnly,
+        },
+        SETTINGS_NAVIGATION,
+      );
+    const applySetting = (row: SettingRow, value: unknown) => {
+      const settle = () => settingsMenu?.refresh(build());
+      if (row.id === "mcp.allow") {
+        const consent =
+          value === true ? app.rememberGlobalMcpConsent() : app.revokeGlobalMcpConsent();
+        void consent
+          .then(() =>
+            notice(
+              value === true
+                ? "MCP consent remembered globally (mcp.allow); enabled servers will auto-connect on every start. Use /mcp to connect them now."
+                : "Global MCP consent revoked: runtime permission dropped and configured servers disconnected.",
+            ),
+          )
+          .catch(error)
+          .finally(settle);
+        return;
+      }
+      void app
+        // Setting ids are the exact SettableSettingKey paths SETTINGS_DEFINITIONS is built from.
+        .updateSetting(row.id as SettableSettingKey, value)
+        .then(() => {
+          if (row.id === "tui.paddingX") editor.setPaddingX(Number(value));
+        })
+        .catch(error)
+        .finally(settle);
+    };
+    const navigate = (row: SettingRow) => {
+      switch (row.action) {
+        case "model":
+          closePicker();
+          return void chooseModel();
+        case "connect":
+          closePicker();
+          return void connect();
+        case "compact":
+          closePicker();
+          void task((signal) => app.runner.compact(session, { signal }))
+            .catch(error)
+            .then(openSettings);
+          return;
+        case "plugins":
+          closePicker();
+          return managePlugins();
+        case "skills":
+          closePicker();
+          return manageSkills();
+        case "mcp":
+          closePicker();
+          return manageMcp();
+        case "stats":
+          closePicker();
+          info(statsReport());
+          openSettings();
+          return;
+        default:
+          return openSettings();
+      }
+    };
+    const menu = new SettingsMenu(
+      "Settings",
+      build(),
+      applySetting,
+      navigate,
+      closePicker,
+      [
+        current ? `Current: ${current}` : "",
+        ...(options.readOnly ? ["Read-only run: changes are not persisted"] : []),
+      ]
+        .filter(Boolean)
+        .join("\n") || undefined,
+    );
+    settingsMenu = menu;
+    showPicker(menu);
+  };
   const workspaceSessions = () =>
     app.store.list().filter((s) => s.workspace === app.workspace && s.provider === app.provider.id);
   const firstPrompt = (id: string) => {
@@ -1276,6 +1416,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     "plugins",
     "skills",
     "mcp",
+    "settings",
     "compact",
     "clear",
     "resume",
@@ -1330,6 +1471,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return manageSkills();
         case "mcp":
           return manageMcp();
+        case "settings":
+          return openSettings();
         case "compact":
           return await task((signal) =>
             app.runner.compact(session, { focus: parsed.args || undefined, signal }),
@@ -1415,34 +1558,41 @@ export async function runTui(options: TuiOptions): Promise<void> {
   };
   editor.setAutocompleteProvider(
     new CombinedAutocompleteProvider(
-      [
-        ...COMMANDS,
-        ...[...app.prompts.templates.values()].map((t) => ({
-          name: t.name,
-          description: `${t.description} (template)`,
-          ...(t.argumentHint ? { argumentHint: t.argumentHint } : {}),
-        })),
-        ...[...app.plugins.commandInfo.entries()]
-          .filter(([name]) => !resolveCommand(name))
-          .map(([name, c]) => ({
-            name,
-            description: c.description ?? `plugin ${c.plugin}`,
-            ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
+      slashCompletionCommands(
+        [
+          ...COMMANDS,
+          ...[...app.prompts.templates.values()].map((t) => ({
+            name: t.name,
+            description: `${t.description} (template)`,
+            ...(t.argumentHint ? { argumentHint: t.argumentHint } : {}),
           })),
-      ].map((c) => ({
-        name: c.name,
-        description: c.description,
-        ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
-        ...(c.name === "resume"
-          ? {
-              getArgumentCompletions: (prefix: string) =>
-                workspaceSessions()
-                  .filter((s) => s.id.startsWith(prefix))
-                  .slice(0, 20)
-                  .map((s) => ({ value: s.id, label: shortId(s.id), description: s.model })),
-            }
-          : {}),
-      })),
+          ...[...app.plugins.commandInfo.entries()]
+            .filter(([name]) => !resolveCommand(name))
+            .map(([name, c]) => ({
+              name,
+              description: c.description ?? `plugin ${c.plugin}`,
+              ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
+            })),
+        ],
+        {
+          sessions: (prefix) =>
+            workspaceSessions()
+              .filter((s) => s.id.startsWith(prefix))
+              .map((s) => ({ value: s.id, label: shortId(s.id), description: s.model })),
+          skills: app
+            .skillCatalog()
+            .map(({ id, name, displayId, description, scope, enabled, locked, effective }) => ({
+              id,
+              name,
+              displayId,
+              description,
+              scope,
+              enabled,
+              locked,
+              effective,
+            })),
+        },
+      ),
       app.workspace,
     ),
   );

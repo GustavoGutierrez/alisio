@@ -16,11 +16,14 @@ export {
   configFile,
   configHome,
   configSchema,
+  isSettableSettingKey,
   type LoadedConfig,
   loadConfig,
   loadConfigWithProvenance,
   type McpServerSource,
   overridesSavedProviderProfile,
+  type SettableSettingKey,
+  setConfigValue,
   setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
@@ -59,6 +62,7 @@ export {
   type CompactionResult,
   defaultTokenBudget,
   type RunnerOptions,
+  type RunnerSettingsPatch,
   type RunOptions,
 } from "./core/runner.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";

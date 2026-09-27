@@ -15,6 +15,8 @@ import {
   configHome,
   loadConfigWithProvenance,
   overridesSavedProviderProfile,
+  type SettableSettingKey,
+  setConfigValue,
   setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
@@ -24,7 +26,7 @@ import {
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
 import { ToolRegistry } from "./core/registry.ts";
-import { AgentRunner } from "./core/runner.ts";
+import { AgentRunner, type CompactionSettings, type RunnerSettingsPatch } from "./core/runner.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
@@ -888,6 +890,48 @@ export async function createApplication(options: AppOptions = {}) {
             : undefined,
         );
         return mcp.info(id);
+      },
+      /**
+       * Persist one user-facing setting to the GLOBAL user config (`<config home>/config.json`)
+       * and apply it to this process where the value can change live. Compaction and limits land
+       * in the runner (honored by the next run/compact), `context.claudeMdFallback` lands in the
+       * project context (next instructions load), `tui.paddingX` is persisted for the host to
+       * apply. Nothing in this set requires a restart. `mcp.allow` is deliberately not routed
+       * here: it flows through `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent` instead.
+       * Throws under `--read-only`. Returns the written config file.
+       */
+      async updateSetting(key: SettableSettingKey, value: unknown): Promise<string> {
+        if (options.readOnly) throw new Error("Settings changes are unavailable under --read-only");
+        const file = await setConfigValue({ key, value });
+        const compactionLeaf = (leaf: string) => ({ [leaf]: value }) as Partial<CompactionSettings>;
+        const limitLeaf = (leaf: string) => ({ [leaf]: value }) as RunnerSettingsPatch;
+        switch (key) {
+          case "compaction.auto":
+          case "compaction.threshold":
+          case "compaction.keepTurns":
+          case "compaction.maxOutputTokens": {
+            const patch = compactionLeaf(key.slice("compaction.".length));
+            config.compaction = { ...config.compaction, ...patch };
+            runner.applySettings({ compaction: patch });
+            break;
+          }
+          case "context.claudeMdFallback":
+            config.context = { ...config.context, claudeMdFallback: value === true };
+            context.update({ claudeMdFallback: value === true });
+            break;
+          case "limits.maxTurns":
+          case "limits.maxOutputTokens":
+          case "limits.maxContextChars": {
+            const patch = limitLeaf(key.slice("limits.".length));
+            config.limits = { ...config.limits, ...patch };
+            runner.applySettings(patch);
+            break;
+          }
+          case "tui.paddingX":
+            config.tui = { ...config.tui, paddingX: Number(value) };
+            break;
+        }
+        return file;
       },
       provider,
       providers,

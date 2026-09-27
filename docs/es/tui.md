@@ -69,7 +69,8 @@ muestra una estimación marcada con `~` (unos 4 caracteres por token).
 
 ## Comandos
 
-Al escribir `/` se abre el autocompletado.
+Al escribir `/` se abre el autocompletado: `/skills` (`/skill`) sugiere las skills efectivas por
+nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con el prefijo.
 
 | Comando | Función |
 | --- | --- |
@@ -85,6 +86,7 @@ Al escribir `/` se abre el autocompletado.
 | `/plugins` (`/plugin`) | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo |
 | `/skills` (`/skill`) | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
 | `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
+| `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
@@ -100,13 +102,67 @@ Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una secció
 en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
-autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/skills`, `/mcp`, `/compact`,
+autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero.
 
 El catálogo de skills usa `↑`/`↓`, RePág/AvPág, Inicio/Fin y la rueda del ratón. Mantiene visible la
 selección al filtrar, ordenar y redimensionar, solo renderiza las filas que caben e informa los
 recortes como `↑ N more above` / `↓ N more below`. Enter o Espacio cambia la skill gestionable
-seleccionada; Esc cierra el catálogo.
+seleccionada; Esc cierra el catálogo. Las skills también aparecen directamente en el
+autocompletado de comandos del editor: al empezar a escribir `/ski…` (o el propio nombre de la
+skill, como `/branch-pr…`) cada skill efectiva aparece como comando `skill:<nombre>` con un
+marcador de ámbito (`[u]` usuario, `[p]` proyecto, `[c]` config, `[l]` plugin) y su descripción, al
+estilo OpenCode; elegir una inserta `skill:<nombre>` y envía. Además, `/skills <prefijo>` (o
+`/skill <prefijo>`) autocompleta las entradas del catálogo por nombre o descripción (las
+deshabilitadas, bloqueadas y sombreadas siguen listadas con una pista de estado); aceptar una
+sugerencia solo rellena el argumento, así que enviar todavía abre el catálogo.
+
+### Menú de ajustes (`/settings`)
+
+`/settings` abre una lista de ajustes estilo OpenCode. Cada fila es un ajuste con su valor actual
+en una columna derecha; la cabecera muestra el proveedor/modelo activo. La lista permite buscar
+escribiendo (coincidencia con nombre, clave, categoría y descripción), navegar con
+`↑`/`↓`/Inicio/Fin/RePág/AvPág, cambiar el ajuste resaltado con Enter o Espacio, y muestra un
+contador `(n/total)` y un pie con la descripción de la fila resaltada. Esc vuelve al editor.
+Escribir un espacio después de empezar a buscar inserta un espacio en el filtro. Bajo
+`--read-only` todas las filas se muestran marcadas como de solo lectura: no se persiste nada.
+
+Cada ajuste siguiente es real y está conectado: se persiste en tu configuración de **usuario**
+(`~/.config/alisio/config.json`) mediante el mismo escritor atómico que usa el consentimiento MCP
+y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecida (por ejemplo un
+`compaction.threshold: 0.87` editado a mano) avanzan al siguiente valor ofrecido al primer Enter.
+
+| Ajuste | Valores | Por defecto | Se aplica |
+| --- | --- | --- | --- |
+| Auto-compact (`compaction.auto`) | `true` / `false` | `true` | siguiente ejecución |
+| Umbral de compactación (`compaction.threshold`) | 50 % – 95 % en pasos de 5 % | `85 %` | siguiente ejecución |
+| Mantener últimos turnos (`compaction.keepTurns`) | 0 – 20 | `2` | siguiente ejecución |
+| Tope de tokens de salida de compactación (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | siguiente ejecución |
+| Fallback a CLAUDE.md (`context.claudeMdFallback`) | `true` / `false` | `false` | siguiente turno |
+| Recordar consentimiento MCP (`mcp.allow`) | `true` / `false` | `false` | inmediato |
+| Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | siguiente ejecución |
+| Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | siguiente ejecución |
+| Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | siguiente ejecución |
+| Padding del editor (`tui.paddingX`) | 0 – 4 | `1` | inmediato |
+
+"Recordar consentimiento MCP" alterna el mismo consentimiento persistido que el flujo de
+concesión de `/mcp`: activarlo escribe `mcp.allow` y concede el permiso en tiempo de ejecución
+(los servidores habilitados se conectarán solos desde el próximo inicio; usa `/mcp` para
+conectarlos ahora), y desactivarlo revoca el consentimiento y desconecta los servidores.
+
+Las filas inferiores navegan: Proveedor y modelo, Conectar proveedor, Compactar contexto ahora,
+Plugins, Skills, Servidores MCP y Estadísticas de sesión. Las filas que abren un gestor dejan
+Esc/atrás a ese gestor; las acciones puntuales (compactar, estadísticas) vuelven a la lista.
+
+**No incluidos (lista honesta):** varios ajustes habituales en otros agentes de código no existen
+aún en Alisio, así que NO se ofrecen aquí — telemetría (Alisio no recopila ninguna), renderizado
+de diagramas Mermaid, modo de dirección/seguimiento, doble Esc para salir, selección automática
+de transporte (handshake stdio/http), tiempo de inactividad HTTP para MCP, telemetría de
+instalación, entradas de changelog colapsadas, cursor por hardware, limpiar al reducir la
+terminal, progreso en terminal, cambio de tema, niveles de aviso, filtro de árbol, nivel de
+razonamiento/esfuerzo, un valor de confianza persistido por defecto y una ventana de contexto
+global de proveedor/modelo (esa es por perfil en `/connect`). Si falta un ajuste es porque Alisio
+no implementa esa función; ninguna fila es un stub.
 
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y
 `/command plugin.id:name args`. Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.

@@ -1,6 +1,7 @@
 import type { RunEvent } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
 import {
+  COMMANDS,
   configuredProviderModelItems,
   contextLevel,
   editSummary,
@@ -21,7 +22,10 @@ import {
   reduceEvent,
   reservedCommandNames,
   resolveCommand,
+  type SkillCompletionEntry,
   shortenPath,
+  skillCompletions,
+  slashCompletionCommands,
   summarizeToolArgs,
 } from "../packages/cli/src/tui/state.ts";
 
@@ -218,7 +222,276 @@ describe("commands", () => {
     expect(resolveCommand("skill")).toBe("skills");
     expect(resolveCommand("skills")).toBe("skills");
     expect(resolveCommand("mcp")).toBe("mcp");
+    expect(resolveCommand("settings")).toBe("settings");
+    expect(resolveCommand("prefs")).toBe("settings");
     expect(reservedCommandNames()).toContain("mcp");
+  });
+
+  it("lists /settings with its alias so autocomplete and /help discover it", () => {
+    const settings = COMMANDS.find((c) => c.name === "settings");
+    expect(settings).toMatchObject({ description: "Open the settings menu", aliases: ["prefs"] });
+    expect(parseCommand("/settings")).toEqual({ name: "settings", args: "" });
+    expect(parseCommand("/prefs")).toEqual({ name: "prefs", args: "" });
+    expect(reservedCommandNames()).toContain("settings");
+    expect(reservedCommandNames()).toContain("prefs");
+  });
+});
+
+describe("skill slash autocompletion", () => {
+  const docx: SkillCompletionEntry = {
+    id: "docx",
+    name: "docx",
+    displayId: "docx",
+    description: "Create, read and edit Word documents",
+    enabled: true,
+    locked: false,
+    effective: true,
+  };
+  const pdf: SkillCompletionEntry = {
+    id: "pdf",
+    name: "pdf",
+    displayId: "pdf",
+    description: "Extract and generate PDF files",
+    enabled: false,
+    locked: false,
+    effective: true,
+  };
+  const archive: SkillCompletionEntry = {
+    id: "memory:archive",
+    name: "archive",
+    displayId: "memory:archive",
+    description: "Archive observations to persistent memory",
+    enabled: true,
+    locked: true,
+    effective: true,
+  };
+  const docxShadow: SkillCompletionEntry = {
+    id: "docx#shadow-1",
+    name: "docx",
+    displayId: "docx",
+    description: "A duplicated user copy",
+    enabled: true,
+    locked: false,
+    effective: false,
+  };
+
+  it("suggests the whole catalog on an empty prefix with ids as values and display names as labels", () => {
+    expect(skillCompletions([docx, pdf, archive, docxShadow], "")).toEqual([
+      { value: "docx", label: "docx", description: "Create, read and edit Word documents" },
+      {
+        value: "pdf",
+        label: "pdf",
+        description: "disabled · Extract and generate PDF files",
+      },
+      {
+        value: "memory:archive",
+        label: "memory:archive",
+        description: "locked by plugin · Archive observations to persistent memory",
+      },
+      {
+        value: "docx#shadow-1",
+        label: "docx",
+        description: "shadowed · A duplicated user copy",
+      },
+    ]);
+  });
+
+  it("filters by prefix ignoring case on names, display ids and description keywords", () => {
+    expect(skillCompletions([docx, pdf, archive, docxShadow], "DOC").map((i) => i.value)).toEqual([
+      "docx",
+      "docx#shadow-1",
+    ]);
+    expect(skillCompletions([docx, pdf, archive, docxShadow], "Word").map((i) => i.value)).toEqual([
+      "docx",
+    ]);
+    expect(
+      skillCompletions([docx, pdf, archive, docxShadow], "persistent").map((i) => i.value),
+    ).toEqual(["memory:archive"]);
+    expect(
+      skillCompletions([docx, pdf, archive, docxShadow], " memory ").map((i) => i.value),
+    ).toEqual(["memory:archive"]);
+  });
+
+  it("respects the limit and caps the description length", () => {
+    const long = {
+      ...docx,
+      id: "long",
+      name: "long",
+      displayId: "long",
+      description: "x".repeat(200),
+    };
+    const items = skillCompletions([docx, pdf, archive, docxShadow, long], "", 2);
+    expect(items.map((i) => i.value)).toEqual(["docx", "pdf"]);
+    const described = skillCompletions([long], "");
+    expect(described[0]?.description?.length).toBeLessThanOrEqual(80);
+    expect(described[0]?.description?.endsWith("…")).toBe(true);
+    // The disabled marker is prepended before truncating, so it survives the cap.
+    const marked = skillCompletions([{ ...long, enabled: false }], "");
+    expect(marked[0]?.description).toMatch(/^disabled · x+x…$/);
+    expect(marked[0]?.description?.length).toBeLessThanOrEqual(80);
+  });
+
+  it("returns no suggestions for an empty catalog or a non-matching prefix", () => {
+    expect(skillCompletions([], "doc")).toEqual([]);
+    expect(skillCompletions([docx, pdf], "zzz")).toEqual([]);
+  });
+
+  it("wires argument completions to /skills (and its alias) and /resume only", () => {
+    const long = "x".repeat(200);
+    const commands = slashCompletionCommands(
+      [
+        {
+          name: "skills",
+          description: "Browse and manage effective skills",
+          aliases: ["skill"],
+        },
+        { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
+        { name: "help", description: "Show commands and keys" },
+      ],
+      {
+        sessions: (prefix) =>
+          [{ value: "s1", label: "s1", description: "m1" }].filter((s) =>
+            s.value.startsWith(prefix),
+          ),
+        skills: [docx, { ...docx, id: "long", name: "long", displayId: "long", description: long }],
+      },
+    );
+    expect(commands.map((c) => c.name)).toEqual([
+      "skills",
+      "skill",
+      "resume",
+      "help",
+      "skill:docx",
+      "skill:long",
+    ]);
+    const skills = commands[0]!;
+    expect(skills.name).toBe("skills");
+    expect(skills.getArgumentCompletions?.("DOC")).toEqual([
+      {
+        value: "docx",
+        label: "docx",
+        description: "Create, read and edit Word documents",
+      },
+    ]);
+    const alias = commands[1]!;
+    expect(alias.name).toBe("skill");
+    expect(alias.description).toBe("Browse and manage effective skills");
+    expect(alias.getArgumentCompletions?.("")).toHaveLength(2);
+    expect(alias.getArgumentCompletions?.("")?.[1]?.description?.length).toBeLessThanOrEqual(80);
+    const resume = commands[2]!;
+    expect(resume.getArgumentCompletions?.("s")).toEqual([
+      { value: "s1", label: "s1", description: "m1" },
+    ]);
+    expect(resume.getArgumentCompletions?.("z")).toEqual([]);
+    expect((commands[3]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
+    // The appended skill entries are plain slash commands: inserting the name is enough, submitting
+    // routes `skill:<id>` to skill load, and they must not steal argument completions.
+    const skillEntry = commands[4]!;
+    expect(skillEntry.name).toBe("skill:docx");
+    expect(skillEntry.description).toBe("Create, read and edit Word documents");
+    expect((skillEntry as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
+    expect((commands[5]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
+  });
+
+  it("adds a first-class skill:<id> slash entry per catalog skill with scope marker, status and truncated description", () => {
+    const long = "x".repeat(200);
+    const catalog: SkillCompletionEntry[] = [
+      { ...docx, scope: "user" },
+      { ...pdf, scope: "project" },
+      { ...archive, scope: "plugin" },
+      { ...docxShadow, scope: "user" },
+      {
+        ...docx,
+        id: "config:docx",
+        name: "docx",
+        displayId: "config:docx",
+        scope: "config",
+        description: long,
+      },
+    ];
+    const commands = slashCompletionCommands(
+      [{ name: "help", description: "Show commands and keys" }],
+      { skills: catalog },
+    );
+    expect(commands.map((c) => c.name)).toEqual([
+      "help",
+      "skill:docx",
+      "skill:pdf",
+      "skill:memory:archive",
+      "skill:docx#shadow-1",
+      "skill:config:docx",
+    ]);
+    expect(commands[1]?.description).toBe("[u] Create, read and edit Word documents");
+    expect(commands[2]?.description).toBe("[p] disabled · Extract and generate PDF files");
+    expect(commands[3]?.description).toBe(
+      "[l] locked by plugin · Archive observations to persistent memory",
+    );
+    expect(commands[4]?.description).toBe("[u] shadowed · A duplicated user copy");
+    // The scope marker and status survive the truncation cap.
+    expect(commands[5]?.description?.startsWith("[c] x")).toBe(true);
+    expect(commands[5]?.description?.endsWith("…")).toBe(true);
+    expect(commands[5]?.description?.length).toBeLessThanOrEqual(80);
+  });
+
+  it("keeps skill: entries filterable for a /ski-type prefix, case-insensitively", () => {
+    const commands = slashCompletionCommands(
+      [
+        { name: "skills", description: "Browse and manage effective skills", aliases: ["skill"] },
+        { name: "help", description: "Show commands and keys" },
+      ],
+      {
+        skills: [
+          { ...docx, scope: "user" },
+          {
+            ...docx,
+            id: "branch-pr",
+            name: "branch-pr",
+            displayId: "branch-pr",
+            scope: "user",
+            description: "Create Gentle AI pull requests with issue-first checks",
+          },
+          {
+            ...docx,
+            id: "chained-pr",
+            name: "chained-pr",
+            displayId: "chained-pr",
+            scope: "user",
+            description: "Trigger: PRs over 400 lines, stacked PRs, review slices",
+          },
+        ],
+      },
+    );
+    // The provider fuzzy-matches names with all prefix characters in order, case-insensitively;
+    // emulate that contract here instead of importing pi-tui internals.
+    const matches = (name: string, prefix: string) => {
+      const query = prefix.toLowerCase();
+      const text = name.toLowerCase();
+      let at = 0;
+      for (const char of query) {
+        const hit = text.indexOf(char, at);
+        if (hit === -1) return false;
+        at = hit + 1;
+      }
+      return true;
+    };
+    const names = (prefix: string) =>
+      commands.filter((c) => matches(c.name, prefix)).map((c) => c.name);
+    expect(names("ski")).toContain("skill:branch-pr");
+    expect(names("ski")).toContain("skill:chained-pr");
+    expect(names("ski")).toContain("skills");
+    expect(names("SKI")).toContain("skill:branch-pr");
+    expect(names("skill:b")).toEqual(["skill:branch-pr"]);
+    expect(names("branch")).toEqual(["skill:branch-pr"]);
+    expect(names("zzz")).toEqual([]);
+  });
+
+  it("contributes no skill entries for an empty catalog", () => {
+    const commands = slashCompletionCommands(
+      [{ name: "help", description: "Show commands and keys" }],
+      { skills: [] },
+    );
+    expect(commands.map((c) => c.name)).toEqual(["help"]);
+    expect(commands.some((c) => c.name.startsWith("skill:"))).toBe(false);
   });
 });
 

@@ -69,6 +69,17 @@ export interface RunnerOptions {
    */
   nativeTools?: Array<Record<string, unknown>>;
 }
+/** The settings a running TUI can change live; merged into the runner options on apply. */
+export interface RunnerSettingsPatch {
+  /** Compaction settings; merged over the current ones (any subset). */
+  compaction?: Partial<CompactionSettings>;
+  /** Maximum turns per run. */
+  maxTurns?: number;
+  /** Per-call max output tokens budget. */
+  maxOutputTokens?: number;
+  /** Post-compaction context budget in characters. */
+  maxContextChars?: number;
+}
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
  * and `toolFilter` are applied on top of the runner's policy and tools.
@@ -132,6 +143,18 @@ export class AgentRunner {
   /** Whether write/process tools can be approved interactively. */
   get approvals(): boolean {
     return !!this.options.approve;
+  }
+  /**
+   * Live-update runnable settings so the next `run`/`compact` call honors them without restarting
+   * Alisio. Every patch field is merged over the current options; unrelated settings are kept.
+   */
+  applySettings(patch: RunnerSettingsPatch): void {
+    const { compaction, ...rest } = patch;
+    this.options = {
+      ...this.options,
+      ...rest,
+      ...(compaction ? { compaction: { ...this.options.compaction, ...compaction } } : {}),
+    };
   }
   private emitter(sessionId: string): Emit {
     const runId = crypto.randomUUID();

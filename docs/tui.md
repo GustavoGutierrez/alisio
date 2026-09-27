@@ -67,7 +67,8 @@ estimate marked with `~` (about 4 characters per token) is shown.
 
 ## Commands
 
-Typing `/` opens autocompletion.
+Typing `/` opens autocompletion: `/skills` (`/skill`) suggests the effective skills by name or
+description, and `/resume` suggests matching session IDs.
 
 | Command | Purpose |
 | --- | --- |
@@ -83,6 +84,7 @@ Typing `/` opens autocompletion.
 | `/plugins` (`/plugin`) | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled |
 | `/skills` (`/skill`) | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
 | `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp` (or global `mcp.allow`), Connect/Enable shows process/network consequences and can grant access for this TUI session only, or remember it globally (`mcp.allow`) for every session. A "Revoke global MCP consent" row clears that preference and disconnects servers. `--read-only` blocks it |
+| `/settings` (`/prefs`) | Settings menu: an OpenCode-style list of real, wired preferences (compaction, context, MCP consent, limits, editor padding) plus navigation rows for the managers below. Two-column rows (name + current value), type-to-search filter, `(n/total)` counter, footer with the highlighted row's description; Enter/Space changes a value, Esc leaves. Persisted to your user configuration and applied to the running session |
 | `/copy` | Copy the last assistant response to the clipboard |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
@@ -98,13 +100,64 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/plugins`, `/skills`, `/mcp`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+is running, prompts and the `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
 interrupt first.
 
 The skills catalog uses `↑`/`↓`, PgUp/PgDn, Home/End and the mouse wheel. It keeps the selection
 visible after filtering, sorting and resizing, renders only the rows that fit, and reports clipped
 rows as `↑ N more above` / `↓ N more below`. Enter or Space toggles the selected manageable skill;
-Esc closes it.
+Esc closes it. Skills also appear directly in the editor's slash autocomplete: starting to type
+`/ski…` (or the skill's own name, like `/branch-pr…`) shows every effective skill as a
+`skill:<name>` command with a scope marker (`[u]` user, `[p]` project, `[c]` config, `[l]` plugin)
+and its description, OpenCode-style; selecting one inserts `skill:<name>` and submits it. In
+addition, `/skills <prefix>` (or `/skill <prefix>`) autocompletes catalog
+entries by name or description (disabled, locked and shadowed entries stay listed with a status
+hint); selecting a suggestion only fills the argument, so submitting still opens the catalog.
+
+### Settings menu (`/settings`)
+
+`/settings` opens an OpenCode-style settings list. Each row is a setting name with its current
+value in a right-hand column; the header shows the active provider/model. The list supports
+type-to-search (matching name, key, category and description), `↑`/`↓`/Home/End/PgUp/PgDn
+navigation, Enter or Space to change the highlighted setting, a `(n/total)` counter and a footer
+with the highlighted row's description. Esc returns to the editor. Typing a space after starting a
+search inserts a space into the filter. Under `--read-only` every row is shown but marked
+read-only: nothing is persisted.
+
+Every setting below is real and wired: it persists to your **user** configuration
+(`~/.config/alisio/config.json`) through the same atomic writer used for MCP consent and is
+applied to the running session. Values that are not in the offered list (for example a
+hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on your first Enter.
+
+| Setting | Values | Default | Takes effect |
+| --- | --- | --- | --- |
+| Auto-compact (`compaction.auto`) | `true` / `false` | `true` | next run |
+| Compaction threshold (`compaction.threshold`) | 50% – 95% in 5% steps | `85%` | next run |
+| Keep latest turns (`compaction.keepTurns`) | 0 – 20 | `2` | next run |
+| Compaction max output tokens (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | next run |
+| CLAUDE.md fallback (`context.claudeMdFallback`) | `true` / `false` | `false` | next turn |
+| Remember MCP consent (`mcp.allow`) | `true` / `false` | `false` | immediately |
+| Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | next run |
+| Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | next run |
+| Context char budget (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | next run |
+| Editor padding (`tui.paddingX`) | 0 – 4 | `1` | immediately |
+
+"Remember MCP consent" toggles the same persisted consent as the `/mcp` grant flow: turning it on
+writes `mcp.allow` and grants runtime permission (enabled servers auto-connect from the next
+start; use `/mcp` to connect now), turning it off revokes the consent and disconnects servers.
+
+The bottom rows navigate: Provider & model, Connect provider, Compact context now, Plugins,
+Skills, MCP servers and Session statistics. Rows that open a manager leave Esc/back to that
+manager; one-shot actions (compact, statistics) return to the settings list.
+
+**Not included (honest list):** several settings commonly seen in other coding agents do not exist
+in Alisio yet, so they are NOT offered here — telemetry (Alisio collects none), Mermaid diagram
+rendering, steering/follow-up mode, double-Esc to exit, automatic transport selection (stdio/http
+handshake), HTTP idle timeout for MCP, install telemetry, collapsed changelog entries, hardware
+cursor, clearing on terminal shrink, terminal progress reporting, theme switching, warning
+levels, a tree filter, thinking/effort level, a persisted trust default, and a global
+model-provider context window (that one is per-profile in `/connect`). If a setting is missing it
+means Alisio does not implement the feature; no row is a stub.
 
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and
 `/command plugin.id:name args`. Lines are processed sequentially; Ctrl+C cancels and exits.

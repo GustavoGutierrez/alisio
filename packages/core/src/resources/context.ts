@@ -49,6 +49,13 @@ export class ProjectContext implements ContextSource {
     this.options = options;
     this.cwd = options.cwd ?? workspace;
   }
+  /**
+   * Live-update options so the next `instructions()` call honors them without restarting.
+   * Only runtime-read fields matter (`claudeMdFallback`, `maxBytes`); `cwd` stays fixed.
+   */
+  update(options: Partial<ProjectContextOptions>): void {
+    this.options = { ...this.options, ...options };
+  }
   private names(): Array<[string, InstructionKind]> {
     return [
       ["AGENTS.override.md", "override"],

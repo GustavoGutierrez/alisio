@@ -162,9 +162,36 @@ funcional, no solo interfaces o stubs.
   cabecera con modelo/host/permisos, conversación con Markdown, bloques de herramientas con
   spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens (ventana real
   del modelo cuando el catálogo la expone; `~9.9k / ?` honesto cuando no), comandos
-  `/help /model /compact /stats /clear /sessions /resume /tools /exit` con autocompletado,
+  `/help /model /compact /stats /clear /sessions /resume /tools /exit` con autocompletado
+  (incluido `/skills`/`/skill` con sugerencias del catálogo por nombre o descripción),
   interrupción con Esc y aprobación interactiva de `write`/`process`. `--no-tui` conserva
   el modo readline.
+- Comando `/settings` (`/prefs`): menú de ajustes estilo OpenCode — filas de dos columnas
+  (preferencia + valor actual), filtro escribiendo (nombre/clave/categoría/descripción), contador
+  `(n/total)` y pie con la descripción de la fila resaltada; Enter/Espacio cambia el valor, Esc
+  sale. Diez ajustes REALES y conectados, persistidos de forma atómica en la configuración global
+  de usuario (`setConfigValue`, puerta de entrada acotada a un conjunto de claves validado con el
+  propio esquema) y aplicados en caliente: `compaction.auto/threshold/keepTurns/maxOutputTokens`
+  y `limits.maxTurns/maxOutputTokens/maxContextChars` (vía `AgentRunner.applySettings`, surten
+  efecto en la siguiente ejecución), `context.claudeMdFallback` (vía `ProjectContext.update`,
+  siguiente turno), `tui.paddingX` (padding del editor, inmediato) y el consentimiento
+  `mcp.allow` por el camino `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent`. Bajo
+  `--read-only` todo se muestra en solo lectura. Las filas inferiores navegan a
+  `/model`, `/connect`, compactación, `/plugins`, `/skills`, `/mcp` y `/stats`; las puntuales
+  (compactar, estadísticas) avisan y reabren la lista. La lista es HONESTA: no se ofrecen ajustes
+  inexistentes (telemetría, Mermaid, modo dirección, doble Esc, transporte automático, idle HTTP,
+  tema, niveles de aviso, confianza persistida, ventana de contexto global...) — ver docs/tui.md.
+  `/settings` se bloquea mientras un turno está en curso, igual que los gestores a los que da acceso.
+- Skills en el autocompletado de comandos: cada skill efectiva del catálogo aparece como entrada de
+  primer nivel `skill:<id>` (marcador de ámbito `[u]`/`[p]`/`[c]`/`[l]`, pista de estado
+  deshabilitada/bloqueada/sombreada y descripción recortada, como en `/skills`), de modo que
+  `/ski…` o el propio nombre de la skill las muestran y elegir una inserta `skill:<id>`. El enrutado
+  `/skill:<id>` existente no cambia, ni el completado de argumentos de `/skills` ni `/resume`.
+- Dependencia con parche (`patchedDependencies` en `pnpm-workspace.yaml`, `patches/`): pi-tui 0.87.1
+  filtraba los nombres `skill:*` quitando el prefijo al emparejar (diseñado para `/branch…`), lo que
+  hacía imposible que `/ski…` mostrara `skill:branch-pr`; el parche empareja el nombre completo.
+  Cualquier comando que reconstruya `node_modules` (instalación limpia/CI) aplica el parche solo si
+  `pnpm install` corre con `patchedDependencies` presente.
 - Versión en tiempo de ejecución por paquete: metadatos de plugins, `user-agent` por defecto y el
   cliente MCP leen la versión de su propio `package.json` (con la inyección
   `ALISIO_PACKAGE_VERSION` para binarios autónomos y `dev` como último recurso); la cabecera de la

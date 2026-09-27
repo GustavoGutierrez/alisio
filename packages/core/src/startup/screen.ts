@@ -124,10 +124,7 @@ export const DefaultStartupScreen: StartupScreenProvider = {
       ...pluginsSection(ctx),
     ];
     const body = side ? composeSideBySide(mascot, info, columns) : [...mascot, ...info];
-    const rule = sgr(
-      ctx.terminal.color,
-      "2",
-    )(glyph(ctx.terminal, "─", "-").repeat(columns - 2));
+    const rule = sgr(ctx.terminal.color, "2")(glyph(ctx.terminal, "─", "-").repeat(columns - 2));
     return [...body, "", ...tipsSection(ctx), rule].map((line) => truncate(line, columns));
   },
 };

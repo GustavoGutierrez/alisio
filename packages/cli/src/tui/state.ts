@@ -316,6 +316,11 @@ export const COMMANDS: CommandSpec[] = [
     aliases: ["skill"],
   },
   { name: "mcp", description: "Browse and manage MCP servers" },
+  {
+    name: "settings",
+    description: "Open the settings menu",
+    aliases: ["prefs"],
+  },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   {
     name: "ask",
@@ -336,6 +341,142 @@ export function parseCommand(input: string): { name: string; args: string } | un
   const match = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(input.trim());
   if (!match?.[1]) return undefined;
   return { name: match[1], args: (match[2] ?? "").trim() };
+}
+
+/** Minimal structural view of a skill for slash autocompletion (subset of the core catalog entry). */
+export interface SkillCompletionEntry {
+  id: string;
+  name: string;
+  displayId: string;
+  description: string;
+  /** Catalog scope of the skill: user | project | config | plugin (drives the [u]/[p]/[c]/[l] marker). */
+  scope?: string;
+  enabled: boolean;
+  locked: boolean;
+  effective: boolean;
+}
+export interface SlashCompletionItem {
+  value: string;
+  label: string;
+  description?: string;
+}
+export const SKILL_COMPLETION_DESCRIPTION_LIMIT = 80;
+/** Status hint prefixes (no color): shadowed < disabled < locked states shown by /skills. */
+const skillStatus = (skill: SkillCompletionEntry): string | undefined =>
+  !skill.effective
+    ? "shadowed"
+    : !skill.enabled
+      ? "disabled"
+      : skill.locked
+        ? "locked by plugin"
+        : undefined;
+/**
+ * OpenCode-style scope marker for a skill's slash entry, mirroring the catalog scopes the /skills
+ * manager shows: user, project, config and plugin (plugin skills are locked by their owner plugin).
+ */
+export const skillScopeMarker = (skill: SkillCompletionEntry): string | undefined => {
+  const marker = ({ user: "[u]", project: "[p]", config: "[c]", plugin: "[l]" } as const)[
+    skill.scope as "user" | "project" | "config" | "plugin"
+  ];
+  return marker ?? (skill.scope ? `[${skill.scope}]` : undefined);
+};
+/**
+ * Description for a skill's first-class `skill:<id>` slash entry: scope marker, status hint, then
+ * the skill description truncated to the shared limit. The marker and status are prepended before
+ * truncating, so they survive the cap just like the /skills argument completions.
+ */
+export function skillSlashDescription(skill: SkillCompletionEntry): string {
+  const marker = skillScopeMarker(skill);
+  const status = skillStatus(skill);
+  if (!marker && !status)
+    return truncatePlain(skill.description, SKILL_COMPLETION_DESCRIPTION_LIMIT);
+  return truncatePlain(
+    `${[marker, status].filter(Boolean).join(" ")}${status ? " · " : " "}${skill.description}`,
+    SKILL_COMPLETION_DESCRIPTION_LIMIT,
+  );
+}
+/**
+ * Suggested completions for `/skills <prefix>`: every entry the /skills manager shows, filtered by
+ * prefix (case-insensitive) on name or description. Selecting a suggestion only fills the argument;
+ * submitting still opens the skills manager.
+ */
+export function skillCompletions(
+  catalog: SkillCompletionEntry[],
+  prefix: string,
+  limit = 20,
+): SlashCompletionItem[] {
+  const query = prefix.trim().toLowerCase();
+  const items = query
+    ? catalog.filter((skill) =>
+        [skill.displayId, skill.name, skill.description].join(" ").toLowerCase().includes(query),
+      )
+    : catalog;
+  return items.slice(0, limit).map((skill) => {
+    const status = skillStatus(skill);
+    return {
+      value: skill.id,
+      label: skill.displayId,
+      description: truncatePlain(
+        status ? `${status} · ${skill.description}` : skill.description,
+        SKILL_COMPLETION_DESCRIPTION_LIMIT,
+      ),
+    };
+  });
+}
+
+export interface SlashCompletionSource {
+  name: string;
+  description?: string;
+  argumentHint?: string;
+  aliases?: string[];
+}
+export interface SlashCompletionContext {
+  /** Live session rows for `/resume`: already filtered to the typed prefix and mapped. */
+  sessions?: (prefix: string) => SlashCompletionItem[];
+  /** Effective skill catalog backing `/skills` (the same entries the skills manager shows). */
+  skills: SkillCompletionEntry[];
+}
+function argumentCompletionsFor(source: SlashCompletionSource, context: SlashCompletionContext) {
+  const sessions = context.sessions;
+  if (source.name === "resume" && sessions)
+    return {
+      getArgumentCompletions: (prefix: string) => sessions(prefix).slice(0, 20),
+    };
+  if (source.name === "skills")
+    return {
+      getArgumentCompletions: (prefix: string) => skillCompletions(context.skills, prefix, 20),
+    };
+  return {};
+}
+/**
+ * Builds the editor slash-autocomplete command list. Aliases get their own entries with the same
+ * description and argument completions, because the provider matches commands by fuzzy name.
+ * Effective skills are appended as first-class `skill:<id>` entries so `/ski…`, `/skill:b…` and
+ * even `/branch…` all surface them; submitting already routes `skill:` commands to skill load, so
+ * selecting an entry only needs to insert the command name.
+ */
+export function slashCompletionCommands(
+  sources: SlashCompletionSource[],
+  context: SlashCompletionContext,
+) {
+  const entries = sources.flatMap((source) => {
+    const entry = (name: string) => ({
+      name,
+      description: source.description,
+      ...(source.argumentHint ? { argumentHint: source.argumentHint } : {}),
+      ...argumentCompletionsFor(source, context),
+    });
+    return [
+      entry(source.name),
+      ...(source.aliases ?? []).filter((a) => a !== source.name).map(entry),
+    ];
+  });
+  for (const skill of context.skills)
+    entries.push({
+      name: `skill:${skill.id}`,
+      description: skillSlashDescription(skill),
+    });
+  return entries;
 }
 
 function parseArgs(args: string): Record<string, unknown> | undefined {
