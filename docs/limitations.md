@@ -28,6 +28,10 @@ it is not a statement that all of its release criteria are met.
   consent persistently and auto-connects enabled servers at every start; a per-session TUI grant is
   the alternative when `mcp.allow` is unset. Granting persists across sessions: a server that
   auto-connects at startup runs unsandboxed under your user privileges whenever enabled.
+  Large tool catalogs are a deployment choice: a server exposing dozens of tools inflates every
+  request and is not counted against the post-compaction context budget (see
+  [Context limitations](#context)), so manage oversized catalogs with `/plugins` (disable the
+  server) rather than expecting the runner to shrink them.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
 - Hardening against hostile processes and filesystem races. No OS sandbox is offered.
 - **Persistent MCP consent**: `mcp.allow: true` grants MCP process/network consent for this user
@@ -111,7 +115,10 @@ it is not a statement that all of its release criteria are met.
   switch), or stays unknown. Auto-compaction uses ONE effective budget: with a known window it
   triggers at `threshold` of that window only; with an unknown window (or one declared beyond
   `2_000_000` tokens) it falls back to `limits.maxContextChars` (est. tokens at `maxContextChars / 4`),
-  which also stays as the post-compaction hard limit. The TUI context bar reflects the same budget.
+  which also stays as the post-compaction hard limit. The hard limit measures only **reducible
+  content** (instructions + transcript): the fixed tool catalog is not counted against it, so a
+  huge MCP catalog can never corrupt or fake-fail a small transcript — manage oversized catalogs
+  with `/plugins` instead. The TUI context bar reflects the same budget.
   Coverage uses saved profiles and `/connect` activation with fake catalogs; the interactive
   `/connect` input is verified by types and manually, not by UI tests.
 - **Compaction** uses the current provider; its token usage is not added to the `limits.maxTokens`
@@ -185,7 +192,7 @@ and the config schema accepts the new field with its default.
 
 The coherent context metric was verified with mocked providers (Vitest, no network): the runner
 auto-compacts on the char-budget fallback when the window is unknown, does NOT compact early when a
-large window is known (the DeepSeek ~1M-window vs 160k-char mismatch), compacts at `window ×
+large window is known (the DeepSeek ~1M-window vs 800k-char mismatch), compacts at `window ×
 threshold`, and treats declared windows beyond 2M tokens as unknown; `app.contextBudget` reports
 the model window when the catalog exposes it (lazily loaded, refreshed on model switch) and an
 honest `basis: "unknown"` with no fabricated total otherwise, and the TUI bar renders `~9.9k / ?`

@@ -158,16 +158,20 @@ const configObjectSchema = z
       .object({
         maxTurns: z.number().int().min(1).max(100).default(20),
         timeoutMs: z.number().int().min(100).default(300000),
-        maxContextChars: z.number().int().positive().default(160000),
-        maxOutputTokens: z.number().int().positive().default(4096),
+        maxContextChars: z.number().int().positive().default(800000),
+        /**
+         * Per-call output token budget for one agent turn. 4096 starves reasoning-heavy models,
+         * which can spend the whole budget on `reasoning_content` before any usable text arrives.
+         */
+        maxOutputTokens: z.number().int().positive().default(16384),
         /** Cumulative tokens per run; default is proportional to the context window. */
         maxTokens: z.number().int().positive().optional(),
       })
       .default(() => ({
         maxTurns: 20,
         timeoutMs: 300000,
-        maxContextChars: 160000,
-        maxOutputTokens: 4096,
+        maxContextChars: 800000,
+        maxOutputTokens: 16384,
       })),
     tui: z
       .object({

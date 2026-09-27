@@ -557,8 +557,9 @@ describe("compaction truncation handling", () => {
  * Context-budget recovery: after a compaction that still leaves the kept tail over
  * `maxContextChars`, the runner reduces retained content in place against a TOTAL character
  * target (largest items first, in descending cap rounds) instead of failing, and only a
- * pathological session (instructions + tools alone crowding out the limit) produces the
- * actionable error (with the session still usable).
+ * pathological session (instructions alone crowding out the limit) produces the
+ * actionable error (with the session still usable), and the fixed tool catalog is NOT
+ * counted against the hard limit (a huge MCP catalog never corrupts the transcript).
  */
 describe("context-budget reduction after compaction", () => {
   const marker = "… [truncated by context budget]";
@@ -762,7 +763,7 @@ describe("context-budget reduction after compaction", () => {
     }
   });
 
-  it("fails actionably when instructions+tools alone exceed the limit, and later prompts still work", async () => {
+  it("fails actionably when instructions alone exceed the limit, and later prompts still work", async () => {
     const fx = await fixture();
     try {
       const session = fx.store.create(fx.root, "test", "test");
@@ -787,11 +788,66 @@ describe("context-budget reduction after compaction", () => {
       expect(error).not.toBeNull();
       expect(error?.message).toContain("Context budget exceeded");
       expect(error?.message).toContain("/compact");
+      expect(error?.message).toContain("/plugins");
       expect(error?.message).toMatch(/approximately \d+ characters/);
       // A later prompt in the same session succeeds: no leftovers poison the TUI.
       const again = await runner.run(session.id, "hi");
       expect(again.status).toBe("completed");
       expect(again.text).toMatch(/^answer /);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("does not fail when the fixed tool catalog alone exceeds the char budget", async () => {
+    const fx = await fixture();
+    try {
+      // The reported bug: an MCP-style server exposing a huge catalog (devforge ~95 tools +
+      // assignable tools) makes the serialized toolsText alone ~200k chars — over the 160k
+      // limit — so an EMPTY transcript used to die with the fatal context-budget error. The
+      // hard cap now measures only reducible content (instructions + transcript): the catalog
+      // is a fixed deployment reality (a /plugins decision), not session growth.
+      fx.registry.register({
+        name: "huge",
+        effect: "read",
+        description: "x".repeat(200_000),
+        inputSchema: { type: "object" },
+        async execute() {
+          return textResult("ok");
+        },
+      });
+      const session = fx.store.create(fx.root, "test", "test");
+      fx.store.append(session.id, { role: "user", text: "hi" });
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: twoFaceProvider() as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxContextChars: 160_000,
+        // A known window keeps the window-based auto-compaction branch (which measures the
+        // FULL request including tools) from firing: 200k chars ≈ 50k tokens is far below
+        // 1M × 0.85.
+        contextWindow: () => 1_000_000,
+        onEvent,
+      });
+      const result = await runner.run(session.id, "continue");
+      expect(result.status).toBe("completed");
+      expect(result.text).toMatch(/^answer /);
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+      // The small transcript must NOT be reduced or compacted by the catalog's weight.
+      expect(events.some((e) => e.type === "context_reduced")).toBe(false);
+      expect(events.some((e) => e.type === "compaction_completed")).toBe(false);
+      const stored = fx.store.messages(session.id);
+      expect(stored.filter((m) => m.role === "user").map((m) => m.text)).toEqual([
+        "hi",
+        "continue",
+      ]);
+      // A follow-up prompt keeps working (the historical fatal error is gone for good).
+      const again = await runner.run(session.id, "next prompt");
+      expect(again.status).toBe("completed");
     } finally {
       await fx.close();
     }

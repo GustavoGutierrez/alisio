@@ -38,11 +38,22 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
   `ventana × threshold` no oculte la presión real) — Alisio recurre a `limits.maxContextChars`:
   los tokens estimados (≈ caracteres / 4) que alcanzan `maxContextChars / 4` también compactan.
   Aplica exactamente uno de los dos criterios, de modo que la barra de contexto de la TUI y el motor
-  siempre coinciden sobre cuándo se compacta. `maxContextChars` además sigue siendo el límite duro
-  posterior a la compactación: si comprimir no logra quedarse por debajo, la cola conservada se
-  reduce (ver más abajo) y solo una sesión irreducible falla con un error accionable en vez de enviar
-  una petición descomunal. `auto: false` desactiva la
+  siempre coinciden sobre cuándo se compacta. Ambos criterios miden la **petición completa**
+  (instrucciones, transcript y el catálogo fijo de herramientas), porque protegen lo que el modelo
+  ve realmente. `maxContextChars` además sigue siendo el límite duro
+  posterior a la compactación — pero allí cuenta solo el **contenido reducible**
+  (instrucciones + transcript), nunca el catálogo de herramientas (ver
+  [más abajo](#el-catálogo-de-herramientas-no-se-cuenta)). Si comprimir no logra dejar la
+  conversación por debajo, la cola conservada se reduce (ver más abajo) y solo una sesión
+  irreducible falla con un error accionable en vez de enviar una petición descomunal. `auto: false` desactiva la
   compactación automática por completo.
+
+El respaldo por defecto es de `800000` caracteres (≈ `200000` tokens): una **suposición para
+ventanas desconocidas**, el mismo presupuesto de ~200k tokens que OpenCode asume para proveedores
+personalizados, para que los servidores locales que no informan su ventana (por ejemplo llama.cpp)
+obtengan un presupuesto de unos 200k tokens en lugar de uno de 40k. Una ventana conocida (hasta el
+límite de confianza de 2M de tokens) siempre la anula, y `/settings` → Presupuesto de caracteres de
+contexto permite bajar el respaldo en cualquier momento.
 
 ## Configuración
 
@@ -83,12 +94,13 @@ contexto posterior; trátelo como un respaldo degradado, no como un resumen comp
 
 La compactación conserva `keepTurns` turnos recientes **sin cambios**. Si esos turnos contienen
 salidas enormes de herramientas (por ejemplo `grep` sobre un repositorio grande), ni siquiera un
-checkpoint perfecto logra dejar la petición por debajo de `limits.maxContextChars`, y la sesión
+checkpoint perfecto logra dejar el contenido reducible de la sesión por debajo de
+`limits.maxContextChars`, y la sesión
 solía morir en cada prompt. En su lugar, tras una compactación el runner ahora comprueba el límite
 duro y, si sigue superado, **reduce los mensajes conservados en su sitio** antes de enviar nada:
 
 - La reducción apunta a un **presupuesto total de caracteres** para el transcript:
-  `objetivo = max(4 000, limits.maxContextChars − instrucciones − herramientas)`, de modo que
+  `objetivo = max(4 000, limits.maxContextChars − instrucciones)`, de modo que
   también cubre sesiones con muchos resultados MEDIOS de herramientas (por ejemplo salidas MCP de
   unos pocos miles de caracteres cada una) que individualmente quedan bajo los límites por mensaje
   pero juntos superan el límite.
@@ -105,13 +117,35 @@ duro y, si sigue superado, **reduce los mensajes conservados en su sitio** antes
   originales permanecen en la base marcados como compactados, igual que en la propia
   compactación).
 - El evento `context_reduced` informa cuántos mensajes se cortaron.
-- Solo una sesión patológica — `instrucciones` más `herramientas` que ya superan el límite por sí
-  solas, de modo que ni siquiera el mínimo de 4 000 caracteres cabe — falla con un error accionable
-  que nombra el tamaño aproximado y sugiere `/compact`, recortar salidas grandes de herramientas o
-  iniciar una sesión nueva. La reducción igualmente se persiste, así que la sesión sigue
+- Solo una sesión patológica — las `instrucciones` por sí solas (más el mínimo de 4 000 caracteres)
+  que ya superan el límite, de modo que ni siquiera el suelo de la reducción cabe — falla con un
+  error accionable que nombra el tamaño aproximado de la conversación y sugiere `/compact`, recortar
+  salidas grandes de herramientas, iniciar una sesión nueva o desactivar con `/plugins` los
+  servidores MCP innecesarios. La reducción igualmente se persiste, así que la sesión sigue
   funcionando para prompts posteriores.
 
 Los checkpoints (`summary: true`) están acotados por diseño y este paso nunca los corta.
+
+## El catálogo de herramientas no se cuenta {#el-catálogo-de-herramientas-no-se-cuenta}
+
+El límite duro anterior mide deliberadamente **solo el contenido reducible** — instrucciones más
+el transcript. El catálogo serializado de herramientas (`toolsText`: nombre, esquema y descripción
+de cada herramienta registrada) es una **realidad de despliegue fija**: forma parte de cada
+petición sin importar la historia, de modo que un servidor con decenas de herramientas (por
+ejemplo un catálogo MCP grande) puede valer por sí solo 100k+ caracteres, y un transcript pequeño
+ya no cabe bajo el límite una vez que se cuenta el catálogo. Antes de esta distinción, esas
+sesiones fallaban con el error fatal «Context budget exceeded» incluso con un transcript casi
+vacío — la falla reportada en subagentes y exploraciones en repositorios con varios servidores
+MCP.
+
+- El tamaño del catálogo es una decisión de **`/plugins`**, no crecimiento de sesión: desactive allí
+  los servidores MCP innecesarios (`/mcp` muestra el recuento de herramientas de cada servidor), en
+  lugar de que el runner corrompa un transcript sano para «caber» un catálogo que no puede
+  reducir.
+- La compactación automática sigue midiendo la petición **completa** (los umbrales de ventana
+  protegen todo lo que el modelo ve, herramientas incluidas); solo el límite duro posterior a la
+  compactación y la reducción del transcript excluyen el catálogo, de modo que el error fatal nunca
+  se dispara por `toolsText` solo.
 
 ## Eventos
 

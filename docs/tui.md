@@ -12,7 +12,10 @@ alisio --no-tui           # plain readline mode instead of the TUI
 ```
 
 `run`, `resume <id> "prompt"` and `--json` never open the TUI. The TUI uses the terminal's alternate
-screen; on exit it prints the conversation and the session ID.
+screen; on exit it prints the conversation and the session ID. Exiting is fast: an in-flight turn
+gets up to 3 seconds, session-end hooks ~1.5 seconds (during exit; `/clear` still honors the full
+`pluginHooks.sessionEndTimeoutMs`), and teardown of MCP servers, provider and plugins runs in
+parallel with short caps — a hanging server or plugin never stalls the exit.
 
 ## Startup screen
 
@@ -43,7 +46,7 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 
 | Area | Content |
 | --- | --- |
-| Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
+| Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
 | Status bar | Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
@@ -142,8 +145,8 @@ hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on 
 | Web search provider (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | unset (fallback chain) | next search call |
 | Remember MCP consent (`mcp.allow`) | `true` / `false` | `false` | immediately |
 | Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | next run |
-| Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | next run |
-| Context char budget (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | next run |
+| Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | next run |
+| Context char budget (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k / 800k | `800000` | next run |
 | Run timeout (`limits.timeoutMs`) | 30 s – 600 s in 30 s steps (persisted as ms) | `300000 ms` (5 min) | next run |
 | Plugin hook timeout (`pluginHooks.timeoutMs`) | 1 s – 120 s in 1 s steps (persisted as ms) | `15000 ms` | next hook call |
 | Editor padding (`tui.paddingX`) | 0 – 4 | `1` | immediately |
@@ -180,6 +183,10 @@ In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name requ
 | Esc | Interrupt the running turn |
 | Ctrl+C | Clear the input; interrupt an active turn; pressed twice on an empty input, exit |
 | Ctrl+D | Exit when the input is empty |
+
+`/exit`, double Ctrl+C on an empty input and Ctrl+D all go through the same bounded shutdown:
+whatever is still running is aborted, waited for at most ~3 seconds, session-end hooks get ~1.5
+seconds, and the app teardown itself is capped — exit feels instant even with many MCP servers.
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |

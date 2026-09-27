@@ -457,7 +457,7 @@ describe("token budgets in configuration", () => {
   it("defaults compaction.maxOutputTokens independently of limits.maxOutputTokens", () => {
     const parsed = configSchema.parse({});
     expect(parsed.compaction.maxOutputTokens).toBe(16_000);
-    expect(parsed.limits.maxOutputTokens).toBe(4096);
+    expect(parsed.limits.maxOutputTokens).toBe(16_384);
     expect(parsed.limits.maxTurns).toBe(20);
   });
 

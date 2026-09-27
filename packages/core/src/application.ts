@@ -43,6 +43,14 @@ import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
 import { ChildSessions } from "./sessions/children.ts";
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/**
+ * Cap per teardown stage of `app.close()`: exit must never wait longer than this on a hanging
+ * component (MCP server, provider, plugin). Stages run in parallel where independent and
+ * failures are swallowed, so teardown errors never replace the caller's result.
+ */
+const TEARDOWN_STAGE_TIMEOUT_MS = 2_500;
 export interface AppOptions {
   cwd?: string;
   config?: string;
@@ -1078,27 +1086,34 @@ export async function createApplication(options: AppOptions = {}) {
         });
       },
       async close() {
+        // Exit latency is user-facing: tear down herdr + MCP in parallel, then provider +
+        // plugins (store last). Every stage is raced against a cap so a single hanging
+        // component cannot stall /exit; teardown errors are swallowed for callers.
+        const capped = (work: Promise<unknown>) =>
+          Promise.race([work.catch(() => {}), delay(TEARDOWN_STAGE_TIMEOUT_MS)]);
         try {
-          await herdr.close();
-          await mcp.close();
+          await capped(Promise.allSettled([herdr.close(), mcp.close()]));
         } finally {
           try {
-            await provider.dispose();
-            await Promise.allSettled(
-              [
-                ...new Set([
+            await capped(
+              (async () => {
+                const runtimes = new Set([
                   ...(await Promise.allSettled(targetProviders.values()))
                     .filter(
                       (x): x is PromiseFulfilledResult<ModelProvider> => x.status === "fulfilled",
                     )
                     .map((x) => x.value),
                   ...retainedProviders,
-                ]),
-              ]
-                .filter((runtime) => runtime !== provider.currentProvider)
-                .map((runtime) => Promise.resolve(runtime.dispose?.())),
+                ]);
+                await Promise.allSettled([
+                  provider.dispose(),
+                  ...[...runtimes]
+                    .filter((runtime) => runtime !== provider.currentProvider)
+                    .map((runtime) => Promise.resolve(runtime.dispose?.())),
+                  plugins.close(),
+                ]);
+              })(),
             );
-            await plugins.close();
           } finally {
             store.close();
           }
@@ -1106,9 +1121,10 @@ export async function createApplication(options: AppOptions = {}) {
       },
     };
   } catch (e) {
-    await herdr.close();
-    await mcp.close();
-    await plugins.close();
+    await Promise.race([
+      Promise.allSettled([herdr.close(), mcp.close(), plugins.close()]),
+      delay(TEARDOWN_STAGE_TIMEOUT_MS),
+    ]);
     store.close();
     throw e;
   }

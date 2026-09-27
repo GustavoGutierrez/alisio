@@ -25,6 +25,8 @@ interface StoredSpec {
   maxTurns?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  /** Per-call output token budget for the child; overrides the global agent-loop budget. */
+  maxOutputTokens?: number;
 }
 export interface ChildSessionsOptions {
   store: SessionStore;
@@ -125,6 +127,7 @@ export class ChildSessions implements SessionsAPI {
       ...(spec.maxTurns ? { maxTurns: spec.maxTurns } : {}),
       ...(spec.timeoutMs ? { timeoutMs: spec.timeoutMs } : {}),
       ...(spec.maxTokens ? { maxTokens: spec.maxTokens } : {}),
+      ...(spec.maxOutputTokens ? { maxOutputTokens: spec.maxOutputTokens } : {}),
     };
     const child = this.o.store.createChild({
       ...(spec.id ? { id: spec.id } : {}),
@@ -198,6 +201,7 @@ export class ChildSessions implements SessionsAPI {
           context: this.o.contextFor(session.workspace),
           ...(spec.maxTurns ? { maxTurns: spec.maxTurns } : {}),
           ...(spec.maxTokens ? { maxTokens: spec.maxTokens } : {}),
+          ...(spec.maxOutputTokens ? { maxOutputTokens: spec.maxOutputTokens } : {}),
           ...(spec.timeoutMs ? { timeoutMs: spec.timeoutMs } : {}),
         },
       );

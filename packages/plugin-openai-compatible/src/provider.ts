@@ -168,7 +168,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (completed.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
     if (finish === "length" && !text.trim())
       throw new Error(
-        "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+        "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
       );
     yield {
       type: "completed",
@@ -247,7 +247,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           .join("");
         if (!text.trim())
           throw new Error(
-            "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+            "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
           );
         if (calls.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
         yield {

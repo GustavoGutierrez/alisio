@@ -37,10 +37,20 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
   declared window is absurdly large (beyond `2_000_000` tokens, so `window × threshold` cannot hide
   real pressure) — Alisio falls back to `limits.maxContextChars`: est. tokens (≈ characters / 4)
   reaching `maxContextChars / 4` also compacts. Exactly one of the two applies, so the TUI context
-  bar and the engine always agree on when compaction triggers. `maxContextChars` additionally stays
-  as the post-compaction hard limit: if compressing cannot get under it, the retained tail is
-  reduced (see below), and only an irreducible session fails with an actionable error instead of
-  sending an oversized request. `auto: false` disables automatic compaction entirely.
+  bar and the engine always agree on when compaction triggers. Both triggers measure the **full
+  request** (instructions, transcript and the fixed tool catalog), because they protect what the
+  model really sees. `maxContextChars` additionally stays as the post-compaction hard limit — but
+  there it counts only **reducible content** (instructions + transcript), never the tool catalog
+  (see [below](#the-tool-catalog-is-not-counted)). If compressing cannot get the conversation under
+  it, the retained tail is reduced (see below), and only an irreducible session fails with an
+  actionable error instead of sending an oversized request. `auto: false` disables automatic
+  compaction entirely.
+
+The fallback default is `800000` characters (≈ `200000` tokens): an **assumption for unknown
+windows**, the same ~200k-token budget OpenCode assumes for custom providers, so local servers that
+do not report a window (for example llama.cpp) get about a 200k-token budget instead of a 40k one. A
+known window (up to the 2M-token trust boundary) always overrides it, and `/settings` → Context char
+budget can lower the fallback at any time.
 
 ## Configuration
 
@@ -80,13 +90,14 @@ context; treat it as a degraded fallback, not a full summary.
 ## Reducing an oversized kept tail
 
 Compaction keeps `keepTurns` recent turns **verbatim**. If those turns hold huge tool outputs
-(for example `grep` over a large repository), even a perfect checkpoint cannot bring the request
-under `limits.maxContextChars`, and the session used to die on every prompt. Instead, after a
+(for example `grep` over a large repository), even a perfect checkpoint cannot bring the session's
+reducible content under `limits.maxContextChars`, and the session used to die on every prompt.
+Instead, after a
 compaction the runner now checks the hard limit and, when still over, **reduces the retained
 messages in place** before sending anything:
 
 - The reduction targets a **total character budget** for the transcript:
-  `target = max(4 000, limits.maxContextChars − instructions − tools)`, so it also handles
+  `target = max(4 000, limits.maxContextChars − instructions)`, so it also handles
   sessions with many MEDIUM tool results (for example MCP outputs of a few thousand characters
   each) that individually stay under the per-message caps but together exceed the limit.
 - Content is clipped **iteratively, largest first**, in descending cap rounds: tool results at
@@ -100,12 +111,31 @@ messages in place** before sending anything:
   The reduced transcript is persisted (originals stay in the database marked as compacted, like
   compaction itself).
 - The `context_reduced` event reports how many messages were cut.
-- Only a pathological session — `instructions` plus `tools` alone already exceeding the limit, so
-  even the 4 000-character floor cannot fit — fails with an actionable error naming the
-  approximate size and suggesting `/compact`, trimming large tool outputs, or starting a new
-  session. The reduction is still persisted, so the session keeps working for later prompts.
+- Only a pathological session — `instructions` alone (plus the 4 000-character floor) still
+  exceeding the limit, so even the reduction floor cannot fit — fails with an actionable error
+  naming the approximate conversation size and suggesting `/compact`, trimming large tool
+  outputs, starting a new session, or disabling unneeded MCP servers with `/plugins`. The
+  reduction is still persisted, so the session keeps working for later prompts.
 
 Checkpoint summaries (`summary: true`) are bounded by design and are never cut by this step.
+
+## The tool catalog is not counted {#the-tool-catalog-is-not-counted}
+
+The hard limit above deliberately measures **reducible content only** — instructions plus the
+transcript. The serialized tool catalog (`toolsText`: every registered tool's name, schema and
+description) is a **fixed deployment reality**: it is part of every request regardless of
+history, so a server exposing dozens of tools (for example a large MCP catalog) can be worth
+100k+ characters on its own, and a small transcript can no longer fit under the limit once the
+catalog is counted. Before this distinction, such sessions hit the fatal "Context budget
+exceeded" error even with an almost-empty transcript — the reported failure for subagents and
+explores in repos with several MCP servers.
+
+- Catalog size is a **`/plugins` decision**, not session growth: disable unneeded MCP servers
+  there (`/mcp` shows each server's tool count), instead of the runner corrupting a healthy
+  transcript to "fit" a catalog it cannot shrink.
+- Auto-compaction still measures the **full** request (window thresholds protect everything the
+  model sees, tools included); only the post-compaction hard cap and the transcript reduction
+  exclude the catalog, so the fatal error never fires because of `toolsText` alone.
 
 ## Events
 

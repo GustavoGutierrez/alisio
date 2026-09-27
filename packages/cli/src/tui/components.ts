@@ -11,11 +11,13 @@ import {
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
+import { terminalCapabilities } from "../banner.ts";
 import {
   attachmentCaption,
   MAX_ATTACHMENTS_PER_MESSAGE,
   type PendingAttachment,
 } from "./attachments.ts";
+import { branchDisplay } from "./git-branch.ts";
 import {
   initialQuestionState,
   type QuestionAction,
@@ -53,6 +55,8 @@ export interface HeaderInfo {
   provider?: string;
   cwd: string;
   session: string;
+  /** Git branch (or short SHA on a detached HEAD) of the session workspace; undefined when unavailable. */
+  branch?: string;
   write: PermissionState;
   process: PermissionState;
   mcp: boolean;
@@ -109,6 +113,22 @@ export class Header implements Component {
       [
         { text: i.cwd, priority: 6, paint: style.cyan },
         { text: `session ${i.session}`, priority: 4, paint: style.gray },
+        // Priority 3 (below session's 4): the branch is ambient context, so on narrow terminals it
+        // drops first — before the session ID and permissions. At equal priority fitSegments drops
+        // the FIRST lowest-priority segment, which would mis-drop the session when branch sits
+        // after it, so the branch keeps a strictly lower priority instead.
+        ...(i.branch
+          ? [
+              {
+                text: branchDisplay(
+                  i.branch,
+                  terminalCapabilities({ env: process.env, columns: width, tty: true }).unicode,
+                ),
+                priority: 3,
+                paint: style.cyan,
+              },
+            ]
+          : []),
         ...perms,
       ],
       width,

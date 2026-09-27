@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
 import { type AppOptions, createApplication } from "../packages/core/src/application.ts";
 import { hash } from "../packages/core/src/tools/standard.ts";
+import { subagentsConfigSchema } from "../packages/plugin-subagents/src/config.ts";
 
 const base = await mkdtemp(join(tmpdir(), "alisio-subagents-"));
 afterAll(() => rm(base, { recursive: true, force: true }));
@@ -23,6 +24,8 @@ type Turn = {
   messages: Message[];
   tools: string[];
   instructions: string;
+  /** Per-call output token budget the request was sent with. */
+  maxOutputTokens?: number;
 };
 /** Scripted provider: each conversation is keyed by its first user message. */
 function scripted(handler: (turn: Turn) => Reply | Promise<Reply>): ModelProvider {
@@ -42,6 +45,7 @@ function scripted(handler: (turn: Turn) => Reply | Promise<Reply>): ModelProvide
         messages: request.messages,
         tools: request.tools.map((t) => t.name),
         instructions: request.instructions,
+        maxOutputTokens: request.maxOutputTokens,
       });
       const calls = (reply.calls ?? []).map((c) => ({
         id: `c${++seq}`,
@@ -246,6 +250,119 @@ describe("delegation basics", () => {
     } finally {
       await a.close();
     }
+  });
+});
+
+describe("child output token budgets", () => {
+  it("forwards maxOutputTokensPerChild to child runs (default 16384) and keeps maxTokens cumulative", async () => {
+    let childTurn: Turn | undefined;
+    const { app: a, session } = await app(
+      scripted((t) => {
+        if (t.key === "PARENT") {
+          if (t.round === 1)
+            return {
+              calls: [
+                {
+                  name: "task",
+                  args: { description: "d", prompt: "CHILD-BUDGET", subagent_type: "general" },
+                },
+              ],
+            };
+          return { text: "parent done" };
+        }
+        childTurn = t;
+        return { text: "done" };
+      }),
+    );
+    try {
+      await a.runner.run(session, "PARENT");
+      expect(childTurn?.maxOutputTokens).toBe(16_384);
+      const options = a.store.children(session).map((c) => a.store.get(c.id).options ?? {});
+      expect(options[0]).toMatchObject({ maxOutputTokens: 16_384 });
+    } finally {
+      await a.close();
+    }
+  });
+
+  it("honors an explicit maxOutputTokensPerChild", async () => {
+    let childTurn: Turn | undefined;
+    const { app: a, session } = await app(
+      scripted((t) => {
+        if (t.key === "PARENT") {
+          if (t.round === 1)
+            return {
+              calls: [
+                {
+                  name: "task",
+                  args: { description: "d", prompt: "CHILD-EXPLICIT", subagent_type: "explore" },
+                },
+              ],
+            };
+          return { text: "parent done" };
+        }
+        childTurn = t;
+        return { text: "done" };
+      }),
+      { plugin: { maxOutputTokensPerChild: 8192 } },
+    );
+    try {
+      await a.runner.run(session, "PARENT");
+      expect(childTurn?.maxOutputTokens).toBe(8192);
+    } finally {
+      await a.close();
+    }
+  });
+
+  it("sends the child call together with the cumulative maxTokens when both are configured", async () => {
+    let childTurn: Turn | undefined;
+    const { app: a, session } = await app(
+      scripted((t) => {
+        if (t.key === "PARENT") {
+          if (t.round === 1)
+            return {
+              calls: [
+                {
+                  name: "task",
+                  args: { description: "d", prompt: "CHILD-BOTH", subagent_type: "general" },
+                },
+              ],
+            };
+          return { text: "parent done" };
+        }
+        childTurn = t;
+        return { text: "done" };
+      }),
+      { plugin: { maxTokensPerChild: 300_000 } },
+    );
+    try {
+      await a.runner.run(session, "PARENT");
+      expect(childTurn?.maxOutputTokens).toBe(16_384);
+      const options = a.store.children(session).map((c) => a.store.get(c.id).options ?? {});
+      expect(options[0]).toMatchObject({ maxTokens: 300_000, maxOutputTokens: 16_384 });
+    } finally {
+      await a.close();
+    }
+  });
+});
+
+describe("subagents config schema", () => {
+  it("defaults maxOutputTokensPerChild to 16384 and keeps maxTokensPerChild optional", () => {
+    const config = subagentsConfigSchema.parse({});
+    expect(config.maxOutputTokensPerChild).toBe(16_384);
+    expect(config.maxTokensPerChild).toBeUndefined();
+    expect(config.maxTurns).toBe(50);
+  });
+
+  it("accepts explicit limits and rejects non-positive output budgets", () => {
+    expect(
+      subagentsConfigSchema.parse({ maxOutputTokensPerChild: 8192 }).maxOutputTokensPerChild,
+    ).toBe(8192);
+    expect(
+      subagentsConfigSchema.parse({ maxTokensPerChild: 300_000, maxOutputTokensPerChild: 24_000 })
+        .maxTokensPerChild,
+    ).toBe(300_000);
+    expect(() => subagentsConfigSchema.parse({ maxOutputTokensPerChild: 0 })).toThrow();
+    expect(() => subagentsConfigSchema.parse({ maxOutputTokensPerChild: -1 })).toThrow();
   });
 });
 

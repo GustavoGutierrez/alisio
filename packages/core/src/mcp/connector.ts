@@ -45,6 +45,16 @@ type Connected = {
 };
 
 const TOOL_NAME_LIMIT = 64;
+/**
+ * Per-server client close cap used ONLY by the terminal `close()`: the MCP SDK's stdio close can
+ * take ~4s worst case (stdin end → 2s → SIGTERM → 2s → SIGKILL) when a server ignores
+ * termination, and exit must never wait for that ladder. Runtime `disconnect()` keeps its
+ * unbounded semantics so interactive reconnect flows stay unchanged.
+ */
+const CLOSE_SERVER_TIMEOUT_MS = 800;
+/** Overall cap for `close()` (every connected server in parallel plus bridge unregistration). */
+const CLOSE_TOTAL_TIMEOUT_MS = 1_500;
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const semanticSegment = (value: string, fallback: string): string =>
   value
     .normalize("NFKD")
@@ -463,7 +473,30 @@ export class McpConnector {
     return [...(this.clients.get(name)?.registeredNames ?? [])];
   }
   async close(): Promise<void> {
-    await Promise.all([...this.clients.keys()].map((name) => this.disconnect(name)));
-    for (const undo of this.bridgeUndo.splice(0).reverse()) undo();
+    const servers = [...this.clients.keys()];
+    // Exit latency is user-facing: every server is disconnected in parallel, each client close
+    // raced against a short cap, and the whole phase against an overall cap. An abandoned close
+    // keeps running in the background and the SDK still SIGKILLs an unresponsive server; the
+    // registry cleanup runs synchronously inside `disconnect`, so tools are always unregistered.
+    await Promise.race([
+      (async () => {
+        await Promise.all(
+          servers.map((name) =>
+            Promise.race([this.disconnect(name), delay(CLOSE_SERVER_TIMEOUT_MS)]),
+          ),
+        );
+        for (const undo of this.bridgeUndo.splice(0).reverse()) undo();
+      })(),
+      delay(CLOSE_TOTAL_TIMEOUT_MS),
+    ]);
+    // A raced `disconnect` may have been abandoned before its final status cleanup (it flips
+    // the status only after `client.close()` resolves): the client entry is already gone, so
+    // settle the status here for exit without touching runtime disconnect semantics.
+    for (const name of servers) {
+      if (this.clients.has(name) || this.statuses.get(name) !== "connected") continue;
+      const server = this.servers[name];
+      if (!server) continue;
+      this.statuses.set(name, server.enabled ? "disconnected" : "disabled");
+    }
   }
 }

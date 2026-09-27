@@ -374,6 +374,8 @@ export interface ChildSessionSpec {
   maxTurns?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  /** Per-call output token budget for the child; beats the global agent-loop budget. */
+  maxOutputTokens?: number;
 }
 export interface ChildSessionInfo {
   id: string;

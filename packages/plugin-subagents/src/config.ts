@@ -19,6 +19,11 @@ export const subagentsConfigSchema = z
     timeoutMs: z.number().int().min(1_000).default(600_000),
     /** Per-child cumulative token budget; default follows the core proportional budget. */
     maxTokensPerChild: z.number().int().positive().optional(),
+    /**
+     * Per-child per-call output token budget. Children forward this (never the global agent-loop
+     * default) so reasoning-heavy models are not starved; 4096 would be spent on reasoning alone.
+     */
+    maxOutputTokensPerChild: z.number().int().positive().default(16_384),
     /** Parallel write-capable children in a git repository. */
     parallelWrites: z.enum(["ask", "worktree", "serial", "shared"]).default("ask"),
     waitMaxMs: z.number().int().min(100).default(600_000),

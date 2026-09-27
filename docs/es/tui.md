@@ -12,7 +12,11 @@ alisio --no-tui           # plain readline mode instead of the TUI
 ```
 
 `run`, `resume <id> "prompt"` y `--json` nunca abren la TUI. La TUI usa la pantalla alternativa de la
-terminal; al salir imprime la conversación y el ID de sesión.
+terminal; al salir imprime la conversación y el ID de sesión. Salir es rápido: un turno en vuelo
+recibe hasta 3 segundos, los hooks de fin de sesión ~1,5 segundos (durante la salida; `/clear`
+sigue honrando el `pluginHooks.sessionEndTimeoutMs` completo) y el cierre de servidores MCP,
+proveedor y plugins corre en paralelo con topes cortos — un servidor o plugin colgado nunca
+retrasa la salida.
 
 ## Pantalla de inicio
 
@@ -44,7 +48,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 
 | Zona | Contenido |
 | --- | --- |
-| Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
+| Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
 | Barra de estado | Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
@@ -145,8 +149,8 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Proveedor de búsqueda web (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | sin definir (cadena de respaldo) | siguiente llamada de búsqueda |
 | Recordar consentimiento MCP (`mcp.allow`) | `true` / `false` | `false` | inmediato |
 | Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | siguiente ejecución |
-| Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | siguiente ejecución |
-| Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | siguiente ejecución |
+| Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | siguiente ejecución |
+| Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k / 800k | `800000` | siguiente ejecución |
 | Tiempo de espera de ejecución (`limits.timeoutMs`) | 30 s – 600 s en pasos de 30 s (se persiste en ms) | `300000 ms` (5 min) | siguiente ejecución |
 | Tiempo de espera de hooks de plugins (`pluginHooks.timeoutMs`) | 1 s – 120 s en pasos de 1 s (se persiste en ms) | `15000 ms` | siguiente hook |
 | Padding del editor (`tui.paddingX`) | 0 – 4 | `1` | inmediato |
@@ -185,6 +189,11 @@ En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name r
 | Esc | Interrumpir el turno en curso |
 | Ctrl+C | Borrar la entrada; interrumpir un turno activo; pulsado dos veces con la entrada vacía, salir |
 | Ctrl+D | Salir cuando la entrada está vacía |
+
+`/exit`, doble Ctrl+C con la entrada vacía y Ctrl+D pasan por el mismo apagado acotado: lo que siga
+en ejecución se aborta y se espera como mucho ~3 segundos, los hooks de fin de sesión reciben ~1,5
+segundos y el cierre de la aplicación también está limitado — salir se siente instantáneo incluso
+con muchos servidores MCP.
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |

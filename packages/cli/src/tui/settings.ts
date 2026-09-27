@@ -70,7 +70,7 @@ export interface SettingsMenuInput {
 export const defaultConfig: SettingsConfigView = {
   compaction: { auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 },
   context: { claudeMdFallback: false, maxBytes: 32 * 1024 },
-  limits: { maxTurns: 20, maxOutputTokens: 4_096, maxContextChars: 160_000, timeoutMs: 300_000 },
+  limits: { maxTurns: 20, maxOutputTokens: 16_384, maxContextChars: 800_000, timeoutMs: 300_000 },
   tui: { paddingX: 1, skillSlashCommands: true },
   mcp: { allow: false },
   websearch: { provider: undefined },
@@ -208,7 +208,7 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     label: "Context char budget",
     category: "Limits",
     valueType: "number",
-    values: [80_000, 120_000, 160_000, 240_000, 320_000],
+    values: [80_000, 120_000, 160_000, 240_000, 320_000, 800_000],
     read: (config) => config.limits.maxContextChars,
     description:
       "Hard context limit in characters (instruction files + transcript + tool list) per run; the budget fallback that auto-compaction measures when the model window is unknown. Applied from the next run.",

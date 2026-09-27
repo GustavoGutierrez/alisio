@@ -121,6 +121,7 @@ Se configuran en `builtinPlugins.subagents`:
 | `maxTurns` | `50` | Límite de turnos por defecto por hijo (1–500) |
 | `timeoutMs` | `600000` | Tiempo límite por ejecución de un hijo (mínimo 1000) |
 | `maxTokensPerChild` | presupuesto del núcleo | Presupuesto acumulado de tokens por hijo; por defecto, el presupuesto proporcional del núcleo |
+| `maxOutputTokensPerChild` | `16384` | Presupuesto de tokens de salida por llamada y por hijo. Los hijos lo reenvían en lugar del tope global del bucle del agente (4096) para que los modelos con razonamiento no se queden sin presupuesto |
 | `parallelWrites` | `ask` | `ask`, `worktree`, `serial` o `shared` (ver más abajo) |
 | `waitMaxMs` | `600000` | Cota superior de `task_wait` (mínimo 100) |
 | `resultMaxBytes` | `50000` | Tamaño máximo del resultado (1000–1000000) |

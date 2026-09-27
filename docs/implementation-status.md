@@ -457,7 +457,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No se ejecutó una compactación automática con inferencia real autenticada.
 - Métrica de contexto coherente (Vitest, proveedores simulados, sin red): el runner compacta con el
   presupuesto de caracteres de respaldo cuando la ventana es desconocida, NO compacta pronto cuando
-  la ventana conocida es grande (el desajuste DeepSeek ~1M de ventana frente a 160k de caracteres),
+  la ventana conocida es grande (el desajuste DeepSeek ~1M de ventana frente a 800k de caracteres),
   compacta en `ventana × threshold` aunque esté muy por debajo del presupuesto de caracteres, y
   trata las ventanas declaradas por encima de 2M de tokens como desconocidas para que el respaldo
   siga protegiendo. `app.contextBudget` informa la ventana del modelo cuando el catálogo la expone
@@ -465,6 +465,13 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   oficiales de DeepSeek/OpenCode) y una base honesta `basis: "unknown"` sin total inventado en caso
   contrario; la barra de la TUI pinta `~9.9k / ?` para ese caso (Vitest de reducción/formateo) y
   expone el punto de compactación a la TUI.
+- Cambio: `limits.maxContextChars` ahora tiene por defecto `800000` caracteres (≈ `200000` tokens,
+  antes `160000` ≈ 40k) en el esquema de configuración y en el menú de ajustes (`/settings` →
+  Presupuesto de caracteres de contexto, que ahora ofrece 800k entre sus valores). Es una suposición
+  para ventanas de modelo desconocidas — el mismo presupuesto de ~200k tokens que OpenCode asume
+  para proveedores personalizados — pensada para servidores locales que no informan su ventana
+  (p. ej. llama.cpp); una ventana conocida (≤ 2M tokens) siempre la anula (compactación en
+  `ventana × threshold`) y el usuario puede bajarla desde `/settings`.
 - Recuperación del presupuesto de contexto tras una compactación insuficiente (Vitest, proveedores
   simulados, sin red): si tras compactar los mensajes conservados aún superan `limits.maxContextChars`,
   el runner reduce el contenido retenido contra un OBJETIVO TOTAL de caracteres
@@ -513,6 +520,71 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   el presupuesto del bucle del agente; la TUI muestra el aviso y el marcador `partial` (Vitest de
   reducción de eventos) y el esquema de configuración acepta el nuevo campo con su dato por
   defecto.
+
+## Presupuesto de tokens de salida del agente: alcance de la verificación
+
+- Cambio: `limits.maxOutputTokens` ahora tiene por defecto `16384` (antes `4096`) en el esquema de
+  configuración y en el menú de ajustes (`/settings` → "Agent max output tokens"), porque un tope de
+  4096 deja a los modelos con razonamiento (p. ej. DeepSeek) agotar todo el presupuesto en el
+  razonamiento antes de producir texto útil; eso hacía fallar subagentes de exploración/auditoría con
+  «cut off by max output tokens before any usable content» tras 20–50 s de trabajo.
+- Nuevo: las sesiones hijas (subagentes) reciben un presupuesto de salida por llamada propio.
+  `builtinPlugins.subagents.maxOutputTokensPerChild` (positivo, por defecto `16384`) se introduce en
+  la especificación del hijo (`maxOutputTokens` en `ChildSessionSpec`), se persiste en sus opciones y
+  se reenvía a cada llamada del runner; sin él, el hijo usaría el defecto global de 4096 del runner.
+  El presupuesto acumulado `maxTokensPerChild` no cambia (sigue siendo la suma por ejecución, no el
+  tope por llamada). El runner ahora acepta `maxOutputTokens` por ejecución en `RunOptions` y lo
+  aplica delante del presupuesto del runner: opción por ejecución > opciones del runner > 4096.
+- Mensajes: el error «raise limits.maxOutputTokens» y el aviso de la TUI ahora señalan también
+  `/settings → Agent max output tokens`.
+- Verificación (Vitest, sin red): esquema de configuración (`config-layers`, `subagents`); reenvío
+  del presupuesto en hijos y rechazo de valores no positivos (`children-output-tokens`, `subagents`);
+  regresión de la sesión principal que mantiene `limits.maxOutputTokens`; aviso de la TUI
+  (`tui-state`); truncación sin cambios (la ruta de compactación conserva su propio presupuesto de
+  16000).
+
+## Límite de contexto frente al catálogo de herramientas y velocidad de salida: alcance de la verificación
+
+- Límite duro posterior a la compactación corregido: ahora mide SOLO el contenido reducible
+  (instrucciones + transcript), no el catálogo fijo de herramientas (`toolsText`). Antes, un
+  catálogo grande (p. ej. un servidor MCP con ~95 herramientas y los tools asignables) podía valer
+  100k+ caracteres por sí solo: el objetivo de reducción `max(4 000, límite − instrucciones −
+  herramientas)` quedaba en el suelo de 4 000 y aun así `chars()` (con el catálogo) superaba el
+  límite, matando la ejecución con «Context budget exceeded» incluso con un transcript casi vacío
+  — la falla reportada en subagentes/exploraciones. Ahora `objetivo = max(4 000, límite −
+  instrucciones)` y la comprobación fatal usa `instrucciones + JSON.stringify(mensajes)`; el
+  catálogo es una realidad de despliegue (decisión de `/plugins`), no crecimiento de sesión, y el
+  mensaje fatal (que solo se dispara si instrucciones + transcript siguen superando el límite tras
+  la reducción) menciona `/compact`, recortar salidas grandes y desactivar servidores MCP
+  innecesarios con `/plugins`. La compactación automática (`shouldCompactContext`) sigue midiendo
+  la petición COMPLETA (ventanas y respaldo de caracteres protegen lo que el modelo ve,
+  herramientas incluidas); solo el límite duro posterior y la reducción del transcript excluyen el
+  catálogo. El evento `context_reduced` y todos los invariantes del reducer no cambian.
+- Velocidad de salida corregida (`/exit`, doble Ctrl+C, Ctrl+D, SIGINT/SIGTERM): el cierre de
+  `McpConnector` acota cada `client.close()` por servidor a 800 ms (el cierre stdio del SDK puede
+  tardar ~4 s con un servidor que ignore la terminación) y toda la fase a 1500 ms, solo en el
+  `close()` terminal; `disconnect()` en caliente conserva su semántica sin tope para el
+  reconexado interactivo. `app.close()` ejecuta herdr+MCP en paralelo y luego proveedor+plugins
+  (store al final), todo con `Promise.allSettled` y topes de etapa de 2500 ms, con el mismo
+  tratamiento acotado en la ruta de error de `createApplication`. La TUI acota el apagado: turno
+  en vuelo ≤ 3 s y hooks de fin de sesión ≤ 1,5 s al salir (el `/clear` conserva el límite
+  completo de `pluginHooks.sessionEndTimeoutMs`).
+- Verificación (Vitest, sin red): un sesión con `toolsText` de ~200k caracteres y transcript
+  pequeño completa sin error fatal, sin `context_reduced` y sin compactar, y su transcript queda
+  intacto (`runner-truncation`); el caso patológico irreducible (solo instrucciones) sigue
+  fallando con el error accionable que ahora sugiere `/plugins`; `McpConnector.close()` vuelve en
+  < 3 s frente a un servidor stdio real que ignora fin de stdin y SIGTERM (el SDK tardaría ~4 s),
+  con registro limpio y estado `disconnected` (`mcp-close-timeout`, fixtura `mcp-slow-server`);
+  `app.close()` vuelve en < 6 s aunque `dispose` de proveedor y plugin nunca resuelvan
+  (`exit-speed`); `app.endSession` queda acotado por `sessionEndTimeoutMs` con un hook colgado
+  (`exit-speed`); los topes de la TUI (3 s/1,5 s) están cubiertos por el helper `bounded`
+  (`tui-exit`); suites existentes (MCP, consentimiento MCP en caliente, presupuesto de contexto,
+  compactación, truncación, subagentes, tokens de salida por hijo, tui-state) sin cambios o con
+  ajustes de redacción.
+- Limitación documentada: un catálogo MCP enorme debe gestionarse con `/plugins` (desactivar el
+  servidor; `/mcp` muestra el recuento de herramientas); el runner nunca corrompe un transcript
+  sano por el catálogo, y la compactación automática con ventana desconocida sigue disparándose
+  por la petición completa (herramientas incluidas) como protección del contexto real del modelo.
 
 ## Memoria y plugins: alcance de la verificación
 

@@ -340,6 +340,7 @@ export class SubagentManager {
       maxTurns: agent.maxTurns ?? this.config.maxTurns,
       timeoutMs: this.config.timeoutMs,
       ...(this.config.maxTokensPerChild ? { maxTokens: this.config.maxTokensPerChild } : {}),
+      maxOutputTokens: this.config.maxOutputTokensPerChild,
     });
     const task: TaskRecord = {
       id: info.id,

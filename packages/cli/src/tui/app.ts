@@ -53,6 +53,8 @@ import {
   TreePanel,
 } from "./components.ts";
 import { ConnectInputPrompt } from "./connect-input.ts";
+import { bounded, EXIT_PENDING_CAP_MS, EXIT_SESSION_END_CAP_MS } from "./exit.ts";
+import { BRANCH_REFRESH_MS, createBranchCache } from "./git-branch.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
@@ -236,6 +238,21 @@ export async function runTui(options: TuiOptions): Promise<void> {
     }, ms);
     tui.requestRender();
   };
+  // Git branch of the workspace for the header. Reading refs is a read operation, so it stays on
+  // under --read-only; the TTL cache means git is spawned at most once per ~10s, never per frame,
+  // and a missing repo/git or a slow spawn simply yields no branch segment.
+  const branchCache = createBranchCache();
+  let branchName: string | undefined;
+  const refreshBranch = () => {
+    void branchCache.read(app.workspace).then((branch) => {
+      if (branch !== branchName) {
+        branchName = branch;
+        tui.requestRender();
+      }
+    });
+  };
+  refreshBranch();
+  const branchTimer = setInterval(refreshBranch, BRANCH_REFRESH_MS);
   const headerInfo = (): HeaderInfo => {
     const policy = app.runner.policy,
       ask = app.runner.approvals;
@@ -246,6 +263,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       provider: app.providers.get(activeProvider?.id ?? "")?.name,
       cwd: shortenPath(app.workspace, homedir()),
       session: shortId(session),
+      branch: branchName,
       write: policy.write ? "on" : ask ? "ask" : "off",
       process: policy.process ? "on" : ask ? "ask" : "off",
       mcp: app.mcpRuntimePermission() === "granted",
@@ -603,10 +621,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   /** Session-end plugin hooks (e.g. memory summary), bounded by the host timeout. */
   const endSession = async (reason: "clear" | "exit") => {
     if (!view.stats.runs || !app.plugins.hasSessionEndHooks) return;
-    flashHint(
-      "Running session-end plugin hooks (bounded by pluginHooks.sessionEndTimeoutMs)…",
-      60_000,
-    );
+    flashHint("Running session-end plugin hooks…", 60_000);
     tui.renderNow?.();
     try {
       const { failures } = await app.endSession(session, reason);
@@ -622,8 +637,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
     if (stopping) return;
     stopping = true;
     controller?.abort(new Error("Exiting"));
-    await Promise.race([pending?.catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
-    await endSession("exit");
+    // Exit must feel instant: an in-flight turn gets up to 3s (the abort above settles it
+    // immediately in practice), then session-end hooks get a short cap — /clear still honors
+    // the full pluginHooks.sessionEndTimeoutMs. app.close() later in the main path is itself
+    // parallel and capped, so the whole exit path is bounded end to end.
+    await bounded(
+      pending?.catch(() => {}),
+      EXIT_PENDING_CAP_MS,
+    );
+    await bounded(endSession("exit"), EXIT_SESSION_END_CAP_MS);
     resolveExit();
   };
 
@@ -1848,6 +1870,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     await exited;
   } finally {
     clearInterval(ticker);
+    clearInterval(branchTimer);
     clearTimeout(hintTimer);
     process.off("SIGTERM", onSignal);
     process.off("SIGHUP", onSignal);

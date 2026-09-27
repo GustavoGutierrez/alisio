@@ -127,8 +127,8 @@ selección anterior determina cuándo se usa esa configuración en lugar del per
 | --- | --- | --- |
 | `maxTurns` | `20` | Turnos del modelo por ejecución (1–100). Cada turno es una respuesta del modelo; una ejecución que solo llama a herramientas muchas veces puede agotarlos |
 | `timeoutMs` | `300000` | Tiempo límite de la ejecución en milisegundos (mínimo 100); incluye las esperas de aprobación |
-| `maxContextChars` | `160000` | Límite de longitud del contexto en caracteres. Actúa como **disparador de compactación por defecto (fallback)** cuando la ventana del modelo es desconocida (o absurdamente grande; ver [compactación](/es/configuration#compaction)) — tokens estimados (`~caracteres/4`) que alcanzan `maxContextChars / 4` — y como **límite duro** que debe caber tras una compactación |
-| `maxOutputTokens` | `4096` | Tokens de salida por petición. Cuando un modelo alcanza este presupuesto a mitad de respuesta, Alisio conserva el texto producido, avisa de que la respuesta se cortó (`response cut by max output tokens`), completa la ejecución con normalidad y marca la finalización como `truncated` en `run_completed`. Las llamadas a herramientas totalmente escritas siguen ejecutándose. Aumente este presupuesto para respuestas más largas |
+| `maxContextChars` | `800000` | Límite de longitud del contexto en caracteres. El valor por defecto (800k caracteres ≈ 200k tokens) es una **suposición para ventanas de modelo desconocidas** — el mismo presupuesto de ~200k tokens que OpenCode asume para proveedores personalizados — para que los servidores locales que no informan su ventana (p. ej. llama.cpp) obtengan ~200k tokens en lugar de ~40k. Actúa como **disparador de compactación por defecto (fallback)** cuando la ventana del modelo es desconocida (o absurdamente grande; ver [compactación](/es/configuration#compaction)) — tokens estimados (`~caracteres/4`) que alcanzan `maxContextChars / 4` — y como **límite duro** que debe caber tras una compactación. Una ventana **conocida** anula el respaldo, y `/settings` → Presupuesto de caracteres de contexto permite bajarlo en cualquier momento |
+| `maxOutputTokens` | `16384` | Tokens de salida por petición. Cuando un modelo alcanza este presupuesto a mitad de respuesta, Alisio conserva el texto producido, avisa de que la respuesta se cortó (`response cut by max output tokens`), completa la ejecución con normalidad y marca la finalización como `truncated` en `run_completed`. Las llamadas a herramientas totalmente escritas siguen ejecutándose. Aumente este presupuesto para respuestas más largas; los modelos con razonamiento pueden gastar casi todo en razonamiento antes de producir texto, así que no lo fije demasiado bajo. Editable desde `/settings` → Tope de tokens de salida del agente |
 | `maxTokens` | proporcional | Presupuesto acumulado opcional de tokens informados por ejecución. Por defecto: 8 × la ventana de contexto del modelo, acotado a 400000–8000000; 1000000 cuando la ventana es desconocida |
 
 ## `compaction`
@@ -150,7 +150,12 @@ caracteres: la estimación de caracteres en bruto (`~caracteres / 4`, unos 4 car
 que alcanza `maxContextChars / 4` también compacta (un informe de tokens del proveedor nunca
 dispara el respaldo por sí solo). La barra de contexto de la TUI muestra la misma ventana conocida,
 o un honesto `?` cuando es desconocida (ver [Interfaz de terminal](/es/tui)); el respaldo de
-caracteres anterior es una salvaguarda del motor, nunca un total mostrado.
+caracteres anterior es una salvaguarda del motor, nunca un total mostrado. El valor por defecto de
+`800000` caracteres (≈ `200000` tokens) es una suposición para ventanas desconocidas — el mismo
+presupuesto de ~200k tokens que OpenCode asume para proveedores personalizados — para que los
+servidores locales que no informan su ventana obtengan ~200k tokens en lugar de ~40k; una ventana
+conocida siempre gana, y `/settings` → Presupuesto de caracteres de contexto permite bajar el
+respaldo en cualquier momento.
 
 Consulte [Compactación de contexto](/es/compaction).
 

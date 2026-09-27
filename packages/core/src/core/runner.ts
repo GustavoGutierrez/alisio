@@ -103,6 +103,8 @@ export interface RunOptions {
   context?: ContextSource;
   maxTurns?: number;
   maxTokens?: number;
+  /** Per-call output token budget for this run; beats the runner-level budget when set. */
+  maxOutputTokens?: number;
   timeoutMs?: number;
 }
 /**
@@ -117,8 +119,8 @@ export function defaultTokenBudget(contextWindow?: number): number {
 const MAX_INJECT_CHARS = 24_000;
 /**
  * Floor for the post-compaction transcript target: retained messages are never reduced below
- * this many characters, so a pathological session (instructions + tools alone crowding out the
- * limit) fails with an actionable error instead of silently losing the whole history.
+ * this many characters, so a pathological session (instructions alone crowding out the limit)
+ * fails with an actionable error instead of silently losing the whole history.
  */
 const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
 const allowed = (policy: Policy, effect: string) =>
@@ -416,7 +418,7 @@ export class AgentRunner {
     const controller = this.claim(sessionId);
     const o = this.options,
       emit = this.emitter(sessionId);
-    const limit = o.maxContextChars ?? 160_000;
+    const limit = o.maxContextChars ?? 800_000;
     let tokens = 0,
       lastText = "",
       acquired = false;
@@ -496,6 +498,14 @@ export class AgentRunner {
         const toolsText = this.toolsText(tools);
         const chars = () =>
           instructions.length + JSON.stringify(messages).length + toolsText.length;
+        // REDUCIBLE content only (instructions + transcript). The fixed tool catalog
+        // (`toolsText`) is a deployment reality — a huge MCP catalog with dozens of tools is
+        // part of every request regardless of history, so it is deliberately excluded from the
+        // post-compaction hard cap: counting it would reduce a small transcript to near-nothing
+        // and still fake-fail. Oversized catalogs are a `/plugins` decision, not session growth;
+        // auto-compaction above still measures the FULL request (`chars()`), because window
+        // thresholds protect what the model really sees, tools included.
+        const charsConversation = () => instructions.length + JSON.stringify(messages).length;
         const used = () => {
           const last = this.reported.get(sessionId);
           return last && last.count <= messages.length
@@ -520,30 +530,28 @@ export class AgentRunner {
           instructions = await withPersona();
           messages = o.store.messages(sessionId);
         }
-        // A compaction that still leaves the session over the hard limit (typically a kept tail
-        // holding huge tool outputs) is reduced in place instead of failing outright: retained
-        // content is clipped against a TOTAL character target for the transcript
-        // (`limit − instructions − tools`), largest items first, tool results before texts, in
-        // descending cap rounds. That also covers sessions with many MEDIUM results (e.g. MCP
-        // outputs of a few thousand chars each) that individually stay under the per-message
-        // caps; roles/callIds/boundaries stay untouched, so the transcript remains valid and
-        // replayable. Only if even the reduction floor cannot fit (instructions + tools alone
-        // crowd out the limit) the run fails with an actionable error; the reduction is
-        // persisted either way, so the session stays usable for later prompts.
-        if (chars() > limit) {
-          const targetChars = Math.max(
-            MIN_MESSAGE_BUDGET_FLOOR,
-            limit - instructions.length - toolsText.length,
-          );
+        // A compaction that still leaves the session over the hard limit is reduced in place
+        // instead of failing outright: retained content is clipped against a TOTAL character
+        // target for the transcript (`limit − instructions`), largest items first, tool results
+        // before texts, in descending cap rounds. That also covers sessions with many MEDIUM
+        // results (e.g. MCP outputs of a few thousand chars each) that individually stay under
+        // the per-message caps; roles/callIds/boundaries stay untouched, so the transcript
+        // remains valid and replayable. The hard cap measures ONLY reducible content
+        // (`charsConversation`): the fixed tool catalog (see above) never triggers the error on
+        // its own. The reduction is persisted either way, so the session stays usable for later
+        // prompts. Only if even the reduction floor cannot fit (instructions alone crowd out the
+        // limit) the run fails with an actionable error.
+        if (charsConversation() > limit) {
+          const targetChars = Math.max(MIN_MESSAGE_BUDGET_FLOOR, limit - instructions.length);
           const reduction = reduceMessagesToBudget(messages, targetChars);
           if (reduction.truncated > 0) {
             o.store.overwrite(sessionId, reduction.messages);
             messages = reduction.messages;
             emit("context_reduced", { messages: reduction.truncated });
           }
-          if (chars() > limit)
+          if (charsConversation() > limit)
             throw new Error(
-              `Context budget exceeded and compaction could not reduce it (approximately ${chars()} characters; limit ${limit}). Run /compact, trim large tool outputs, or start a new session.`,
+              `Context budget exceeded and compaction could not reduce it (approximately ${charsConversation()} characters of conversation; limit ${limit}). Run /compact, trim large tool outputs, start a new session, or disable unneeded MCP servers with /plugins.`,
             );
         }
         let completion: Extract<Message, { role: "assistant" }> | undefined;
@@ -553,7 +561,7 @@ export class AgentRunner {
           instructions,
           messages,
           tools,
-          maxOutputTokens: o.maxOutputTokens ?? 4096,
+          maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
           signal: combined,
           model,
           sessionId,
@@ -605,7 +613,7 @@ export class AgentRunner {
             // The adapter kept a usable answer, but the token budget cut it off.
             emit("response_truncated", {
               turn: turn + 1,
-              maxOutputTokens: o.maxOutputTokens ?? 4096,
+              maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
             });
             final.truncated = true;
           }

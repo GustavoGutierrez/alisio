@@ -811,7 +811,7 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
     case "response_truncated":
       return addItem(state, {
         kind: "notice",
-        text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens to allow longer answers.",
+        text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.",
       });
     case "model_changed":
       return {

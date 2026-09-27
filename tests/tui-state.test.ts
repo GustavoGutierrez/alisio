@@ -747,7 +747,7 @@ describe("event reduction", () => {
     s = reduceEvent(s, ev("response_truncated", { turn: 1, maxOutputTokens: 4096 }));
     expect(s.items.at(-1)).toEqual({
       kind: "notice",
-      text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens to allow longer answers.",
+      text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.",
     });
   });
 

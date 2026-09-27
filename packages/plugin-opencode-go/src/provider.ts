@@ -319,7 +319,7 @@ export class OpenCodeGatewayProvider implements ModelProvider {
     if (completed.some((call) => !call.id || !call.name)) throw new Error("Incomplete tool call");
     if (finish === "length" && !text.trim())
       throw new Error(
-        "OpenCode chat response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+        "OpenCode chat response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
       );
     yield {
       type: "completed",
@@ -406,7 +406,7 @@ export class OpenCodeGatewayProvider implements ModelProvider {
           .join("");
         if (!text.trim())
           throw new Error(
-            "OpenCode Responses response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+            "OpenCode Responses response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
           );
         if (calls.some((call) => !call.id || !call.name)) throw new Error("Incomplete tool call");
         const u = event.response.usage;
@@ -597,7 +597,7 @@ export class OpenCodeGatewayProvider implements ModelProvider {
     if (truncated) {
       if (!text.trim())
         throw new Error(
-          "OpenCode Messages response cut off by max output tokens before any usable content; raise limits.maxOutputTokens",
+          "OpenCode Messages response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
         );
       yield {
         type: "completed",

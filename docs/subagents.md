@@ -121,6 +121,7 @@ Configured under `builtinPlugins.subagents`:
 | `maxTurns` | `50` | Default turn limit per child (1–500) |
 | `timeoutMs` | `600000` | Timeout per child run (minimum 1000) |
 | `maxTokensPerChild` | core budget | Per-child cumulative token budget; defaults to the proportional core budget |
+| `maxOutputTokensPerChild` | `16384` | Per-child per-call output token budget. Children forward this instead of the global agent-loop default (4096) so reasoning-heavy models are not starved |
 | `parallelWrites` | `ask` | `ask`, `worktree`, `serial` or `shared` (see below) |
 | `waitMaxMs` | `600000` | Upper bound for `task_wait` (minimum 100) |
 | `resultMaxBytes` | `50000` | Result size cap (1000–1000000) |
