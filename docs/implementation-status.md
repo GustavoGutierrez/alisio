@@ -169,13 +169,18 @@ funcional, no solo interfaces o stubs.
 - Comando `/settings` (`/prefs`): menú de ajustes estilo OpenCode — filas de dos columnas
   (preferencia + valor actual), filtro escribiendo (nombre/clave/categoría/descripción), contador
   `(n/total)` y pie con la descripción de la fila resaltada; Enter/Espacio cambia el valor, Esc
-  sale. Diez ajustes REALES y conectados, persistidos de forma atómica en la configuración global
+  sale. Quince ajustes REALES y conectados, persistidos de forma atómica en la configuración global
   de usuario (`setConfigValue`, puerta de entrada acotada a un conjunto de claves validado con el
-  propio esquema) y aplicados en caliente: `compaction.auto/threshold/keepTurns/maxOutputTokens`
-  y `limits.maxTurns/maxOutputTokens/maxContextChars` (vía `AgentRunner.applySettings`, surten
-  efecto en la siguiente ejecución), `context.claudeMdFallback` (vía `ProjectContext.update`,
-  siguiente turno), `tui.paddingX` (padding del editor, inmediato) y el consentimiento
-  `mcp.allow` por el camino `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent`. Bajo
+  propio esquema) y aplicados en caliente: `compaction.auto/threshold/keepTurns/maxOutputTokens` y
+  `limits.maxTurns/maxOutputTokens/maxContextChars/timeoutMs` (vía `AgentRunner.applySettings`,
+  surten efecto en la siguiente ejecución; `limits.timeoutMs` se muestra en segundos y se persiste
+  en milisegundos), `context.claudeMdFallback/maxBytes` (vía `ProjectContext.update`, siguiente
+  turno), `websearch.provider` (enum, muta el objeto compartido que la cadena de búsqueda lee en
+  cada llamada; `native` requiere un proveedor que lo soporte), `pluginHooks.timeoutMs` (vía
+  `PluginHost.applyTimeoutSettings`, siguiente hook), `tui.paddingX` (padding del editor, inmediato),
+  `tui.skillSlashCommands` (alterna las entradas `skill:<id>` del autocompletado, inmediato) y el
+  consentimiento `mcp.allow` por el camino
+  `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent`. Bajo
   `--read-only` todo se muestra en solo lectura. Las filas inferiores navegan a
   `/model`, `/connect`, compactación, `/plugins`, `/skills`, `/mcp` y `/stats`; las puntuales
   (compactar, estadísticas) avisan y reabren la lista. La lista es HONESTA: no se ofrecen ajustes
@@ -187,6 +192,9 @@ funcional, no solo interfaces o stubs.
   deshabilitada/bloqueada/sombreada y descripción recortada, como en `/skills`), de modo que
   `/ski…` o el propio nombre de la skill las muestran y elegir una inserta `skill:<id>`. El enrutado
   `/skill:<id>` existente no cambia, ni el completado de argumentos de `/skills` ni `/resume`.
+  El ajuste `tui.skillSlashCommands` (por defecto `true`) oculta SOLO esas entradas `skill:<id>`
+  cuando está desactivado: el gestor `/skills` y su autocompletado de argumentos siguen disponibles,
+  y el proveedor del editor se reconstruye al guardar, sin reinicio.
 - Dependencia con parche (`patchedDependencies` en `pnpm-workspace.yaml`, `patches/`): pi-tui 0.87.1
   filtraba los nombres `skill:*` quitando el prefijo al emparejar (diseñado para `/branch…`), lo que
   hacía imposible que `/ski…` mostrara `skill:branch-pr`; el parche empareja el nombre completo.

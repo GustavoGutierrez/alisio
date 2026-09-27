@@ -112,7 +112,9 @@ Esc closes it. Skills also appear directly in the editor's slash autocomplete: s
 and its description, OpenCode-style; selecting one inserts `skill:<name>` and submits it. In
 addition, `/skills <prefix>` (or `/skill <prefix>`) autocompletes catalog
 entries by name or description (disabled, locked and shadowed entries stay listed with a status
-hint); selecting a suggestion only fills the argument, so submitting still opens the catalog.
+hint); selecting a suggestion only fills the argument, so submitting still opens the catalog. The
+`skill:<name>` slash entries can be hidden with the `tui.skillSlashCommands` setting (see below);
+the `/skills` manager and its argument completion keep working either way.
 
 ### Settings menu (`/settings`)
 
@@ -136,11 +138,16 @@ hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on 
 | Keep latest turns (`compaction.keepTurns`) | 0 – 20 | `2` | next run |
 | Compaction max output tokens (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | next run |
 | CLAUDE.md fallback (`context.claudeMdFallback`) | `true` / `false` | `false` | next turn |
+| AGENTS.md max bytes (`context.maxBytes`) | 4 KiB – 1 MiB in 4 KiB steps | `32768` | next turn |
+| Web search provider (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | unset (fallback chain) | next search call |
 | Remember MCP consent (`mcp.allow`) | `true` / `false` | `false` | immediately |
 | Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | next run |
 | Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | next run |
 | Context char budget (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | next run |
+| Run timeout (`limits.timeoutMs`) | 30 s – 600 s in 30 s steps (persisted as ms) | `300000 ms` (5 min) | next run |
+| Plugin hook timeout (`pluginHooks.timeoutMs`) | 1 s – 120 s in 1 s steps (persisted as ms) | `15000 ms` | next hook call |
 | Editor padding (`tui.paddingX`) | 0 – 4 | `1` | immediately |
+| Skill slash commands (`tui.skillSlashCommands`) | `true` / `false` | `true` | immediately |
 
 "Remember MCP consent" toggles the same persisted consent as the `/mcp` grant flow: turning it on
 writes `mcp.allow` and grants runtime permission (enabled servers auto-connect from the next

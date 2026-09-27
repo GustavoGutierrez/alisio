@@ -95,6 +95,63 @@ describe("setConfigValue", () => {
     await expect(readFile(configFile, "utf8")).rejects.toThrow();
     await expect(loadConfig(root)).resolves.toMatchObject({});
   });
+
+  it("accepts the new settings keys and keeps text inputs out of the allowlist", () => {
+    for (const key of [
+      "context.maxBytes",
+      "limits.timeoutMs",
+      "pluginHooks.timeoutMs",
+      "tui.skillSlashCommands",
+      "websearch.provider",
+    ])
+      expect(isSettableSettingKey(key)).toBe(true);
+    // The settings menu has no text inputs: searxngUrl/apiKeyEnv stay out of the menu's reach.
+    expect(isSettableSettingKey("websearch.searxngUrl")).toBe(false);
+    expect(isSettableSettingKey("websearch.apiKeyEnv")).toBe(false);
+    expect(isSettableSettingKey("pluginHooks.sessionEndTimeoutMs")).toBe(false);
+  });
+
+  it("round-trips the new web/context/limits/plugin-hook/TUI settings atomically", async () => {
+    const { root } = await fixture();
+    await setConfigValue({ key: "websearch.provider", value: "tavily" });
+    await setConfigValue({ key: "context.maxBytes", value: 65_536 });
+    await setConfigValue({ key: "limits.timeoutMs", value: 60_000 });
+    await setConfigValue({ key: "pluginHooks.timeoutMs", value: 30_000 });
+    await setConfigValue({ key: "tui.skillSlashCommands", value: false });
+    const loaded = await loadConfig(root);
+    expect(loaded.websearch.provider).toBe("tavily");
+    expect(loaded.context.maxBytes).toBe(65_536);
+    expect(loaded.limits.timeoutMs).toBe(60_000);
+    expect(loaded.pluginHooks.timeoutMs).toBe(30_000);
+    expect(loaded.tui.skillSlashCommands).toBe(false);
+    // Untouched leaves keep their defaults.
+    expect(loaded.context.claudeMdFallback).toBe(false);
+    expect(loaded.tui.paddingX).toBe(1);
+    expect(loaded.pluginHooks.sessionEndTimeoutMs).toBe(10_000);
+  });
+
+  it("validates the new keys against the schema's own enum and bounds", async () => {
+    const { root } = await fixture();
+    await expect(setConfigValue({ key: "websearch.provider", value: "yahoo" })).rejects.toThrow(
+      /Invalid value for websearch\.provider/,
+    );
+    await expect(setConfigValue({ key: "context.maxBytes", value: 100 })).rejects.toThrow(
+      /Invalid value for context\.maxBytes/,
+    );
+    await expect(setConfigValue({ key: "limits.timeoutMs", value: 50 })).rejects.toThrow(
+      /Invalid value for limits\.timeoutMs/,
+    );
+    await expect(setConfigValue({ key: "pluginHooks.timeoutMs", value: 50 })).rejects.toThrow(
+      /Invalid value for pluginHooks\.timeoutMs/,
+    );
+    await expect(setConfigValue({ key: "tui.skillSlashCommands", value: "yes" })).rejects.toThrow(
+      /Invalid value for tui\.skillSlashCommands/,
+    );
+    // Nothing was written for any rejected value.
+    const loaded = await loadConfig(root);
+    expect(loaded.websearch.provider).toBeUndefined();
+    expect(loaded.context.maxBytes).toBe(32 * 1024);
+  });
 });
 
 describe("application.updateSetting", () => {
@@ -110,6 +167,31 @@ describe("application.updateSetting", () => {
     await app.updateSetting("tui.paddingX", 3);
     expect(app.config.limits.maxTurns).toBe(10);
     expect(app.config.tui.paddingX).toBe(3);
+  });
+
+  it("applies the new web/context/limits/plugin-hook/TUI keys to the process and the file", async () => {
+    const { root, configFile } = await fixture();
+    const app = await createApplication({ cwd: root, provider: fakeProvider, noHerdr: true });
+    await app.updateSetting("websearch.provider", "brave");
+    await app.updateSetting("context.maxBytes", 131_072);
+    await app.updateSetting("limits.timeoutMs", 60_000);
+    await app.updateSetting("pluginHooks.timeoutMs", 30_000);
+    await app.updateSetting("tui.skillSlashCommands", false);
+    expect(app.config.websearch.provider).toBe("brave");
+    expect(app.config.context.maxBytes).toBe(131_072);
+    expect(app.config.limits.timeoutMs).toBe(60_000);
+    expect(app.config.pluginHooks.timeoutMs).toBe(30_000);
+    expect(app.config.tui.skillSlashCommands).toBe(false);
+    const saved = JSON.parse(await readFile(configFile, "utf8"));
+    expect(saved.websearch.provider).toBe("brave");
+    expect(saved.context.maxBytes).toBe(131_072);
+    expect(saved.limits.timeoutMs).toBe(60_000);
+    expect(saved.pluginHooks.timeoutMs).toBe(30_000);
+    expect(saved.tui.skillSlashCommands).toBe(false);
+    // A fresh app reflects the same persisted values.
+    const fresh = await createApplication({ cwd: root, provider: fakeProvider, noHerdr: true });
+    expect(fresh.config.websearch.provider).toBe("brave");
+    expect(fresh.config.tui.skillSlashCommands).toBe(false);
   });
 
   it("flips the effective value used by a fresh run (no restart needed)", async () => {

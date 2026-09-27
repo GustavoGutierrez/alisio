@@ -53,10 +53,17 @@ describe("settings menu rows", () => {
     const all = rows({
       config: config({
         compaction: { auto: false, threshold: 0.9, keepTurns: 0, maxOutputTokens: 12_000 },
-        context: { claudeMdFallback: true },
-        limits: { maxTurns: 10, maxOutputTokens: 8_192, maxContextChars: 240_000 },
+        context: { claudeMdFallback: true, maxBytes: 65_536 },
+        limits: {
+          maxTurns: 10,
+          maxOutputTokens: 8_192,
+          maxContextChars: 240_000,
+          timeoutMs: 120_000,
+        },
         mcp: { allow: true },
-        tui: { paddingX: 2 },
+        pluginHooks: { timeoutMs: 30_000 },
+        tui: { paddingX: 2, skillSlashCommands: false },
+        websearch: { provider: "tavily" },
       }),
       mcpAllowPersisted: true,
     });
@@ -66,11 +73,18 @@ describe("settings menu rows", () => {
     expect(byId("compaction.keepTurns").current).toBe(0);
     expect(byId("compaction.maxOutputTokens").current).toBe(12_000);
     expect(byId("context.claudeMdFallback").current).toBe(true);
+    // AGENTS.md max bytes is read raw (bytes).
+    expect(byId("context.maxBytes").current).toBe(65_536);
+    // Run timeout is displayed in seconds (120_000 ms -> 120 s).
+    expect(byId("limits.timeoutMs").current).toBe(120);
     expect(byId("mcp.allow").current).toBe(true);
     expect(byId("limits.maxTurns").current).toBe(10);
     expect(byId("limits.maxOutputTokens").current).toBe(8_192);
     expect(byId("limits.maxContextChars").current).toBe(240_000);
+    expect(byId("pluginHooks.timeoutMs").current).toBe(30_000);
     expect(byId("tui.paddingX").current).toBe(2);
+    expect(byId("tui.skillSlashCommands").current).toBe(false);
+    expect(byId("websearch.provider").current).toBe("tavily");
   });
 
   it("treats mcp.allow as unpersisted when the user has no saved consent", () => {
@@ -162,6 +176,50 @@ describe("value display and cycling", () => {
     expect(cycleSettingValue(turns, 101)).toBe(5);
   });
 
+  it("cycles an enum through every option and wraps at the end", () => {
+    const row = rows().find((r) => r.id === "websearch.provider") as SettingRow;
+    expect(row.valueType).toBe("enum");
+    expect(row.values).toEqual([
+      "searxng",
+      "duckduckgo-instant",
+      "tavily",
+      "brave",
+      "serpapi",
+      "native",
+    ]);
+    expect(cycleSettingValue(row, undefined)).toBe("searxng"); // unset -> first option
+    expect(cycleSettingValue(row, "searxng")).toBe("duckduckgo-instant");
+    expect(cycleSettingValue(row, "tavily")).toBe("brave");
+    expect(cycleSettingValue(row, "native")).toBe("searxng"); // wraps
+    // A hand-edited unknown provider moves to the first offered candidate.
+    expect(cycleSettingValue(row, "yahoo")).toBe("searxng");
+  });
+
+  it("steps number rows within the schema bounds and clamps hand-edited values", () => {
+    const maxBytes = rows().find((r) => r.id === "context.maxBytes") as SettingRow;
+    expect(formatSettingValue(maxBytes, 32_768)).toBe("32768");
+    // 4 KiB steps: the default (32 KiB) advances to 36 KiB, and the top bound wraps to the first.
+    expect(cycleSettingValue(maxBytes, 32_768)).toBe(36_864);
+    expect(cycleSettingValue(maxBytes, 1_048_576)).toBe(4096);
+    // A hand-edited value below the schema min moves to the first candidate (4 KiB).
+    expect(cycleSettingValue(maxBytes, 700)).toBe(4096);
+    // A hand-edited value between steps moves to the next candidate at or above it.
+    expect(cycleSettingValue(maxBytes, 100_000)).toBe(102_400);
+    // The offered values never violate the schema bounds.
+    expect(Math.min(...(maxBytes.values as number[]))).toBeGreaterThanOrEqual(1024);
+    expect(Math.max(...(maxBytes.values as number[]))).toBeLessThanOrEqual(1_048_576);
+
+    const hook = rows().find((r) => r.id === "pluginHooks.timeoutMs") as SettingRow;
+    expect(cycleSettingValue(hook, 15_000)).toBe(16_000); // 1 s steps
+    expect(Math.min(...(hook.values as number[]))).toBeGreaterThanOrEqual(100);
+    expect(Math.max(...(hook.values as number[]))).toBeLessThanOrEqual(120_000);
+
+    const timeout = rows().find((r) => r.id === "limits.timeoutMs") as SettingRow;
+    // Displayed in seconds: the default 5 min advances to 5 min 30 s.
+    expect(cycleSettingValue(timeout, 300)).toBe(330);
+    expect(formatSettingValue(timeout, 300)).toBe("300");
+  });
+
   it("does not cycle read-only rows", () => {
     const all = rows({ readOnly: true });
     const row = all.find((r) => r.id === "compaction.auto") as SettingRow;
@@ -179,13 +237,13 @@ describe("value display and cycling", () => {
 
 describe("counter", () => {
   it("renders OpenCode-style (n/total)", () => {
-    expect(settingsCounter(rows(), 0)).toBe("(1/12)");
-    expect(settingsCounter(rows(), 11)).toBe("(12/12)");
+    expect(settingsCounter(rows(), 0)).toBe("(1/17)");
+    expect(settingsCounter(rows(), 16)).toBe("(17/17)");
   });
   it("is empty for an empty list and clamps out-of-range selections", () => {
     expect(settingsCounter([], 0)).toBe("");
-    expect(settingsCounter(rows(), 99)).toBe("(12/12)");
-    expect(settingsCounter(rows(), -3)).toBe("(1/12)");
+    expect(settingsCounter(rows(), 99)).toBe("(17/17)");
+    expect(settingsCounter(rows(), -3)).toBe("(1/17)");
   });
 });
 

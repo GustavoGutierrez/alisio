@@ -115,7 +115,9 @@ marcador de ámbito (`[u]` usuario, `[p]` proyecto, `[c]` config, `[l]` plugin) 
 estilo OpenCode; elegir una inserta `skill:<nombre>` y envía. Además, `/skills <prefijo>` (o
 `/skill <prefijo>`) autocompleta las entradas del catálogo por nombre o descripción (las
 deshabilitadas, bloqueadas y sombreadas siguen listadas con una pista de estado); aceptar una
-sugerencia solo rellena el argumento, así que enviar todavía abre el catálogo.
+sugerencia solo rellena el argumento, así que enviar todavía abre el catálogo. Las entradas
+`skill:<nombre>` del autocompletado pueden ocultarse con el ajuste `tui.skillSlashCommands` (ver
+más abajo); el gestor `/skills` y su autocompletado de argumentos siguen funcionando igualmente.
 
 ### Menú de ajustes (`/settings`)
 
@@ -139,11 +141,16 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Mantener últimos turnos (`compaction.keepTurns`) | 0 – 20 | `2` | siguiente ejecución |
 | Tope de tokens de salida de compactación (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | siguiente ejecución |
 | Fallback a CLAUDE.md (`context.claudeMdFallback`) | `true` / `false` | `false` | siguiente turno |
+| Tope de bytes de AGENTS.md (`context.maxBytes`) | 4 KiB – 1 MiB en pasos de 4 KiB | `32768` | siguiente turno |
+| Proveedor de búsqueda web (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | sin definir (cadena de respaldo) | siguiente llamada de búsqueda |
 | Recordar consentimiento MCP (`mcp.allow`) | `true` / `false` | `false` | inmediato |
 | Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | siguiente ejecución |
 | Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `4096` | siguiente ejecución |
 | Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k | `160000` | siguiente ejecución |
+| Tiempo de espera de ejecución (`limits.timeoutMs`) | 30 s – 600 s en pasos de 30 s (se persiste en ms) | `300000 ms` (5 min) | siguiente ejecución |
+| Tiempo de espera de hooks de plugins (`pluginHooks.timeoutMs`) | 1 s – 120 s en pasos de 1 s (se persiste en ms) | `15000 ms` | siguiente hook |
 | Padding del editor (`tui.paddingX`) | 0 – 4 | `1` | inmediato |
+| Comandos slash de skills (`tui.skillSlashCommands`) | `true` / `false` | `true` | inmediato |
 
 "Recordar consentimiento MCP" alterna el mismo consentimiento persistido que el flujo de
 concesión de `/mcp`: activarlo escribe `mcp.allow` y concede el permiso en tiempo de ejecución

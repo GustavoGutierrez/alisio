@@ -493,6 +493,30 @@ describe("skill slash autocompletion", () => {
     expect(commands.map((c) => c.name)).toEqual(["help"]);
     expect(commands.some((c) => c.name.startsWith("skill:"))).toBe(false);
   });
+
+  it("skillEntries:false gates only the standalone skill: entries and keeps /skills argument completion", () => {
+    const commands = slashCompletionCommands(
+      [
+        { name: "skills", description: "Browse and manage effective skills", aliases: ["skill"] },
+        { name: "help", description: "Show commands and keys" },
+      ],
+      { skills: [docx, pdf] },
+      { skillEntries: false },
+    );
+    expect(commands.map((c) => c.name)).toEqual(["skills", "skill", "help"]);
+    expect(commands.some((c) => c.name.startsWith("skill:"))).toBe(false);
+    // The /skills manager (and its alias) still offer argument completions from the same catalog.
+    expect(commands[0]!.getArgumentCompletions?.("")).toHaveLength(2);
+    expect(commands[1]!.getArgumentCompletions?.("DOC")).toEqual([
+      { value: "docx", label: "docx", description: "Create, read and edit Word documents" },
+    ]);
+    // Default (omitted) keeps the skill: entries.
+    const defaulted = slashCompletionCommands(
+      [{ name: "help", description: "Show commands and keys" }],
+      { skills: [docx] },
+    );
+    expect(defaulted.map((c) => c.name)).toContain("skill:docx");
+  });
 });
 
 describe("MCP manager presentation", () => {

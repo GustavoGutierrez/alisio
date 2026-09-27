@@ -173,9 +173,14 @@ const configObjectSchema = z
       .object({
         /** Horizontal padding (columns) around the editor input box. */
         paddingX: z.number().int().min(0).max(4).default(1),
+        /**
+         * Offer effective skills as first-class `skill:<id>` editor slash-autocomplete entries.
+         * Off hides those entries; the `/skills` manager and its argument completion stay available.
+         */
+        skillSlashCommands: z.boolean().default(true),
       })
       .strict()
-      .default(() => ({ paddingX: 1 })),
+      .default(() => ({ paddingX: 1, skillSlashCommands: true })),
   })
   .strict()
   .superRefine((config, context) => {
@@ -476,7 +481,9 @@ const SETTABLE_SECTIONS = {
   compaction: configObjectSchema.shape.compaction.removeDefault(),
   context: configObjectSchema.shape.context.removeDefault(),
   limits: configObjectSchema.shape.limits.removeDefault(),
+  pluginHooks: configObjectSchema.shape.pluginHooks.removeDefault(),
   tui: configObjectSchema.shape.tui.removeDefault(),
+  websearch: configObjectSchema.shape.websearch.removeDefault(),
 } as const;
 const SETTABLE_KEYS = {
   "compaction.auto": SETTABLE_SECTIONS.compaction.shape.auto,
@@ -484,10 +491,15 @@ const SETTABLE_KEYS = {
   "compaction.keepTurns": SETTABLE_SECTIONS.compaction.shape.keepTurns,
   "compaction.maxOutputTokens": SETTABLE_SECTIONS.compaction.shape.maxOutputTokens,
   "context.claudeMdFallback": SETTABLE_SECTIONS.context.shape.claudeMdFallback,
+  "context.maxBytes": SETTABLE_SECTIONS.context.shape.maxBytes,
   "limits.maxTurns": SETTABLE_SECTIONS.limits.shape.maxTurns,
   "limits.maxOutputTokens": SETTABLE_SECTIONS.limits.shape.maxOutputTokens,
   "limits.maxContextChars": SETTABLE_SECTIONS.limits.shape.maxContextChars,
+  "limits.timeoutMs": SETTABLE_SECTIONS.limits.shape.timeoutMs,
+  "pluginHooks.timeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.timeoutMs,
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
+  "tui.skillSlashCommands": SETTABLE_SECTIONS.tui.shape.skillSlashCommands,
+  "websearch.provider": SETTABLE_SECTIONS.websearch.shape.provider,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

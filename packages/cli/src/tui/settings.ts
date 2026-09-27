@@ -7,7 +7,7 @@
  * list: every "setting" row maps to a real config key persisted through the atomic
  * `setConfigValue` writer (or the MCP consent path) and is applied to the running process.
  */
-export type SettingValueType = "boolean" | "number" | "percent";
+export type SettingValueType = "boolean" | "number" | "percent" | "enum";
 
 export interface SettingRow {
   /** Config key (or MCP consent id) this row edits; navigation rows carry their action id. */
@@ -34,16 +34,28 @@ export interface SettingsNavigationAction {
   description: string;
 }
 
+/** Ordered candidates of the `websearch.provider` enum, aligned exactly with the config schema. */
+export const WEBSEARCH_PROVIDERS = [
+  "searxng",
+  "duckduckgo-instant",
+  "tavily",
+  "brave",
+  "serpapi",
+  "native",
+] as const;
+
 /**
  * The config surface the menu reads. A structural view of the loaded config: rows are built only
  * from the documented fields below, so unknown keys in a real config are ignored by construction.
  */
 export interface SettingsConfigView {
   compaction: { auto: boolean; threshold: number; keepTurns: number; maxOutputTokens: number };
-  context: { claudeMdFallback: boolean };
-  limits: { maxTurns: number; maxOutputTokens: number; maxContextChars: number };
-  tui: { paddingX: number };
+  context: { claudeMdFallback: boolean; maxBytes: number };
+  limits: { maxTurns: number; maxOutputTokens: number; maxContextChars: number; timeoutMs: number };
+  tui: { paddingX: number; skillSlashCommands: boolean };
   mcp: { allow?: boolean };
+  websearch: { provider?: (typeof WEBSEARCH_PROVIDERS)[number] };
+  pluginHooks: { timeoutMs: number };
 }
 
 export interface SettingsMenuInput {
@@ -57,10 +69,12 @@ export interface SettingsMenuInput {
 /** The config view with the schema defaults; also the canonical fixture for tests. */
 export const defaultConfig: SettingsConfigView = {
   compaction: { auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 },
-  context: { claudeMdFallback: false },
-  limits: { maxTurns: 20, maxOutputTokens: 4_096, maxContextChars: 160_000 },
-  tui: { paddingX: 1 },
+  context: { claudeMdFallback: false, maxBytes: 32 * 1024 },
+  limits: { maxTurns: 20, maxOutputTokens: 4_096, maxContextChars: 160_000, timeoutMs: 300_000 },
+  tui: { paddingX: 1, skillSlashCommands: true },
   mcp: { allow: false },
+  websearch: { provider: undefined },
+  pluginHooks: { timeoutMs: 15_000 },
 };
 
 /** Strictly ascending number sequence with exact step arithmetic (0.85 stays 0.85). */
@@ -82,8 +96,10 @@ interface SettingDefinition {
 
 /**
  * Every real, wired setting the menu offers. `read` maps the live config to the current value;
- * the keys are exactly the ones `setConfigValue` accepts (`compaction.*`, `context.*`, `limits.*`
- * plus `tui.paddingX`), and `mcp.allow` flows through the application's consent path instead.
+ * the keys are exactly the ones `setConfigValue` accepts (`compaction.*`, `context.*`, `limits.*`,
+ * `pluginHooks.timeoutMs`, `tui.*` and `websearch.provider`), and `mcp.allow` flows through the
+ * application's consent path instead. `limits.timeoutMs` is displayed in seconds (the values are
+ * seconds); the app host multiplies by 1000 before persisting the milliseconds.
  */
 export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
   {
@@ -137,6 +153,27 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
       "Use a directory's CLAUDE.md when it has no AGENTS.md (agents.md convention). Loaded as project instructions from the next turn.",
   },
   {
+    id: "context.maxBytes",
+    label: "AGENTS.md max bytes",
+    category: "Context",
+    valueType: "number",
+    // 4 KiB steps aligned to the default (32 KiB is on-grid); 1024 stays reachable by hand-edit.
+    values: stepValues(4096, 1_048_576, 4096),
+    read: (config) => config.context.maxBytes,
+    description:
+      "Total AGENTS.md bytes injected. The closest instruction files are kept up to this budget; raise it for very large repositories.",
+  },
+  {
+    id: "websearch.provider",
+    label: "Web search provider",
+    category: "Web",
+    valueType: "enum",
+    values: [...WEBSEARCH_PROVIDERS],
+    read: (config) => config.websearch.provider,
+    description:
+      "Backend used by websearch tools. Unset falls back to a plugin extension, then a public SearXNG instance; `native` runs search server-side and must be supported by the active provider.",
+  },
+  {
     id: "mcp.allow",
     label: "Remember MCP consent",
     category: "MCP",
@@ -177,6 +214,27 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
       "Hard context limit in characters (instruction files + transcript + tool list) per run; the budget fallback that auto-compaction measures when the model window is unknown. Applied from the next run.",
   },
   {
+    id: "limits.timeoutMs",
+    label: "Run timeout",
+    category: "Limits",
+    valueType: "number",
+    // Displayed in seconds; the app host multiplies by 1000 before persisting milliseconds.
+    values: stepValues(30, 600, 30),
+    read: (config) => config.limits.timeoutMs / 1000,
+    description:
+      "Per-run timeout. A run over the limit is aborted; raise it for very long autonomous tasks.",
+  },
+  {
+    id: "pluginHooks.timeoutMs",
+    label: "Plugin hook timeout",
+    category: "Plugins",
+    valueType: "number",
+    values: stepValues(1000, 120_000, 1000),
+    read: (config) => config.pluginHooks.timeoutMs,
+    description:
+      "Host-enforced plugin hook timeout. Hooks (compaction, session start/end) are aborted when they exceed it; raise it for plugins that summarize slowly.",
+  },
+  {
     id: "tui.paddingX",
     label: "Editor padding",
     category: "TUI",
@@ -185,6 +243,16 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.tui.paddingX,
     description:
       "Horizontal padding (columns) around the editor input box. Applied immediately to the current editor.",
+  },
+  {
+    id: "tui.skillSlashCommands",
+    label: "Skill slash commands",
+    category: "TUI",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.tui.skillSlashCommands,
+    description:
+      "Offer effective skills as first-class `skill:<id>` editor autocomplete entries. Off hides those entries; the `/skills` manager and its argument completion stay available. Applied immediately to the editor.",
   },
 ];
 

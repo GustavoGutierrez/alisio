@@ -1239,11 +1239,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
           .finally(settle);
         return;
       }
+      const stored = row.id === "limits.timeoutMs" ? Number(value) * 1000 : value;
       void app
         // Setting ids are the exact SettableSettingKey paths SETTINGS_DEFINITIONS is built from.
-        .updateSetting(row.id as SettableSettingKey, value)
+        .updateSetting(row.id as SettableSettingKey, stored)
         .then(() => {
           if (row.id === "tui.paddingX") editor.setPaddingX(Number(value));
+          // Rebuild the slash provider: the toggle gates the skill:<id> entries immediately.
+          if (row.id === "tui.skillSlashCommands")
+            editor.setAutocompleteProvider(buildSlashCompletionProvider());
         })
         .catch(error)
         .finally(settle);
@@ -1556,24 +1560,30 @@ export async function runTui(options: TuiOptions): Promise<void> {
   editor.onSubmit = (text) => {
     void handleSubmit(text);
   };
-  editor.setAutocompleteProvider(
-    new CombinedAutocompleteProvider(
+  /**
+   * Builds the editor slash-autocomplete provider from the live config: `tui.skillSlashCommands`
+   * gates the standalone `skill:<id>` entries (the `/skills` manager always keeps its argument
+   * completion), so rebuilding after a settings save takes effect without a restart.
+   */
+  const buildSlashCompletionProvider = () => {
+    const sources = [
+      ...COMMANDS,
+      ...[...app.prompts.templates.values()].map((t) => ({
+        name: t.name,
+        description: `${t.description} (template)`,
+        ...(t.argumentHint ? { argumentHint: t.argumentHint } : {}),
+      })),
+      ...[...app.plugins.commandInfo.entries()]
+        .filter(([name]) => !resolveCommand(name))
+        .map(([name, c]) => ({
+          name,
+          description: c.description ?? `plugin ${c.plugin}`,
+          ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
+        })),
+    ];
+    return new CombinedAutocompleteProvider(
       slashCompletionCommands(
-        [
-          ...COMMANDS,
-          ...[...app.prompts.templates.values()].map((t) => ({
-            name: t.name,
-            description: `${t.description} (template)`,
-            ...(t.argumentHint ? { argumentHint: t.argumentHint } : {}),
-          })),
-          ...[...app.plugins.commandInfo.entries()]
-            .filter(([name]) => !resolveCommand(name))
-            .map(([name, c]) => ({
-              name,
-              description: c.description ?? `plugin ${c.plugin}`,
-              ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
-            })),
-        ],
+        sources,
         {
           sessions: (prefix) =>
             workspaceSessions()
@@ -1592,10 +1602,12 @@ export async function runTui(options: TuiOptions): Promise<void> {
               effective,
             })),
         },
+        { skillEntries: app.config.tui.skillSlashCommands !== false },
       ),
       app.workspace,
-    ),
-  );
+    );
+  };
+  editor.setAutocompleteProvider(buildSlashCompletionProvider());
 
   // Interactive services for plugins: choices (e.g. worktree isolation) and session views.
   app.plugins.setInteractiveUI({

@@ -453,11 +453,18 @@ function argumentCompletionsFor(source: SlashCompletionSource, context: SlashCom
  * description and argument completions, because the provider matches commands by fuzzy name.
  * Effective skills are appended as first-class `skill:<id>` entries so `/ski…`, `/skill:b…` and
  * even `/branch…` all surface them; submitting already routes `skill:` commands to skill load, so
- * selecting an entry only needs to insert the command name.
+ * selecting an entry only needs to insert the command name. `options.skillEntries: false` gates
+ * ONLY those standalone `skill:` entries (e.g. the `tui.skillSlashCommands` toggle): the `/skills`
+ * manager and its argument completion keep working, since `context.skills` still feeds both.
  */
+export interface SlashCompletionOptions {
+  /** Include first-class `skill:<id>` entries for effective skills (default true). */
+  skillEntries?: boolean;
+}
 export function slashCompletionCommands(
   sources: SlashCompletionSource[],
   context: SlashCompletionContext,
+  options: SlashCompletionOptions = {},
 ) {
   const entries = sources.flatMap((source) => {
     const entry = (name: string) => ({
@@ -471,11 +478,12 @@ export function slashCompletionCommands(
       ...(source.aliases ?? []).filter((a) => a !== source.name).map(entry),
     ];
   });
-  for (const skill of context.skills)
-    entries.push({
-      name: `skill:${skill.id}`,
-      description: skillSlashDescription(skill),
-    });
+  if (options.skillEntries !== false)
+    for (const skill of context.skills)
+      entries.push({
+        name: `skill:${skill.id}`,
+        description: skillSlashDescription(skill),
+      });
   return entries;
 }
 

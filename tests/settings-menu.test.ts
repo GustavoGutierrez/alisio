@@ -48,7 +48,7 @@ describe("SettingsMenu", () => {
     expect(text).toContain("Auto-compact");
     expect(text).toContain("true"); // default compaction.auto
     expect(text).toContain("85%"); // default compaction.threshold
-    expect(text).toContain("(1/12)");
+    expect(text).toContain("(1/17)");
     // Footer: description of the highlighted row is shown.
     expect(text).toContain("Summarize older history automatically");
     expect(text).toContain("Type to search · Enter/Space to change · Esc to cancel");
@@ -165,7 +165,7 @@ describe("SettingsMenu", () => {
     const refreshed = settingsMenuRows(
       {
         ...input(),
-        config: { ...defaultConfig, tui: { paddingX: 2 } },
+        config: { ...defaultConfig, tui: { paddingX: 2, skillSlashCommands: true } },
       },
       NAVIGATION,
     );

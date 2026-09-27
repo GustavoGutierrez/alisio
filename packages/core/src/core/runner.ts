@@ -79,6 +79,8 @@ export interface RunnerSettingsPatch {
   maxOutputTokens?: number;
   /** Post-compaction context budget in characters. */
   maxContextChars?: number;
+  /** Per-run timeout in milliseconds; the next run honors it. */
+  timeoutMs?: number;
 }
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`

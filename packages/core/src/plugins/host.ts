@@ -124,6 +124,13 @@ export class PluginHost implements RunnerExtensions {
     private options: PluginHostOptions = {},
     private providers?: ProviderRegistry,
   ) {}
+  /**
+   * Live-update host-enforced hook timeouts so the NEXT hook call honors them without restarting.
+   * Keeps the same options object reference the constructors of new hooks read at call time.
+   */
+  applyTimeoutSettings(patch: Partial<PluginHostOptions>): void {
+    this.options = { ...this.options, ...patch };
+  }
   /** Binds the provider-agnostic completion service once a provider exists. */
   setCompleter(fn: (request: CompletionRequest & { signal: AbortSignal }) => Promise<string>) {
     this.completer = fn;

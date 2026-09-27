@@ -894,10 +894,12 @@ export async function createApplication(options: AppOptions = {}) {
       /**
        * Persist one user-facing setting to the GLOBAL user config (`<config home>/config.json`)
        * and apply it to this process where the value can change live. Compaction and limits land
-       * in the runner (honored by the next run/compact), `context.claudeMdFallback` lands in the
-       * project context (next instructions load), `tui.paddingX` is persisted for the host to
-       * apply. Nothing in this set requires a restart. `mcp.allow` is deliberately not routed
-       * here: it flows through `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent` instead.
+       * in the runner (honored by the next run/compact), `context.*` lands in the project context
+       * (next instructions load), `websearch.provider` mutates the shared config object the search
+       * chain reads per call, `pluginHooks.timeoutMs` lands in the plugin host (next hook call),
+       * and `tui.*` is persisted for the host to apply. Nothing in this set requires a restart.
+       * `mcp.allow` is deliberately not routed here: it flows through
+       * `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent` instead.
        * Throws under `--read-only`. Returns the written config file.
        */
       async updateSetting(key: SettableSettingKey, value: unknown): Promise<string> {
@@ -919,16 +921,34 @@ export async function createApplication(options: AppOptions = {}) {
             config.context = { ...config.context, claudeMdFallback: value === true };
             context.update({ claudeMdFallback: value === true });
             break;
+          case "context.maxBytes":
+            config.context = { ...config.context, maxBytes: Number(value) };
+            context.update({ maxBytes: Number(value) });
+            break;
           case "limits.maxTurns":
           case "limits.maxOutputTokens":
-          case "limits.maxContextChars": {
+          case "limits.maxContextChars":
+          case "limits.timeoutMs": {
             const patch = limitLeaf(key.slice("limits.".length));
             config.limits = { ...config.limits, ...patch };
             runner.applySettings(patch);
             break;
           }
+          case "pluginHooks.timeoutMs":
+            config.pluginHooks = { ...config.pluginHooks, timeoutMs: Number(value) };
+            plugins.applyTimeoutSettings({ hookTimeoutMs: Number(value) });
+            break;
           case "tui.paddingX":
             config.tui = { ...config.tui, paddingX: Number(value) };
+            break;
+          case "tui.skillSlashCommands":
+            config.tui = { ...config.tui, skillSlashCommands: value === true };
+            break;
+          case "websearch.provider":
+            // Mutated in place (same object identity) so the tool chain's per-call
+            // `websearchCtx.config` sees the new provider on the very next search call.
+            config.websearch.provider =
+              value === undefined ? undefined : (value as typeof config.websearch.provider);
             break;
         }
         return file;
