@@ -58,11 +58,11 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 
 | Zona | Contenido |
 | --- | --- |
-| Cabecera | **Alisio Code** y la versión del paquete en ejecución (el mismo valor que imprime `--version`), modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
+| Cabecera | **Alisio Code** y la versión del paquete en ejecución (el mismo valor que imprime `--version`), **modelo · proveedor · effort** (el nombre del modelo en cian negrita, el nombre del proveedor en magenta, el nivel de effort en amarillo cuando el modelo activo anuncia niveles soportados), host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
-| Barra de estado | Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
-| Selectores | Listas seleccionables para `/model`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
+| Barra de estado | **Línea del agente activo** bajo el editor: `agente: <nombre> · <modelo> · <proveedor> · <effort>` (modelo en cian negrita, proveedor en magenta, effort en amarillo; el effort aparece solo cuando el modelo activo anuncia niveles soportados; en terminales estrechos se descartan primero las piezas de menor prioridad). Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
+| Selectores | Listas seleccionables para `/model`, `/agents`, `/effort`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
 
 Los errores aparecen en rojo dentro de la conversación sin cerrar la TUI.
 
@@ -105,12 +105,14 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
 | `/copy` | Copia la última respuesta del asistente al portapapeles |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
+| `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulte [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del plugin de subagentes, consulte [Subagentes](/es/subagents#in-the-tui) |
+| `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
-| `/agents …` | Comando del plugin integrado de subagentes: lista, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; consulte [Subagentes](/es/subagents#in-the-tui) |
+| `/agents …` | Gestión heredada de tareas de subagentes (plugin integrado): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; sigue disponible con un argumento como arriba — consulte [Subagentes](/es/subagents#in-the-tui) |
 
 `/init` es una plantilla de prompt que genera o actualiza `AGENTS.md` a partir del repositorio; no
 tiene relación con el comando `alisio setup`, que solo genera un `.alisio/config.json` de ejemplo.
@@ -118,8 +120,9 @@ Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una secció
 en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
-autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
-`/clear` y `/resume` esperan: pulse Esc para interrumpir primero.
+autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
+`/clear` y `/resume` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
+subagentes (`/agents open …`, `/agents list`, …) siguen funcionando durante un turno.
 
 ### Catálogo de skills y autocompletado
 
@@ -184,13 +187,46 @@ aún en Alisio, así que NO se ofrecen aquí — telemetría (Alisio no recopila
 de diagramas Mermaid, modo de dirección/seguimiento, doble Esc para salir, selección automática
 de transporte (handshake stdio/http), tiempo de inactividad HTTP para MCP, telemetría de
 instalación, entradas de changelog colapsadas, cursor por hardware, limpiar al reducir la
-terminal, progreso en terminal, cambio de tema, niveles de aviso, filtro de árbol, nivel de
-razonamiento/esfuerzo, un valor de confianza persistido por defecto y una ventana de contexto
-global de proveedor/modelo (esa es por perfil en `/connect`). Si falta un ajuste es porque Alisio
-no implementa esa función; ninguna fila es un stub.
+terminal, progreso en terminal, cambio de tema, niveles de aviso, filtro de árbol, un valor de
+confianza persistido por defecto y una ventana de contexto global de proveedor/modelo (esa es por
+perfil en `/connect`). El agente activo y el effort de razonamiento viven en `/agents` y
+`/effort`; un valor de confianza persistido sigue fuera de alcance por ahora. Si falta un ajuste
+es porque Alisio no implementa esa función; ninguna fila es un stub.
 
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y
 `/command plugin.id:name args`. Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.
+
+### Agente activo y effort {#active-agent-and-effort}
+
+El **agente activo** dirige la sesión principal: su prompt de sistema se anexa a cada prompt, y un
+agente de solo lectura (como el `plan` integrado) limita la ejecución a lecturas (sin herramientas
+de escritura/proceso, sin aprobaciones). Alisio incluye dos integrados:
+
+| Agente | Descripción |
+| --- | --- |
+| `build` (por defecto) | Agente general de máxima potencia: edita código y archivos, ejecuta procesos y verifica su trabajo con el flujo de permisos normal. El valor por defecto no añade persona, así que el comportamiento inicial no cambia |
+| `plan` | Agente de planificación de solo lectura: analiza el código y devuelve un plan de implementación sin modificar nada |
+
+`/agents` (selector de agente activo) lista cada agente seleccionable con su descripción: los
+integrados más cualquier definición principal-capaz del sistema de [subagentes](/es/subagents)
+(definiciones marcadas `mode: primary` o `mode: all`), incluidos los `--agents <json>` y los
+archivos Markdown de agentes. El agente actual se marca, `build` muestra su marcador `(default)` y
+los agentes de solo lectura muestran `read-only`. Elegir uno persiste `agents.active` en tu
+configuración de usuario y se aplica **desde el siguiente prompt** (se conserva la sesión actual).
+Cuando el agente elegido declara un `model`, el modelo de la sesión se cambia con el enrutamiento
+normal de proveedores (inicia una sesión nueva, exactamente como `/model`); un agente sin modelo
+conserva el modelo actual — anúlelo en cualquier momento con `/model`. Un id de agente persistido
+que ya no resuelve (por ejemplo, porque se eliminó su definición) cae a `build`.
+
+**Effort de razonamiento.** Cuando el modelo activo anuncia `effort.supportedLevels` en su
+catálogo (por ejemplo los modelos DeepSeek), `/effort` selecciona el nivel que se envía con cada
+prompt siguiente: sin argumento abre un selector sobre los niveles soportados (se marca el
+`defaultLevel` del modelo, además de una entrada *Auto · por defecto del proveedor* que limpia el
+valor guardado); con argumento, el nivel se valida y se persiste (`agents.effort`). El proveedor lo
+recibe como `reasoning_effort` (Chat Completions) o `reasoning.effort` (Responses); los proveedores
+sin concepto de effort lo ignoran. Si más tarde el modelo cambia a uno que no soporta el nivel
+guardado, se usa el valor por defecto del modelo silenciosamente con un aviso único. El nivel
+elegido también se muestra en la cabecera y en la barra de estado, en amarillo.
 
 ## Gestor MCP {#mcp}
 

@@ -221,3 +221,19 @@ unit tests (ordering, leak check, dry-run side effects, version bump, unknown pa
 dirs and no network; `docs/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`
 (the tool-flow diagram referenced from the tools pages) is an untracked binary asset that must be
 added to git before committing.
+
+**Active agent and effort.** The effort is resolved against the ACTIVE model's catalog in the TUI
+(async `GET /models` load): until the catalog arrives — or when the query fails — no effort is sent
+(honest degradation, never a fabricated level) and the effort segment is omitted; a repaint happens
+when the catalog lands. Headless modes (`run`, `resume`, `--no-tui`) never send effort (it is a TUI
+feature); the active agent itself IS applied there (system prompt and read-only narrowing).
+Switching agents persists `agents.active` in the user layer, but an agent-declared model follows
+`/model` semantics (a fresh session), and an explicit later `/model` choice wins until the agent is
+re-selected. `reasoning_effort`/`reasoning.effort` are sent verbatim (validated against the active
+model's `supportedLevels`); the remote provider is the final authority and may reject a level its
+catalog no longer advertises — acceptance per level was verified against the test server, not the
+public API. The reserved `agents` name was previously owned by the subagents plugin command: the
+task-management verbs (with an argument) still route to the plugin, but the editor autocomplete and
+`/help` show only the TUI command; task management stays reachable as `/agents <verb>` and
+`/command agents <verb>`. The picker interactions of `/agents` and `/effort` were not verified in a
+pseudo-terminal (their pure logic and status-line parts were).

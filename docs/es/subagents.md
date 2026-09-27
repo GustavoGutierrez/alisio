@@ -42,7 +42,7 @@ style, run only the affected tests and report what you added and the results.
 | `tools` | Lista de herramientas permitidas; `*` significa todas las herramientas del padre, incluida la delegación |
 | `disallowedTools` | Herramientas que se retiran al agente |
 | `model` | Un selector configurado `proveedor/modelo` (recomendado), un ID sin proveedor que sea único, o `inherit` (por defecto). Los alias de Claude `sonnet`, `opus` y `haiku` heredan el modelo del padre con una advertencia |
-| `mode` | `subagent` (por defecto), `primary` o `all`. Los agentes `primary` no pueden usarse mediante `task` |
+| `mode` | `subagent` (por defecto), `primary` o `all`. Los agentes `primary` no pueden usarse mediante `task`; las definiciones `primary`/`all` también se ofrecen como agentes **ACTIVOS** (de la sesión principal) en el selector `/agents` de la TUI, con su prompt de sistema dirigiendo la sesión principal |
 | `maxTurns` | Límite de turnos (alias `steps`, `maxSteps`); por defecto `builtinPlugins.subagents.maxTurns` |
 | `color` | Color en el árbol de agentes |
 | `permission` | `edit`/`write` y `bash`/`process`: `allow`, `ask` o `deny`. Los mapas de patrones (opencode) pasan a `ask` |
@@ -56,8 +56,20 @@ compatibilidad, los nombres de herramientas de Claude Code como `tools: Read, Gr
 asignan a herramientas de Alisio (`read_file`, `search_text`, `list_files`, `shell`/`run_process`, …),
 y `tools: { bash: false }` de opencode se traduce en `disallowedTools`.
 
+**Agentes principales frente a definiciones de hijos.** Alisio tiene dos sistemas de agentes: los
+SUBAGENTES delegados (este plugin — los integrados `general`, `explore` y `plan` se ejecutan en
+sesiones hijas mediante la herramienta `task`) y el agente ACTIVO de la sesión PRINCIPAL
+(integrados `build` y `plan`, un planificador de solo lectura; consulte [Agente activo y
+effort](/es/tui#active-agent-and-effort)). El `plan` integrado de delegación es un agente distinto
+del `plan` de la sesión principal. Una definición marcada `mode: primary` o `all` pasa a ser
+candidata del selector `/agents` de la sesión principal **y** se excluye de `task`; todo lo demás
+es solo de delegación.
+
 También se pueden pasar agentes adicionales en la línea de comandos como JSON (`description`,
-`prompt`, y opcionalmente `tools` y `model`):
+`prompt`, y opcionalmente `tools`, `model` y `mode`). Las definiciones marcadas
+`mode: "primary"` o `"all"` pasan a ser candidatas de agente ACTIVO en el selector `/agents` de la
+TUI (consulte [Agente activo y effort](/es/tui#active-agent-and-effort)); el valor por defecto es
+`subagent` (solo delegación):
 
 ```sh
 alisio --agents '{"reviewer":{"description":"Reviews diffs for bugs","prompt":"Review the change and list correctness bugs.","tools":["read_file","search_text","git_diff"]}}'
@@ -194,7 +206,8 @@ sus tokens y un resumen en vivo de una línea. La sangría muestra padre → hij
 
 | Comando | Función |
 | --- | --- |
-| `/agents` | Lista las tareas de subagentes de la sesión |
+| `/agents` | Abre el selector del agente **ACTIVO** (sesión principal); la lista de tareas de subagentes es `/agents list`. Consulte [Agente activo y effort](/es/tui#active-agent-and-effort) |
+| `/agents list` | Lista las tareas de subagentes de la sesión |
 | `/agents open <id>` | Abre la conversación de una tarea en una vista de solo lectura |
 | `/agents cancel <id>`, `/agents kill <id>` | Cancela una tarea y sus descendientes |
 | `/agents resume <id> [message]` | Reanuda en segundo plano una tarea terminada o cancelada |

@@ -42,7 +42,7 @@ style, run only the affected tests and report what you added and the results.
 | `tools` | Allowlist of tool names; `*` means every tool the parent has, including delegation |
 | `disallowedTools` | Tools removed from the agent |
 | `model` | A configured `provider/model` selector (recommended), a unique bare model ID, or `inherit` (default). The Claude aliases `sonnet`, `opus` and `haiku` inherit the parent's model with a warning |
-| `mode` | `subagent` (default), `primary` or `all`. `primary` agents cannot be used through `task` |
+| `mode` | `subagent` (default), `primary` or `all`. `primary` agents cannot be used through `task`; `primary`/`all` definitions are also offered as **ACTIVE** (main-session) agents in the TUI's `/agents` picker, with their system prompt driving the main session |
 | `maxTurns` | Turn limit (aliases `steps`, `maxSteps`); default `builtinPlugins.subagents.maxTurns` |
 | `color` | Color in the agent tree |
 | `permission` | `edit`/`write` and `bash`/`process`: `allow`, `ask` or `deny`. Pattern maps (opencode) become `ask` |
@@ -56,8 +56,18 @@ Claude Code tool names such as `tools: Read, Grep, Glob, Bash` are mapped to Ali
 (`read_file`, `search_text`, `list_files`, `shell`/`run_process`, …), and opencode's
 `tools: { bash: false }` maps to `disallowedTools`.
 
+**Main agents vs. child definitions.** Alisio has two agent systems: DELEGATED subagents (this
+plugin — the built-ins `general`, `explore` and `plan` run in child sessions through the `task`
+tool) and the ACTIVE agent of the MAIN session (built-ins `build` and `plan`, a read-only planner;
+see [Active agent and effort](/tui#active-agent-and-effort)). The built-in delegation `plan` is a
+different agent from the main-session `plan`. A definition marked `mode: primary` or `all` becomes
+a candidate for the main session's `/agents` picker **and** is excluded from `task`; everything
+else is delegation-only.
+
 Extra agents can also be passed on the command line as JSON (`description`, `prompt`, optional
-`tools` and `model`):
+`tools`, `model` and `mode`). Definitions marked `mode: "primary"` or `"all"` become ACTIVE-agent
+candidates in the TUI's `/agents` picker (see [Active agent and effort](/tui#active-agent-and-effort));
+the default is `subagent` (delegation only):
 
 ```sh
 alisio --agents '{"reviewer":{"description":"Reviews diffs for bugs","prompt":"Review the change and list correctness bugs.","tools":["read_file","search_text","git_diff"]}}'
@@ -194,7 +204,8 @@ keys.
 
 | Command | Purpose |
 | --- | --- |
-| `/agents` | List the subagent tasks of the session |
+| `/agents` | Open the **ACTIVE-agent** picker (main session); the subagent task list is `/agents list`. See [Active agent and effort](/tui#active-agent-and-effort) |
+| `/agents list` | List the subagent tasks of the session |
 | `/agents open <id>` | Open a task's conversation in a read-only view |
 | `/agents cancel <id>`, `/agents kill <id>` | Cancel a task and its descendants |
 | `/agents resume <id> [message]` | Resume a finished or cancelled task in the background |

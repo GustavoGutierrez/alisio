@@ -14,17 +14,19 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - Implementado: proveedores y `/connect`; núcleo, límites y almacenamiento; herramientas, AGENTS.md
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
-  usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico.
+  usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
+  de razonamiento.
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
   skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
-  adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos).
+  adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
+  agente activo y effort).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
-  Herdr.
+  Herdr; agente activo y effort.
 
 ## Implementado
 
@@ -316,6 +318,37 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   cada sesión conserva proveedor, modelo, continuación opaca e ID OpenCode propios. Los destinos
   ausentes, ambiguos o con catálogo no disponible fallan antes de inferencia con orientación segura.
 - Lockfile y versiones fijadas; Biome, TypeScript, Vitest y CI Linux con Node 22.16, 22.x y 24.
+
+### Agente activo y effort de razonamiento
+
+- Sistema de agente ACTIVO de la sesión principal: integrados `build` (por defecto, sin persona
+  añadida: comportamiento idéntico al actual) y `plan` (planificador de solo lectura que inyecta su
+  prompt de sistema y limita la ejecución a lecturas vía `RunOptions.policy`/`approvals`), más las
+  definiciones principal-capaces publicadas por el plugin de subagentes (`mode: primary|all`,
+  incluidas las de `--agents <json>`). El prompt de sistema del agente se anexa por ejecución en el
+  runner (`RunOptions.instructions`, el mismo seam que la persona base), y el cambio de agente se
+  aplica desde el siguiente prompt, sin reiniciar la sesión.
+- Comando de TUI `/agents`: selector navegable con nombre, descripción y marcadores de
+  actual/por defecto/solo lectura; elegir persiste `agents.active` (escritor atómico de la capa de
+  usuario) y cambia el modelo de la sesión por el enrutamiento existente de proveedores cuando el
+  agente declara `model` (sesión nueva, como `/model`). Los verbos de gestión de tareas de
+  subagentes (`list/open/cancel/kill/resume/merge/discard/defs`) siguen enrutándose al plugin de
+  subagentes cuando `/agents` recibe argumentos. El mismo agente activo se aplica en los modos
+  `run`, `resume` y `--no-tui` (prompt y acotación de solo lectura; el effort es solo de la TUI).
+- Effort de razonamiento: `ModelInfo.effort` (niveles y `defaultLevel`) ya descubierto por el
+  proveedor DeepSeek; contrato aditivo `reasoningEffort` en `CompletionRequest` y en la petición de
+  `ModelProvider.stream`, que el runner propaga por `RunnerOptions`/`RunOptions` y DeepSeek envía
+  como `reasoning_effort` (Chat Completions) o `reasoning.effort` (Responses); los demás
+  proveedores lo ignoran. Comando `/effort [nivel]`: sin argumento, selector sobre
+  `supportedLevels` con el `defaultLevel` marcado (y una entrada para limpiar el valor guardado);
+  con argumento, valida y persiste `agents.effort`. El nivel efectivo se resuelve contra el modelo
+  ACTIVO: si el guardado no lo soporta el modelo nuevo, se usa el `defaultLevel` con un aviso único
+  (un solo fallo de catálogo degrada a "sin effort" con honestidad).
+- Barra de estado bajo el editor y cabecera: `agente · modelo · proveedor · effort` con tres
+  colores distintos (modelo cian negrita, proveedor magenta, effort amarillo); el segmento de
+  effort solo aparece cuando el modelo activo anuncia `supportedLevels`; en terminales estrechos se
+  descartan primero las piezas de menor prioridad. Lógica de diseño pura y probada
+  (`identityParts`/`fitIdentityParts`).
 
 ### Preguntar al usuario (ask_user_question)
 
@@ -837,6 +870,24 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No verificado: `alisio trust list`/`alisio trust revoke` en pseudo-terminal (sí se probó su
   lógica de forma aislada en Vitest); comportamiento en Windows/macOS.
 
+## Agente activo y effort: alcance de la verificación
+
+- Vitest: `tests/active-agent.test.ts` (catálogo y resolución del agente activo, opciones por
+  ejecución —el `plan` inyecta su prompt de sistema vía `RunOptions.instructions` y acota a solo
+  lectura con `policy`/`approvals`—, resolución del effort por modelo con respaldo silencioso al
+  `defaultLevel`, validación de `/effort [nivel]`, filas del selector y piezas de la línea de
+  estado con roles de color, truncación y omisión del segmento de effort sin niveles soportados,
+  comandos reservados `/agents` y `/effort`, y publicación de definiciones principal-capaces por el
+  plugin de subagentes a través de `pluginState`); `tests/deepseek-effort.test.ts` (fixture HTTP
+  local: `reasoning_effort` en Chat Completions y `reasoning.effort` en Responses, presentes solo
+  cuando se fija el valor); `tests/settings-persistence.test.ts` y `tests/config-layers.test.ts`
+  (claves `agents.active`/`agents.effort` en el esquema, el allowlist estricto y el escritor
+  atómico, con el valor por defecto `build`); `tests/subagents-defs.test.ts` (`mode` en
+  `--agents <json>`). Sin red: los catálogos reales de DeepSeek no se consultan en las pruebas.
+- No verificado en pseudo-terminal: la interacción visual del selector `/agents` y del picker de
+  `/effort` (sí su lógica pura y las piezas de estado), ni el envío efectivo del effort contra la
+  API real de DeepSeek (sí el cuerpo de la petición contra el servidor de pruebas).
+
 ## Límites conocidos
 
 ### Runtime y empaquetado
@@ -1014,3 +1065,24 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Lectura/edición de texto limitada a 1 MiB. Búsquedas/salidas extensas se truncan explícitamente.
 - La integración Herdr permite intercambio por terminales; no promete autonomía multiagente
   completa ni planificación distribuida.
+
+### Agente activo y effort
+
+- El effort se resuelve contra el catálogo del modelo activo en la TUI (carga asíncrona de
+  `GET /models`): hasta que el catálogo llega, o si la consulta falla, no se envía ningún effort
+  (degradación honesta, nunca un nivel inventado) y el segmento de effort se omite; cuando el
+  catálogo por fin llega se repinta. En los modos headless (`run`, `resume`, `--no-tui`) el effort
+  NO se envía (es una función de la TUI); el agente activo sí se aplica (prompt y acotación de solo
+  lectura).
+- El agente activo es una función del proceso actual: el cambio de agente se persiste en la capa de
+  usuario, pero el cambio de modelo por agente sigue la semántica de `/model` (sesión nueva). Un
+  agente con `model` no se re-aplica automáticamente si el usuario cambia el modelo después con
+  `/model` — esa elección explícita del usuario gana hasta que se vuelva a elegir el agente.
+- `reasoning_effort`/`reasoning.effort` se envían tal cual (validados contra `supportedLevels` del
+  catálogo del modelo activo): el proveedor remoto es la autoridad final y puede rechazar un nivel
+  que su catálogo ya no soporte; la aceptación real de cada nivel solo se verifica contra el
+  servidor de pruebas, no contra la API pública.
+- Los comandos `/agents`/`/effort` usan el nombre reservado `agents` que también registraba el
+  plugin de subagentes: los verbos de gestión de tareas (con argumento) siguen enrutándose al
+  plugin, pero el autocompletado del editor y `/help` muestran solo el comando de la TUI; la
+  gestión de tareas sigue siempre disponible como `/agents <verbo>` y `/command agents <verbo>`.

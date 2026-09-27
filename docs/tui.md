@@ -56,10 +56,10 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 
 | Area | Content |
 | --- | --- |
-| Header | **Alisio Code** and the running package version (the same value `--version` prints), model, provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
+| Header | **Alisio Code** and the running package version (the same value `--version` prints), **model · provider · effort** (the model name in bold cyan, the provider name in magenta, the effort level in yellow when the active model advertises supported levels), provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
-| Status bar | Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
+| Status bar | **Active agent line** below the editor: `agent: <name> · <model> · <provider> · <effort>` (model bold cyan, provider magenta, effort yellow; the effort appears only when the active model advertises supported levels; the lowest-priority pieces drop first on narrow terminals). Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
 | Pickers | Selectable lists for `/model`, `/plugins`, `/skills`, `/resume` and approvals |
 
 Errors appear in red inside the conversation without closing the TUI.
@@ -102,12 +102,14 @@ description, and `/resume` suggests matching session IDs.
 | `/settings` (`/prefs`) | Settings menu: an OpenCode-style list of real, wired preferences (compaction, context, MCP consent, limits, editor padding) plus navigation rows for the managers below. Two-column rows (name + current value), type-to-search filter, `(n/total)` counter, footer with the highlighted row's description; Enter/Space changes a value, Esc leaves. Persisted to your user configuration and applied to the running session |
 | `/copy` | Copy the last assistant response to the clipboard |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
+| `/agents` | Open the active-agent picker: every selectable main-session agent with its description, current/default/read-only markers. Selecting one persists `agents.active`, takes effect from the next prompt, and switches the session model when the agent declares one; see [Active agent and effort](#active-agent-and-effort). With an argument (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) it routes to the subagents plugin's task management, see [Subagents](/subagents#in-the-tui) |
+| `/effort [level]` | Set the reasoning effort for the active model when it advertises `effort.supportedLevels`: no argument opens a picker (the model's default is marked), an argument is validated and persisted (`agents.effort`). The level is sent from the next prompt; see [Active agent and effort](#active-agent-and-effort) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
 | `/memory …` | Command of the built-in memory plugin; see [Persistent memory](/memory) |
-| `/agents …` | Command of the built-in subagents plugin: list, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; see [Subagents](/subagents#in-the-tui) |
+| `/agents …` | Legacy subagent task management (built-in subagents plugin): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; still reachable with an argument as above — see [Subagents](/subagents#in-the-tui) |
 
 `/init` is a prompt template that generates or updates `AGENTS.md` from the repository; it is
 unrelated to the `alisio setup` command, which only scaffolds an example `.alisio/config.json`.
@@ -115,8 +117,8 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
-interrupt first.
+is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+interrupt first. The subagent task-management verbs (`/agents open …`, `/agents list`, …) keep working during a run.
 
 ### Skills catalog and autocompletion
 
@@ -179,12 +181,45 @@ in Alisio yet, so they are NOT offered here — telemetry (Alisio collects none)
 rendering, steering/follow-up mode, double-Esc to exit, automatic transport selection (stdio/http
 handshake), HTTP idle timeout for MCP, install telemetry, collapsed changelog entries, hardware
 cursor, clearing on terminal shrink, terminal progress reporting, theme switching, warning
-levels, a tree filter, thinking/effort level, a persisted trust default, and a global
-model-provider context window (that one is per-profile in `/connect`). If a setting is missing it
+levels, a tree filter, a persisted trust default, and a global model-provider context window (that
+one is per-profile in `/connect`). The active agent and the reasoning effort live in `/agents` and
+`/effort`; a persisted trust default remains out of scope for now. If a setting is missing it
 means Alisio does not implement the feature; no row is a stub.
 
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and
 `/command plugin.id:name args`. Lines are processed sequentially; Ctrl+C cancels and exits.
+
+### Active agent and effort
+
+The **active agent** drives the main session: its system prompt is appended to every prompt, and a
+read-only agent (like the built-in `plan`) narrows the run to reads (no write/process tools, no
+approvals). Two built-ins ship with Alisio:
+
+| Agent | Description |
+| --- | --- |
+| `build` (default) | Full-power general agent: edits code and files, runs processes and verifies its work through the normal permission flow. The default adds no persona, so out-of-the-box behavior is unchanged |
+| `plan` | Read-only planning agent: analyzes the codebase and returns an implementation plan without modifying anything |
+
+`/agents` (`/agents help`: the active-agent picker) lists every selectable agent with its
+description: the built-ins plus any main-capable definition from the [subagents](/subagents) system
+(definitions marked `mode: primary` or `mode: all`), including `--agents <json>` definitions and
+agent Markdown files. The current agent is marked, `build` shows its `(default)` marker and read-only
+agents show `read-only`. Selecting one persists `agents.active` in your user configuration and takes
+effect **from the next prompt** (the current session is kept). When the chosen agent declares a
+`model`, the session model is switched through the normal provider routing (a fresh session starts,
+exactly like `/model`); an agent without a model keeps the current model — override it any time with
+`/model`. A persisted agent id that no longer resolves (for example its definition was removed)
+falls back to `build`.
+
+**Reasoning effort.** When the active model advertises `effort.supportedLevels` in its catalog (for
+example DeepSeek models), `/effort` selects the level that is sent with every subsequent prompt:
+without an argument it opens a picker over the supported levels (the model's `defaultLevel` is
+marked, plus an *Auto · provider default* entry that clears the saved value); with an argument the
+level is validated and persisted (`agents.effort`). The provider receives it as
+`reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses); providers without an
+effort concept ignore it. If the model later changes to one that does not support the stored level,
+the model's default is used silently with a one-time notice. The chosen level is also shown in the
+header and the status line, in yellow.
 
 ## MCP manager {#mcp}
 

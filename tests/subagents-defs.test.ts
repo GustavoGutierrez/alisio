@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { subagentsConfigSchema } from "../packages/plugin-subagents/src/config.ts";
 import {
   BUILTIN_AGENTS,
   discoverAgents,
@@ -73,6 +74,22 @@ describe("agent definition parsing", () => {
     ).toBeUndefined();
     expect(parseAgentDefinition(md("name: ok"), { source: "user" }).definition).toBeUndefined();
   });
+
+  it("marks definitions main-capable when mode is primary or all", () => {
+    const primary = parseAgentDefinition(
+      md("name: reviewer\ndescription: Reviews\ntools: [read_file]\nmode: primary"),
+      { source: "project", path: "/p/.alisio/agents/reviewer.md" },
+    );
+    expect(primary.definition).toMatchObject({ name: "reviewer", mode: "primary" });
+    const all = parseAgentDefinition(md("name: copilot\ndescription: Everything\nmode: all"), {
+      source: "project",
+    });
+    expect(all.definition?.mode).toBe("all");
+    const plain = parseAgentDefinition(md("name: scout\ndescription: Explore\nmode: subagent"), {
+      source: "project",
+    });
+    expect(plain.definition?.mode).toBe("subagent");
+  });
 });
 
 describe("agent discovery", () => {
@@ -128,5 +145,28 @@ describe("agent discovery", () => {
     expect(BUILTIN_AGENTS.find((a) => a.name === "general")?.tools).toEqual(["*"]);
     for (const n of ["explore", "plan"])
       expect(BUILTIN_AGENTS.find((a) => a.name === n)?.readOnly).toBe(true);
+  });
+
+  it("reads mode from --agents JSON: primary/all are main-capable, subagent by default", async () => {
+    const found = await discoverAgents({
+      workspace: root,
+      home: join(root, "nohome"),
+      configHome: join(root, "nohome", ".config", "alisio"),
+      trusted: true,
+      cli: {
+        reviewer: { description: "Reviews", prompt: "Review.", mode: "primary" },
+        planner: { description: "Plans", prompt: "Plan.", mode: "all" },
+        helper: { description: "Helps", prompt: "Help." },
+      },
+      plugins: [],
+    });
+    expect(found.agents.get("reviewer")?.mode).toBe("primary");
+    expect(found.agents.get("planner")?.mode).toBe("all");
+    expect(found.agents.get("helper")?.mode).toBe("subagent");
+    // The plugin configuration schema accepts the same shape.
+    const parsed = subagentsConfigSchema.parse({
+      agents: { reviewer: { description: "d", prompt: "p", mode: "primary" } },
+    });
+    expect(parsed.agents.reviewer?.mode).toBe("primary");
   });
 });

@@ -9,6 +9,7 @@ import type {
 import OpenAI from "openai";
 import type {
   ChatCompletionContentPart,
+  ChatCompletionCreateParams,
   ChatCompletionMessageParam,
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
@@ -144,6 +145,13 @@ export class DeepSeekProvider implements ModelProvider {
       this.#config.tokenParameter === "omit"
         ? {}
         : { [this.#config.tokenParameter]: request.maxOutputTokens };
+    // `reasoning_effort` is provider-declared (DeepSeek's catalog `effort.supported_levels`); the
+    // SDK type is a fixed union, so the value is carried through the params type of `create`.
+    const reasoningEffort = request.reasoningEffort
+      ? ({
+          reasoning_effort: request.reasoningEffort,
+        } as unknown as Pick<ChatCompletionCreateParams, "reasoning_effort">)
+      : {};
     const stream = await this.#client.chat.completions.create(
       {
         model: request.model || this.model,
@@ -151,6 +159,7 @@ export class DeepSeekProvider implements ModelProvider {
         stream: true,
         ...limit,
         ...(this.#config.streamUsage ? { stream_options: { include_usage: true } } : {}),
+        ...reasoningEffort,
         ...(request.tools.length || request.nativeTools?.length
           ? {
               tools: [
@@ -250,6 +259,13 @@ export class DeepSeekProvider implements ModelProvider {
         store: false,
         include: ["reasoning.encrypted_content"],
         max_output_tokens: request.maxOutputTokens,
+        ...(request.reasoningEffort
+          ? {
+              reasoning: {
+                effort: request.reasoningEffort,
+              } as unknown as ResponseCreateParams["reasoning"],
+            }
+          : {}),
         tools: [
           ...request.tools.map((t) => ({
             type: "function" as const,

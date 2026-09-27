@@ -85,6 +85,14 @@ export class PluginHost implements RunnerExtensions {
   }) {
     this.uiImpl = ui;
   }
+  /**
+   * Read-only view of one plugin's shared state (written through `api.state.set`). The host layer
+   * uses this to consume plugin-published data (for example the main-capable agent definitions the
+   * built-in subagents plugin publishes) without importing the plugin package.
+   */
+  pluginState(plugin: string, key: string): unknown {
+    return this.state.getState(plugin, key);
+  }
   get sessions(): PluginAPI["sessions"] {
     if (!this.sessionsImpl) throw new Error("Child sessions are not available yet");
     return this.sessionsImpl;

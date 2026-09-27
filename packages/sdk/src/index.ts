@@ -120,6 +120,12 @@ export interface ModelProvider {
      * that does not support one may ignore this or let the provider reject it.
      */
     nativeTools?: Array<Record<string, unknown>>;
+    /**
+     * Provider-declared reasoning effort level (a value from `ModelInfo.effort.supportedLevels`).
+     * Providers that advertise effort levels map it to their request field (for example DeepSeek
+     * `reasoning_effort`); providers without a concept ignore it.
+     */
+    reasoningEffort?: string;
   }): AsyncIterable<ProviderEvent>;
   /** Optional model catalog. Implementations must not expose credentials. */
   listModels?(signal: AbortSignal): Promise<ModelInfo[]>;
@@ -248,6 +254,8 @@ export interface CompletionRequest {
   model?: string;
   /** Session whose provider binding should be used when model is omitted. */
   sessionId?: string;
+  /** Reasoning effort level when the target model advertises `ModelInfo.effort`. */
+  reasoningEffort?: string;
   signal?: AbortSignal;
 }
 export type SqlValue = string | number | bigint | null | Uint8Array;

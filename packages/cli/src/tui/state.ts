@@ -323,6 +323,16 @@ export const COMMANDS: CommandSpec[] = [
   },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   {
+    name: "agents",
+    description: "List and switch the active agent (applies from the next prompt)",
+    argumentHint: "[<verb>]",
+  },
+  {
+    name: "effort",
+    description: "Set the reasoning effort level for the active model",
+    argumentHint: "[level]",
+  },
+  {
     name: "ask",
     description: "Ask the agent to turn your question into a multiple-choice ask_user_question",
     argumentHint: "<question>",
@@ -341,6 +351,91 @@ export function parseCommand(input: string): { name: string; args: string } | un
   const match = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(input.trim());
   if (!match?.[1]) return undefined;
   return { name: match[1], args: (match[2] ?? "").trim() };
+}
+
+/** Reasoning-effort capability advertised by a model's catalog entry (`ModelInfo.effort`). */
+export interface EffortCapability {
+  supportedLevels: string[];
+  defaultLevel?: string;
+}
+/**
+ * The effective reasoning effort to send for a model: the persisted level when the model
+ * supports it, otherwise the model's default level (silent fallback), and nothing when the
+ * model advertises no effort levels at all.
+ */
+export function effectiveEffort(
+  persisted: string | undefined,
+  capability: EffortCapability | undefined,
+): string | undefined {
+  if (!capability?.supportedLevels?.length) return undefined;
+  if (persisted && capability.supportedLevels.includes(persisted)) return persisted;
+  return capability.defaultLevel;
+}
+/** Validates a `/effort <level>` argument against the active model; returns an error or nothing. */
+export function validateEffortLevel(
+  level: string,
+  capability: EffortCapability | undefined,
+): string | undefined {
+  if (!capability?.supportedLevels?.length)
+    return "This model does not advertise reasoning effort levels, so no effort is sent to it.";
+  if (!capability.supportedLevels.includes(level))
+    return `Unsupported effort level "${level}". Supported levels: ${capability.supportedLevels.join(", ")}.`;
+  return undefined;
+}
+export function effortPickerItems(
+  capability: EffortCapability,
+  active: string | undefined,
+): Array<{ value: string; label: string; description?: string }> {
+  const items = capability.supportedLevels.map((level) => ({
+    value: level,
+    label: [
+      level,
+      level === active ? "(current)" : undefined,
+      level === capability.defaultLevel ? "(default)" : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...(level === capability.defaultLevel ? { description: "The model's own default" } : {}),
+  }));
+  return [
+    ...items,
+    {
+      value: "!clear",
+      label: "Auto · provider default",
+      description: "Clear the saved effort; the provider uses its own default",
+    },
+  ];
+}
+
+/** Role of a status-line identity part; the renderer maps each role to a distinct color. */
+export type IdentityRole = "agent" | "model" | "provider" | "effort";
+export interface IdentityPart extends Segment {
+  role: IdentityRole;
+}
+export interface IdentityInput {
+  agent: string;
+  model: string;
+  provider?: string;
+  effort?: string;
+}
+/**
+ * The ordered identity parts for the status line below the editor:
+ * `agent: <name> · <model> · <provider> · <effort>`, with the effort part omitted when the
+ * active model advertises no supported levels (`effort === undefined`). Colors are applied by
+ * the renderer per role; this module stays terminal-free and testable.
+ */
+export function identityParts(input: IdentityInput): IdentityPart[] {
+  const parts: IdentityPart[] = [
+    { text: `agent: ${input.agent}`, priority: 10, role: "agent" },
+    { text: input.model || "not connected", priority: 9, role: "model" },
+  ];
+  if (input.provider) parts.push({ text: input.provider, priority: 8, role: "provider" });
+  if (input.effort) parts.push({ text: input.effort, priority: 7, role: "effort" });
+  return parts;
+}
+/** Drops the lowest-priority identity parts until the line fits `width`; truncates the survivor. */
+export function fitIdentityParts(input: IdentityInput, width: number): IdentityPart[] {
+  return fitSegments(identityParts(input), width, " · ");
 }
 
 /** Minimal structural view of a skill for slash autocompletion (subset of the core catalog entry). */

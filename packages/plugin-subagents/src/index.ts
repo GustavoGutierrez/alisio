@@ -14,6 +14,9 @@ export type { AgentDefinition } from "./definitions.ts";
 export { BUILTIN_AGENTS, discoverAgents, parseAgentDefinition } from "./definitions.ts";
 export { SubagentManager } from "./manager.ts";
 
+/** Plugin-state key under which the plugin publishes main-session-capable (mode primary/all) agents. */
+export const MAIN_AGENTS_STATE_KEY = "mainAgents";
+
 export interface SubagentsPluginContext {
   workspace: string;
   stateHome: string;
@@ -62,6 +65,23 @@ export function createSubagentsPlugin(
         plugins: api.resources.list("agents"),
       });
       warnings = found.warnings;
+      // Publish the main-session-capable definitions (mode `primary`/`all`) for the TUI's `/agents`
+      // picker. The host reads them through `pluginState`, so the TUI never imports this package.
+      // Only the fields the ACTIVE agent needs are persisted; prompts stay bounded.
+      api.state.set(
+        MAIN_AGENTS_STATE_KEY,
+        [...found.agents.values()]
+          .filter((a) => a.mode !== "subagent" && !a.hidden)
+          .map((a) => ({
+            name: a.name,
+            description: a.description,
+            prompt: a.prompt.slice(0, 24_000),
+            ...(a.model ? { model: a.model } : {}),
+            ...(a.readOnly ? { readOnly: true } : {}),
+            source: a.source,
+            ...(a.path ? { path: a.path } : {}),
+          })),
+      );
       const m = new SubagentManager(api, config, context, found.agents);
       manager = m;
       const status = () => {

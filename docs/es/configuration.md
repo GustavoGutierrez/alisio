@@ -260,6 +260,26 @@ en proyectos de confianza), las raíces de usuario y las skills de plugins. Cons
 Las anulaciones se aplican a la skill efectiva del proyecto actual. Las skills propiedad de plugins
 están bloqueadas y siguen el ciclo de vida de su plugin.
 
+## `agents`
+
+El agente activo y el effort de razonamiento de la sesión principal. Lo escriben `/agents` y
+`/effort` (también se puede configurar con el mismo escritor atómico `setConfigValue` que el resto
+de ajustes de usuario).
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `active` | `"build"` | Id del agente activo (de la sesión principal): los integrados `build` o `plan`, o el id de una definición principal-capaz del sistema de [subagentes](/es/subagents) (`mode: primary`/`all`). El prompt de sistema del agente se anexa a cada prompt; un agente de solo lectura limita la ejecución a lecturas. Un id que no resuelve cae a `build` |
+| `effort` | sin definir | Nivel de effort de razonamiento (`string`) para un modelo que anuncia `effort.supportedLevels`; se valida contra el modelo ACTIVO al usarse. Cuando el nivel guardado no lo soporta el modelo actual, se usa silenciosamente el `defaultLevel` del modelo con un aviso único. Los proveedores que anuncian effort lo reciben como `reasoning_effort` (chat) / `reasoning.effort` (responses); los proveedores sin ese concepto lo ignoran |
+
+```json
+{ "agents": { "active": "plan", "effort": "high" } }
+```
+
+`/agents` y `/effort` son comandos de la TUI; `alisio run`/`resume` y el modo `--no-tui` aplican el
+prompt de sistema del agente activo persistido y su limitación de solo lectura en cada ejecución
+(el nivel de effort es una función de la TUI: solo la envía la TUI interactiva, tras validarlo
+contra el catálogo del modelo activo).
+
 ## Plantillas de prompts
 
 No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en

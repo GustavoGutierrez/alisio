@@ -68,6 +68,11 @@ export interface RunnerOptions {
    * runner; only meaningful for a provider that documents an equivalent server-side tool.
    */
   nativeTools?: Array<Record<string, unknown>>;
+  /**
+   * Default reasoning effort level (a value from the current model's `ModelInfo.effort`), sent on
+   * every run unless overridden per-run. Providers that do not advertise effort levels ignore it.
+   */
+  reasoningEffort?: string;
 }
 /** The settings a running TUI can change live; merged into the runner options on apply. */
 export interface RunnerSettingsPatch {
@@ -106,6 +111,8 @@ export interface RunOptions {
   /** Per-call output token budget for this run; beats the runner-level budget when set. */
   maxOutputTokens?: number;
   timeoutMs?: number;
+  /** Reasoning effort level for this run; beats the runner-level default when set. */
+  reasoningEffort?: string;
 }
 /**
  * Default cumulative token budget for one run: several context windows (each turn re-sends the
@@ -567,6 +574,9 @@ export class AgentRunner {
           model,
           sessionId,
           ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
+          ...((options.reasoningEffort ?? o.reasoningEffort)
+            ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
+            : {}),
         })) {
           combined.throwIfAborted();
           if (e.type === "text_delta") emit("text_delta", { delta: e.delta });

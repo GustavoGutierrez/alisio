@@ -5,6 +5,8 @@ const cliAgent = z.object({
   prompt: z.string().default(""),
   tools: z.array(z.string()).optional(),
   model: z.string().optional(),
+  /** `primary`/`all` makes the definition available as an ACTIVE (main-session) agent in `/agents`. */
+  mode: z.enum(["subagent", "primary", "all"]).optional(),
 });
 /** Options under `builtinPlugins.subagents`. */
 export const subagentsConfigSchema = z

@@ -237,6 +237,7 @@ export interface CliAgent {
   prompt: string;
   tools?: string[];
   model?: string;
+  mode?: "subagent" | "primary" | "all";
 }
 /**
  * Discovery, first match wins by name: CLI `--agents` > project `.alisio/agents` >
@@ -264,7 +265,13 @@ export async function discoverAgents(options: {
   };
   for (const [name, spec] of Object.entries(options.cli ?? {})) {
     const { definition, warnings: w } = parseAgentDefinition(
-      `---\n${JSON.stringify({ name, description: spec.description, ...(spec.tools ? { tools: spec.tools } : {}), ...(spec.model ? { model: spec.model } : {}) })}\n---\n${spec.prompt ?? ""}`,
+      `---\n${JSON.stringify({
+        name,
+        description: spec.description,
+        ...(spec.tools ? { tools: spec.tools } : {}),
+        ...(spec.model ? { model: spec.model } : {}),
+        ...(spec.mode ? { mode: spec.mode } : {}),
+      })}\n---\n${spec.prompt ?? ""}`,
       { source: "cli" },
     );
     warnings.push(...w);

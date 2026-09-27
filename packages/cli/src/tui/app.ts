@@ -31,6 +31,15 @@ import {
 } from "@earendil-works/pi-tui";
 import { loadVersion } from "../version.ts";
 import {
+  type ActiveAgent,
+  activeAgentCatalog,
+  agentPickerItems,
+  agentRunOptions,
+  type MainCapableAgentRecord,
+  mainAgentFromRecord,
+  resolveActiveAgent,
+} from "./agents.ts";
+import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_IMAGE_BYTES,
   type PendingAttachment,
@@ -65,6 +74,8 @@ import {
   addItem,
   COMMANDS,
   configuredProviderModelItems,
+  effectiveEffort,
+  effortPickerItems,
   formatContext,
   formatDuration,
   formatTokens,
@@ -87,6 +98,7 @@ import {
   summarizeToolArgs,
   type TranscriptItem,
   type ViewState,
+  validateEffortLevel,
 } from "./state.ts";
 import { editorTheme, selectListTheme, style } from "./theme.ts";
 
@@ -187,17 +199,46 @@ export async function runTui(options: TuiOptions): Promise<void> {
       modelList = undefined;
       throw e;
     }));
+  /** Active-provider catalog by model id; feeds effort support and display names. */
+  let modelCatalog = new Map<string, ModelInfo>();
   /**
    * Reloads the active-provider catalog and repaints when it lands, so the context bar learns
    * the ACTIVE model's real window (previously only the first /model picker or autocomplete
    * call loaded it, leaving a fabricated 40k total on screen). Called at startup and after
    * every provider/model switch; the bar honestly shows `?` until the catalog arrives.
+   * The same refresh feeds the effort status (supported levels + default) and the model
+   * display name used by the header and the status line below the editor.
    */
   const primeModels = () => {
     void models()
-      .then(() => tui.requestRender())
+      .then((list) => {
+        modelCatalog = new Map(list.map((m) => [m.id, m]));
+        refreshEffort();
+        tui.requestRender();
+      })
       .catch(() => {});
   };
+  const effortSupportFor = (model: string) => modelCatalog.get(model)?.effort;
+  const modelDisplayName = (model: string): string => modelCatalog.get(model)?.name ?? model;
+  /** Persisted `agents.effort` is silently replaced by the model default when unsupported; one notice. */
+  let notifiedEffortFallback = "";
+  function refreshEffort(): void {
+    const persisted = app.config.agents.effort;
+    const capability = effortSupportFor(view.model);
+    if (!persisted || !capability?.supportedLevels?.length) return;
+    if (capability.supportedLevels.includes(persisted)) return;
+    const key = `${view.model}:${persisted}`;
+    if (notifiedEffortFallback !== key) {
+      notifiedEffortFallback = key;
+      flashHint(
+        `Reasoning effort "${persisted}" is not supported by ${modelDisplayName(view.model)}; using ${capability.defaultLevel ? `"${capability.defaultLevel}"` : "the provider default"}.`,
+        7000,
+      );
+    }
+  }
+  /** Effective effort sent on runs: the persisted level when supported, else the model default. */
+  const currentEffort = (): string | undefined =>
+    effectiveEffort(app.config.agents.effort, effortSupportFor(view.model));
   const terminal = new ProcessTerminal();
   const copy = async (text: string) =>
     copyText(text, {
@@ -253,6 +294,26 @@ export async function runTui(options: TuiOptions): Promise<void> {
   };
   refreshBranch();
   const branchTimer = setInterval(refreshBranch, BRANCH_REFRESH_MS);
+  /**
+   * Selectable ACTIVE (main-session) agents: the built-in `build`/`plan` pair plus the
+   * main-capable definitions the subagents plugin publishes (`mode: primary|all`) through its
+   * plugin state. Never imports the plugin package; a missing/unavailable contribution is just
+   * an empty extra list. The persisted `agents.active` id resolves against this catalog.
+   */
+  const mainAgents = (): ActiveAgent[] => {
+    let contributions: ActiveAgent[] = [];
+    try {
+      const records = app.plugins.pluginState("subagents", "mainAgents") as
+        | MainCapableAgentRecord[]
+        | undefined;
+      contributions = (records ?? []).map(mainAgentFromRecord);
+    } catch {
+      /* plugin state is best-effort */
+    }
+    return activeAgentCatalog(contributions);
+  };
+  const currentAgent = (): ActiveAgent =>
+    resolveActiveAgent(mainAgents(), app.config.agents.active);
   const headerInfo = (): HeaderInfo => {
     const policy = app.runner.policy,
       ask = app.runner.approvals;
@@ -261,6 +322,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
       host: hostOf(String(activeProvider?.profile.baseURL ?? app.config.provider.baseURL)),
       apiMode: String(activeProvider?.profile.apiMode ?? app.config.provider.apiMode),
       provider: app.providers.get(activeProvider?.id ?? "")?.name,
+      modelName: modelDisplayName(view.model),
+      effort: currentEffort(),
       cwd: shortenPath(app.workspace, homedir()),
       session: shortId(session),
       branch: branchName,
@@ -324,6 +387,14 @@ export async function runTui(options: TuiOptions): Promise<void> {
     () => app.contextBudget((viewedState() ?? view).model),
     () => panelHint() ?? hint,
     () => [...app.plugins.status.values()].map((s) => s.text),
+    // Status row below the editor: `agent: <name> · <model> · <provider> · <effort>` (the
+    // effort segment appears only when the active model advertises supported levels).
+    () => ({
+      agent: currentAgent().name,
+      model: modelDisplayName(view.model),
+      provider: app.providers.get(activeProvider?.id ?? "")?.name,
+      effort: currentEffort(),
+    }),
   );
   const treePanel = new TreePanel(() => {
     const entry = panelEntry();
@@ -613,8 +684,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
     pendingAttachments = [];
     attachmentsBar.invalidate();
     push({ kind: "user", text: display });
+    // The ACTIVE agent drives the main session: its system prompt is appended per run and a
+    // read-only agent narrows the run to reads (no approvals). The persisted reasoning effort is
+    // resolved against the ACTIVE model and sent when the model advertises supported levels.
+    const agent = currentAgent();
+    const effort = currentEffort();
     return task((signal) =>
       app.runner.run(session, prompt, signal, {
+        ...agentRunOptions(agent),
+        ...(effort ? { reasoningEffort: effort } : {}),
         ...(persistDisplay ? { display: persistDisplay } : {}),
         ...(attachments.length ? { attachments } : {}),
       }),
@@ -1197,6 +1275,115 @@ export async function runTui(options: TuiOptions): Promise<void> {
     openCatalog();
   };
   /**
+   * `/agents` (active agent): a navigable picker listing every selectable main-session agent with
+   * its description. Selecting one persists `agents.active` globally (applies from the next
+   * prompt), optionally switches the session model to the agent's declared model, and starts a
+   * fresh session just like `/model` when it does. Esc returns to the editor.
+   */
+  const openAgentsPicker = () => {
+    const agents = mainAgents();
+    const current = currentAgent();
+    showPicker(
+      new Picker(
+        "Active agent",
+        agentPickerItems(agents, current.id),
+        (item) => {
+          const agent = agents.find((candidate) => candidate.id === item.value);
+          if (agent) void applyActiveAgent(agent);
+        },
+        closePicker,
+        true,
+        "Changing the active agent takes effect from the next prompt; the current session is kept unless the agent declares a different model.",
+      ),
+    );
+  };
+  const applyActiveAgent = (agent: ActiveAgent) => {
+    void (async () => {
+      closePicker();
+      const previous = currentAgent().name;
+      try {
+        await app.updateSetting("agents.active", agent.id);
+        let switched = false;
+        if (agent.model && app.store.get(session).model !== agent.model) {
+          flashHint(`Switching to ${agent.name}'s model ${agent.model}…`, 60_000);
+          const created = await app.switchModel(agent.model);
+          if (created) {
+            activeProvider = app.providerInfo;
+            modelList = undefined;
+            session = created.id;
+            reset(initialViewState(created.model));
+            switched = true;
+          }
+        }
+        notice(
+          `Active agent: ${agent.name}${agent.readOnly ? " (read-only)" : ""}. Applies from the next prompt.`,
+        );
+        if (agent.model && switched)
+          notice(
+            `Agent ${agent.name} switches the session model to ${app.store.get(session).model}.`,
+          );
+        else if (agent.model)
+          flashHint(
+            `Agent ${agent.name} keeps the current model (already ${view.model}). Override any time with /model.`,
+          );
+        else flashHint(`Active agent: ${agent.name} (was ${previous}).`);
+        refreshEffort();
+        primeModels();
+        tui.requestRender();
+      } catch (cause) {
+        error(cause);
+      }
+    })();
+  };
+  /**
+   * `/effort [level]`: without an argument, a picker over the ACTIVE model's advertised effort
+   * levels (marking the model default); with an argument, the level is validated against
+   * `effort.supportedLevels` and persisted globally. The chosen level is sent from the next
+   * prompt; if the model later changes to one that does not support it, the model's default is
+   * used silently with a one-time notice.
+   */
+  const setEffort = async (args: string) => {
+    const capability = effortSupportFor(view.model);
+    if (!args) {
+      if (!capability?.supportedLevels?.length)
+        return notice(
+          `${view.model} does not advertise reasoning effort levels (ModelInfo.effort), so /effort is not available for it.`,
+        );
+      const items = effortPickerItems(capability, currentEffort());
+      showPicker(
+        new Picker(
+          `Reasoning effort · ${modelDisplayName(view.model)}`,
+          items,
+          (item) => void applyEffort(item.value),
+          closePicker,
+          true,
+        ),
+      );
+      return;
+    }
+    const invalid = validateEffortLevel(args, capability);
+    if (invalid) return notice(invalid);
+    await applyEffort(args);
+  };
+  const applyEffort = async (value: string) => {
+    const clear = value === "!clear";
+    closePicker();
+    try {
+      await app.updateSetting("agents.effort", clear ? undefined : value);
+      const capability = effortSupportFor(view.model);
+      const effective = effectiveEffort(clear ? undefined : value, capability);
+      notice(
+        clear
+          ? `Reasoning effort cleared; ${capability?.defaultLevel ? `the model default "${capability.defaultLevel}" is used` : "the provider default is used"}.`
+          : `Reasoning effort: ${value}${value === capability?.defaultLevel ? ` (default for ${modelDisplayName(view.model)})` : ""}${effective && effective !== value ? ` — effective: ${effective}` : ""}. Applies from the next prompt.`,
+      );
+      refreshEffort();
+      tui.requestRender();
+    } catch (cause) {
+      error(cause);
+    }
+  };
+  /**
    * Navigation rows at the bottom of `/settings`: they route to the existing managers and one-shot
    * actions exactly like the old picker, so every prior entry stays reachable. `compact` and
    * `stats` finish here and re-open the settings list (mirroring managePlugins' openCatalog loop);
@@ -1532,6 +1719,29 @@ export async function runTui(options: TuiOptions): Promise<void> {
               `first; call the tool right away.`,
           );
         }
+        case "agents": {
+          // The subagents plugin registers its own built-in `/agents` command for subagent task
+          // management (list/open/cancel/kill/resume/merge/discard/defs). With arguments, route
+          // to it verbatim (still available while a turn runs, exactly as before); without
+          // arguments, this opens the ACTIVE-agent picker.
+          if (parsed.args) {
+            const handler = app.plugins.commands.get("agents");
+            if (handler) return info(await handler(parsed.args, { sessionId: session }));
+          }
+          if (busy) {
+            editor.setText(raw);
+            flashHint("A turn is running: wait for it to finish before switching the active agent");
+            return;
+          }
+          return openAgentsPicker();
+        }
+        case "effort":
+          if (busy) {
+            editor.setText(raw);
+            flashHint("A turn is running: wait for it to finish before changing the effort");
+            return;
+          }
+          return await setEffort(parsed.args);
         case "clear": {
           await endSession("clear");
           session = app.store.create(app.workspace, app.provider.id, view.model).id;

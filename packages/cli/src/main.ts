@@ -138,6 +138,22 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     },
   });
   for (const failure of app.mcpStartupFailures()) process.stderr.write(`[startup] ${failure}\n`);
+  // The ACTIVE agent (built-in `build`/`plan` or a main-capable definition) drives the main
+  // session here too: its system prompt is appended and a read-only agent narrows the run. The
+  // TUI adds the picker and the model switch; effort is a TUI feature (validated against the
+  // active model's catalog).
+  const { agentCatalogFromState, agentRunOptions, resolveActiveAgent } = await import(
+    "./tui/agents.ts"
+  );
+  let activeRunOptions: ReturnType<typeof agentRunOptions> = {};
+  try {
+    const reported = app.plugins.pluginState("subagents", "mainAgents");
+    activeRunOptions = agentRunOptions(
+      resolveActiveAgent(agentCatalogFromState(reported), app.config.agents.active),
+    );
+  } catch {
+    /* agent resolution is best-effort */
+  }
   const controller = new AbortController();
   const interrupt = () => controller.abort(new Error("Interrupted"));
   process.on("SIGINT", interrupt);
@@ -160,12 +176,10 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(prompt);
       if (match?.[1])
         prompt = `${await app.skills.load(match[1])}\n\nUser request: ${match[2] ?? ""}`;
-      await app.runner.run(
-        session,
-        template?.text ?? prompt,
-        controller.signal,
-        template ? { display: template.display } : {},
-      );
+      await app.runner.run(session, template?.text ?? prompt, controller.signal, {
+        ...activeRunOptions,
+        ...(template ? { display: template.display } : {}),
+      });
       if (!opts.json) process.stdout.write(`\nSession: ${session}\n`);
       return;
     }
@@ -223,12 +237,10 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         const input = match?.[1] ? `${await app.skills.load(match[1])}\n\n${match[2] ?? ""}` : line;
         try {
           const template = app.expandPrompt(input);
-          await app.runner.run(
-            session,
-            template?.text ?? input,
-            controller.signal,
-            template ? { display: template.display } : {},
-          );
+          await app.runner.run(session, template?.text ?? input, controller.signal, {
+            ...activeRunOptions,
+            ...(template ? { display: template.display } : {}),
+          });
         } catch (e) {
           console.error(String(e));
         }

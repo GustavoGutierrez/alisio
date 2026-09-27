@@ -492,6 +492,7 @@ async function completeTextWithMeta(
     signal: request.signal,
     ...(request.model ? { model: request.model } : {}),
     ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+    ...(request.reasoningEffort ? { reasoningEffort: request.reasoningEffort } : {}),
   })) {
     request.signal.throwIfAborted();
     if (event.type === "completed") {

@@ -193,6 +193,27 @@ const configObjectSchema = z
       })
       .strict()
       .default(() => ({ paddingX: 1, skillSlashCommands: true })),
+    /**
+     * The ACTIVE agent drives the main session: its system prompt is appended to every prompt and
+     * its optional model selector is offered when the agent is chosen (`/agents`). `build` is the
+     * built-in default (full-power, no added persona); `plan` is the built-in read-only planner.
+     * `effort` holds a reasoning effort level chosen with `/effort` for a model that advertises
+     * `effort.supportedLevels`; it is validated against the ACTIVE model on use, falling back to
+     * the model's default level when unsupported.
+     */
+    agents: z
+      .object({
+        active: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/, "invalid agent name")
+          .default("build"),
+        effort: z.string().trim().min(1).max(50).optional(),
+      })
+      .strict()
+      .default(() => ({ active: "build" })),
   })
   .strict()
   .superRefine((config, context) => {
@@ -496,6 +517,7 @@ const SETTABLE_SECTIONS = {
   pluginHooks: configObjectSchema.shape.pluginHooks.removeDefault(),
   tui: configObjectSchema.shape.tui.removeDefault(),
   websearch: configObjectSchema.shape.websearch.removeDefault(),
+  agents: configObjectSchema.shape.agents.removeDefault(),
 } as const;
 const SETTABLE_KEYS = {
   "compaction.auto": SETTABLE_SECTIONS.compaction.shape.auto,
@@ -512,6 +534,8 @@ const SETTABLE_KEYS = {
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
   "tui.skillSlashCommands": SETTABLE_SECTIONS.tui.shape.skillSlashCommands,
   "websearch.provider": SETTABLE_SECTIONS.websearch.shape.provider,
+  "agents.active": SETTABLE_SECTIONS.agents.shape.active,
+  "agents.effort": SETTABLE_SECTIONS.agents.shape.effort,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

@@ -255,6 +255,25 @@ roots and plugin skills are also searched. See [Context: AGENTS.md and skills](/
 Overrides apply to the effective skill in the current project. Plugin-owned skills are locked and
 follow their plugin lifecycle instead.
 
+## `agents`
+
+The active agent and the reasoning effort of the main session. Written by `/agents` and `/effort`
+(also settable through the same atomic `setConfigValue` writer as the other user settings).
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `active` | `"build"` | Id of the active (main-session) agent: the built-in `build` or `plan`, or a main-capable definition id from the [subagents](/subagents) system (`mode: primary`/`all`). The agent's system prompt is appended to every prompt; a read-only agent narrows the run to reads. An id that does not resolve falls back to `build` |
+| `effort` | unset | Reasoning effort level (`string`) for a model that advertises `effort.supportedLevels`; validated against the ACTIVE model on use. When the stored level is unsupported by the current model, the model's `defaultLevel` is used silently with a one-time notice. Providers that advertise effort receive it as `reasoning_effort` (chat) / `reasoning.effort` (responses); providers without the concept ignore it |
+
+```json
+{ "agents": { "active": "plan", "effort": "high" } }
+```
+
+`/agents` and `/effort` are TUI commands; `alisio run`/`resume` and `--no-tui` mode apply the
+persisted active agent's system prompt and read-only narrowing to each run (the effort level is a
+TUI feature: it is sent only by the interactive TUI, after validation against the active model's
+catalog).
+
 ## Prompt templates
 
 There is no configuration key for templates. They are read from `<config home>/prompts/` and, for

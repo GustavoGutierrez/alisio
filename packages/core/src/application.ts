@@ -906,6 +906,8 @@ export async function createApplication(options: AppOptions = {}) {
        * (next instructions load), `websearch.provider` mutates the shared config object the search
        * chain reads per call, `pluginHooks.timeoutMs` lands in the plugin host (next hook call),
        * and `tui.*` is persisted for the host to apply. Nothing in this set requires a restart.
+       * `agents.*` (active agent id and reasoning effort) is persisted for the TUI to consume:
+       * the next `/agents`/`/effort` selection and the next prompt already read the live config.
        * `mcp.allow` is deliberately not routed here: it flows through
        * `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent` instead.
        * Throws under `--read-only`. Returns the written config file.
@@ -951,6 +953,16 @@ export async function createApplication(options: AppOptions = {}) {
             break;
           case "tui.skillSlashCommands":
             config.tui = { ...config.tui, skillSlashCommands: value === true };
+            break;
+          case "agents.active":
+            config.agents = { ...config.agents, active: String(value) };
+            break;
+          case "agents.effort":
+            // Clearing (undefined) drops the leaf from the live config and the JSON file.
+            config.agents =
+              value === undefined
+                ? { active: config.agents.active }
+                : { ...config.agents, effort: String(value) };
             break;
           case "websearch.provider":
             // Mutated in place (same object identity) so the tool chain's per-call

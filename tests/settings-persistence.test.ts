@@ -130,6 +130,46 @@ describe("setConfigValue", () => {
     expect(loaded.pluginHooks.sessionEndTimeoutMs).toBe(10_000);
   });
 
+  it("persists the active agent and reasoning effort globally, defaulting active to build", async () => {
+    const { configFile, root } = await fixture();
+    expect(isSettableSettingKey("agents.active")).toBe(true);
+    expect(isSettableSettingKey("agents.effort")).toBe(true);
+    // Schema default: build.
+    expect((await loadConfig(root)).agents.active).toBe("build");
+    expect((await loadConfig(root)).agents.effort).toBeUndefined();
+
+    await setConfigValue({ key: "agents.active", value: "plan" });
+    await setConfigValue({ key: "agents.effort", value: "max" });
+    const saved = JSON.parse(await readFile(configFile, "utf8"));
+    expect(saved.agents).toEqual({ active: "plan", effort: "max" });
+    const loaded = await loadConfig(root);
+    expect(loaded.agents.active).toBe("plan");
+    expect(loaded.agents.effort).toBe("max");
+    // Unrelated fields survive.
+    await setConfigValue({ key: "compaction.auto", value: false });
+    expect(JSON.parse(await readFile(configFile, "utf8")).compaction.auto).toBe(false);
+    expect(JSON.parse(await readFile(configFile, "utf8")).agents.active).toBe("plan");
+    // Clearing the effort (undefined) drops the leaf from the JSON file, keeping `active`.
+    await setConfigValue({ key: "agents.effort", value: undefined });
+    const cleared = JSON.parse(await readFile(configFile, "utf8"));
+    expect(cleared.agents).toEqual({ active: "plan" });
+    expect((await loadConfig(root)).agents.effort).toBeUndefined();
+  });
+
+  it("rejects invalid active-agent ids and non-string effort values", async () => {
+    const { root } = await fixture();
+    await expect(setConfigValue({ key: "agents.active", value: "" })).rejects.toThrow(
+      /Invalid value for agents\.active/,
+    );
+    await expect(setConfigValue({ key: "agents.active", value: "bad name" })).rejects.toThrow(
+      /Invalid value for agents\.active/,
+    );
+    await expect(setConfigValue({ key: "agents.effort", value: 42 })).rejects.toThrow(
+      /Invalid value for agents\.effort/,
+    );
+    expect((await loadConfig(root)).agents.active).toBe("build");
+  });
+
   it("validates the new keys against the schema's own enum and bounds", async () => {
     const { root } = await fixture();
     await expect(setConfigValue({ key: "websearch.provider", value: "yahoo" })).rejects.toThrow(
@@ -214,6 +254,22 @@ describe("application.updateSetting", () => {
     await writeFile(join(root, "CLAUDE.md"), "claude fallback instructions\n");
     const instructions = await app.context.instructions(app.store.create(root, "fake", "fake").id);
     expect(instructions).toContain("claude fallback instructions");
+  });
+
+  it("applies the active-agent keys to the running process and a fresh app", async () => {
+    const { root, configFile } = await fixture();
+    const app = await createApplication({ cwd: root, provider: fakeProvider, noHerdr: true });
+    expect(app.config.agents.active).toBe("build");
+    await app.updateSetting("agents.active", "plan");
+    await app.updateSetting("agents.effort", "high");
+    expect(app.config.agents).toEqual({ active: "plan", effort: "high" });
+    await app.updateSetting("agents.effort", undefined);
+    expect(app.config.agents).toEqual({ active: "plan" });
+    expect(JSON.parse(await readFile(configFile, "utf8")).agents).toEqual({ active: "plan" });
+    const fresh = await createApplication({ cwd: root, provider: fakeProvider, noHerdr: true });
+    expect(fresh.config.agents.active).toBe("plan");
+    await fresh.close();
+    await app.close();
   });
 
   it("is blocked under --read-only", async () => {

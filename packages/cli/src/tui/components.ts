@@ -30,10 +30,13 @@ import {
   contextLevel,
   contextPercent,
   editSummary,
+  fitIdentityParts,
   fitSegments,
   formatContext,
   formatDuration,
   formatTokens,
+  type IdentityInput,
+  type IdentityRole,
   type TranscriptItem,
   type ViewState,
 } from "./state.ts";
@@ -53,6 +56,10 @@ export interface HeaderInfo {
   host: string;
   apiMode: string;
   provider?: string;
+  /** Model display name (catalog `name`), falling back to the session model id. */
+  modelName?: string;
+  /** Effective reasoning effort of the active model, when it advertises supported levels. */
+  effort?: string;
   cwd: string;
   session: string;
   /** Git branch (or short SHA on a detached HEAD) of the session workspace; undefined when unavailable. */
@@ -88,12 +95,14 @@ export class Header implements Component {
         { text: "◆ Alisio Code", priority: 8, paint: (t) => style.bold(style.brightCyan(t)) },
         { text: `v${i.version}`, priority: 1, paint: style.gray },
         {
-          text: v.model || "not connected",
+          text: i.modelName || v.model || "not connected",
           priority: 10,
-          paint: v.model ? style.bold : style.yellow,
+          paint: v.model ? (t) => style.bold(style.cyan(t)) : style.yellow,
         },
-        ...(i.provider ? [{ text: i.provider, priority: 6, paint: style.cyan }] : []),
-        { text: i.host, priority: 5, paint: style.gray },
+        // `model · provider · effort` with each piece in a distinct color.
+        ...(i.provider ? [{ text: i.provider, priority: 6, paint: style.magenta }] : []),
+        ...(i.effort ? [{ text: i.effort, priority: 5, paint: style.yellow }] : []),
+        { text: i.host, priority: 4, paint: style.gray },
         { text: i.apiMode, priority: 2, paint: style.gray },
       ],
       width,
@@ -143,6 +152,7 @@ export class Footer implements Component {
     private budget: () => ContextBudget | undefined,
     private hint: () => string | undefined,
     private statuses: () => string[] = () => [],
+    private identity?: () => IdentityInput | undefined,
   ) {}
   invalidate(): void {}
   render(width: number): string[] {
@@ -192,7 +202,27 @@ export class Footer implements Component {
       (v.streaming || v.compacting
         ? "Esc interrupt · Ctrl+C clear/exit"
         : "Enter send · Shift+Enter newline · /help commands · Ctrl+D exit");
-    return fit([line1, style.dim(hint)], width);
+    // Status row below the editor: `agent: <name> · <model> · <provider> · <effort>`, each piece
+    // in a distinct color (model bold/cyan, provider magenta, effort yellow); the effort part is
+    // omitted when the active model advertises no supported levels. Truncation drops the lowest
+    // priority parts first (effort, then provider) before truncating what remains.
+    const identity = this.identity?.();
+    const identityLine = identity
+      ? fitIdentityParts(identity, width)
+          .map((part) =>
+            ({
+              agent: (t: string) => style.bold(style.magenta(t)),
+              model: (t: string) => style.bold(style.cyan(t)),
+              provider: style.magenta,
+              effort: style.yellow,
+            })[part.role](part.text),
+          )
+          .join(style.gray(" · "))
+      : undefined;
+    return fit(
+      identityLine ? [identityLine, line1, style.dim(hint)] : [line1, style.dim(hint)],
+      width,
+    );
   }
 }
 

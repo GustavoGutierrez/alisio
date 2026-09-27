@@ -161,6 +161,24 @@ describe("legacy provider provenance", () => {
   });
 });
 
+describe("active agent and effort configuration", () => {
+  it("defaults agents.active to build and keeps effort optional", () => {
+    const parsed = configSchema.parse({});
+    expect(parsed.agents).toEqual({ active: "build" });
+    expect(configSchema.parse({ agents: { effort: "max" } }).agents).toEqual({
+      active: "build",
+      effort: "max",
+    });
+    expect(configSchema.parse({ agents: { active: "plan" } }).agents.active).toBe("plan");
+  });
+
+  it("rejects unknown agents keys and malformed agent ids", () => {
+    expect(() => configSchema.parse({ agents: { active: "build", extra: true } })).toThrow();
+    expect(() => configSchema.parse({ agents: { active: "two words" } })).toThrow();
+    expect(() => configSchema.parse({ agents: { effort: "" } })).toThrow();
+  });
+});
+
 describe("websearch provider enum", () => {
   it("accepts duckduckgo-html as a websearch.provider value", () => {
     const parsed = configSchema.parse({ websearch: { provider: "duckduckgo-html" } });
