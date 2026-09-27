@@ -4,8 +4,29 @@ La especificación original es la dirección del producto, no una declaración d
 sus criterios de release estén superados. Esta entrega inicia el proyecto con una alpha
 funcional, no solo interfaces o stubs.
 
-## Implementado
+## Contenido
 
+El índice es de texto plano a propósito: este archivo se lee tanto en GitHub como dentro del
+sitio, y los dos generan anclas distintas para títulos con acentos (GitHub las conserva, VitePress
+las elimina), así que unos enlaces internos aquí se romperían en uno de los dos. Use el esquema de
+la derecha en el sitio o la búsqueda de su navegador en GitHub.
+
+- Implementado: proveedores y `/connect`; núcleo, límites y almacenamiento; herramientas, AGENTS.md
+  y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
+  de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
+  usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico.
+- Validación.
+- Pendiente para estabilizar v0.1.
+- Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
+  skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
+  tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
+  adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos).
+- Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
+  plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
+  permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
+  Herdr.
+
+## Implementado
 
 ### Proveedores y `/connect`
 
@@ -43,7 +64,6 @@ funcional, no solo interfaces o stubs.
   System One porque no satisfacen el contrato actual del agente de texto. El selector muestra el
   proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
   continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
-
 
 ### Núcleo, límites y almacenamiento
 
@@ -803,7 +823,6 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ## Límites conocidos
 
-
 ### Runtime y empaquetado
 
 - Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
@@ -832,7 +851,6 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   así que glifos anchos (CJK, emoji) en mascotas personalizadas pueden desalinear. Los
   proveedores son síncronos: un proveedor lento no puede interrumpirse, solo descartarse.
 - Licencia MIT provisional (titular: Gustavo Gutiérrez), pendiente de confirmación.
-
 
 ### Memoria
 
