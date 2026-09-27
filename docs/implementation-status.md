@@ -6,6 +6,9 @@ funcional, no solo interfaces o stubs.
 
 ## Implementado
 
+
+### Proveedores y `/connect`
+
 - Proveedores de primera clase: contrato SDK aditivo `providers.register`, registro múltiple en el
   núcleo y activación transaccional. El adaptador OpenAI-compatible salió del núcleo al plugin
   integrado `@alisio/plugin-openai-compatible` (Chat/Responses, catálogo y mismo ID heredado
@@ -41,6 +44,9 @@ funcional, no solo interfaces o stubs.
   proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
   continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
 
+
+### Núcleo, límites y almacenamiento
+
 - Núcleo propio: streaming, tool loop, validación de entradas, límites de turnos/tiempo/contexto,
   presupuesto de tokens reportados, cancelación y eventos versionados.
 - Límite de turnos SUAVE (`limits.maxTurns`, por defecto `100`): al alcanzar el tope, la ejecución
@@ -54,6 +60,9 @@ funcional, no solo interfaces o stubs.
   ausencia de autenticación y diferencias de parámetros de tokens.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
   bloqueo de sesión y recuperación conservadora de efectos inciertos.
+
+### Herramientas, AGENTS.md y skills
+
 - Herramientas locales: lectura, escritura/edición con hash, ripgrep (con mensaje de instalación
   por plataforma si `rg` falta, en las herramientas y en `alisio doctor`), procesos, shell y Git.
 - AGENTS.md según la convención agents.md: global `<config>/AGENTS.md` (con `AGENTS.override.md`
@@ -73,6 +82,9 @@ funcional, no solo interfaces o stubs.
   skills de plugins bloqueadas por su ciclo de vida.
 - Presupuesto de tokens proporcional: `limits.maxTokens` es opcional; por defecto 8 × ventana de
   contexto (entre 400k y 8M) o 1M si la ventana es desconocida.
+
+### Subagentes
+
 - Plugin integrado `subagents` (`@alisio/plugin-subagents`, desactivable): definiciones de agentes
   en Markdown + YAML con precedencia CLI > proyecto > `.agents/agents` (convención especulativa) >
   compatibilidad `.claude/agents` y `.opencode/agent(s)` > usuario > plugins > integrados
@@ -84,6 +96,9 @@ funcional, no solo interfaces o stubs.
   reiniciar y reanudables con `task_id`; notificaciones de tareas en segundo plano; escrituras en
   paralelo en git con worktree por subagente (merge/discard), escritura serial o directorio
   compartido; panel de árbol de agentes con navegación por flechas y vistas de solo lectura.
+
+### Plugins, extensiones y MCP
+
 - Puntos de extensión genéricos: `api.sessions`, `api.ui.panel/select/open/interactive`,
   `api.resources.agents/list`, `ToolDefinition.concurrent`, contexto de sesión en comandos.
 - Plugins locales y manifiestos de directorio: herramientas, comandos, eventos, contexto,
@@ -109,6 +124,9 @@ funcional, no solo interfaces o stubs.
   forma atómica en la forma y archivo que definieron el servidor. El modelo conserva la decisión de
   llamar una herramienta; el nombre semántico mejora, pero no garantiza, la selección automática.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
+
+### CLI, runtime y empaquetado
+
 - CLI interactiva/headless, JSONL, reanudación, configuración y diagnósticos.
 - Runtime Node-first: Node.js >=22.16 (mínimo verificado: 22.13–22.15 incluyen `node:sqlite`
   sin FTS5; 22.16.0 funciona) y compatible con Bun. Sin APIs `Bun.*`: `node:sqlite` (en ambos
@@ -141,6 +159,9 @@ funcional, no solo interfaces o stubs.
   a las raíces globales (incluida su variante `node_modules/`).
 - Binario autónomo opcional (`pnpm build:binary`, Bun) y workflow de release con binarios
   linux-x64/arm64, darwin-x64/arm64 y windows-x64, `SHA256SUMS` e instalador `scripts/install.sh`.
+
+### Plantillas, pantalla de inicio y TUI
+
 - Sitio de documentación bilingüe (VitePress, inglés y español) desplegado en GitHub Pages.
 - Plantillas de prompts: Markdown con frontmatter YAML (`description`, `argument-hint`,
   `requires`), sintaxis `$ARGUMENTS` y `$1`..`$9`; fuentes con precedencia documentada
@@ -213,6 +234,9 @@ funcional, no solo interfaces o stubs.
   TUI muestra **Alisio Code** y, junto con el banner y `--version`, resuelve la versión del CLI
   caminando hacia arriba hasta el `package.json` de `@alisio/alisio-code` (límite de 8 niveles),
   sin literales que puedan desincronizarse de la publicación.
+
+### Compactación, plugins y memoria
+
 - Compactación de contexto en el núcleo (manual y automática por umbral), con resumen del
   proveedor actual, emparejamiento de llamadas/resultados preservado y persistencia
   transaccional (migración 2: columna `messages.compacted`).
@@ -254,6 +278,9 @@ funcional, no solo interfaces o stubs.
   el mensaje (`Message.attachments` en `@alisio/sdk`); la compactación describe una imagen
   resumida solo por tipo MIME y dimensiones, nunca reenvía ni conserva sus bytes en el
   checkpoint.
+
+### Modelo y enrutamiento por sesión
+
 - Cambio de modelo por sesión (`AgentRunner.setModel`, `sessions.model`); el proveedor acepta
   un modelo por petición. `/model` y `/models` comparten un selector global que agrega solo perfiles
   creados con `/connect`, identifica la propiedad proveedor/modelo, marca la pareja activa, aísla
@@ -269,6 +296,9 @@ funcional, no solo interfaces o stubs.
   cada sesión conserva proveedor, modelo, continuación opaca e ID OpenCode propios. Los destinos
   ausentes, ambiguos o con catálogo no disponible fallan antes de inferencia con orientación segura.
 - Lockfile y versiones fijadas; Biome, TypeScript, Vitest y CI Linux con Node 22.16, 22.x y 24.
+
+### Preguntar al usuario (ask_user_question)
+
 - Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
   subagente hijo, ya que la condición es que exista alguna UI interactiva enlazada, nunca cuál
   sesión pregunta— puede hacer de 1 a 4 preguntas de opción múltiple (2-4 opciones, como mucho una
@@ -288,6 +318,9 @@ funcional, no solo interfaces o stubs.
   cola o en pantalla) se descarta con un aviso, sin dejar un panel obsoleto. El panel de árbol de
   agentes gana un estado de presentación **esperando** (distinto de en ejecución) para las sesiones
   bloqueadas en una pregunta o una aprobación.
+
+### Herramientas de red y CLI
+
 - Herramientas de red (núcleo, no plugins): `webfetch(url, format?, timeout?)` lee una URL como
   `markdown`/`text`/`html` (conversión con `turndown` + `@mixmark-io/domino`, sin navegador ni
   jsdom), rechaza contenido no textual, limita a 5 MiB y trunca el texto embebido a 20 000
@@ -311,6 +344,9 @@ funcional, no solo interfaces o stubs.
 - Comando `alisio setup` (renombrado desde `alisio init`, sin alias): sigue escribiendo el mismo
   `.alisio/config.json` de ejemplo; `alisio init` ahora se comporta como cualquier subcomando
   desconocido (comportamiento propio de commander, sin trato especial).
+
+### Confianza de proyecto y diagnóstico
+
 - Confianza de proyecto por directorio, de una sola vez: al iniciar la TUI (nunca en modo headless
   `run`/`resume "prompt"`/`--json`, que siguen exigiendo `--trust-project`/`--config` explícitos
   porque ahí no hay nadie a quien preguntar) en un directorio con recursos de proyecto
@@ -341,7 +377,7 @@ funcional, no solo interfaces o stubs.
 
 ## Validación
 
-Consultar validation.txt para la ejecución final. Las pruebas de proveedor usan un
+Consultar [validation.txt](https://github.com/GustavoGutierrez/alisio/blob/main/docs/validation.txt) para la ejecución final. Las pruebas de proveedor usan un
 servidor HTTP local determinista, no una cuenta externa. MCP se prueba con el SDK servidor
 real en procesos/HTTP locales. El binario Linux ejecuta un ciclo completo, carga un plugin
 externo con dependencia y conserva la sesión. La integración Herdr tiene validación de
@@ -767,15 +803,24 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ## Límites conocidos
 
+
+### Runtime y empaquetado
+
 - Runtime: Node no carga `.env` automáticamente (Bun sí); use variables de entorno o
   `node --env-file=.env`. Los plugins `.ts` locales requieren Bun o Node >=22.18; los paquetes
   npm de plugins deben publicarse en JavaScript. La condición de export `alisio-source` solo
   se usa en desarrollo dentro del monorepo y no se publica.
+
+### Subagentes
+
 - Subagentes: los mensajes en cola (`send_message`, notificaciones) viven en memoria y se pierden
   al salir; una notificación en segundo plano llega con el siguiente turno del padre; las skills
   de una definición no se preinyectan (se pide cargarlas con `skill_load`); los worktrees solo se
   usan cuando se solapan escritores; `/agents merge` exige árbol limpio y no resuelve conflictos;
   el panel muestra las tareas iniciadas en este proceso; `kill` equivale a `cancel`.
+
+### Proveedores, plantillas y licencia
+
 - Proveedores: la resolución cruzada solo ve perfiles globales creados mediante `/connect`; la
   configuración raíz heredada no es un catálogo oculto. El catálogo se mantiene en caché hasta 15
   segundos por proceso.
@@ -787,6 +832,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   así que glifos anchos (CJK, emoji) en mascotas personalizadas pueden desalinear. Los
   proveedores son síncronos: un proveedor lento no puede interrumpirse, solo descartarse.
 - Licencia MIT provisional (titular: Gustavo Gutiérrez), pendiente de confirmación.
+
+
+### Memoria
 
 - Memoria: la búsqueda usa el tokenizador trigram, así que los términos de menos de 3
   caracteres se ignoran. Sin búsqueda semántica. El resumen automático de cierre solo se
@@ -806,6 +854,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Efecto `internal`: las herramientas de memoria no modifican el workspace ni la red y se
   permiten incluso con `--read-only`. Si se prefiere un modo estrictamente sin escrituras,
   use `--disable-plugin memory`.
+
+### Plugins e instalación
+
 - Plugins: `model.complete` usa el proveedor configurado (el modelo de la sesión cuando el
   plugin lo pasa) y no descuenta del presupuesto `limits.maxTokens`. Los hooks corren en
   proceso: el timeout aborta la espera y señala el `AbortSignal`, pero no puede detener
@@ -819,6 +870,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   herramienta solo avisa/pide confirmación (headless exige `--yes`/`--trust-plugin`). No se
   soportan URLs de registro (`registry:`, `git:`, `file:`), ni resolución de dependencias propia
   de Alisio: el paquete debe declarar la keyword `alisio-plugin` para poder cargarse.
+
+### Portapapeles, pegado y TUI
+
 - Portapapeles: OSC 52 no puede confirmarse; la TUI lo informa como no verificado.
 - Pegado y adjuntos: el acceso al portapapeles de imágenes necesita un ayudante nativo de la
   plataforma (o `wl-paste` en Wayland); suele faltar en sesiones SSH simples. No hay
@@ -831,6 +885,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - TUI: las estadísticas de `/stats` cubren solo el proceso actual de la TUI para la sesión
   activa; no se reconstruyen desde eventos persistidos. La TUI necesita una terminal con
   pantalla alternativa; en otros casos use `--no-tui` o `run`.
+
+### Skills y contexto
+
 - Skills: el coste de tokens mostrado por `/skills` es una aproximación uniforme de bytes/4, no el
   tokenizador del proveedor. Una skill de un plugin desactivado tras reiniciar deja de existir en el
   catálogo; un cambio pendiente del plugin conserva la skill bloqueada y marca su origen como
@@ -845,6 +902,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   desactiva para ese modelo salvo por `limits.maxContextChars` (salvaguarda interna, nunca total
   mostrado). La cobertura usa perfiles guardados y activación de `/connect` con catálogos ficticios;
   la entrada interactiva de `/connect` se verifica por tipos y manualmente, no con pruebas de UI.
+
+### Compactación y truncamiento
+
 - La compactación usa el proveedor actual; su consumo de tokens no se suma al presupuesto
   `limits.maxTokens`. Las estimaciones antes/después son aproximadas (≈4 caracteres/token).
   Los items opacos de Responses del tramo resumido se descartan; los conservados no cambian.
@@ -857,6 +917,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   (≈4 caracteres/token), así que un resumen cerca de su presupuesto puede cortarse aunque el
   modelo no esté cerca de *su* límite; el presupuesto real consumido lo informa el proveedor y no
   puede comprobarse de antemano.
+
+### Permisos, aprobaciones y confianza
+
 - Aprobaciones: para los efectos `write`, `process` y `external`, y solo en la TUI (la propia
   TUI ya pasa siempre un manejador `approve` salvo con `--read-only`, así que sin ningún flag el
   efecto se ofrece y se pregunta en cada llamada; ver la tabla de verdad en `docs/tools.md`); los
@@ -872,6 +935,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   crear esa `Application` es exactamente lo que la decisión de confianza controla, así que no podía
   usarse aquí. El almacén vive en `<ALISIO_STATE_HOME>/trust.json` con permisos 0600 (directorio
   0700); no está pensado para compartirse entre máquinas ni usuarios.
+
+### Preguntas y herramientas de red
+
 - `ask_user_question`/`/ask`: la cola interactiva compartida cubre aprobaciones, el `select` de
   plugins y las preguntas, pero deliberadamente NO incluye los selectores propios de `/model` ni
   `/resume` (siguen con su mecanismo previo sin cambios): son comandos que el usuario escribe él
@@ -899,6 +965,9 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   cualquier ejecutable. El proveedor SearXNG por defecto (sin configurar nada) es poco fiable en la
   práctica frente a instancias públicas con protección antibots; véase la sección de verificación.
   DuckDuckGo Instant Answer solo responde consultas factuales directas, nunca búsqueda general.
+
+### Persistencia, estadísticas y Herdr
+
 - El bloqueo SQLite por PID está diseñado para procesos locales en un host, no para una base
   compartida en red. La reutilización de PID puede exigir intervención del usuario.
 - La validación de rutas no es un aislamiento OS. La shell y plugins tienen permisos del usuario.

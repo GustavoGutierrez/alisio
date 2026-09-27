@@ -17,6 +17,16 @@ gets up to 3 seconds, session-end hooks ~1.5 seconds (during exit; `/clear` stil
 `pluginHooks.sessionEndTimeoutMs`), and teardown of MCP servers, provider and plugins runs in
 parallel with short caps — a hanging server or plugin never stalls the exit.
 
+## Quick path
+
+| I want to… | Go to |
+| --- | --- |
+| Choose or switch provider and model | [`/connect`, `/model`](#commands) |
+| Paste text or an image | [Paste: text and images](#paste-text-and-images) |
+| Approve or deny a write/process call | [Interactive approvals](#interactive-approvals) |
+| Answer a multiple-choice question | [Asking the user](#ask-user-question) |
+| Grant or revoke MCP consent | [MCP manager](#mcp) |
+| Watch or cancel a subagent | [Agent panel](#agent-panel) |
 ## Startup screen
 
 Interactive sessions open with a startup screen: the mascot (by default "Ali", a trade-wind cloud
@@ -40,7 +50,7 @@ alisio --quiet            # no startup screen and no non-essential hints
 switches to ASCII. Plugins can replace the mascot or the whole screen through
 [extension points](/plugins#extension-points).
 
-## Layout
+## Layout {#layout}
 
 The screen reflows when the terminal is resized, and every line is truncated or wrapped to the width.
 
@@ -72,6 +82,8 @@ estimate marked with `~` (about 4 characters per token) is shown.
 
 Typing `/` opens autocompletion: `/skills` (`/skill`) suggests the effective skills by name or
 description, and `/resume` suggests matching session IDs.
+
+### Commands at a glance
 
 | Command | Purpose |
 | --- | --- |
@@ -105,6 +117,8 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
 is running, prompts and the `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
 interrupt first.
+
+### Skills catalog and autocompletion
 
 The skills catalog uses `↑`/`↓`, PgUp/PgDn, Home/End and the mouse wheel. It keeps the selection
 visible after filtering, sorting and resizing, renders only the rows that fit, and reports clipped
@@ -172,6 +186,16 @@ means Alisio does not implement the feature; no row is a stub.
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and
 `/command plugin.id:name args`. Lines are processed sequentially; Ctrl+C cancels and exits.
 
+## MCP manager {#mcp}
+
+`/mcp` in the TUI lists servers by source and, for the selected one, separates configured/enabled,
+session permission, connection and loaded-tool states, showing tool annotations. Without startup
+`--allow-mcp` (or the global `mcp.allow`), **Connect**/**Enable** explains the process/network
+consequences and offers a **session-only** grant or **Grant and remember** (which writes `mcp.allow`
+and auto-connects enabled servers from the next start); a **Revoke global MCP consent** row clears
+that preference and disconnects servers. `--read-only` blocks the whole manager. See
+[Tools & permissions](/tools#mcp) for server configuration and
+[Configuration](/configuration#mcp-servers) for `mcp.allow`.
 ## Keys
 
 | Key | Action |
@@ -183,16 +207,16 @@ In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name requ
 | Esc | Interrupt the running turn |
 | Ctrl+C | Clear the input; interrupt an active turn; pressed twice on an empty input, exit |
 | Ctrl+D | Exit when the input is empty |
-
-`/exit`, double Ctrl+C on an empty input and Ctrl+D all go through the same bounded shutdown:
-whatever is still running is aborted, waited for at most ~3 seconds, session-end hooks get ~1.5
-seconds, and the app teardown itself is capped — exit feels instant even with many MCP servers.
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |
 | Ctrl+K | Cancel the selected or viewed agent |
 | Ctrl+V | Attach a clipboard image (see [Paste](#paste-text-and-images)) |
 | Ctrl+R | Remove the most recently attached image |
+
+`/exit`, double Ctrl+C on an empty input and Ctrl+D all go through the same bounded shutdown:
+whatever is still running is aborted, waited for at most ~3 seconds, session-end hooks get ~1.5
+seconds, and the app teardown itself is capped — exit feels instant even with many MCP servers.
 
 ## Agent panel {#agent-panel}
 
@@ -368,7 +392,7 @@ limits.maxTurns (/settings → Max turns).` — instead of an error block, and y
 partial report as usable output with a `turnsExceeded` marker, never as a failure (see
 [Subagents](/subagents#turn-limit)).
 
-## Interactive approvals
+## Interactive approvals {#interactive-approvals}
 
 In the TUI, when `write` or `process` are not allowed by flags, the corresponding tools are still
 offered to the model, and Alisio asks before running them:

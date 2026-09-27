@@ -30,7 +30,8 @@ Ejecute estas comprobaciones antes de abrir un pull request:
 | `pnpm test:cli` | La CLI compilada bajo Node contra un proveedor simulado local |
 | `pnpm test:compiled` | Compila el binario independiente y ejecuta contra él el fixture de extremo a extremo |
 | `pnpm pack:check` | Contenido de los paquetes npm |
-| `pnpm docs:build` | Este sitio de documentación, incluida la comprobación de enlaces rotos |
+| `pnpm docs:check` | Enlaces internos, `#anclas` y paridad inglés/español |
+| `pnpm docs:build` | Este sitio de documentación, incluidos `docs:check` y la comprobación de enlaces rotos |
 
 `pnpm check` las ejecuta todas en orden.
 
@@ -66,6 +67,7 @@ El sitio está en `docs/` y se construye con VitePress:
 
 ```sh
 pnpm docs:dev     # local preview
+pnpm docs:check   # internal links, anchors and EN/ES parity
 pnpm docs:build   # production build with dead-link check
 ```
 
@@ -84,4 +86,5 @@ enlaces internos usan rutas del sitio (`/configuration` en inglés, `/es/configu
 - [ ] El inglés y el español se actualizan en el mismo pull request.
 - [ ] `docs/es/limitations.md` sigue incluyendo `docs/implementation-status.md`, y
       `docs/limitations.md` en inglés refleja su contenido actual.
-- [ ] `pnpm docs:build` termina sin enlaces rotos.
+- [ ] `pnpm docs:build` termina sin enlaces rotos (`pnpm docs:check` valida `#anclas` y paridad, algo
+      que la propia comprobación de enlaces de VitePress no cubre).

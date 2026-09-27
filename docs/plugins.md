@@ -554,7 +554,7 @@ or `--allow-process` headless — and is never available under `--read-only`. Se
 [Tools & permissions](/tools#plugin-install).
 
 ```text
-You:   instala el plugin plugin-openrouter
+You:   install the plugin plugin-openrouter
 Agent: (calls plugin_install with spec "npm:plugin-openrouter", you approve it)
 Agent: Installed plugin "plugin-openrouter" v1.2.3 at
        ~/.config/alisio/plugins/node_modules/plugin-openrouter and added it to the

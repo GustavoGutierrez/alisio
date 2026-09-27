@@ -27,6 +27,7 @@ pnpm build
 pnpm test:cli
 pnpm test:compiled
 pnpm pack:check
+pnpm docs:check
 pnpm docs:build
 ```
 
@@ -66,4 +67,5 @@ The VitePress site lives in `docs/` (`pnpm docs:dev`, `pnpm docs:build`). Englis
 - [ ] English and Spanish are updated in the same pull request.
 - [ ] `docs/es/limitations.md` still includes `docs/implementation-status.md`, and the English
       `docs/limitations.md` reflects its current content.
-- [ ] `pnpm docs:build` passes with no dead links.
+- [ ] `pnpm docs:build` passes with no dead links (`pnpm docs:check` validates `#anchors` and EN/ES
+      parity).

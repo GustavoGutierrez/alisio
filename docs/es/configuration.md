@@ -149,7 +149,7 @@ declaradas por encima de `2_000_000` tokens se tratan como desconocidas para que
 caracteres: la estimación de caracteres en bruto (`~caracteres / 4`, unos 4 caracteres por token)
 que alcanza `maxContextChars / 4` también compacta (un informe de tokens del proveedor nunca
 dispara el respaldo por sí solo). La barra de contexto de la TUI muestra la misma ventana conocida,
-o un honesto `?` cuando es desconocida (ver [Interfaz de terminal](/es/tui)); el respaldo de
+o un honesto `?` cuando es desconocida (ver [Interfaz de terminal](/es/tui#layout)); el respaldo de
 caracteres anterior es una salvaguarda del motor, nunca un total mostrado. El valor por defecto de
 `800000` caracteres (≈ `200000` tokens) es una suposición para ventanas desconocidas — el mismo
 presupuesto de ~200k tokens que OpenCode asume para proveedores personalizados — para que los

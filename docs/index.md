@@ -32,6 +32,10 @@ features:
     details: A built-in, Engram-style memory plugin backed by SQLite and FTS5 that survives sessions and projects.
   - title: Typed plugin SDK
     details: Tools, commands, events, context, compaction and session hooks, model completions and a SQLite storage port.
+  - title: Subagents
+    details: Delegate to specialized agents in child sessions, with a live agent tree, parallel git worktrees and cascade cancellation.
+  - title: MCP and Herdr
+    details: An MCP client (stdio and Streamable HTTP) with lazy, consent-gated connections, plus a Herdr report integration.
 ---
 
 ## What is Alisio?

@@ -18,6 +18,16 @@ sigue honrando el `pluginHooks.sessionEndTimeoutMs` completo) y el cierre de ser
 proveedor y plugins corre en paralelo con topes cortos — un servidor o plugin colgado nunca
 retrasa la salida.
 
+## Ruta rápida
+
+| Quiero… | Ir a |
+| --- | --- |
+| Elegir o cambiar proveedor y modelo | [`/connect`, `/model`](#comandos) |
+| Pegar texto o una imagen | [Pegar: texto e imágenes](#paste-text-and-images) |
+| Aprobar o denegar una escritura/proceso | [Aprobaciones interactivas](#interactive-approvals) |
+| Responder una pregunta de opción múltiple | [Preguntar al usuario](#ask-user-question) |
+| Conceder o revocar consentimiento MCP | [Gestor MCP](#mcp) |
+| Ver o cancelar un subagente | [Panel de agentes](#agent-panel) |
 ## Pantalla de inicio
 
 Las sesiones interactivas comienzan con una pantalla de inicio: la mascota (por defecto "Ali", un
@@ -42,7 +52,7 @@ alisio --quiet            # no startup screen and no non-essential hints
 cambia a ASCII. Los plugins pueden reemplazar la mascota o toda la pantalla mediante
 [puntos de extensión](/es/plugins#extension-points).
 
-## Disposición
+## Disposición {#layout}
 
 La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca o ajusta al ancho.
 
@@ -76,6 +86,8 @@ muestra una estimación marcada con `~` (unos 4 caracteres por token).
 Al escribir `/` se abre el autocompletado: `/skills` (`/skill`) sugiere las skills efectivas por
 nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con el prefijo.
 
+### Comandos de un vistazo
+
 | Comando | Función |
 | --- | --- |
 | `/help` | Comandos y teclas |
@@ -108,6 +120,8 @@ en el autocompletado.
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero.
+
+### Catálogo de skills y autocompletado
 
 El catálogo de skills usa `↑`/`↓`, RePág/AvPág, Inicio/Fin y la rueda del ratón. Mantiene visible la
 selección al filtrar, ordenar y redimensionar, solo renderiza las filas que caben e informa los
@@ -178,6 +192,17 @@ no implementa esa función; ninguna fila es un stub.
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y
 `/command plugin.id:name args`. Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.
 
+## Gestor MCP {#mcp}
+
+`/mcp` en la TUI lista los servidores por origen y, para el seleccionado, separa los estados
+configurado/activado, permiso de sesión, conexión y herramientas cargadas, mostrando las anotaciones
+de las herramientas. Sin `--allow-mcp` al arrancar (o el `mcp.allow` global), **Conectar**/**Activar**
+explica las consecuencias de proceso/red y ofrece una concesión **solo para esta sesión** o
+**Conceder y recordar** (que escribe `mcp.allow` y auto-conecta los servidores activados desde el
+siguiente arranque); una fila **Revocar consentimiento MCP global** borra esa preferencia y
+desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
+[Herramientas y permisos](/es/tools#mcp) para la configuración de servidores y
+[Configuración](/es/configuration#servidores-mcp) para `mcp.allow`.
 ## Teclas
 
 | Tecla | Acción |
@@ -189,17 +214,17 @@ En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name r
 | Esc | Interrumpir el turno en curso |
 | Ctrl+C | Borrar la entrada; interrumpir un turno activo; pulsado dos veces con la entrada vacía, salir |
 | Ctrl+D | Salir cuando la entrada está vacía |
-
-`/exit`, doble Ctrl+C con la entrada vacía y Ctrl+D pasan por el mismo apagado acotado: lo que siga
-en ejecución se aborta y se espera como mucho ~3 segundos, los hooks de fin de sesión reciben ~1,5
-segundos y el cierre de la aplicación también está limitado — salir se siente instantáneo incluso
-con muchos servidores MCP.
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
 | Ctrl+K | Cancelar el agente seleccionado o visualizado |
 | Ctrl+V | Adjuntar una imagen del portapapeles (véase [Pegar](#paste-text-and-images)) |
 | Ctrl+R | Quitar la última imagen adjuntada |
+
+`/exit`, doble Ctrl+C con la entrada vacía y Ctrl+D pasan por el mismo apagado acotado: lo que siga
+en ejecución se aborta y se espera como mucho ~3 segundos, los hooks de fin de sesión reciben ~1,5
+segundos y el cierre de la aplicación también está limitado — salir se siente instantáneo incluso
+con muchos servidores MCP.
 
 ## Panel de agentes {#agent-panel}
 

@@ -29,3 +29,17 @@ All packages are published under the
 
 This documentation site (English and Spanish) is published at
 <https://gustavogutierrez.github.io/alisio/>.
+
+## Project documents
+
+Some project documents are not part of this site; they live in the repository and are linked
+here with their absolute GitHub URLs:
+
+- [Product specification](https://github.com/GustavoGutierrez/alisio/blob/main/docs/specification.md):
+  the product direction; it is not a claim that all of its release criteria are met.
+- [Implementation status](https://github.com/GustavoGutierrez/alisio/blob/main/docs/implementation-status.md)
+  (Spanish): the source of truth for the limitations and the verification scope.
+- [Validation log](https://github.com/GustavoGutierrez/alisio/blob/main/docs/validation.txt): the
+  record of the final validation run.
+- [Benchmark data](https://github.com/GustavoGutierrez/alisio/blob/main/docs/benchmark.json): raw
+  JSON; GitHub shows it as data, not as a rendered page.

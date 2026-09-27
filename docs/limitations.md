@@ -30,7 +30,8 @@ it is not a statement that all of its release criteria are met.
   auto-connects at startup runs unsandboxed under your user privileges whenever enabled.
   Large tool catalogs are a deployment choice: a server exposing dozens of tools inflates every
   request and is not counted against the post-compaction context budget (see
-  [Context limitations](#context)), so manage oversized catalogs with `/plugins` (disable the
+  [the tool catalog is not counted](/compaction#the-tool-catalog-is-not-counted)), so manage
+  oversized catalogs with `/plugins` (disable the
   server) rather than expecting the runner to shrink them.
 - Remote OpenTelemetry, memory metrics and large-repository benchmarks.
 - Hardening against hostile processes and filesystem races. No OS sandbox is offered.
@@ -157,6 +158,25 @@ including canonical, unique, missing and ambiguous selectors, continuation isola
 overrides and stable/distinct OpenCode session headers. No real credentials were used.
 
 ## Verification scope
+
+The source file records a dedicated verification-scope section for each area below; the summary
+here links to it with an absolute GitHub URL (the file is excluded from this site):
+
+- **Runtime and packaging** — tests under Node and Bun, the built CLI, the standalone binary, packs.
+- **Subagents, AGENTS.md and skills** — precedence, limits, cascade cancellation, git worktrees.
+- **Prompt templates and `/init`** — sources, arguments, trust and diagnostics.
+- **Startup screen and extensions** — mascot, extension points and `TERM=dumb`/`NO_COLOR`.
+- **TUI and compaction** — pseudo-terminal runs, manual and automatic compaction.
+- **Agent output-token budget** — truncation handling across the four adapters.
+- **Context limit versus tool catalog and output speed** — what the post-compaction budget counts.
+- **Memory and plugins** — FTS5 search, end-of-session summary, plugin install.
+- **Paste and image attachments** — clipboard helpers per platform and limits.
+- **`ask_user_question`** — the shared interactive queue and stepped prompts.
+- **Network tools (webfetch, websearch, execute)** — mocked providers and no network sandbox.
+- **Project trust and default permissions** — trust store, approvals and `--read-only`.
+
+The full detail (in Spanish) is in the source file linked at the top of this page, which the
+[Spanish version of this page](/es/limitations) includes verbatim.
 
 Runtime and packaging: unit and integration tests run under Node (a subset also on Bun); `test:cli`
 runs the built CLI on Node (verified on 22.19 and the 22.16.0 minimum) and `test:compiled` runs the

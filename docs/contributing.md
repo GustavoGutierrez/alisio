@@ -29,7 +29,8 @@ Run these before opening a pull request:
 | `pnpm test:cli` | The built CLI under Node against a local fake provider |
 | `pnpm test:compiled` | Builds the standalone binary and runs the end-to-end fixture against it |
 | `pnpm pack:check` | Contents of the npm packages |
-| `pnpm docs:build` | This documentation site, including the dead-link check |
+| `pnpm docs:check` | Internal links, `#anchors` and English/Spanish parity |
+| `pnpm docs:build` | This documentation site, including `docs:check` and the dead-link check |
 
 `pnpm check` runs all of them in order.
 
@@ -62,6 +63,7 @@ The site lives in `docs/` and is built with VitePress:
 
 ```sh
 pnpm docs:dev     # local preview
+pnpm docs:check   # internal links, anchors and EN/ES parity
 pnpm docs:build   # production build with dead-link check
 ```
 
@@ -80,4 +82,5 @@ site paths (`/configuration` in English, `/es/configuration` in Spanish). `speci
 - [ ] English and Spanish are updated in the same pull request.
 - [ ] `docs/es/limitations.md` still includes `docs/implementation-status.md`, and the English
       `docs/limitations.md` reflects its current content.
-- [ ] `pnpm docs:build` passes with no dead links.
+- [ ] `pnpm docs:build` passes with no dead links (`pnpm docs:check` validates `#anchors` and parity,
+      which VitePress’s own dead-link check does not).

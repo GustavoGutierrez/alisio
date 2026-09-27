@@ -29,3 +29,17 @@ Todos los paquetes se publican bajo la
 
 Este sitio de documentación (inglés y español) se publica en
 <https://gustavogutierrez.github.io/alisio/>.
+
+## Documentos del proyecto
+
+Algunos documentos del proyecto no forman parte de este sitio; viven en el repositorio y se
+enlazan aquí con su URL absoluta de GitHub:
+
+- [Especificación del producto](https://github.com/GustavoGutierrez/alisio/blob/main/docs/specification.md):
+  la dirección del producto; no afirma que se cumplan todos sus criterios de release.
+- [Estado de implementación](https://github.com/GustavoGutierrez/alisio/blob/main/docs/implementation-status.md)
+  (en español): la fuente de verdad de las limitaciones y del alcance de la verificación.
+- [Registro de validación](https://github.com/GustavoGutierrez/alisio/blob/main/docs/validation.txt):
+  el registro de la ejecución final de validación.
+- [Datos de benchmark](https://github.com/GustavoGutierrez/alisio/blob/main/docs/benchmark.json):
+  JSON sin procesar; GitHub lo muestra como datos, no como página renderizada.

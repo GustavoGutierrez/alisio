@@ -75,6 +75,8 @@ alisio run "Explain this repository" --config .alisio/config.json --read-only
 
 - [English docs](https://gustavogutierrez.github.io/alisio/)
 - [Documentación en español](https://gustavogutierrez.github.io/alisio/es/)
+- [Product specification](docs/specification.md): the product direction, kept in the repository.
+- [Validation log](docs/validation.txt) and [benchmark data](docs/benchmark.json): raw validation output.
 
 The documentation site is bilingual (English and Spanish). The detailed implementation status
 ([docs/implementation-status.md](docs/implementation-status.md)) is maintained in Spanish.

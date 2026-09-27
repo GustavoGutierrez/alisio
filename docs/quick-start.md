@@ -4,6 +4,15 @@ Alisio ships with the OpenAI-compatible provider plugin enabled, but no default 
 Start the TUI and run `/connect` for the quickest setup: choose the provider, enter its settings and
 key, then choose a discovered model. The selection applies globally on later launches.
 
+## Quick path (60 seconds)
+
+1. `alisio setup` — write an example `.alisio/config.json` without secrets.
+2. Export the key variable that file names (step 2 below).
+3. `alisio doctor --config ./my-api.json` — confirm runtime, tools and provider.
+4. `alisio --config ./my-api.json` — open the TUI and run `/connect` to pick a provider and model.
+
+Each step follows in detail below; [Terminal UI](/tui) covers the TUI itself.
+
 ## 1. Create a configuration file
 
 `alisio setup` writes an example `.alisio/config.json` in the current directory, without secrets.

@@ -5,6 +5,15 @@ credenciales predeterminados. Inicie la TUI y ejecute `/connect`: elija el prove
 ajustes y clave, y seleccione un modelo descubierto. La selección se aplica globalmente en inicios
 posteriores.
 
+## Ruta rápida (60 segundos)
+
+1. `alisio setup` — escriba un `.alisio/config.json` de ejemplo, sin secretos.
+2. Exporte la variable de la clave que indique ese archivo (paso 2 más abajo).
+3. `alisio doctor --config ./my-api.json` — confirme runtime, herramientas y proveedor.
+4. `alisio --config ./my-api.json` — abra la TUI y ejecute `/connect` para elegir proveedor y modelo.
+
+Cada paso se detalla a continuación; [Interfaz de terminal](/es/tui) cubre la TUI.
+
 ## 1. Crear un archivo de configuración
 
 `alisio setup` escribe un `.alisio/config.json` de ejemplo en el directorio actual, sin secretos.
@@ -85,7 +94,7 @@ alisio --config ./my-api.json
 # Headless, read-only: las herramientas de escritura/proceso/red ni siquiera se ofrecen
 alisio run "Explain this repository" --config ./my-api.json --read-only
 
-# Headless with versioned JSONL events on stdout (diagnostics go to stderr)
+# Headless con eventos JSONL versionados en stdout (los diagnósticos van a stderr)
 alisio run "Review the code" --config ./my-api.json --json
 
 # Omitir la pregunta y permitir ediciones (y procesos, si hace falta) directamente
