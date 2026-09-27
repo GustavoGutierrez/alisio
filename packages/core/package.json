@@ -1,6 +1,6 @@
 {
   "name": "@alisio/core",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "description": "Embeddable provider-agnostic Alisio agent core: tool loop, context compaction, local tools, MCP, plugin host and SQLite session store. Runs on Node >=22.16 and Bun.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
