@@ -53,6 +53,7 @@ export function welcomeSection(ctx: StartupContext): string[] {
 export function infoSection(ctx: StartupContext, width: number): string[] {
   const t = ctx.terminal;
   const label = sgr(t.color, "2");
+  const pad = " ".repeat(2);
   const rows: Array<[string, string]> = [];
   if (ctx.model) rows.push(["model", ctx.model]);
   if (ctx.provider) rows.push(["provider", ctx.provider]);
@@ -62,9 +63,9 @@ export function infoSection(ctx: StartupContext, width: number): string[] {
   rows.push(["plugins", plugins ? `${plugins} loaded` : "none"]);
   const labelWidth = Math.min(12, Math.max(...rows.map(([l]) => l.length)) + 1);
   return rows.map(([l, v]) => {
-    const room = Math.max(1, width - labelWidth - 1);
+    const room = Math.max(1, width - labelWidth - 1 - 4);
     const value = l === "cwd" ? shortenPath(v, room) : truncate(v, room);
-    return `${label(padEnd(l, labelWidth))} ${value}`;
+    return `${pad}${label(padEnd(l, labelWidth))} ${value}${pad}`;
   });
 }
 export function pluginsSection(ctx: StartupContext): string[] {
@@ -79,12 +80,12 @@ export function pluginsSection(ctx: StartupContext): string[] {
       .filter((p) => !p.categories?.includes("model-provider"))
       .map((p) => `${p.id}${p.builtin ? " (builtin)" : ""}`),
   ];
-  return [`${sgr(t.color, "2")("with")} ${names.join(", ")}`];
+  return [`  ${sgr(t.color, "2")("with")} ${names.join(", ")}  `];
 }
 export function tipsSection(ctx: StartupContext): string[] {
   const t = ctx.terminal;
   const bullet = sgr(t.color, "33")(glyph(t, "›", ">"));
-  return ctx.tips.map((tip) => `${bullet} Tip: ${tip}`);
+  return ctx.tips.map((tip) => `  ${bullet} Tip: ${tip}  `);
 }
 export function mascotSection(ctx: StartupContext): string[] {
   return [ctx.mascot.render({ terminal: ctx.terminal, version: ctx.version })].flat();
@@ -126,7 +127,7 @@ export const DefaultStartupScreen: StartupScreenProvider = {
     const rule = sgr(
       ctx.terminal.color,
       "2",
-    )(glyph(ctx.terminal, "─", "-").repeat(Math.min(columns, 60)));
+    )(glyph(ctx.terminal, "─", "-").repeat(columns - 2));
     return [...body, "", ...tipsSection(ctx), rule].map((line) => truncate(line, columns));
   },
 };

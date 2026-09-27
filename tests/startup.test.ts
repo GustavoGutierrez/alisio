@@ -165,7 +165,7 @@ describe("startup plugin summary", () => {
         { id: "subagents", version: "1", builtin: true },
       ]),
     )[0];
-    expect(line).toBe("with 4 model providers, memory (builtin), subagents (builtin)");
+    expect(line).toBe("  with 4 model providers, memory (builtin), subagents (builtin)  ");
     expect(line).not.toMatch(/deepseek|openai-compatible|opencode/);
   });
 
@@ -181,7 +181,7 @@ describe("startup plugin summary", () => {
           },
         ]),
       ),
-    ).toEqual(["with 1 model provider"]);
+    ).toEqual(["  with 1 model provider  "]);
   });
 
   it("derives the model-provider category from plugin registrations", async () => {
