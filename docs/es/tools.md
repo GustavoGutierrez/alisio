@@ -300,6 +300,35 @@ alisio mcp list --config ./my-api.json
 alisio mcp doctor my-server --config ./my-api.json --allow-mcp
 ```
 
+### Resultados enriquecidos
+
+Los resultados de herramientas y recursos MCP ya no se aplana a texto JSON. El conector los mapea
+heurísticamente a las partes de contenido propias de Alisio:
+
+- Las partes `text` siguen siendo texto; las partes `image` se convierten en imágenes.
+- `structuredContent` (o una parte de texto parseable como JSON) que coincida con una **forma
+  verificada** se convierte en un bloque nativo de la TUI: tablas `{columns, rows}` /
+  `{headers, rows}` (las filas también pueden ser objetos indexados por los nombres de columna),
+  objetos planos de escalares como clave-valor, y árboles `{nodes: [{label, children?, meta?}]}`.
+  Todo lo demás —incluido JSON anidado sin forma reconocida— sigue siendo texto plano, como antes.
+- Siempre se añade una **proyección de texto canónica** de cada bloque/imagen, de modo que el
+  modelo, la compactación y cualquier ruta headless (`run`, `resume <id> "prompt"`, `--json`,
+  `--no-tui`, `TERM=dumb`, `NO_COLOR`) vean exactamente lo que veían antes: solo texto, nunca
+  bytes de imagen. La TUI renderiza el bloque de forma nativa sobre esa misma proyección.
+
+En la TUI, las tablas se renderizan como columnas alineadas con celdas que se ajustan al ancho; el
+clave-valor, como dos columnas; los árboles, con glifos de ramas; los bloques de código, con el
+mismo resaltado de sintaxis que las respuestas; y los bloques markdown, con el renderizador de
+Markdown habitual. Las imágenes se muestran en línea cuando la terminal soporta el protocolo de
+gráficos kitty o iTerm2 (marcador atenuado `[image: mime AxA]` en caso contrario). `mcp_resource`
+usa el mismo mapeo para contenidos de texto y blobs de imagen; los blobs que no son imagen se
+convierten en un marcador corto en vez de base64 crudo.
+
+Limitaciones: la detección de formas es deliberadamente conservadora (heurística, no impulsada por
+protocolo); los servidores que devuelven solo JSON no estructurado conservan el comportamiento
+anterior literalmente; y si la terminal no puede renderizar imágenes, la TUI muestra un marcador
+mientras el modelo sigue leyendo `[image: …]` en la proyección de texto.
+
 ### Ejemplo: Brave Search
 
 El paquete oficial corre sobre stdio mediante `npx` (resuelto desde su `PATH`, que el conector

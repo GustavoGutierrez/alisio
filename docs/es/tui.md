@@ -59,8 +59,8 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 | Zona | Contenido |
 | --- | --- |
 | Cabecera | **Alisio Code** y la versión del paquete en ejecución (el mismo valor que imprime `--version`), **modelo · proveedor · effort** (el nombre del modelo en cian negrita, el nombre del proveedor en magenta, el nivel de effort en amarillo cuando el modelo activo anuncia niveles soportados), host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
-| Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
-| Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
+| Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown: títulos en cian brillante y negrita, tablas con columnas alineadas adaptadas al ancho (las filas separadoras con guiones largos em/en se normalizan de nuevo a `---`), listas, código en línea y en bloque — el código en bloque se sangra y se colorea por sintaxis según el lenguaje (TypeScript/JavaScript, JSON, Bash, Python, YAML, CSS, HTML, Markdown) sin ninguna dependencia de resaltado — y enlaces. Una pista atenuada `⎘ copy · /copy` aparece bajo cada respuesta completada. El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
+| Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos. Las herramientas que devuelven datos estructurados (por ejemplo MCP) renderizan **bloques nativos**: tablas de columnas alineadas con celdas que se ajustan al ancho, clave-valor en dos columnas, árboles con glifos de ramas, bloques de código con resaltado de sintaxis, bloques markdown e imágenes en línea cuando la terminal lo soporta (marcador atenuado `[image: …]` en caso contrario) |
 | Barra de estado | **Línea del agente activo** bajo el editor: `agente: <nombre> · <modelo> · <proveedor> · <effort>` (modelo en cian negrita, proveedor en magenta, effort en amarillo; el effort aparece solo cuando el modelo activo anuncia niveles soportados; en terminales estrechos se descartan primero las piezas de menor prioridad). Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
 | Selectores | Listas seleccionables para `/model`, `/agents`, `/effort`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
 
@@ -103,7 +103,7 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/skills` (`/skill`) | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
 | `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
 | `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
-| `/copy` | Copia la última respuesta del asistente al portapapeles |
+| `/copy` | Copia la última respuesta del asistente al portapapeles como texto crudo (sin formato, sin los colores ANSI que se ven en pantalla) |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
 | `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulte [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del plugin de subagentes, consulte [Subagentes](/es/subagents#in-the-tui) |
 | `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
@@ -250,6 +250,9 @@ desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
 | Esc | Interrumpir el turno en curso |
 | Ctrl+C | Borrar la entrada; interrumpir un turno activo; pulsado dos veces con la entrada vacía, salir |
 | Ctrl+D | Salir cuando la entrada está vacía |
+| `c` / `y` | Copiar la última respuesta del asistente como texto crudo (cuando la entrada está vacía) |
+| `x` | Expandir o plegar la fila plegable más cercana — una sección **Thought** terminada, un lote agrupado de llamadas a herramientas o una salida de comando larga (cuando la entrada está vacía; véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
+| Clic del ratón | En la fila de cabecera de un bloque plegable, expandirlo o plegarlo (véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
@@ -261,6 +264,44 @@ desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
 en ejecución se aborta y se espera como mucho ~3 segundos, los hooks de fin de sesión reciben ~1,5
 segundos y el cierre de la aplicación también está limitado — salir se siente instantáneo incluso
 con muchos servidores MCP.
+
+## Visualización de herramientas y razonamiento {#tool-reasoning-display}
+
+La transcripción sigue las convenciones visuales de otros agentes de código, para que un turno
+activo se lea como una historia y no como un muro de llamadas crudas:
+
+- **Nombres de herramientas legibles.** `read_file` se muestra como **Read File**, `search_text`
+  como **Search Text**, `mcp_devforge_time_diff` como **MCP · Devforge Time Diff**. Los acrónimos
+  conocidos se conservan en mayúsculas (HTTP, API, CLI…). El nombre de máquina sigue disponible,
+  atenuado, en la fila de detalle de cada llamada agrupada y en los informes `/tools` y `/stats`.
+- **Razonamiento plegable.** Mientras el modelo piensa, la fila muestra la cola en vivo
+  `✻ thinking…`. Cuando la sección de pensamiento termina se pliega a **`+ Thought · 2.9s`** (la
+  duración aproxima el intervalo de pensamiento a partir de la secuencia de eventos; en sesiones
+  reanudadas se omite). Al expandir se muestra el texto completo del pensamiento, acotado a 40
+  líneas envueltas.
+- **Lotes de herramientas agrupados.** Las llamadas consecutivas del mismo tipo (`read`, `write`,
+  `process`, `mcp`) aparecen como **una sola fila cuando todas terminan**: `✓ Read File — 3 reads ·
+  60ms` para un lote uniforme, o `✓ Explored — 3 reads` cuando el lote mezcla herramientas de
+  lectura. Al expandir se lista cada llamada con su estado, duración, resumen, una vista previa de
+  salida acotada y su línea de código de salida. Un lote que comparte nombre conserva el nombre
+  legible de la herramienta más un sustantivo de recuento por tipo (`reads`, `files`, `commands`,
+  `calls`, `tasks`). Las llamadas en ejecución o en espera de aprobación siempre siguen siendo
+  filas individuales con su propio spinner y estado en vivo — un lote se pliega en su fila de grupo
+  solo cuando todas las llamadas han terminado.
+- **Salida de comando larga.** Una vista previa más larga que el límite plegado (3 líneas limpias
+  al tener éxito, 6 en error) se pliega a la vista familiar del shell: las primeras líneas,
+  `… N more lines` y una línea final **`Command exited with code 0.`** (verde) o
+  `Command exited with code 1.` (roja) cuando la herramienta informó un código de salida
+  (run_process, shell, search_text). Al expandir se revela la salida completa. Los diffs de
+  edición, las imágenes y los bloques ui nativos (tablas, árboles…) conservan su renderizado
+  anterior; los bloques enriquecidos no se pliegan porque ya van acotados.
+
+Los plegables se alternan pulsando **`x`** con la **entrada vacía** (nunca mientras se escribe un
+mensaje — la misma convención de entrada vacía que `c`/`y`), o **haciendo clic en la fila de
+cabecera** de un bloque plegable con el ratón (la selección por arrastre y copiar-al-seleccionar no
+se ven afectados: un clic sin movimiento alterna, un arrastre sigue seleccionando). "Más cercano"
+significa el último de la transcripción, así que durante el streaming `x` pliega el último bloque
+terminado. Las filas plegadas muestran un `+` atenuado y las expandidas un `−`.
 
 ## Panel de agentes {#agent-panel}
 
@@ -310,8 +351,46 @@ Si ninguna funciona, Alisio envía una secuencia de escape OSC 52 y la informa c
 porque la terminal no puede confirmarla. `/copy` copia la última respuesta del asistente de la misma
 manera.
 
+### Copiar una respuesta
+
+Cada respuesta completada del asistente muestra una pista atenuada **`⎘ copy · /copy`** bajo ella
+(`[copy] · /copy` en ASCII si la terminal no soporta Unicode) — solo informa de que la respuesta se
+puede copiar, no dispara nada por sí misma. Pulsar **`c`** (o **`y`**) con la **entrada vacía**
+copia la última respuesta del asistente exactamente igual que `/copy` — como **texto crudo, sin
+formato** (la fuente Markdown, nunca el renderizado con color) — y muestra la misma confirmación
+`Copied (<herramienta>)`. Escribir `c` o `y` a mitad de un mensaje escribe con normalidad: el
+atajo solo actúa con la entrada vacía, sin autocompletado a la vista y sin un turno en curso. La
+pista aparece solo cuando la respuesta está completa (nunca durante el streaming).
+
 Mientras la captura del ratón está activa, la selección nativa de la terminal suele requerir
 **Shift+arrastrar**.
+
+## Resultados enriquecidos de herramientas {#rich-tool-results}
+
+Las herramientas que responden con datos estructurados —los servidores MCP a la cabeza— dejan de
+aplanar su salida en texto JSON crudo. El conector mapea las formas verificadas a bloques `ui` propios de
+Alisio y la TUI los renderiza de forma nativa bajo la cabecera de la herramienta:
+
+- **Tablas** como columnas alineadas: cabecera en negrita, celdas que se ajustan al ancho de su
+  columna (los valores largos se envuelven en vez de cortarse) y una línea separadora atenuada bajo
+  la cabecera. Un título opcional aparece atenuado sobre el bloque.
+- **Clave-valor** en dos columnas: claves en cian brillante a la izquierda, valores envueltos a la
+  derecha.
+- **Árboles** con glifos de ramas (`├─`/`└─`/`│`) y con alternativa ASCII (`|-`/`` `- ``/`|`) en
+  terminales sin Unicode. Una anotación `(meta)` atenuada sigue a la etiqueta cuando existe.
+- **Código** como mini bloque de código que reutiliza el resaltador de las respuestas: cerca
+  atenuada ` ```lang `, líneas resaltadas y la cerca de cierre.
+- **Markdown** con el renderizador de Markdown habitual de las respuestas (títulos, listas, tablas…).
+- **Imágenes** en línea cuando la terminal soporta el protocolo de gráficos kitty o iTerm2
+  (detección automática de pi-tui 0.87.1). Sin soporte de imágenes —o con `NO_COLOR`— se muestra
+  un marcador atenuado `[image: image/png 640x480]`.
+
+Cada bloque tiene una **proyección de texto canónica** que siempre forma parte del resultado de la
+herramienta, de modo que el modelo, `/copy`, los resúmenes de compactación y cualquier ruta
+headless ven solo texto plano (los bytes de imagen nunca llegan al prompt del modelo). El transcript
+también guarda la proyección, de forma que `resume` reproduce los resultados enriquecidos de manera
+nativa. Es una capa de presentación: el JSON crudo no se muestra cuando se renderiza un bloque, y
+las formas no reconocidas conservan el comportamiento de vista previa anterior.
 
 ## Pegar: texto e imágenes {#paste-text-and-images}
 

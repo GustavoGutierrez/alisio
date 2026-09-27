@@ -10,8 +10,32 @@ export interface ToolCall {
   name: string;
   arguments: string;
 }
+/** A node of a `{ kind: "tree" }` UI block. */
+export interface TreeNode {
+  label: string;
+  children?: TreeNode[];
+  /** Optional annotation rendered after the label, e.g. a count or a status word. */
+  meta?: string;
+}
+/**
+ * Alisio-owned structured rendering of a tool result, produced by core adapters (for example
+ * the MCP connector) when a tool returns structured data. It never carries MCP protocol types:
+ * plugins wanting a structured block build one of these shapes directly. The runner always
+ * keeps a plain-text projection alongside a `ui` part, so providers, compaction and headless
+ * output only ever see text; the block is a display hint for TUI rendering.
+ */
+export type UiBlock =
+  | { kind: "table"; columns: string[]; rows: Array<Array<string>>; caption?: string }
+  | { kind: "key-value"; entries: Array<[string, string]>; caption?: string }
+  | { kind: "tree"; nodes: Array<TreeNode> }
+  | { kind: "code"; lang?: string; code: string; caption?: string }
+  | { kind: "markdown"; text: string };
 export interface ToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; mimeType: string; data: string }
+    | { type: "ui"; block: UiBlock }
+  >;
   isError?: boolean;
 }
 /**
@@ -593,3 +617,13 @@ export const textResult = (text: string, isError = false): ToolResult => ({
   content: [{ type: "text", text }],
   ...(isError ? { isError: true } : {}),
 });
+/**
+ * Text-only view of a tool result: the content filtered to its text parts, order preserved.
+ * This is what the runner hands to providers, what compaction summarizes and what headless
+ * output shows; `ui`/`image` parts stay only in the persisted transcript for TUI replay, so
+ * raw bytes or structured blocks never reach the model prompt.
+ */
+export function textProjection(result: ToolResult): ToolResult {
+  if (result.content.every((part) => part.type === "text")) return result;
+  return { ...result, content: result.content.filter((part) => part.type === "text") };
+}

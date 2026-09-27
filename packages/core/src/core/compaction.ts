@@ -159,6 +159,9 @@ function clampMessage(message: Message, maxToolResultChars: number, maxTextChars
   let used = 0;
   let changed = false;
   const content = message.result.content.map((part) => {
+    // Only the text projection is clipped: ui/image parts are display-only transcript data and
+    // are never truncated (raw bytes never reach the model, which only sees the projection).
+    if (part.type !== "text") return part;
     const room = maxToolResultChars - used;
     const text =
       room <= 0
@@ -278,7 +281,8 @@ export function reduceMessagesToBudget(
             : m.role === "assistant"
               ? m.text.length > textCap
               : m.role === "tool" &&
-                m.result.content.reduce((a, p) => a + p.text.length, 0) > toolCap;
+                m.result.content.reduce((a, p) => a + (p.type === "text" ? p.text.length : 0), 0) >
+                  toolCap;
         if (over) {
           best = i;
           bestSize = current;
@@ -322,7 +326,12 @@ export function serializeForSummary(messages: Message[], maxItemChars = 4_000): 
       for (const c of m.calls)
         lines.push(`TOOL CALL ${c.id} ${c.name}: ${clip(c.arguments, maxItemChars)}`);
     } else {
-      const text = m.result.content.map((c) => c.text).join("\n");
+      // Only the text projection is summarized: ui/image parts are display data and never
+      // reach the summarizer (raw image bytes in particular stay out of the checkpoint).
+      const text = m.result.content
+        .filter((p) => p.type === "text")
+        .map((c) => c.text)
+        .join("\n");
       lines.push(
         `TOOL RESULT ${m.callId}${m.result.isError ? " (error)" : ""}: ${clip(text, maxItemChars)}`,
       );

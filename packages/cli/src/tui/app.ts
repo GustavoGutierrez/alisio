@@ -20,12 +20,15 @@ import {
   getImageDimensions,
   getNativeClipboard,
   Key,
+  MouseRegion,
   matchesKey,
   ProcessTerminal,
   ScrollView,
   type SelectItem,
   SelectList,
   TuiAltScreen,
+  type TuiMouseEvent,
+  type TuiMouseEventResult,
   truncateToWidth,
   VStack,
 } from "@earendil-works/pi-tui";
@@ -74,8 +77,12 @@ import {
   addItem,
   COMMANDS,
   configuredProviderModelItems,
+  editorCopyKey,
   effectiveEffort,
   effortPickerItems,
+  type FoldCandidate,
+  foldCandidates,
+  foldToggleKey,
   formatContext,
   formatDuration,
   formatTokens,
@@ -92,6 +99,7 @@ import {
   reduceEvent,
   reservedCommandNames,
   resolveCommand,
+  richPartsOf,
   shortenPath,
   shortId,
   slashCompletionCommands,
@@ -266,6 +274,25 @@ export async function runTui(options: TuiOptions): Promise<void> {
   // Read-only views of child sessions (subagents), fed by their events.
   const childViews = new Map<string, ViewState>();
   const childView = new TranscriptSync();
+  // Fold state of every collapsible transcript row (reasoning sections, tool batches, long
+  // outputs). Keyed by stable fold keys from state.ts; absent entries use the pure defaults.
+  const folded = new Map<string, boolean>();
+  const foldOf = (candidate: FoldCandidate) =>
+    folded.get(candidate.key) ?? candidate.defaultExpanded;
+  main.setFoldResolver(foldOf);
+  childView.setFoldResolver(foldOf);
+  /** Which transcript is on screen right now (child view while viewing a subagent, else main). */
+  const visibleTranscript = (): { items: TranscriptItem[]; sync: TranscriptSync } =>
+    viewedState()
+      ? { items: viewedState()?.items ?? [], sync: childView }
+      : { items: view.items, sync: main };
+  /** Applies one fold toggle and re-syncs only the affected transcript (cheap: events, not frames). */
+  const toggleFold = (candidate: FoldCandidate) => {
+    folded.set(candidate.key, !(folded.get(candidate.key) ?? candidate.defaultExpanded));
+    const visible = visibleTranscript();
+    visible.sync.sync(visible.items);
+    tui.requestRender();
+  };
   let panelState = initialPanelState();
   const startupDiagnostics: import("@alisio/core").StartupDiagnostic[] = [];
   let hint: string | undefined;
@@ -422,22 +449,33 @@ export async function runTui(options: TuiOptions): Promise<void> {
   bottom.addChild(editor);
   bottom.addChild(treePanel);
   bottom.addChild(footer);
+  // Click-to-toggle on collapsible transcript rows: pi-tui synthesizes `click` events after a
+  // press+release without movement, so plain clicks fold/unfold while drag-selection keeps
+  // working (copyOnSelect must never be disturbed). The region sits between the ScrollView and
+  // the content switch; content rows = visible rows + the scroll offset.
+  let transcriptScroll: ScrollView | undefined;
+  const transcriptRegion = new MouseRegion(
+    new Switch(() => (viewedState() ? childView.container : transcript)),
+    (event: TuiMouseEvent): TuiMouseEventResult | undefined => {
+      if (picker || event.type !== "click" || event.button !== "left") return undefined;
+      const scroll = transcriptScroll;
+      if (!scroll) return undefined;
+      const visible = visibleTranscript();
+      const candidate = visible.sync.entryAt(event.y + scroll.scrollTop, event.width);
+      if (!candidate) return undefined;
+      toggleFold(candidate);
+      return { handled: true };
+    },
+  );
+  transcriptScroll = new ScrollView(transcriptRegion, {
+    follow: "end",
+    primary: true,
+    overscroll: "chain",
+  });
   tui.setLayoutRoot(
     new VStack([
       { component: header, basis: "auto" },
-      {
-        component: new ScrollView(
-          new Switch(() => (viewedState() ? childView.container : transcript)),
-          {
-            follow: "end",
-            primary: true,
-            overscroll: "chain",
-          },
-        ),
-        basis: 0,
-        grow: 1,
-        minSize: 1,
-      },
+      { component: transcriptScroll, basis: 0, grow: 1, minSize: 1 },
       { component: bottom, basis: "auto", shrink: 1, minSize: 3 },
     ]),
   );
@@ -487,6 +525,14 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const info = (text: string) => push({ kind: "info", text });
   let terminalEvent = false;
   dispatch = (event) => {
+    // The event stream stays text-only (headless/JSONL consumers see the projection); the TUI
+    // pulls the persisted rich parts (ui/image) itself so native rendering survives resume.
+    if (event.type === "tool_completed") {
+      const data = (event.data ?? {}) as Record<string, unknown>;
+      const rich = richPartsOf(app.store.callResult(event.sessionId, String(data.id ?? "")));
+      if (rich.ui !== undefined || rich.image !== undefined)
+        event = { ...event, data: { ...data, ...rich } };
+    }
     if (event.sessionId !== session) {
       // Child session (e.g. a subagent): keep a view model for its read-only view.
       const child = childViews.get(event.sessionId) ?? initialViewState(view.model);
@@ -1627,7 +1673,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       "- `/init` (above) writes AGENTS.md; the shell command `alisio setup` only scaffolds `.alisio/config.json`",
       "- `/command plugin.id:name args` — run a plugin command",
       "",
-      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents",
+      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents",
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
@@ -1941,6 +1987,22 @@ export async function runTui(options: TuiOptions): Promise<void> {
         removeAttachment();
         return { consume: true };
       }
+      // `x` on an EMPTY editor line toggles the nearest collapsible transcript row — a finished
+      // `Thought` section, a grouped batch of tool calls, or a long command output. Same
+      // empty-input convention as Enter, Ctrl+D and `c`/`y`; typing `x` mid-message is never
+      // intercepted, and with nothing collapsible it types normally.
+      if (
+        foldToggleKey(data, {
+          text: editor.getText(),
+          autocomplete: editor.isShowingAutocomplete(),
+        })
+      ) {
+        const target = foldCandidates(visibleTranscript().items).at(-1);
+        if (target) {
+          toggleFold(target);
+          return { consume: true };
+        }
+      }
     }
     if (!picker) {
       if (matchesKey(data, Key.ctrl("x"))) {
@@ -1981,6 +2043,25 @@ export async function runTui(options: TuiOptions): Promise<void> {
           applyPanel(r);
           return { consume: true };
         }
+      }
+      // `c`/`y` on an EMPTY editor line copies the last assistant response as raw text, the same
+      // as /copy; typing `c` or `y` mid-message is never intercepted.
+      if (
+        editorCopyKey(data, {
+          text: editor.getText(),
+          autocomplete: editor.isShowingAutocomplete(),
+          busy,
+        })
+      ) {
+        const last = lastAssistantText(view.items);
+        if (last) {
+          void copy(last).then((result) => {
+            const message = copyMessage(result);
+            tui.flash(message);
+            if (!result.ok) notice(message);
+          });
+        }
+        return { consume: true };
       }
     }
     if (matchesKey(data, Key.escape)) {

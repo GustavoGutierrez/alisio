@@ -71,7 +71,10 @@ export async function runExecute(code: string, deps: ExecuteDeps): Promise<unkno
       ...(deps.session ? { session: deps.session } : {}),
       ...(deps.label ? { label: deps.label } : {}),
     });
-    const text = result.content.map((c) => c.text).join("\n");
+    const text = result.content
+      .filter((p) => p.type === "text")
+      .map((c) => c.text)
+      .join("\n");
     if (result.isError) throw new Error(text);
     try {
       return JSON.parse(text);

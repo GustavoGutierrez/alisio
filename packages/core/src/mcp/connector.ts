@@ -6,6 +6,7 @@ import type { McpServerSource, ServerConfig } from "../config.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { objectSchema } from "../tools/standard.ts";
 import { loadVersion } from "../version.ts";
+import { mapMcpCallResult, mapMcpResourceResult } from "./rich.ts";
 
 export type McpStatus =
   | "disabled"
@@ -167,7 +168,7 @@ export class McpConnector {
                   { signal: c.signal, timeout: 15000 },
                 )
               : await client.listResources(undefined, { signal: c.signal, timeout: 15000 });
-            return textResult(JSON.stringify(result));
+            return mapMcpResourceResult(result);
           },
         }),
       );
@@ -413,10 +414,7 @@ export class McpConnector {
                 { name: tool.name, arguments: input },
                 { signal: ctx.signal, timeout: 30000 },
               );
-              return textResult(
-                JSON.stringify(result),
-                "isError" in result && result.isError === true,
-              );
+              return mapMcpCallResult(result);
             },
           }),
         );

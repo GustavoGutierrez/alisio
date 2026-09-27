@@ -57,8 +57,8 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 | Area | Content |
 | --- | --- |
 | Header | **Alisio Code** and the running package version (the same value `--version` prints), **model · provider · effort** (the model name in bold cyan, the provider name in magenta, the effort level in yellow when the active model advertises supported levels), provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
-| Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
-| Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
+| Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown: bold bright-cyan headings, width-aware tables with aligned columns (separator rows with em/en dashes are normalized back to `---`), lists, inline and block code — block code is indented and syntax-colored per language (TypeScript/JavaScript, JSON, Bash, Python, YAML, CSS, HTML, Markdown) without any highlighter dependency, and links. A dim `⎘ copy · /copy` hint sits under every completed response. Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
+| Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments. Tools that return structured data (for example MCP) render **native blocks**: aligned tables with wrapped cells, two-column key-value, trees with branch glyphs, syntax-highlighted code blocks, markdown blocks, and inline images when the terminal supports them (dim `[image: …]` placeholder otherwise) |
 | Status bar | **Active agent line** below the editor: `agent: <name> · <model> · <provider> · <effort>` (model bold cyan, provider magenta, effort yellow; the effort appears only when the active model advertises supported levels; the lowest-priority pieces drop first on narrow terminals). Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
 | Pickers | Selectable lists for `/model`, `/plugins`, `/skills`, `/resume` and approvals |
 
@@ -100,7 +100,7 @@ description, and `/resume` suggests matching session IDs.
 | `/skills` (`/skill`) | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
 | `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp` (or global `mcp.allow`), Connect/Enable shows process/network consequences and can grant access for this TUI session only, or remember it globally (`mcp.allow`) for every session. A "Revoke global MCP consent" row clears that preference and disconnects servers. `--read-only` blocks it |
 | `/settings` (`/prefs`) | Settings menu: an OpenCode-style list of real, wired preferences (compaction, context, MCP consent, limits, editor padding) plus navigation rows for the managers below. Two-column rows (name + current value), type-to-search filter, `(n/total)` counter, footer with the highlighted row's description; Enter/Space changes a value, Esc leaves. Persisted to your user configuration and applied to the running session |
-| `/copy` | Copy the last assistant response to the clipboard |
+| `/copy` | Copy the last assistant response to the clipboard as raw text (unformatted, without the ANSI colors you see on screen) |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
 | `/agents` | Open the active-agent picker: every selectable main-session agent with its description, current/default/read-only markers. Selecting one persists `agents.active`, takes effect from the next prompt, and switches the session model when the agent declares one; see [Active agent and effort](#active-agent-and-effort). With an argument (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) it routes to the subagents plugin's task management, see [Subagents](/subagents#in-the-tui) |
 | `/effort [level]` | Set the reasoning effort for the active model when it advertises `effort.supportedLevels`: no argument opens a picker (the model's default is marked), an argument is validated and persisted (`agents.effort`). The level is sent from the next prompt; see [Active agent and effort](#active-agent-and-effort) |
@@ -242,6 +242,9 @@ that preference and disconnects servers. `--read-only` blocks the whole manager.
 | Esc | Interrupt the running turn |
 | Ctrl+C | Clear the input; interrupt an active turn; pressed twice on an empty input, exit |
 | Ctrl+D | Exit when the input is empty |
+| `c` / `y` | Copy the last assistant response as raw text (when the input is empty) |
+| `x` | Expand or collapse the nearest collapsible row — a finished **Thought** section, a grouped batch of tool calls, or a long command output (when the input is empty; see [Tool & reasoning display](#tool-reasoning-display)) |
+| Mouse click | On a collapsible header row, expand or collapse it (see [Tool & reasoning display](#tool-reasoning-display)) |
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |
@@ -252,6 +255,40 @@ that preference and disconnects servers. `--read-only` blocks the whole manager.
 `/exit`, double Ctrl+C on an empty input and Ctrl+D all go through the same bounded shutdown:
 whatever is still running is aborted, waited for at most ~3 seconds, session-end hooks get ~1.5
 seconds, and the app teardown itself is capped — exit feels instant even with many MCP servers.
+
+## Tool & reasoning display {#tool-reasoning-display}
+
+The transcript follows the display conventions of other coding agents, so a busy turn reads as a
+story instead of a wall of raw calls:
+
+- **Humanized tool names.** `read_file` renders as **Read File**, `search_text` as **Search Text**,
+  `mcp_devforge_time_diff` as **MCP · Devforge Time Diff**. Known acronyms stay uppercase (HTTP,
+  API, CLI…). The machine name remains available dimmed in each grouped call's detail row, and in
+  the `/tools` and `/stats` reports.
+- **Collapsible reasoning.** While the model thinks, the row shows the live `✻ thinking…` tail.
+  Once the thought section finishes it folds to **`+ Thought · 2.9s`** (the duration approximates
+  the thinking interval from the event stream; replayed sessions omit it). Expanding shows the
+  full thinking text, bounded to 40 wrapped lines.
+- **Grouped tool batches.** Consecutive calls of the same kind (`read`, `write`, `process`, `mcp`)
+  appear as **one row once they all finish**: `✓ Read File — 3 reads · 60ms` for a uniform batch,
+  or `✓ Explored — 3 reads` when the batch mixes read tools. Expanding lists each call with its
+  status, duration, summary, a capped output preview and its exit-code line. A batch that shares a
+  name keeps the humanized tool name plus a per-kind count noun (`reads`, `files`, `commands`,
+  `calls`, `tasks`). Running or approval-pending calls always stay individual rows with their own
+  spinner and live state — a batch collapses into its group row only once every call has finished.
+- **Long command output.** A tool preview longer than the collapsed cap (3 clean lines on success,
+  6 on error) folds to the familiar shell view: the first lines, `… N more lines`, and a closing
+  line **`Command exited with code 0.`** (green) or `Command exited with code 1.` (red) when the
+  tool reported an exit code (run_process, shell, search_text). Expanding reveals the full output.
+  Edit diffs, images and native ui blocks (tables, trees…) keep their previous rendering; rich
+  blocks are not folded because they are already bounded.
+
+Collapsibles are toggled by pressing **`x`** with an **empty input** (never while typing a
+message — the same empty-input convention as `c`/`y`), or by **clicking the header row** of a
+collapsible with the mouse (drag-selection and copy-on-select are unaffected: a plain click
+without movement toggles, a drag still selects). The nearest collapsible means the last one in the
+transcript, so during streaming `x` folds the most recent finished block. Collapsed rows show a
+dim `+`, expanded ones a dim `−`.
 
 ## Agent panel {#agent-panel}
 
@@ -299,7 +336,43 @@ available tool, without a shell:
 If none works, Alisio sends an OSC 52 escape sequence and reports it as **unverified**, because the
 terminal cannot confirm it. `/copy` copies the last assistant response the same way.
 
+### Copying a response
+
+Every completed assistant response shows a dim **`⎘ copy · /copy`** hint under it (ASCII
+`[copy] · /copy` on terminals without Unicode) — it only tells you the response can be copied, it
+does not trigger anything by itself. Pressing **`c`** (or **`y`**) with an **empty input** copies
+the last assistant response the same way `/copy` does — as **raw, unformatted text** (the Markdown
+source, never the colored rendering) — and flashes the same `Copied (<tool>)` confirmation. Typing
+`c` or `y` mid-message types normally: the hotkey only fires on an empty input while no
+autocomplete is showing and no turn is running. The hint appears only once the answer is complete
+(it never shows while streaming).
+
 While mouse capture is active, native terminal selection usually requires **Shift+drag**.
+
+## Rich tool results {#rich-tool-results}
+
+Tools that answer with structured data — MCP servers first among them — stop flattening their
+output into raw JSON text. The connector maps verified shapes into Alisio's own `ui` blocks and
+the TUI renders them natively under the tool head:
+
+- **Tables** render as aligned columns: the header is bold, cells wrap to their column width
+  (long values wrap instead of being cut), and a dim separator line sits under the header. An
+  optional caption shows dimmed above the block.
+- **Key-value** renders as two columns: bright-cyan keys on the left, values wrapped on the right.
+- **Trees** render with branch glyphs (`├─`/`└─`/`│`) and fall back to ASCII (`|-`/`` `- ``/`|`)
+  on terminals without Unicode. A dim `(meta)` annotation follows the label when present.
+- **Code** renders as a mini code block reusing the response highlighter: a dim ` ```lang ` fence,
+  highlighted lines, and the closing fence.
+- **Markdown** renders through the regular response Markdown renderer (headings, lists, tables…).
+- **Images** render inline when the terminal supports the kitty or iTerm2 graphics protocol
+  (pi-tui 0.87.1 auto-detection). Without image support — or with `NO_COLOR` — a dim placeholder
+  `[image: image/png 640x480]` is shown instead.
+
+Every block has a canonical **text projection** that is always part of the tool result, so the
+model, `/copy`, compaction summaries and every headless path see plain text only (image bytes never
+reach the model prompt). The transcript also stores the projection, so `resume` replays rich
+results natively. This is a display layer: the raw JSON is not shown once a block renders, and
+unrecognized shapes keep the previous preview behavior.
 
 ## Paste: text and images {#paste-text-and-images}
 

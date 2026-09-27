@@ -63,6 +63,8 @@ export interface SessionStore {
   release(id: string): void;
   beginCall(session: string, call: ToolCall): void;
   endCall(session: string, call: ToolCall, result: ToolResult): void;
+  /** The persisted result of a completed tool call, for replay of rich (ui/image) parts. */
+  callResult(session: string, callId: string): ToolResult | undefined;
   reconcile(id: string, acknowledge?: boolean): void;
   event(id: string, runId: string, type: string, data: unknown): void;
 }

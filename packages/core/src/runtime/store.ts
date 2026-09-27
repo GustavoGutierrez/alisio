@@ -239,6 +239,13 @@ export class SQLiteStore implements SessionStore {
       )
       .run(id, call.id, JSON.stringify(result));
   }
+  /** Rich (ui/image) parts persist as part of the serialized result and replay verbatim. */
+  callResult(id: string, callId: string): ToolResult | undefined {
+    const row = this.db
+      .prepare("SELECT result FROM tool_calls WHERE session=? AND call_id=? AND status='completed'")
+      .get(id, callId) as { result: string | null } | null;
+    return row?.result ? (JSON.parse(row.result) as ToolResult) : undefined;
+  }
   reconcile(id: string, acknowledge = false): void {
     this.db.transaction(() => {
       const messages = this.messages(id);

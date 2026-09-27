@@ -265,7 +265,9 @@ describe("reduceMessageSizes", () => {
       expect(user.text.length).toBe(16_000 + marker.length + 1);
       expect(user.text).toContain(marker);
       expect(assistant.text.length).toBe(16_000 + marker.length + 1);
-      expect(toolResult.result.content[0]?.text.length).toBe(8_000 + marker.length + 1);
+      expect(toolResult.result.content.find((p) => p.type === "text")?.text.length).toBe(
+        8_000 + marker.length + 1,
+      );
     }
   });
 
@@ -285,9 +287,11 @@ describe("reduceMessageSizes", () => {
     expect(messages[1]).toEqual(input[1]);
     const toolResult = messages[2];
     expect(toolResult && "result" in toolResult && toolResult.result.isError).toBeUndefined();
-    expect(toolResult && "result" in toolResult && toolResult.result.content[0]?.text.length).toBe(
-      1_000 + marker.length + 1,
-    );
+    expect(
+      toolResult &&
+        "result" in toolResult &&
+        toolResult.result.content.find((p) => p.type === "text")?.text.length,
+    ).toBe(1_000 + marker.length + 1);
     assertPaired(messages);
   });
 
@@ -350,7 +354,14 @@ describe("reduceMessagesToBudget", () => {
     expect(serialized(messages)).toBeLessThanOrEqual(35_000);
     const texts = messages
       .filter((m) => m.role === "tool")
-      .map((m) => (m.role === "tool" ? m.result.content.map((p) => p.text).join("\n") : ""));
+      .map((m) =>
+        m.role === "tool"
+          ? m.result.content
+              .filter((p) => p.type === "text")
+              .map((p) => p.text)
+              .join("\n")
+          : "",
+      );
     expect(texts[0]).toContain(marker);
     expect(texts[1]).toContain(marker);
     expect(texts[2]).toBe("t".repeat(10_000)); // smallest result untouched
@@ -367,7 +378,14 @@ describe("reduceMessagesToBudget", () => {
     expect(truncated).toBe(1);
     const texts = messages
       .filter((m) => m.role === "tool")
-      .map((m) => (m.role === "tool" ? m.result.content.map((p) => p.text).join("\n") : ""));
+      .map((m) =>
+        m.role === "tool"
+          ? m.result.content
+              .filter((p) => p.type === "text")
+              .map((p) => p.text)
+              .join("\n")
+          : "",
+      );
     expect(texts[0]).toContain(marker);
     expect(texts[1]).toBe("t".repeat(30_000));
   });
@@ -407,7 +425,10 @@ describe("reduceMessagesToBudget", () => {
     for (const m of messages) {
       if (m.role === "user") expect(m.text.length).toBeLessThanOrEqual(1024 + marker.length + 1);
       else if (m.role === "tool") {
-        const text = m.result.content.map((p) => p.text).join("\n");
+        const text = m.result.content
+          .filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .join("\n");
         expect(text.length).toBeLessThanOrEqual(512 + marker.length + 1);
         expect(text).toContain(marker);
       }
@@ -422,7 +443,12 @@ describe("reduceMessagesToBudget", () => {
     expect(truncated).toBe(1);
     const tool = messages[2];
     const text =
-      tool && tool.role === "tool" ? tool.result.content.map((p) => p.text).join("\n") : "";
+      tool && tool.role === "tool"
+        ? tool.result.content
+            .filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+        : "";
     expect(text.length).toBe(1_000 + marker.length + 1);
     expect(text).toContain(marker);
   });

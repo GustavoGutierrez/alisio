@@ -216,6 +216,63 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (incluido `/skills`/`/skill` con sugerencias del catálogo por nombre o descripción),
   interrupción con Esc y aprobación interactiva de `write`/`process`. `--no-tui` conserva
   el modo readline.
+- Renderizado Markdown mejorado: títulos en cian brillante y negrita, tablas con columnas
+  alineadas al ancho (un `transform` previo al parseo normaliza las filas separadoras con
+  guiones em/en/de caja a `---` ASCII conservando los dos puntos de alineación, sin tocar
+  bloques de código delimitados/sangrados ni `---` sueltos), y código en bloque sangrado
+  (2 espacios) con resaltado de sintaxis por línea SIN dependencias para ts/tsx/js/jsx/json/
+  bash/sh/python/yaml/css/html/md (palabras clave, cadenas —incluidas f-strings de Python y
+  llaves de JSON—, comentarios de línea y de bloque con continuidad multilínea, números,
+  llamadas a funciones, atributos/asignaciones y variables `$`; el tokenizador sanea ANSI y
+  caracteres de control de la entrada, nunca los reemite, y con `NO_COLOR` devuelve líneas
+  planas). Tono base gris para el cuerpo vía `defaultTextStyle`. Copiar respuestas: pista
+  atenuada `⎘ copy · /copy` (`[copy] · /copy` en terminales sin Unicode) bajo cada respuesta
+  completada (nunca durante el streaming), y atajo `c`/`y` con la entrada VACÍA que copia la
+  última respuesta como texto crudo (misma ruta que `/copy`, mismo aviso `Copied (<herramienta>)`).
+- Resultados enriquecidos de herramientas (MCP "Nivel 0"): el conector deja de aplanar
+  `CallToolResult`/`ReadResourceResult` a `JSON.stringify`. El SDK amplía el contenido de
+  `ToolResult` de forma aditiva —`{type:"text"} | {type:"image", mimeType, data} |
+  {type:"ui", block: UiBlock}` con `textResult` intacto— donde `UiBlock` es unión discriminada
+  propia de Alisio (tabla `{columns, rows}` con cabeceras como nombre alternativo y filas de
+  objetos indexadas por columna, clave-valor de escalares planos, árbol `{nodes: {label,
+  children?, meta?}}`, código y markdown); los tipos MCP nunca se filtran al SDK, el mapeo vive
+  en el adaptador de core (`packages/core/src/mcp/rich.ts`). Heurística conservadora: solo las
+  formas verificadas de `structuredContent` o de partes de texto parseables como JSON se pliegan
+  a bloques; el resto conserva literalmente el comportamiento anterior (incluido
+  `JSON.stringify` para resultados sin contenido reconocible). SIEMPRE se añade la proyección de
+  texto canónica de cada bloque/imagen (parte de texto adicional; render compacto de tablas como
+  markdown, `clave: valor`, árboles con `├─/└─`, código cercado) y marcadores `[image: mime (N
+  bytes)]` en lugar de bytes base64: el modelo, la compactación (`clampMessage`/`reduceMessagesToBudget`
+  recortan SOLO partes de texto; `serializeForSummary` resume solo la proyección), los proveedores
+  (el runner aplica `textProjection` antes de `provider.stream`) y todas las rutas headless
+  (`run`, `resume <id> "prompt"`, `--json`, `--no-tui`, `TERM=dumb`, `NO_COLOR`) siguen viendo
+  texto únicamente. El store persiste las partes ricas con `endCall`/`append` (JSON completo, sin
+  migración) y el TUI las recupera con `SessionStore.callResult` solo para sus eventos
+  (`tool_completed` sigue emitiendo `preview` de texto; JSONL sin cambios). TUI: `TranscriptItem`
+  de herramienta con `ui?`/`image?`; `ToolBlock` renderiza tablas alineadas con celdas que se
+  ajustan al ancho, clave-valor en dos columnas, árboles con `├─/└─/│` (ASCII `|-/`- /|` sin
+  Unicode), bloques de código con el mismo `highlightCode`, markdown con el renderizador habitual,
+  e imágenes en línea vía el componente `Image` de pi-tui 0.87.1 (detección `getCapabilities`),
+  con marcador atenuado `[image: mime WxH]` si no hay soporte o hay `NO_COLOR`; `itemsFromHistory`
+  reproduce los bloques al reanudar. Documentado en `docs/tools.md`, `docs/es/tools.md`,
+  `docs/tui.md` y `docs/es/tui.md`.
+- Presentación de herramientas y razonamiento en la TUI (estilo Claude Code/OpenCode): nombres
+  legibles (`read_file` → `Read File`, `mcp_*` → `MCP · …`, acronyms como HTTP/API en
+  mayúsculas); razonamiento terminado plegado a `+ Thought · 2.9s` (expandible, acotado a 40
+  líneas; la duración aproxima el intervalo de pensamiento desde las marcas de tiempo de los
+  deltas); lotes de llamadas consecutivas del mismo tipo agrupados en una fila al terminar
+  (`✓ Read File — 3 reads · 60ms`, verbo de tipo para lotes mixtos, `✗` si falló alguna; las
+  llamadas en ejecución/esperando aprobación siguen siendo filas individuales con su spinner);
+  salida de comando larga plegada con `… N more lines` y línea final `Command exited with code
+  0.`/`code 1.` derivada con seguridad del JSON de vista previa (run_process/shell/search_text,
+  tolerando el sufijo `<instructions>` de las lecturas); alternar con `x` en la entrada vacía o
+  clic en la fila de cabecera (el clic sintetizado por pi-tui no rompe copiar-al-seleccionar).
+  Modelo puro en `state.ts` (`humanizeToolName`, `toolKindOf`, `groupToolEntries`, `FoldCandidate`
+  y `exitCodeOf`) sin imports de terminal; componentes con caché de líneas por
+  versión/ancho/plegado (los frames de reloj no re-renderizan filas sin cambios), sincronización
+  por claves estables con reutilización de componentes y orden preservado; el `tool_started` del
+  runner lleva el `effect` del registro (aditivo) para agrupar por capacidad real en vivo.
+  Documentado en `docs/tui.md` y `docs/es/tui.md`.
 - Comando `/settings` (`/prefs`): menú de ajustes estilo OpenCode — filas de dos columnas
   (preferencia + valor actual), filtro escribiendo (nombre/clave/categoría/descripción), contador
   `(n/total)` y pie con la descripción de la fila resaltada; Enter/Espacio cambia el valor, Esc
@@ -549,6 +606,42 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   inciertas, cambio de modelo persistido, migración de una base v1 y aprobación
   denegar/permitir en sesión (escenarios Bun); `listModels`, modelo por petición, tokens en
   caché y razonamiento con un servidor HTTP local.
+- Renderizado y copia en la TUI (Vitest, `tests/tui-markdown.test.ts`): tokenizador por línea
+  (segmentos exactos para ts/json/bash/python, docstrings y comentarios de bloque multilínea,
+  llaves y pares de JSON, f-strings de Python, claves YAML, propiedades CSS, tags/atributos
+  HTML); `highlightCode` con color (códigos SGR por estilo) y sin color (`NO_COLOR` → líneas
+  planas sin `\x1b`); saneado de ANSI/controles incrustados en la entrada (nunca se reemiten) y
+  caracteres raros (emoji incluido); `codeBlockIndent` aplicado al renderizar un bloque real
+  con `AssistantBlock`; pista de copia: presente con respuesta completada, ausente durante
+  streaming, ausente con respuesta vacía, aparece al completarse (`update`), fallback ASCII con
+  `TERM=dumb`/`LANG=C`; enrutado puro del atajo `editorCopyKey` (`c`/`y` solo con entrada
+  vacía, sin autocompletado y sin turno en curso); normalización de separadores de tabla
+  (guiones em/en → `---` con alineación, sin tocar código delimitado/sangrado, `---` sueltos ni
+  filas de prosa).
+- Resultados enriquecidos (Vitest, sin red, `tests/mcp-rich.test.ts`, `tests/rich-results.test.ts`,
+  `tests/tui-rich-render.test.ts`): contrato SDK aditivo (la unión de contenido y `UiBlock`
+  compilan; `textResult` byte-idéntico; `textProjection` conserva orden/isError y devuelve la
+  misma referencia para contenido solo-texto); mapeo MCP → bloques con fixturas: texto solo,
+  parte de imagen (mime + base64 + marcador de proyección), tablas `{columns,rows}`/
+  `{headers,rows}` con filas de objetos, clave-valor plano, árboles `{nodes}` con meta e hijos,
+  texto JSON parseable con forma, fallback a texto para JSON anidado/arrays/no parseable, partes
+  desconocidas como marcador (nunca bytes), `structuredContent` sin forma → comportamiento
+  anterior, `isError` preservado, recursos (texto, blob de imagen, blob no-imagen → marcador,
+  listado sin `contents` → JSON plano) y proyección canónica SIEMPRE presente junto a un bloque;
+  persistencia: `endCall`/`callResult`/`append`/`messages` redondean ui/image intactos y
+  `callResult` solo responde para llamadas completadas; compactación: `reduceMessageSizes`/
+  `reduceMessagesToBudget` recortan solo partes de texto (las ui/image pasan intactas y no
+  cuentan contra el tope), `serializeForSummary` emite solo la proyección (sin bytes ni
+  `undefined`); runner: con un proveedor controlado y el adaptador real, el modelo recibe solo
+  `["text","text"]` (texto + proyección), el store conserva ui/image y `tool_completed` emite
+  `preview` solo-texto; TUI: `renderUiBlock` alinea tablas y envuelve celdas largas, clave-valor
+  en dos columnas, árboles con `├─/└─/│` y ASCII `|-/`- /|`, código a través de `highlightCode`,
+  markdown con el renderizador, imágenes: marcador con dimensiones sin protocolo, secuencia
+  iTerm2 con `setCapabilities("iterm2")`, marcador con `NO_COLOR` incluso con soporte, bloques
+  sin color con `NO_COLOR` (módulo fresco); `reduceEvent` e `itemsFromHistory` redondean ui/image
+  y `isUiBlock` rechaza payloads malformados. Sin red: las fixturas llegaron solo hasta el
+  adaptador puro; los tests de conector existentes (`mcp.test.ts` stdio/http) pasaron sin cambios
+  de expectativas.
 - Verificación manual en pseudo-terminal (Linux, xterm-256color, emulado con `pyte`) contra un
   servidor simulado local: arranque, streaming Markdown,
   herramientas, aprobación, `/stats`, `/model`, `/compact`, `/tools`, `/sessions`, `/resume`,
@@ -970,6 +1063,16 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - TUI: las estadísticas de `/stats` cubren solo el proceso actual de la TUI para la sesión
   activa; no se reconstruyen desde eventos persistidos. La TUI necesita una terminal con
   pantalla alternativa; en otros casos use `--no-tui` o `run`.
+- TUI (plegables de presentación): el clic para alternar es opcional — el atajo `x` con la
+  entrada vacía es el camino garantizado; el mapeo del clic usa la altura renderizada en el
+  momento del clic y el ancho de ese frame, por lo que en anchos muy estrechos o con filas de
+  altura variable entre frames el acierto puede desviarse una fila (nunca rompe la selección:
+  un clic sintetizado solo se detona sin arrastre). El marcador de plegado aparece solo cuando
+  la fila es plegable: las filas sin marcar (`run_process` con salida corta, diffs, rich
+  ui/imagenes) no alternan nada. Las vistas previas dentro de un grupo expandido van acotadas
+  (3/6 líneas) y no son plegables individualmente; el razonamiento expandido se acota a 40
+  líneas. La duración `Thought` es una aproximación del primer al último delta de razonamiento
+  y solo existe cuando el evento llevaba marcas de tiempo (no en sesiones reanudadas).
 
 ### Skills y contexto
 

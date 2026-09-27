@@ -627,7 +627,12 @@ describe("context-budget reduction after compaction", () => {
       const toolMessage = stored.find((m) => m.role === "tool")!;
       expect(toolMessage.callId).toBe("c2");
       const text =
-        toolMessage.role === "tool" ? toolMessage.result.content.map((c) => c.text).join("\n") : "";
+        toolMessage.role === "tool"
+          ? toolMessage.result.content
+              .filter((c) => c.type === "text")
+              .map((c) => c.text)
+              .join("\n")
+          : "";
       expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
       expect(text).toContain(marker);
       // Every assistant call still has its result (valid, replayable transcript).
@@ -691,7 +696,12 @@ describe("context-budget reduction after compaction", () => {
       const stored = fx.store.messages(session.id);
       const tools = stored.filter((m) => m.role === "tool");
       expect(tools).toHaveLength(5);
-      const texts = tools.map((m) => m.result.content.map((c) => c.text).join("\n"));
+      const texts = tools.map((m) =>
+        m.result.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n"),
+      );
       for (const text of texts) {
         expect(text.length).toBeLessThanOrEqual(8_000 + marker.length + 1);
         expect(text).toContain(marker);
@@ -874,7 +884,9 @@ describe("context-budget reduction after compaction", () => {
       expect(events.some((e) => e.type === "context_reduced")).toBe(false);
       const tool = fx.store.messages(session.id).find((m) => m.role === "tool");
       expect(tool?.role).toBe("tool");
-      expect(tool && "result" in tool && tool.result.content[0]?.text).toBe("x".repeat(200));
+      expect(
+        tool && "result" in tool && tool.result.content.find((p) => p.type === "text")?.text,
+      ).toBe("x".repeat(200));
     } finally {
       await fx.close();
     }

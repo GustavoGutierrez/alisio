@@ -1118,7 +1118,8 @@ const fixtures: Record<string, () => Promise<void>> = {
           assert.ok(names.includes(n), `${n} offered unprefixed under a read-only policy`);
         assert.match(request.instructions, /Persistent memory/);
         const last = request.messages.at(-1);
-        if (last?.role === "tool") results.push(last.result.content[0]?.text ?? "");
+        if (last?.role === "tool")
+          results.push(last.result.content.find((p) => p.type === "text")?.text ?? "");
         round++;
         const save = (what: string) =>
           call(`s${round}`, "memory_save", {
@@ -1810,7 +1811,9 @@ const fixtures: Record<string, () => Promise<void>> = {
         else if (round === 1) calls_ = [call("r2", "read_file", { path: "AGENTS.md" })];
         else if (round === 2) {
           const sha = JSON.parse(
-            last?.role === "tool" ? (last.result.content[0]?.text ?? "{}") : "{}",
+            last?.role === "tool"
+              ? (last.result.content.find((p) => p.type === "text")?.text ?? "{}")
+              : "{}",
           ).sha256;
           calls_ = [
             call("e1", "edit_file", {
@@ -2144,7 +2147,10 @@ const fixtures: Record<string, () => Promise<void>> = {
       registerStandard(reg, root, new Skills(), new ProjectContext(root));
       const result = await reg.get("ask_user_question").execute({ questions }, ctx());
       assert.equal(result.isError, true);
-      assert.match(result.content[0]?.text ?? "", /not interactive|headless/);
+      assert.match(
+        result.content.find((p) => p.type === "text")?.text ?? "",
+        /not interactive|headless/,
+      );
     }
     // Headless: `ui.interactive()` returning false also fails fast, never calls askQuestions.
     {
@@ -2180,7 +2186,7 @@ const fixtures: Record<string, () => Promise<void>> = {
           ctx({ session: "child-1", label: "general › explore", signal: callSignal }),
         );
       assert.equal(result.isError, undefined);
-      const parsed = JSON.parse(result.content[0]?.text ?? "{}");
+      const parsed = JSON.parse(result.content.find((p) => p.type === "text")?.text ?? "{}");
       assert.deepEqual(parsed.answers, [
         { header: "Style", skipped: false, selected: ["Spaces"] },
         { header: "Tools", skipped: false, selected: ["Lint", "Tests"] },
@@ -2204,7 +2210,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         askQuestions: async () => ({ q0: undefined, q1: [] }),
       });
       const result = await reg.get("ask_user_question").execute({ questions }, ctx());
-      const parsed = JSON.parse(result.content[0]?.text ?? "{}");
+      const parsed = JSON.parse(result.content.find((p) => p.type === "text")?.text ?? "{}");
       assert.deepEqual(parsed.answers, [
         { header: "Style", skipped: true, selected: [] },
         { header: "Tools", skipped: false, selected: [] },

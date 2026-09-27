@@ -277,6 +277,34 @@ alisio mcp list --config ./my-api.json
 alisio mcp doctor my-server --config ./my-api.json --allow-mcp
 ```
 
+### Rich results
+
+MCP tool and resource results are no longer flattened to raw JSON text. The connector maps them
+heuristically into Alisio's own content parts:
+
+- `text` parts stay text; `image` parts become images.
+- `structuredContent` (or a JSON-parseable text part) matching a **verified shape** becomes a
+  native TUI block: `{columns, rows}` / `{headers, rows}` tables (rows can also be objects keyed
+  by the column names), flat scalar objects as key-value, and `{nodes: [{label, children?, meta?}]}`
+  trees. Anything else — including nested JSON without a recognized shape — stays plain text, as
+  before.
+- A **canonical text projection** of every block/image is always appended as text, so the model,
+  compaction and every headless path (`run`, `resume <id> "prompt"`, `--json`, `--no-tui`,
+  `TERM=dumb`, `NO_COLOR`) see exactly what they saw before: text only, never image bytes. The
+  TUI renders the block natively on top of that same projection.
+
+In the TUI, tables render as aligned columns with wrapped cells, key-value as two columns, trees
+with branch glyphs, code blocks with the same syntax highlighting as responses, and markdown blocks
+through the regular Markdown renderer. Images render inline when the terminal supports the kitty or
+iTerm2 graphics protocol (dim placeholder `[image: mime WxH]` otherwise). `mcp_resource` uses the
+same mapping for text contents and image blobs; non-image blobs become a short marker instead of
+raw base64.
+
+Limitations: the shape detection is intentionally conservative (heuristic, not protocol-driven);
+servers that return only unstructured JSON keep the previous behavior verbatim; and if the terminal
+cannot render images, the TUI shows a placeholder while the model still reads the `[image: …]`
+marker in the text projection.
+
 ### Example: Brave Search
 
 The official package runs over stdio through `npx` (resolved from your `PATH`, which the

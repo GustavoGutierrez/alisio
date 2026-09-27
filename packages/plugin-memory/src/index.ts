@@ -44,6 +44,7 @@ function transcript(messages: readonly Message[], maxChars = 60_000): string {
             .filter(Boolean)
             .join("\n")
         : `TOOL RESULT ${m.callId}: ${m.result.content
+            .filter((c) => c.type === "text")
             .map((c) => c.text)
             .join("\n")
             .slice(0, 1_500)}`,

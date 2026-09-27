@@ -1,8 +1,9 @@
-import type { PanelNode } from "@alisio/sdk";
+import type { PanelNode, TreeNode, UiBlock } from "@alisio/sdk";
 import {
   type Component,
   Container,
   getCapabilities,
+  getImageDimensions,
   Image,
   Key,
   Markdown,
@@ -30,17 +31,43 @@ import {
   contextLevel,
   contextPercent,
   editSummary,
+  entryKeyOf,
+  exitCodeOf,
+  type FoldableKind,
+  type FoldCandidate,
   fitIdentityParts,
   fitSegments,
+  foldCandidateOf,
   formatContext,
   formatDuration,
   formatTokens,
+  type GroupedTool,
+  groupIdentity,
+  groupToolEntries,
+  humanizeToolName,
   type IdentityInput,
   type IdentityRole,
+  previewLinesFor,
+  previewRows,
+  previewTruncated,
+  REASONING_EXPAND_MAX_LINES,
+  reasoningDurationMs,
+  TOOL_KIND_VERB,
+  TOOL_KIND_WORD,
+  type ToolItemView,
+  type TranscriptEntry,
   type TranscriptItem,
   type ViewState,
 } from "./state.ts";
-import { imageTheme, levelColor, markdownTheme, style } from "./theme.ts";
+import {
+  highlightCode,
+  imageTheme,
+  levelColor,
+  markdownDefaultTextStyle,
+  markdownTheme,
+  markdownTransform,
+  style,
+} from "./theme.ts";
 
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /** Shared animation clock advanced by the app while work is running. */
@@ -49,6 +76,210 @@ export const clock = { frame: 0, now: Date.now() };
 const fit = (lines: string[], width: number) => lines.map((l) => truncateToWidth(l, width));
 const wrap = (text: string, width: number) =>
   text.split("\n").flatMap((line) => (line ? wrapTextWithAnsi(line, Math.max(1, width)) : [""]));
+/** ANSI-aware right padding to a visible width. */
+const padTo = (text: string, width: number) =>
+  `${text}${" ".repeat(Math.max(0, width - visibleWidth(text)))}`;
+const wrapCell = (text: string, width: number) =>
+  text.split("\n").flatMap((line) => (line ? wrapTextWithAnsi(line, Math.max(1, width)) : [""]));
+
+/** Fold state the components receive: neither knows keys nor defaults (components stay dumb). */
+export interface FoldInfo {
+  expanded: boolean;
+  kind: FoldableKind;
+}
+/**
+ * Rendered body of a tool call's rich parts (inline image + native ui block), reusing the exact
+ * singleton rendering so grouped detail rows and plain rows agree. Returns [] when there is none.
+ */
+function richBodyLines(
+  view: { image?: ToolItemView["image"]; ui?: ToolItemView["ui"] },
+  width: number,
+  markdownCache?: { text: string; renderer: Markdown } | null,
+): { lines: string[]; markdownCache: { text: string; renderer: Markdown } | undefined } {
+  const lines: string[] = [];
+  if (view.image) {
+    const inline = getCapabilities().images !== null && process.env.NO_COLOR === undefined;
+    if (inline) {
+      const image = new Image(view.image.data, view.image.mimeType, imageTheme, {
+        maxWidthCells: Math.max(10, Math.min(60, width - 4)),
+      });
+      lines.push(...image.render(Math.max(1, width - 2)));
+    } else {
+      const dims = getImageDimensions(view.image.data, view.image.mimeType);
+      lines.push(
+        style.dim(
+          `[image: ${view.image.mimeType}${dims ? ` ${dims.widthPx}x${dims.heightPx}` : ""}]`,
+        ),
+      );
+    }
+  }
+  if (view.ui) {
+    const inner = Math.max(1, width - 2);
+    if (view.ui.kind === "markdown") {
+      // Cache the Markdown instance so streaming/resizes never re-parse every frame.
+      if (markdownCache?.text !== view.ui.text)
+        markdownCache = {
+          text: view.ui.text,
+          renderer: new Markdown(view.ui.text, 0, 0, markdownTheme, markdownDefaultTextStyle, {
+            transform: markdownTransform,
+          }),
+        };
+      lines.push(...markdownCache.renderer.render(inner));
+    } else {
+      lines.push(...renderUiBlock(view.ui, width, unicodeAt(width)));
+    }
+  }
+  return { lines, markdownCache: markdownCache ?? undefined };
+}
+/** Terminal Unicode support, mirroring the copy hint detection in AssistantBlock. */
+const unicodeAt = (width: number): boolean =>
+  terminalCapabilities({ env: process.env, columns: width, tty: true }).unicode;
+
+/** Capped preview rows of one member call inside an expanded group (`… N more lines` footer). */
+function memberPreviewLines(member: ToolItemView, indent: string): string[] {
+  const rows = previewRows(member.preview ?? "");
+  if (!rows.length) return [];
+  const cap = previewLinesFor(member.status);
+  const shown = rows.slice(0, cap);
+  const paint = member.status === "error" ? style.red : style.gray;
+  const lines = shown.map(
+    (line, n) =>
+      `${indent}  ${style.gray(n === 0 ? "⎿" : " ")} ${paint(line.replace(/\t/g, "  "))}`,
+  );
+  if (rows.length > shown.length)
+    lines.push(style.gray(`${indent}    … ${rows.length - shown.length} more lines`));
+  return lines;
+}
+/** `Command exited with code 0.` (green) / `Command exited with code N.` (red) when known. */
+export const exitCodeLine = (code: number | undefined, indent = "  "): string | undefined =>
+  code === undefined
+    ? undefined
+    : `${indent}${code === 0 ? style.green("Command exited with code 0.") : style.red(`Command exited with code ${code}.`)}`;
+
+/**
+ * Aligned-column table rendering: cells wrap to their column width, the header is bold, a dim
+ * separator row sits under it, and the whole block respects the given inner width. Long values
+ * wrap instead of being cut; the final `truncateToWidth` pass only bites on very narrow
+ * terminals.
+ */
+function renderTableBlock(block: Extract<UiBlock, { kind: "table" }>, width: number): string[] {
+  const caption = block.caption ? [style.dim(block.caption)] : [];
+  if (!block.columns.length) return [...caption, style.gray("(empty table)")];
+  const inner = Math.max(1, width - 2);
+  const n = block.columns.length;
+  const natural = block.columns.map((header, i) =>
+    Math.max(1, visibleWidth(header), ...block.rows.map((row) => visibleWidth(row[i] ?? ""))),
+  );
+  const separatorCost = (n - 1) * 3;
+  const totalNatural = natural.reduce((a, b) => a + b, 0);
+  let widths: number[];
+  if (totalNatural + separatorCost <= inner) {
+    widths = natural;
+  } else {
+    const budget = Math.max(n, inner - separatorCost);
+    const scale = Math.min(1, budget / totalNatural);
+    widths = natural.map((w) => Math.max(1, Math.floor(w * scale)));
+    let left = budget - widths.reduce((a, b) => a + b, 0);
+    // Hand the leftover to the widest columns that still want space (round-robin, deterministic).
+    for (let round = 0; round < n && left > 0; round++) {
+      const widest = natural.findIndex((w, i) => (widths[i] ?? 0) < w);
+      if (widest < 0) break;
+      widths[widest] = (widths[widest] ?? 0) + 1;
+      left--;
+    }
+  }
+  const cols = block.columns.map((header, i) => ({
+    header: wrapCell(header, widths[i] ?? 1),
+    body: block.rows.map((row) => wrapCell(row[i] ?? "", widths[i] ?? 1)),
+  }));
+  const headerHeight = Math.max(...cols.map((c) => c.header.length));
+  const lines: string[] = [];
+  for (let li = 0; li < headerHeight; li++)
+    lines.push(
+      cols.map((c, i) => style.bold(padTo(c.header[li] ?? "", widths[i] ?? 1))).join(" | "),
+    );
+  lines.push(style.gray(cols.map((c, i) => "─".repeat(widths[i] ?? 1)).join(" │ ")));
+  for (const [ri] of block.rows.entries()) {
+    const wrapped = cols.map((c, i) => c.body[ri] ?? [""]);
+    const height = Math.max(...wrapped.map((w) => w.length));
+    for (let li = 0; li < height; li++)
+      lines.push(cols.map((c, i) => padTo(wrapped[i]?.[li] ?? "", widths[i] ?? 1)).join(" | "));
+  }
+  return [...caption, ...lines];
+}
+
+/** Two-column key-value rendering: bright-cyan keys padded left, values wrapped on the right. */
+function renderKeyValueBlock(
+  block: Extract<UiBlock, { kind: "key-value" }>,
+  width: number,
+): string[] {
+  const caption = block.caption ? [style.dim(block.caption)] : [];
+  if (!block.entries.length) return [...caption, style.gray("(empty)")];
+  const inner = Math.max(1, width - 2);
+  const keyWidth = Math.min(24, Math.max(...block.entries.map(([k]) => visibleWidth(k)), 1));
+  const valueWidth = Math.max(1, inner - keyWidth - 2);
+  const lines: string[] = [];
+  for (const [key, value] of block.entries) {
+    wrapCell(value, valueWidth).forEach((line, i) => {
+      const keyPart = i === 0 ? style.brightCyan(padTo(key, keyWidth)) : " ".repeat(keyWidth);
+      lines.push(`${keyPart}  ${line}`);
+    });
+  }
+  return [...caption, ...lines];
+}
+
+/**
+ * Tree rendering with branch glyphs: `├─`/`└─`/`│` when the terminal supports Unicode, ASCII
+ * `|-`/`` `- ``/`|` otherwise.
+ */
+export function renderTreeLines(nodes: TreeNode[], unicode: boolean): string[] {
+  const branch = unicode ? "├─ " : "|- ";
+  const last = unicode ? "└─ " : "`- ";
+  const vertical = unicode ? "│  " : "|  ";
+  const gap = "   ";
+  const lines: string[] = [];
+  const walk = (items: TreeNode[], prefix: string) => {
+    items.forEach((node, index) => {
+      const isLast = index === items.length - 1;
+      const meta = node.meta ? ` ${style.dim(`(${node.meta})`)}` : "";
+      lines.push(`${prefix}${isLast ? last : branch}${node.label}${meta}`);
+      if (node.children?.length) walk(node.children, `${prefix}${isLast ? gap : vertical}`);
+    });
+  };
+  walk(nodes, "");
+  return lines;
+}
+
+/** Mini code block: dim fenced header, highlighted body (the same highlighter as markdown), dim close. */
+function renderCodeBlock(block: Extract<UiBlock, { kind: "code" }>, _width: number): string[] {
+  const caption = block.caption ? [style.dim(block.caption)] : [];
+  return [
+    ...caption,
+    style.dim(block.lang ? `\`\`\`${block.lang}` : "```"),
+    ...highlightCode(block.code, block.lang),
+    style.dim("```"),
+  ];
+}
+
+/** Renders a `{type:"ui"}` block to styled lines for the given inner width. */
+export function renderUiBlock(block: UiBlock, width: number, unicode: boolean): string[] {
+  switch (block.kind) {
+    case "table":
+      return renderTableBlock(block, width);
+    case "key-value":
+      return renderKeyValueBlock(block, width);
+    case "tree":
+      return renderTreeLines(block.nodes, unicode);
+    case "code":
+      return renderCodeBlock(block, width);
+    case "markdown": {
+      const md = new Markdown(block.text, 0, 0, markdownTheme, markdownDefaultTextStyle, {
+        transform: markdownTransform,
+      });
+      return md.render(Math.max(1, width - 2));
+    }
+  }
+}
 
 export type PermissionState = "on" | "ask" | "off";
 export interface HeaderInfo {
@@ -245,46 +476,121 @@ export class UserBlock implements Component {
   }
 }
 
+/**
+ * Subtle, non-interactive copy affordance under a completed response: it only tells the user the
+ * raw response can be copied (`/copy`, or `c` on an empty input); it never triggers itself.
+ * Falls back to ASCII when the terminal cannot render Unicode (dumb terminal / C locale).
+ */
+const copyHint = (width: number): string => {
+  const unicode = terminalCapabilities({ env: process.env, columns: width, tty: true }).unicode;
+  return `  ${style.dim(unicode ? "⎘ copy · /copy" : "[copy] · /copy")}`;
+};
+
 export class AssistantBlock implements Component {
-  private markdown = new Markdown("", 0, 0, markdownTheme);
+  private markdown = new Markdown("", 0, 0, markdownTheme, markdownDefaultTextStyle, {
+    transform: markdownTransform,
+  });
+  /** Bumped by TranscriptSync when this row's content changes; render caches on it. */
+  public version = 0;
+  public fold?: FoldInfo;
   private item: Extract<TranscriptItem, { kind: "assistant" }>;
+  private cache?: { width: number; version: number; fold: FoldInfo | undefined; lines: string[] };
   constructor(item: Extract<TranscriptItem, { kind: "assistant" }>) {
     this.item = item;
     this.markdown.setText(item.text);
   }
-  update(item: Extract<TranscriptItem, { kind: "assistant" }>): void {
+  update(item: Extract<TranscriptItem, { kind: "assistant" }>, fold?: FoldInfo | undefined): void {
     if (item.text !== this.item.text) this.markdown.setText(item.text);
     this.item = item;
+    this.fold = fold;
   }
   invalidate(): void {
     this.markdown.invalidate();
+    this.cache = undefined;
   }
   render(width: number): string[] {
-    const lines: string[] = [""];
     const reasoning = this.item.reasoning.trim();
+    // The live thinking view animates with streaming deltas and must never be cached.
+    const live = !!reasoning && !this.item.text && !this.item.done;
+    if (
+      !live &&
+      this.cache?.width === width &&
+      this.cache.version === this.version &&
+      this.cache.fold?.expanded === this.fold?.expanded
+    )
+      return this.cache.lines;
+    const lines: string[] = [""];
     if (reasoning) {
-      if (this.item.done || this.item.text) {
-        const words = reasoning.split(/\s+/).length;
-        lines.push(style.dim(style.italic(`✻ reasoning (${words} words)`)));
-      } else {
+      if (live) {
         lines.push(style.dim(style.italic("✻ thinking…")));
         lines.push(
           ...wrap(reasoning, width - 2)
             .slice(-4)
             .map((l) => style.dim(`  ${l}`)),
         );
+      } else {
+        // Finished: a collapsible `+ Thought · 2.9s` header; expanded shows the bounded text.
+        const expanded = this.fold?.expanded ?? false;
+        const duration = reasoningDurationMs(this.item);
+        lines.push(
+          `${style.dim(expanded ? "−" : "+")} ${style.dim(style.italic("Thought"))}${
+            duration !== undefined ? ` ${style.dim(`· ${formatDuration(duration)}`)}` : ""
+          }`,
+        );
+        if (expanded) {
+          const wrapped = wrap(reasoning, Math.max(1, width - 4));
+          lines.push(
+            ...wrapped.slice(0, REASONING_EXPAND_MAX_LINES).map((l) => `  ${style.dim(l)}`),
+          );
+          if (wrapped.length > REASONING_EXPAND_MAX_LINES)
+            lines.push(
+              style.gray(
+                `  … reasoning truncated (${wrapped.length - REASONING_EXPAND_MAX_LINES} more lines)`,
+              ),
+            );
+        }
       }
     }
-    if (this.item.text) lines.push(...this.markdown.render(width));
-    return fit(lines, width);
+    if (this.item.text) {
+      lines.push(...this.markdown.render(width));
+      // The affordance appears only once the answer is complete (never while streaming).
+      if (this.item.done) lines.push(copyHint(width));
+    }
+    const out = fit(lines, width);
+    if (!live) this.cache = { width, version: this.version, fold: this.fold, lines: out };
+    return out;
   }
 }
 
 export class ToolBlock implements Component {
-  constructor(public item: Extract<TranscriptItem, { kind: "tool" }>) {}
-  invalidate(): void {}
+  public item: Extract<TranscriptItem, { kind: "tool" }>;
+  /** Bumped by TranscriptSync when this row's content changes; render caches on it. */
+  public version = 0;
+  public fold?: FoldInfo;
+  private markdown?: { text: string; renderer: Markdown };
+  private cache?: { width: number; version: number; fold: FoldInfo | undefined; lines: string[] };
+  constructor(item: Extract<TranscriptItem, { kind: "tool" }>) {
+    this.item = item;
+  }
+  update(item: Extract<TranscriptItem, { kind: "tool" }>, fold?: FoldInfo | undefined): void {
+    this.item = item;
+    this.fold = fold;
+  }
+  invalidate(): void {
+    this.cache = undefined;
+  }
   render(width: number): string[] {
     const i = this.item;
+    // Running/approval rows animate and must never be cached; terminal rows only change when
+    // TranscriptSync bumps `version`, so clock frames between events reuse the cached lines.
+    const live = i.status === "running" || i.status === "approval";
+    if (
+      !live &&
+      this.cache?.width === width &&
+      this.cache.version === this.version &&
+      this.cache.fold?.expanded === this.fold?.expanded
+    )
+      return this.cache.lines;
     const icon =
       i.status === "running"
         ? style.cyan(SPINNER[clock.frame % SPINNER.length] ?? "…")
@@ -293,13 +599,14 @@ export class ToolBlock implements Component {
           : i.status === "ok"
             ? style.green("✓")
             : style.red("✗");
+    const marker = this.fold ? `${style.dim(this.fold.expanded ? "−" : "+")} ` : "";
     const right =
       i.status === "approval"
         ? style.yellow("awaiting approval")
         : i.durationMs !== undefined
           ? style.gray(formatDuration(i.durationMs))
           : "";
-    const head = `${icon} ${style.bold(i.name)} ${style.gray(i.summary)}`;
+    const head = `${marker}${icon} ${style.bold(humanizeToolName(i.name))} ${style.gray(i.summary)}`;
     const gap = width - visibleWidth(head) - visibleWidth(right) - 1;
     const lines = [
       gap > 0 ? `${head}${" ".repeat(gap + 1)}${right}` : truncateToWidth(head, width),
@@ -315,17 +622,95 @@ export class ToolBlock implements Component {
       if (diff.lines.length > max)
         lines.push(style.gray(`    … ${diff.lines.length - max} more lines`));
     }
-    if (i.preview && (i.status === "error" || !diff)) {
-      const preview = i.preview.split("\n").filter((l) => l.trim());
-      const shown = preview.slice(0, i.status === "error" ? 6 : 3);
+    // Native rich rendering: an inline image (when the terminal supports images and color is
+    // on) and/or a structured ui block replace the plain preview, exactly as the emitted text
+    // projection reads. Every rich line is indented two spaces like the preview lines.
+    const rich = richBodyLines(i, width, this.markdown);
+    const richLines = rich.lines;
+    if (rich.markdownCache) this.markdown = rich.markdownCache;
+    if (richLines.length) {
+      lines.push(...richLines.map((line) => `  ${line}`));
+    } else if (i.preview && (i.status === "error" || !diff)) {
+      const rows = previewRows(i.preview);
+      const cap = previewLinesFor(i.status);
+      const expanded = this.fold?.expanded ?? false;
+      const shown = expanded ? rows : rows.slice(0, cap);
       const paint = i.status === "error" ? style.red : style.gray;
       shown.forEach((l, n) => {
         lines.push(`  ${style.gray(n === 0 ? "⎿" : " ")} ${paint(l.replace(/\t/g, "  "))}`);
       });
-      if (preview.length > shown.length)
-        lines.push(style.gray(`    … ${preview.length - shown.length} more lines`));
+      if (!expanded && rows.length > shown.length)
+        lines.push(style.gray(`    … ${rows.length - shown.length} more lines`));
     }
-    return fit(lines, width);
+    const exitLine = exitCodeLine(i.exitCode);
+    if (exitLine) lines.push(exitLine);
+    const out = fit(lines, width);
+    if (!live) this.cache = { width, version: this.version, fold: this.fold, lines: out };
+    return out;
+  }
+}
+
+/**
+ * One collapsible row for a GROUPED batch of finished tool calls (e.g. `✓ Read File — 3 reads`).
+ * Collapsed it shows the aggregate header; expanded, each call with its status, duration,
+ * summary and capped preview/rich body. All members are terminal, so lines are cached per
+ * version/width/fold just like the other terminal rows.
+ */
+export class ToolGroupBlock implements Component {
+  public group: GroupedTool;
+  /** Bumped by TranscriptSync when this row's content changes; render caches on it. */
+  public version = 0;
+  public fold?: FoldInfo;
+  private cache?: { width: number; version: number; fold: FoldInfo | undefined; lines: string[] };
+  constructor(group: GroupedTool) {
+    this.group = group;
+  }
+  update(group: GroupedTool, fold?: FoldInfo | undefined): void {
+    this.group = group;
+    this.fold = fold;
+  }
+  invalidate(): void {
+    this.cache = undefined;
+  }
+  render(width: number): string[] {
+    if (
+      this.cache?.width === width &&
+      this.cache.version === this.version &&
+      this.cache.fold?.expanded === this.fold?.expanded
+    )
+      return this.cache.lines;
+    const g = this.group;
+    const expanded = this.fold?.expanded ?? false;
+    const icon = g.status === "error" ? style.red("✗") : style.green("✓");
+    const head = `${style.dim(expanded ? "−" : "+")} ${icon} ${style.bold(g.label)} — ${g.members.length} ${g.word}${g.totalMs > 0 ? ` ${style.gray(`· ${formatDuration(g.totalMs)}`)}` : ""}`;
+    const lines = [head];
+    if (expanded) {
+      for (const member of g.members) {
+        const micon = member.status === "error" ? style.red("✗") : style.green("✓");
+        const name =
+          member.humanName === member.name
+            ? style.bold(member.humanName)
+            : `${style.bold(member.humanName)} ${style.dim(`(${member.name})`)}`;
+        lines.push(
+          `  ${micon} ${name}${
+            member.durationMs !== undefined
+              ? ` ${style.gray(`· ${formatDuration(member.durationMs)}`)}`
+              : ""
+          }${member.summary ? ` ${style.gray(member.summary)}` : ""}`,
+        );
+        const rich = richBodyLines(member, width);
+        if (rich.lines.length) {
+          lines.push(...rich.lines.map((line) => `    ${line}`));
+        } else {
+          lines.push(...memberPreviewLines(member, "  "));
+        }
+        const exitLine = exitCodeLine(member.exitCode, "    ");
+        if (exitLine) lines.push(exitLine);
+      }
+    }
+    const out = fit(lines, width);
+    this.cache = { width, version: this.version, fold: this.fold, lines: out };
+    return out;
   }
 }
 
@@ -350,7 +735,9 @@ export class LineBlock implements Component {
 export class InfoBlock implements Component {
   private markdown: Markdown;
   constructor(text: string) {
-    this.markdown = new Markdown(text, 1, 0, markdownTheme);
+    this.markdown = new Markdown(text, 1, 0, markdownTheme, markdownDefaultTextStyle, {
+      transform: markdownTransform,
+    });
   }
   invalidate(): void {
     this.markdown.invalidate();
@@ -361,18 +748,145 @@ export class InfoBlock implements Component {
   }
 }
 
-export function componentFor(item: TranscriptItem): Component {
-  switch (item.kind) {
+export function componentFor(entry: TranscriptEntry): Component {
+  if (entry.kind === "group") return new ToolGroupBlock(entry.group);
+  switch (entry.kind) {
     case "user":
-      return new UserBlock(item.text);
+      return new UserBlock(entry.text);
     case "assistant":
-      return new AssistantBlock(item);
+      return new AssistantBlock(entry);
     case "tool":
-      return new ToolBlock(item);
+      return new ToolBlock(entry);
     case "info":
-      return new InfoBlock(item.text);
+      return new InfoBlock(entry.text);
     default:
-      return new LineBlock(item.text, item.kind);
+      return new LineBlock(entry.text, entry.kind);
+  }
+}
+
+/** Applies a fresh entry (and its fold state) to a component; kinds never collide under a key. */
+function updateComponent(component: Component, entry: TranscriptEntry, fold?: FoldInfo): void {
+  if (entry.kind === "assistant" && component instanceof AssistantBlock)
+    return component.update(entry, fold);
+  if (entry.kind === "tool" && component instanceof ToolBlock) return component.update(entry, fold);
+  if (entry.kind === "group" && component instanceof ToolGroupBlock)
+    return component.update(entry.group, fold);
+}
+/** Whether a reused component can adopt the (new) entry kind (foldable rows also carry `version`). */
+function isCompatible(component: Component, entry: TranscriptEntry): boolean {
+  return (
+    (entry.kind === "assistant" && component instanceof AssistantBlock) ||
+    (entry.kind === "tool" && component instanceof ToolBlock) ||
+    (entry.kind === "group" && component instanceof ToolGroupBlock) ||
+    ((entry.kind === "user" ||
+      entry.kind === "notice" ||
+      entry.kind === "info" ||
+      entry.kind === "error") &&
+      !(component instanceof AssistantBlock) &&
+      !(component instanceof ToolBlock) &&
+      !(component instanceof ToolGroupBlock))
+  );
+}
+
+/**
+ * Keeps a container of transcript components in step with view-model items. Rows are keyed
+ * (stable per fold candidate: tool ids, group ids, append-only item indices) and reused across
+ * syncs; batch groups replace their members' singleton components with one row once all of them
+ * finish. Content versions bump only when a row's entry actually changed, so clock frames
+ * between events reuse each component's cached lines instead of re-rendering. `setFoldResolver`
+ * supplies the effective expanded state; the same resolution feeds `entryAt`, so keybindings
+ * and mouse clicks agree with the renderer.
+ */
+export class TranscriptSync {
+  readonly container = new Container();
+  private rows = new Map<
+    string,
+    { entry: TranscriptEntry; at: number; component: Component; version: number }
+  >();
+  private order: string[] = [];
+  private foldOf: (candidate: FoldCandidate) => boolean = (candidate) => candidate.defaultExpanded;
+  setFoldResolver(resolver: (candidate: FoldCandidate) => boolean): void {
+    this.foldOf = resolver;
+  }
+  sync(items: TranscriptItem[]): void {
+    const entries = groupToolEntries(items);
+    const kept = new Set<string>();
+    for (const { entry, at } of entries) {
+      const key = entryKeyOf(entry, at);
+      kept.add(key);
+      const candidate = foldCandidateOf(entry, at);
+      const fold = candidate
+        ? { expanded: this.foldOf(candidate), kind: candidate.kind }
+        : undefined;
+      const row = this.rows.get(key);
+      if (row && isCompatible(row.component, entry)) {
+        const same =
+          row.entry === entry ||
+          (entry.kind === "group" &&
+            row.entry.kind === "group" &&
+            groupIdentity(entry.group) === groupIdentity(row.entry.group));
+        if (!same) {
+          row.version++;
+          row.entry = entry;
+          row.at = at;
+        }
+        updateComponent(row.component, entry, fold);
+        if (
+          row.component instanceof AssistantBlock ||
+          row.component instanceof ToolBlock ||
+          row.component instanceof ToolGroupBlock
+        )
+          row.component.version = row.version;
+      } else {
+        // Key collision across kinds (defensive; keys are per-kind in practice): drop any stale
+        // component so the container never renders a duplicated row, then add the fresh one.
+        if (row) this.container.removeChild(row.component);
+        const component = componentFor(entry);
+        updateComponent(component, entry, fold);
+        this.rows.set(key, { entry, at, component, version: 0 });
+        this.container.addChild(component);
+      }
+    }
+    for (const [key, row] of this.rows)
+      if (!kept.has(key)) {
+        this.container.removeChild(row.component);
+        this.rows.delete(key);
+      }
+    this.order = entries.map(({ entry, at }) => entryKeyOf(entry, at));
+    // Preserve external children (startup banner) at the front, then managed rows in item order.
+    const managed = new Set(
+      this.order.map((k) => this.rows.get(k)?.component).filter((c): c is Component => !!c),
+    );
+    this.container.children = [
+      ...this.container.children.filter((c) => !managed.has(c)),
+      ...this.order.map((k) => (this.rows.get(k) as { component: Component }).component),
+    ];
+  }
+  /**
+   * Fold candidate at a transcript content row, when the click landed on the row's header
+   * (assistant entries start with a blank spacer line, so their first two rows count). Used by
+   * click-to-toggle; keyboard toggling uses `foldCandidates` instead and needs no heights.
+   */
+  entryAt(contentY: number, width: number): FoldCandidate | undefined {
+    let acc = 0;
+    for (const key of this.order) {
+      const row = this.rows.get(key);
+      if (!row) continue;
+      const height = row.component.render(width).length;
+      if (contentY >= acc && contentY < acc + height) {
+        const candidate = foldCandidateOf(row.entry, row.at);
+        if (!candidate) return undefined;
+        const headerRows = row.entry.kind === "assistant" ? 2 : 1;
+        return contentY < acc + headerRows ? candidate : undefined;
+      }
+      acc += height;
+    }
+    return undefined;
+  }
+  reset(): void {
+    this.rows.clear();
+    this.order = [];
+    this.container.clear();
   }
 }
 
@@ -390,32 +904,6 @@ export class BannerBlock implements Component {
   }
 }
 
-/** Keeps a container of transcript components in step with view-model items. */
-export class TranscriptSync {
-  readonly container = new Container();
-  private rendered: Array<{ item: TranscriptItem; component: Component }> = [];
-  sync(items: TranscriptItem[]): void {
-    if (items.length < this.rendered.length) this.reset();
-    items.forEach((item, index) => {
-      const entry = this.rendered[index];
-      if (!entry) {
-        const component = componentFor(item);
-        this.container.addChild(component);
-        this.rendered.push({ item, component });
-      } else if (entry.item !== item) {
-        if (entry.component instanceof AssistantBlock && item.kind === "assistant")
-          entry.component.update(item);
-        else if (entry.component instanceof ToolBlock && item.kind === "tool")
-          entry.component.item = item;
-        entry.item = item;
-      }
-    });
-  }
-  reset(): void {
-    this.container.clear();
-    this.rendered = [];
-  }
-}
 /** Renders one of several components (main conversation or a read-only child view). */
 export class Switch implements Component {
   constructor(private pick: () => Component) {}

@@ -5,6 +5,7 @@ import {
   type RunEvent,
   type ToolDefinition,
   type ToolResult,
+  textProjection,
   textResult,
 } from "@alisio/sdk";
 import {
@@ -565,9 +566,15 @@ export class AgentRunner {
         let completion: Extract<Message, { role: "assistant" }> | undefined;
         let truncated = false;
         let usage: { input: number; output: number; cachedInput?: number } | undefined;
+        // Providers only ever see the text projection of tool results: ui/image parts are a
+        // display-only extension of the persisted transcript and never reach a model prompt
+        // (raw image bytes included). The store keeps the rich parts for TUI replay.
+        const providerMessages = messages.map((m) =>
+          m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
+        );
         for await (const e of provider.stream({
           instructions,
-          messages,
+          messages: providerMessages,
           tools,
           maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
           signal: combined,
@@ -650,7 +657,14 @@ export class AgentRunner {
           const { call } = p;
           let result: ToolResult;
           const started = Date.now();
-          emit("tool_started", { name: call.name, id: call.id, arguments: call.arguments });
+          // `effect` rides along so the TUI can group consecutive calls by capability kind
+          // (read batches, write batches, commands…) without a name heuristic. Additive field.
+          emit("tool_started", {
+            name: call.name,
+            id: call.id,
+            arguments: call.arguments,
+            effect: p.tool?.effect ?? "external",
+          });
           try {
             combined.throwIfAborted();
             if (p.error) throw new Error(p.error);
@@ -725,6 +739,7 @@ export class AgentRunner {
             isError: result.isError ?? false,
             durationMs: Date.now() - started,
             preview: result.content
+              .filter((part) => part.type === "text")
               .map((c) => c.text)
               .join("\n")
               .slice(0, 2_000),

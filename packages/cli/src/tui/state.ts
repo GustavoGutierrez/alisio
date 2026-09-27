@@ -2,7 +2,7 @@
  * Pure presentation logic for the TUI: formatting, command parsing and the reduction of
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
-import type { Message, ModelInfo, RunEvent } from "@alisio/sdk";
+import type { Message, ModelInfo, RunEvent, ToolResult, TreeNode, UiBlock } from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
 
@@ -671,9 +671,23 @@ export function editSummary(name: string, args: string): EditSummary | undefined
 }
 
 export type ToolStatus = "running" | "approval" | "ok" | "error";
+/** Capability kind of a tool call; drives grouping labels and batch display. */
+export type ToolKind = "read" | "write" | "process" | "mcp" | "internal" | "other";
 export type TranscriptItem =
-  | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string; reasoning: string; done: boolean }
+  | {
+      kind: "user";
+      text: string;
+    }
+  | {
+      kind: "assistant";
+      text: string;
+      reasoning: string;
+      done: boolean;
+      /** Epoch ms of the first reasoning delta; with `reasoningDoneAt` it approximates the thinking interval. */
+      reasoningStartedAt?: number;
+      /** Epoch ms of the last reasoning delta (the end of the visible thought section). */
+      reasoningDoneAt?: number;
+    }
   | {
       kind: "tool";
       id: string;
@@ -683,6 +697,14 @@ export type TranscriptItem =
       status: ToolStatus;
       durationMs?: number;
       preview?: string;
+      /** Structured block rendered natively by the TUI (from a `{type:"ui"}` result part). */
+      ui?: UiBlock;
+      /** Base64 image rendered inline by the TUI when the terminal supports it (from a `{type:"image"}` part). */
+      image?: { mimeType: string; data: string };
+      /** Effect-derived kind (grouping label); name-heuristic fallback for replayed history. */
+      toolKind?: ToolKind;
+      /** Exit code derived safely from the JSON preview when the tool reports one (run_process/shell/search_text). */
+      exitCode?: number;
     }
   | { kind: "notice"; text: string }
   | { kind: "info"; text: string }
@@ -733,19 +755,57 @@ const withModel = (stats: Stats, model: unknown): Stats =>
   typeof model === "string" && model && !stats.models.includes(model)
     ? { ...stats, models: [...stats.models, model] }
     : stats;
-function appendAssistant(state: ViewState, field: "text" | "reasoning", delta: string): ViewState {
+/**
+ * Streaming assistant items stamp the thinking interval: the first reasoning delta records
+ * `reasoningStartedAt` and every later one refreshes `reasoningDoneAt`, so a completed thought
+ * section can show a `Thought · 2.9s` duration. The stamp stops once text arrives (the model
+ * moved on to the answer), so the duration measures the visible reasoning span, never the turn.
+ */
+const withReasoningStamp = (
+  item: Extract<TranscriptItem, { kind: "assistant" }>,
+  field: "text" | "reasoning",
+  at: number,
+): Extract<TranscriptItem, { kind: "assistant" }> => {
+  if (field !== "reasoning" || item.text) return item;
+  return { ...item, reasoningStartedAt: item.reasoningStartedAt ?? at, reasoningDoneAt: at };
+};
+function appendAssistant(
+  state: ViewState,
+  field: "text" | "reasoning",
+  delta: string,
+  at = Date.now(),
+): ViewState {
   const last = state.items.at(-1);
   if (last?.kind === "assistant" && !last.done)
     return {
       ...state,
-      items: [...state.items.slice(0, -1), { ...last, [field]: last[field] + delta }],
+      items: [
+        ...state.items.slice(0, -1),
+        withReasoningStamp({ ...last, [field]: last[field] + delta }, field, at),
+      ],
     };
-  return addItem(state, {
-    kind: "assistant",
-    text: field === "text" ? delta : "",
-    reasoning: field === "reasoning" ? delta : "",
-    done: false,
-  });
+  return addItem(
+    state,
+    withReasoningStamp(
+      {
+        kind: "assistant",
+        text: field === "text" ? delta : "",
+        reasoning: field === "reasoning" ? delta : "",
+        done: false,
+      },
+      field,
+      at,
+    ),
+  );
+}
+/** Approximated thinking interval of a completed reasoning section, when the events carried timestamps. */
+export function reasoningDurationMs(item: {
+  reasoningStartedAt?: number;
+  reasoningDoneAt?: number;
+}): number | undefined {
+  const { reasoningStartedAt, reasoningDoneAt } = item;
+  if (reasoningStartedAt === undefined || reasoningDoneAt === undefined) return undefined;
+  return Math.max(0, reasoningDoneAt - reasoningStartedAt);
 }
 function updateTool(
   state: ViewState,
@@ -771,9 +831,9 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         stats: withModel({ ...state.stats, runs: state.stats.runs + 1 }, d.model),
       };
     case "text_delta":
-      return appendAssistant(state, "text", String(d.delta ?? ""));
+      return appendAssistant(state, "text", String(d.delta ?? ""), at);
     case "reasoning_delta":
-      return appendAssistant(state, "reasoning", String(d.delta ?? ""));
+      return appendAssistant(state, "reasoning", String(d.delta ?? ""), at);
     case "turn_completed": {
       const usage = d.usage as
         | { input?: number; output?: number; cachedInput?: number }
@@ -797,18 +857,21 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         },
       };
     }
-    case "tool_started":
+    case "tool_started": {
+      const name = String(d.name ?? "tool");
       return addItem(state, {
         kind: "tool",
         id: String(d.id ?? ""),
-        name: String(d.name ?? "tool"),
+        name,
         args: typeof d.arguments === "string" ? d.arguments : "",
         summary: summarizeToolArgs(
           String(d.name ?? ""),
           typeof d.arguments === "string" ? d.arguments : "",
         ),
         status: "running",
+        toolKind: toolKindOf(name, typeof d.effect === "string" ? d.effect : undefined),
       });
+    }
     case "approval_requested":
       return updateTool(state, d.id, { status: "approval" });
     case "approval_resolved":
@@ -820,6 +883,9 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
         status: d.isError ? "error" : "ok",
         ...(typeof d.durationMs === "number" ? { durationMs: d.durationMs } : {}),
         ...(typeof d.preview === "string" ? { preview: d.preview } : {}),
+        ...exitCodePart(d.preview),
+        ...(isUiBlock(d.ui) ? { ui: d.ui } : {}),
+        ...(isImagePart(d.image) ? { image: d.image } : {}),
       });
       return {
         ...next,
@@ -940,6 +1006,452 @@ export function lastAssistantText(items: TranscriptItem[]): string | undefined {
   return undefined;
 }
 
+/**
+ * True when a printable key should copy the last assistant response instead of typing: bound to
+ * `c`/`y` (and uppercase) on an EMPTY editor line, while no autocomplete is showing and no turn
+ * is running — the same "empty input" convention Enter and Ctrl+D already use. A non-empty input
+ * never triggers, so typing `c` or `y` mid-message is unaffected.
+ */
+export function editorCopyKey(
+  data: string,
+  input: { text: string; autocomplete: boolean; busy: boolean },
+): boolean {
+  return (
+    (data === "c" || data === "C" || data === "y" || data === "Y") &&
+    input.text === "" &&
+    !input.autocomplete &&
+    !input.busy
+  );
+}
+
+/** True when an unknown event value is a `Node` of a tree UI block. */
+export function isTreeNode(value: unknown): value is TreeNode {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.label !== "string") return false;
+  if (record.meta !== undefined && typeof record.meta !== "string") return false;
+  if (record.children !== undefined && !Array.isArray(record.children)) return false;
+  return record.children === undefined || (record.children as unknown[]).every(isTreeNode);
+}
+
+/** True when an unknown event value is an Alisio `UiBlock` (validated defensively). */
+export function isUiBlock(value: unknown): value is UiBlock {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const block = value as Record<string, unknown>;
+  switch (block.kind) {
+    case "table":
+      return (
+        Array.isArray(block.columns) &&
+        (block.columns as unknown[]).every((c) => typeof c === "string") &&
+        Array.isArray(block.rows) &&
+        (block.rows as unknown[]).every(
+          (r) => Array.isArray(r) && (r as unknown[]).every((c) => typeof c === "string"),
+        ) &&
+        (block.caption === undefined || typeof block.caption === "string")
+      );
+    case "key-value":
+      return (
+        Array.isArray(block.entries) &&
+        (block.entries as unknown[]).every(
+          (e) =>
+            Array.isArray(e) &&
+            e.length === 2 &&
+            typeof e[0] === "string" &&
+            typeof e[1] === "string",
+        ) &&
+        (block.caption === undefined || typeof block.caption === "string")
+      );
+    case "tree":
+      return Array.isArray(block.nodes) && (block.nodes as unknown[]).every(isTreeNode);
+    case "code":
+      return (
+        typeof block.code === "string" &&
+        (block.lang === undefined || typeof block.lang === "string") &&
+        (block.caption === undefined || typeof block.caption === "string")
+      );
+    case "markdown":
+      return typeof block.text === "string";
+    default:
+      return false;
+  }
+}
+
+/** True when an unknown event value is a `{type:"image"}`-style part (mime + base64 data). */
+export function isImagePart(value: unknown): value is { mimeType: string; data: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.mimeType === "string" && typeof record.data === "string";
+}
+
+/** Rich (ui/image) parts of a persisted tool result, if any. */
+export function richPartsOf(result: ToolResult | undefined): {
+  ui?: UiBlock;
+  image?: { mimeType: string; data: string };
+} {
+  if (!result) return {};
+  const ui = result.content.find((part) => part.type === "ui");
+  const image = result.content.find((part) => part.type === "image");
+  return {
+    ...(ui?.type === "ui" ? { ui: ui.block } : {}),
+    ...(image?.type === "image" ? { image: { mimeType: image.mimeType, data: image.data } } : {}),
+  };
+}
+
+// ============================================================================
+// Tool presentation model — the pure extension point for transcript display.
+// Everything the TUI renders beyond a plain `TranscriptItem` is a
+// `TranscriptEntry`, and anything collapsible declares a `FoldCandidate` here,
+// so the renderer, the keybinding and (optionally) mouse clicks stay consistent
+// without importing pi-tui. Future block kinds hook in by extending these
+// shapes, never by special-casing components.
+// ============================================================================
+
+/** Words keyed by their canonical upper-case spelling that stay acronyms when humanized. */
+const ACRONYM_WORDS = new Set([
+  "MCP",
+  "HTTP",
+  "HTTPS",
+  "URL",
+  "API",
+  "CLI",
+  "JSON",
+  "CSV",
+  "XML",
+  "HTML",
+  "SQL",
+  "SQLITE",
+  "DNS",
+  "SSH",
+  "IP",
+  "ID",
+  "DB",
+  "UI",
+  "OS",
+  "IDE",
+  "TUI",
+  "PNG",
+  "SVG",
+  "PDF",
+  "YAML",
+  "TOML",
+  "2FA",
+  "V2",
+]);
+/**
+ * `read_file` → `Read File`, `search_text` → `Search Text`, `mcp_devforge_time_diff` →
+ * `MCP · Devforge Time Diff`. Splits on `_`/`-`/`.`/spaces, keeps known acronyms (MCP, HTTP…)
+ * and bare numeric suffixes (`read_file_2` → `Read File 2`). The machine name stays available
+ * dimmed in grouped detail rows and in the `/tools` and `/stats` reports.
+ */
+export function humanizeToolName(name: string): string {
+  const trimmed = name.trim();
+  let rest = trimmed;
+  let prefix = "";
+  const mcp = /^mcp_/i.exec(rest);
+  if (mcp) {
+    prefix = "MCP · ";
+    rest = rest.slice(mcp[0].length);
+  }
+  const words = rest
+    .split(/[_\-. /]+/)
+    .filter(Boolean)
+    .map((word) => {
+      const upper = word.toUpperCase();
+      if (ACRONYM_WORDS.has(upper)) return upper;
+      if (/^\d+$/.test(upper)) return upper;
+      return `${word[0]?.toUpperCase() ?? ""}${word.slice(1).toLowerCase()}`;
+    });
+  return words.length ? `${prefix}${words.join(" ")}` : trimmed;
+}
+
+/** Verb and count noun used by grouped batch rows per tool kind. */
+export const TOOL_KIND_VERB: Record<ToolKind, string> = {
+  read: "Explored",
+  write: "Edited",
+  process: "Ran",
+  mcp: "Queried",
+  internal: "Ran",
+  other: "Called",
+};
+export const TOOL_KIND_WORD: Record<ToolKind, string> = {
+  read: "reads",
+  write: "files",
+  process: "commands",
+  mcp: "calls",
+  internal: "tasks",
+  other: "calls",
+};
+/**
+ * Capability kind of a tool call. Live events carry the registry `effect` (exact); replayed
+ * history falls back to conservative name heuristics. `mcp_*` is always the mcp kind.
+ */
+export function toolKindOf(name: string, effect?: string): ToolKind {
+  if (name.startsWith("mcp_")) return "mcp";
+  switch (effect) {
+    case "read":
+    case "write":
+    case "process":
+    case "internal":
+      return effect;
+    default:
+      break;
+  }
+  if (/^(read|search|list|git|context|ask|web|fetch)_/.test(name)) return "read";
+  if (/^(write|edit|append|delete|rename|move|mkdir|patch)_/.test(name)) return "write";
+  if (/^(run|shell|execute)/.test(name)) return "process";
+  if (name === "task" || name.startsWith("task_")) return "internal";
+  return "other";
+}
+
+/** Terminal-preview caps for collapsed rows (same values the renderer always used). */
+export const OUTPUT_PREVIEW_LINES_OK = 3;
+export const OUTPUT_PREVIEW_LINES_ERROR = 6;
+export const previewLinesFor = (status: ToolStatus): number =>
+  status === "error" ? OUTPUT_PREVIEW_LINES_ERROR : OUTPUT_PREVIEW_LINES_OK;
+/** Preview rows as the renderer shows them: blank lines dropped, tabs kept for the caller to expand. */
+export const previewRows = (preview: string): string[] =>
+  preview.split("\n").filter((line) => line.trim());
+/** True when the preview exceeds the collapsed cap (the row becomes a collapsible "output"). */
+export function previewTruncated(preview: string | undefined, status: ToolStatus): boolean {
+  return !!preview && previewRows(preview).length > previewLinesFor(status);
+}
+
+/**
+ * Exit code derived safely from a text preview. `run_process`/`shell`/`search_text` return
+ * `{stdout, stderr, exitCode, truncated}` JSON; read-effect tools may carry an appended
+ * `\n<instructions>…` block, retried on the JSON prefix. Any other shape yields nothing.
+ */
+export function exitCodeOf(preview: string | undefined): number | undefined {
+  if (!preview) return undefined;
+  const codeOf = (text: string): number | undefined => {
+    try {
+      const value: unknown = JSON.parse(text);
+      const code =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>).exitCode
+          : undefined;
+      return typeof code === "number" ? code : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const direct = codeOf(preview);
+  if (direct !== undefined) return direct;
+  const cut = preview.indexOf("\n<instructions>");
+  if (cut > 0) return codeOf(preview.slice(0, cut));
+  return undefined;
+}
+const exitCodePart = (preview: unknown): { exitCode: number } | {} => {
+  if (typeof preview !== "string") return {};
+  const code = exitCodeOf(preview);
+  return code === undefined ? {} : { exitCode: code };
+};
+
+/** Renderable view of one tool call (singleton row, or a member of a grouped batch). */
+export interface ToolItemView {
+  id: string;
+  /** Machine name (kept for dimmed detail display). */
+  name: string;
+  /** Humanized display name. */
+  humanName: string;
+  kind: ToolKind;
+  summary: string;
+  status: ToolStatus;
+  durationMs?: number;
+  preview?: string;
+  ui?: UiBlock;
+  image?: { mimeType: string; data: string };
+  exitCode?: number;
+}
+/** A batch of consecutive same-kind, finished tool calls rendered as ONE collapsible row. */
+export interface GroupedTool {
+  /** Id of the first member call (stable fold key while the batch grows). */
+  id: string;
+  members: ToolItemView[];
+  kind: ToolKind;
+  /** Aggregate: `error` when any member failed, else `ok` (members are all terminal). */
+  status: ToolStatus;
+  /** Sum of member durations. */
+  totalMs: number;
+  /** Header name: the shared humanized tool name, or the kind verb for mixed batches. */
+  label: string;
+  /** Count noun matching `label` (`reads`, `files`, `commands`…). */
+  word: string;
+}
+/** Everything the transcript renders: a plain item, or one grouped batch row. */
+export type TranscriptEntry = TranscriptItem | { kind: "group"; group: GroupedTool };
+
+export function toolItemView(item: Extract<TranscriptItem, { kind: "tool" }>): ToolItemView {
+  return {
+    id: item.id,
+    name: item.name,
+    humanName: humanizeToolName(item.name),
+    kind: item.toolKind ?? toolKindOf(item.name),
+    summary: item.summary,
+    status: item.status,
+    ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
+    ...(item.preview !== undefined ? { preview: item.preview } : {}),
+    ...(item.ui ? { ui: item.ui } : {}),
+    ...(item.image ? { image: item.image } : {}),
+    ...(item.exitCode !== undefined ? { exitCode: item.exitCode } : {}),
+  };
+}
+
+/**
+ * Consecutive tool calls of the same kind whose statuses are ALL terminal (ok/error) merge into
+ * one `group` entry; running/approval calls always stay singleton so their spinner and live state
+ * stay visible. A kind change splits the run (`read` never merges with `shell`). Order is
+ * preserved; every entry carries its index within `items` (fold keys for assistant items need
+ * it). One linear pass — called on state changes only, never per frame.
+ */
+export function groupToolEntries(
+  items: TranscriptItem[],
+): Array<{ entry: TranscriptEntry; at: number }> {
+  const out: Array<{ entry: TranscriptEntry; at: number }> = [];
+  let run: Array<{ item: Extract<TranscriptItem, { kind: "tool" }>; at: number }> = [];
+  let runKind: ToolKind | undefined;
+  const flush = () => {
+    if (!run.length) return;
+    const views = run.map((r) => toolItemView(r.item));
+    const first = views[0];
+    const groupable =
+      views.length > 1 &&
+      first !== undefined &&
+      views.every((v) => v.kind === runKind) &&
+      views.every((v) => v.status === "ok" || v.status === "error");
+    if (groupable) {
+      const sameName = views.every((v) => v.name === first.name);
+      out.push({
+        entry: {
+          kind: "group",
+          group: {
+            id: first.id,
+            members: views,
+            kind: first.kind,
+            status: views.some((v) => v.status === "error") ? "error" : "ok",
+            totalMs: views.reduce((sum, v) => sum + (v.durationMs ?? 0), 0),
+            label: sameName ? first.humanName : TOOL_KIND_VERB[first.kind],
+            word: TOOL_KIND_WORD[first.kind],
+          },
+        },
+        at: run[0]?.at ?? 0,
+      });
+    } else {
+      for (const r of run) out.push({ entry: r.item, at: r.at });
+    }
+    run = [];
+    runKind = undefined;
+  };
+  items.forEach((item, at) => {
+    if (item.kind === "tool") {
+      const kind = item.toolKind ?? toolKindOf(item.name);
+      if (runKind === undefined) {
+        runKind = kind;
+        run.push({ item, at });
+      } else if (runKind === kind) {
+        run.push({ item, at });
+      } else {
+        flush();
+        runKind = kind;
+        run.push({ item, at });
+      }
+    } else {
+      flush();
+      out.push({ entry: item, at });
+    }
+  });
+  flush();
+  return out;
+}
+
+/** Content identity of a group (fold/diff purposes): member ids, statuses and durations. */
+export function groupIdentity(group: GroupedTool): string {
+  return `${group.id}|${group.members.length}|${group.members
+    .map((m) => `${m.id}:${m.status}:${m.durationMs ?? ""}`)
+    .join(",")}`;
+}
+
+export type FoldableKind = "reasoning" | "group" | "output";
+/** A collapsible region of the transcript and how to address it (fold key, toggle target). */
+export interface FoldCandidate {
+  /** Stable key for the fold state map (`a:` assistant index, `g:`/`t:` tool ids). */
+  key: string;
+  kind: FoldableKind;
+  /** Running/live content defaults expanded; finished reasoning, batches and long output collapse. */
+  defaultExpanded: boolean;
+}
+
+/** Cap for the reasoning text when expanded; longer sections show a truncation note. */
+export const REASONING_EXPAND_MAX_LINES = 40;
+
+/**
+ * The fold contract of one transcript entry: nothing (not collapsible), or a candidate with its
+ * default state. `at` is the entry's index within the ORIGINAL items array (assistant fold keys
+ * are stable because transcript items are append-only).
+ */
+export function foldCandidateOf(entry: TranscriptEntry, at: number): FoldCandidate | undefined {
+  if (entry.kind === "assistant") {
+    const reasoning = entry.reasoning.trim();
+    if (!reasoning || !(entry.done || entry.text)) return undefined;
+    return { key: `a:${at}`, kind: "reasoning", defaultExpanded: false };
+  }
+  if (entry.kind === "group")
+    return { key: `g:${entry.group.id}`, kind: "group", defaultExpanded: false };
+  if (entry.kind === "tool") {
+    if (entry.status === "running" || entry.status === "approval") return undefined;
+    // Rich blocks keep their native rendering (tables/trees/images are already bounded);
+    // only plain text output folds when it exceeds the collapsed cap.
+    if (entry.ui || entry.image) return undefined;
+    if (previewTruncated(entry.preview, entry.status))
+      return { key: `t:${entry.id}`, kind: "output", defaultExpanded: false };
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Stable key of a transcript entry (used by the component sync to reuse row instances). */
+export function entryKeyOf(entry: TranscriptEntry, at: number): string {
+  switch (entry.kind) {
+    case "assistant":
+      return `a:${at}`;
+    case "group":
+      return `g:${entry.group.id}`;
+    case "tool":
+      return `t:${entry.id}`;
+    case "user":
+      return `u:${at}`;
+    case "notice":
+      return `n:${at}`;
+    case "info":
+      return `i:${at}`;
+    case "error":
+      return `e:${at}`;
+  }
+}
+
+/** Every fold candidate of the transcript in display order; the keybinding targets the last one. */
+export function foldCandidates(items: TranscriptItem[]): FoldCandidate[] {
+  const candidates: FoldCandidate[] = [];
+  for (const { entry, at } of groupToolEntries(items)) {
+    const candidate = foldCandidateOf(entry, at);
+    if (candidate) candidates.push(candidate);
+  }
+  return candidates;
+}
+
+/**
+ * True when a printable key should toggle the nearest collapsible transcript row instead of
+ * typing: bound to `x`/`X` on an EMPTY editor line (no autocomplete), the same "empty input"
+ * convention Enter, Ctrl+D and `c`/`y` already use. Unlike copy, it also works while a turn runs
+ * (the nearest candidate may still exist mid-stream). A non-empty input never triggers.
+ */
+export function foldToggleKey(
+  data: string,
+  input: { text: string; autocomplete: boolean },
+): boolean {
+  return (data === "x" || data === "X") && input.text === "" && !input.autocomplete;
+}
+
 /** Rebuilds transcript items from persisted history (used by /resume). */
 export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
@@ -954,6 +1466,11 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
       if (m.text) items.push({ kind: "assistant", text: m.text, reasoning: "", done: true });
       for (const c of m.calls) {
         const r = results.get(c.id);
+        const preview = r?.result.content
+          .filter((p) => p.type === "text")
+          .map((x) => x.text)
+          .join("\n")
+          .slice(0, 2_000);
         items.push({
           kind: "tool",
           id: c.id,
@@ -961,10 +1478,10 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
           args: c.arguments,
           summary: summarizeToolArgs(c.name, c.arguments),
           status: r?.result.isError ? "error" : "ok",
-          preview: r?.result.content
-            .map((x) => x.text)
-            .join("\n")
-            .slice(0, 2_000),
+          preview,
+          toolKind: toolKindOf(c.name),
+          ...exitCodePart(preview),
+          ...richPartsOf(r?.result),
         });
       }
     }

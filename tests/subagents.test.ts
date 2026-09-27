@@ -62,7 +62,14 @@ function scripted(handler: (turn: Turn) => Reply | Promise<Reply>): ModelProvide
 }
 const toolTexts = (messages: Message[]) =>
   messages.flatMap((m) =>
-    m.role === "tool" ? [m.result.content.map((c) => c.text).join("")] : [],
+    m.role === "tool"
+      ? [
+          m.result.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+            .join(""),
+        ]
+      : [],
   );
 const taskId = (text: string) => /<task id="([^"]+)"/.exec(text)?.[1] ?? "";
 let n = 0;

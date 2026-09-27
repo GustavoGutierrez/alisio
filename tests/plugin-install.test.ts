@@ -409,7 +409,7 @@ describe("plugin_install tool", () => {
       { spec: "npm:plugin-openrouter" },
       { workspace: home, signal: AbortSignal.timeout(10_000), emit() {} },
     );
-    const content = toolResult.content[0];
+    const content = toolResult.content.find((p) => p.type === "text");
     if (!content) throw new Error("empty tool result");
     const parsed = JSON.parse(content.text) as Record<string, unknown>;
     expect(parsed.packageName).toBe("plugin-openrouter");
