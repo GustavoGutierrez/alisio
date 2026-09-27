@@ -156,7 +156,7 @@ hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on 
 | Compaction max output tokens (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | next run |
 | CLAUDE.md fallback (`context.claudeMdFallback`) | `true` / `false` | `false` | next turn |
 | AGENTS.md max bytes (`context.maxBytes`) | 4 KiB – 1 MiB in 4 KiB steps | `32768` | next turn |
-| Web search provider (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | unset (fallback chain) | next search call |
+| Web search provider (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `duckduckgo-html` / `tavily` / `brave` / `serpapi` / `native` | unset (fallback chain) | next search call |
 | Remember MCP consent (`mcp.allow`) | `true` / `false` | `false` | immediately |
 | Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `100` | next run |
 | Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | next run |

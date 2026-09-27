@@ -161,6 +161,17 @@ describe("legacy provider provenance", () => {
   });
 });
 
+describe("websearch provider enum", () => {
+  it("accepts duckduckgo-html as a websearch.provider value", () => {
+    const parsed = configSchema.parse({ websearch: { provider: "duckduckgo-html" } });
+    expect(parsed.websearch.provider).toBe("duckduckgo-html");
+  });
+
+  it("rejects unknown websearch.provider values", () => {
+    expect(() => configSchema.parse({ websearch: { provider: "yahoo" } })).toThrow();
+  });
+});
+
 describe("MCP configuration compatibility", () => {
   it("normalizes canonical and compatible forms", () => {
     const parsed = configSchema.parse({

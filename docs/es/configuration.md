@@ -163,10 +163,15 @@ Consulte [Compactación de contexto](/es/compaction).
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `provider` | ninguno (SearXNG público) | `"searxng"`, `"duckduckgo-instant"`, `"tavily"`, `"brave"`, `"serpapi"` o `"native"` — véase [Herramientas y permisos](/es/tools#websearch) |
+| `provider` | ninguno (SearXNG público) | `"searxng"`, `"duckduckgo-instant"`, `"duckduckgo-html"`, `"tavily"`, `"brave"`, `"serpapi"` o `"native"` — véase [Herramientas y permisos](/es/tools#websearch) |
 | `searxngUrl` | una instancia pública | Instancia SearXNG autoalojada u otra pública; los valores que no sean loopback deben usar `https://` |
 | `apiKeyEnv` | `<PROVIDER>_API_KEY` | Variable de entorno con la clave para `tavily`/`brave`/`serpapi` |
 | `nativeToolType` | `web_search` | Solo para `provider: "native"`: el tipo de herramienta nativa del proveedor enviado al modelo |
+
+La instancia pública de SearXNG por defecto se bloquea a veces como bot para solicitudes
+automatizadas. `"duckduckgo-html"` es un respaldo sin clave que puede elegir en `/settings` →
+Proveedor de búsqueda web (o configurando `websearch.provider` directamente); autoalojar SearXNG
+(`websearch.searxngUrl`) es la opción más fiable.
 
 ## `context`
 

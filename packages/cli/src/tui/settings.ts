@@ -38,6 +38,7 @@ export interface SettingsNavigationAction {
 export const WEBSEARCH_PROVIDERS = [
   "searxng",
   "duckduckgo-instant",
+  "duckduckgo-html",
   "tavily",
   "brave",
   "serpapi",

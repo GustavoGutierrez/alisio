@@ -100,6 +100,7 @@ dependencia obligatoria; la herramienta resuelve uno, en este orden:
    | --- | --- | --- |
    | `"searxng"` | `websearch.searxngUrl` (opcional; véase abajo) | Autoalojado u otra instancia pública |
    | `"duckduckgo-instant"` | Nada | Sin clave; **solo responde consultas factuales/de infobox directas** (estilo Wikipedia) — un resultado vacío no significa que no exista nada en la web |
+   | `"duckduckgo-html"` | Nada | Búsqueda web HTML **lite** de DuckDuckGo sin clave — una búsqueda web general real (a diferencia de `duckduckgo-instant`). Analiza HTML que DuckDuckGo puede cambiar en cualquier momento; la automatización intensa puede disparar verificaciones de bot. Un respaldo sólido sin clave cuando la instancia SearXNG por defecto está bloqueada como bot |
    | `"tavily"` | `TAVILY_API_KEY` (o `websearch.apiKeyEnv`) | Nivel gratuito sin tarjeta (1000 créditos/mes en el momento de escribir esto) |
    | `"brave"` | `BRAVE_SEARCH_API_KEY` | Necesita tarjeta; crédito recurrente de ~5 USD/mes ≈ 1000 consultas en el momento de escribir esto — no es gratis sin tarjeta |
    | `"serpapi"` | `SERPAPI_API_KEY` | Consulte los precios actuales de SerpApi |
@@ -110,8 +111,9 @@ dependencia obligatoria; la herramienta resuelve uno, en este orden:
    genuinamente gratis y sin clave. **En la práctica esto es poco fiable**: al construir esta
    herramienta, casi todas las instancias públicas probadas (de [searx.space](https://searx.space))
    limitaron la tasa o bloquearon como bot una única solicitud automatizada recién hecha. Trátelo
-   como un punto de partida, no como algo de lo que depender. Autoalojarlo es una línea de
-   configuración:
+   como un punto de partida, no como algo de lo que depender. Si le ocurre, cambie a
+   `"duckduckgo-html"` en `/settings` → Proveedor de búsqueda web (o configure
+   `websearch.provider`), o autoaloje — en cualquier caso es una línea de configuración:
 
    ```sh
    docker run -d -p 8080:8080 searxng/searxng

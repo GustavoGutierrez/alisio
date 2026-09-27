@@ -95,6 +95,7 @@ dependency; the tool resolves one, in order:
    | --- | --- | --- |
    | `"searxng"` | `websearch.searxngUrl` (optional; see below) | Self-hosted or another public instance |
    | `"duckduckgo-instant"` | Nothing | Keyless; **only answers direct factual/infobox queries** (Wikipedia-style) — an empty result does not mean nothing exists on the web |
+   | `"duckduckgo-html"` | Nothing | Keyless DuckDuckGo **lite** HTML search — a real general web search (unlike `duckduckgo-instant`). Parses HTML DuckDuckGo may change at any time; heavy automation can be bot-checked. A solid keyless fallback when the default SearXNG instance is bot-blocked |
    | `"tavily"` | `TAVILY_API_KEY` (or `websearch.apiKeyEnv`) | Card-free free tier (1000 credits/month at the time of writing) |
    | `"brave"` | `BRAVE_SEARCH_API_KEY` | Needs a card; ~$5/month recurring credit ≈ 1000 queries at the time of writing — not card-free |
    | `"serpapi"` | `SERPAPI_API_KEY` | Check current SerpApi pricing |
@@ -104,8 +105,9 @@ dependency; the tool resolves one, in order:
    (`websearch.searxngUrl`'s default), queried with `GET <url>/search?q=...&format=json` — genuinely
    free and keyless. **In practice this is unreliable**: while building this tool, nearly every
    public instance tried (from [searx.space](https://searx.space)) rate-limited or bot-blocked a
-   single fresh automated request. Treat it as a starting point, not something to depend on.
-   Self-hosting is one line away:
+   single fresh automated request. Treat it as a starting point, not something to depend on. If you
+   hit that, switch to `"duckduckgo-html"` in `/settings` → Web search provider (or set
+   `websearch.provider`), or self-host — either way it is one config line away:
 
    ```sh
    docker run -d -p 8080:8080 searxng/searxng

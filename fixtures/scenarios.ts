@@ -28,6 +28,7 @@ import { openDatabase } from "../packages/core/src/runtime/sqlite.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
 import { runExecute } from "../packages/core/src/tools/execute.ts";
 import {
+  duckDuckGoHtmlProvider,
   duckDuckGoInstantProvider,
   searchWithFallback,
   validateSearxngUrl,
@@ -2416,6 +2417,56 @@ const fixtures: Record<string, () => Promise<void>> = {
       assert.equal(outcome.limitation, undefined);
     } finally {
       await server.close();
+    }
+  },
+  async "websearch-duckduckgo-html"() {
+    const originalFetch = globalThis.fetch;
+    // A lite HTML page in the verified shape: result-link anchors through the uddg redirector,
+    // snippets in result-snippet cells, and a trailing ad/related section that must be ignored.
+    const liteHtml = `<!DOCTYPE html>
+<html><body>
+  <div class='result'>
+    <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fbun.sh%2Fdocs&amp;rut=zz1" class='result-link'>Bun &#x27;Docs&#x27; &amp; runtime</a>
+    <table><tr><td class='result-snippet'>Bun is a fast <b>JavaScript</b> runtime, bundler and test runner.</td></tr></table>
+  </div>
+  <div class='result'>
+    <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fbun.sh%2Fguides&amp;rut=zz2" class='result-link'>Bun guides</a>
+    <table><tr><td class='result-snippet'>Guides for using Bun.</td></tr></table>
+  </div>
+  <a class='non-result' href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fads.example.com%2F&amp;rut=zz3">Sponsored</a>
+</body></html>`;
+    globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+      assert.match(String(input), /lite\.duckduckgo\.com\/lite\/\?q=bun/);
+      assert.match(String(input), /kl=us-en/);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      assert.match(headers["User-Agent"] ?? "", /Mozilla\/5\.0/);
+      return new Response(liteHtml, { status: 200 });
+    }) as typeof fetch;
+    try {
+      const direct = await duckDuckGoHtmlProvider().search("bun");
+      assert.equal(direct.length, 2);
+      assert.equal(direct[0]?.url, "https://bun.sh/docs");
+      assert.equal(direct[0]?.title, "Bun 'Docs' & runtime");
+      assert.equal(
+        direct[0]?.snippet,
+        "Bun is a fast JavaScript runtime, bundler and test runner.",
+      );
+      assert.equal(
+        direct.some((r) => r.url === "https://ads.example.com/"),
+        false,
+        "ads/related links must be ignored",
+      );
+      const outcome = await searchWithFallback(
+        "bun",
+        { provider: "duckduckgo-html" },
+        undefined,
+        signal(),
+      );
+      assert.equal(outcome.source, "duckduckgo-html");
+      assert.equal(outcome.results[0]?.url, "https://bun.sh/docs");
+      assert.match(outcome.limitation ?? "", /DuckDuckGo lite/);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   },
   async "websearch-duckduckgo-instant"() {

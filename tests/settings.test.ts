@@ -190,6 +190,7 @@ describe("value display and cycling", () => {
     expect(row.values).toEqual([
       "searxng",
       "duckduckgo-instant",
+      "duckduckgo-html",
       "tavily",
       "brave",
       "serpapi",
@@ -197,6 +198,8 @@ describe("value display and cycling", () => {
     ]);
     expect(cycleSettingValue(row, undefined)).toBe("searxng"); // unset -> first option
     expect(cycleSettingValue(row, "searxng")).toBe("duckduckgo-instant");
+    expect(cycleSettingValue(row, "duckduckgo-instant")).toBe("duckduckgo-html");
+    expect(cycleSettingValue(row, "duckduckgo-html")).toBe("tavily");
     expect(cycleSettingValue(row, "tavily")).toBe("brave");
     expect(cycleSettingValue(row, "native")).toBe("searxng"); // wraps
     // A hand-edited unknown provider moves to the first offered candidate.

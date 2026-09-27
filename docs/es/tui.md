@@ -160,7 +160,7 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Tope de tokens de salida de compactación (`compaction.maxOutputTokens`) | 8k / 12k / 16k / 24k / 32k | `16000` | siguiente ejecución |
 | Fallback a CLAUDE.md (`context.claudeMdFallback`) | `true` / `false` | `false` | siguiente turno |
 | Tope de bytes de AGENTS.md (`context.maxBytes`) | 4 KiB – 1 MiB en pasos de 4 KiB | `32768` | siguiente turno |
-| Proveedor de búsqueda web (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | sin definir (cadena de respaldo) | siguiente llamada de búsqueda |
+| Proveedor de búsqueda web (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `duckduckgo-html` / `tavily` / `brave` / `serpapi` / `native` | sin definir (cadena de respaldo) | siguiente llamada de búsqueda |
 | Recordar consentimiento MCP (`mcp.allow`) | `true` / `false` | `false` | inmediato |
 | Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `100` | siguiente ejecución |
 | Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | siguiente ejecución |

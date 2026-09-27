@@ -162,10 +162,15 @@ See [Context compaction](/compaction).
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `provider` | none (public SearXNG) | `"searxng"`, `"duckduckgo-instant"`, `"tavily"`, `"brave"`, `"serpapi"` or `"native"` — see [Tools & permissions](/tools#websearch) |
+| `provider` | none (public SearXNG) | `"searxng"`, `"duckduckgo-instant"`, `"duckduckgo-html"`, `"tavily"`, `"brave"`, `"serpapi"` or `"native"` — see [Tools & permissions](/tools#websearch) |
 | `searxngUrl` | a public instance | Self-hosted or another public SearXNG instance; non-loopback values must use `https://` |
 | `apiKeyEnv` | `<PROVIDER>_API_KEY` | Environment variable holding the key for `tavily`/`brave`/`serpapi` |
 | `nativeToolType` | `web_search` | Only for `provider: "native"`: the provider-native tool type sent to the model |
+
+The default public SearXNG instance is occasionally bot-blocked for automated requests.
+`"duckduckgo-html"` is a keyless fallback you can pick in `/settings` → Web search provider (or set
+`websearch.provider` directly); self-hosting SearXNG (`websearch.searxngUrl`) is the most reliable
+option.
 
 ## `context`
 

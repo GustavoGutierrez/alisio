@@ -8,8 +8,8 @@
  *      A throwing plugin provider falls back to the built-in chain with a diagnostic, never a hard
  *      failure of the tool call.
  *   2. `websearch.provider` from config, when set: `"searxng"` (with a custom `searxngUrl`),
- *      `"duckduckgo-instant"`, `"tavily"`, `"brave"` or `"serpapi"` (the last three need an API key
- *      env var).
+ *      `"duckduckgo-instant"`, `"duckduckgo-html"`, `"tavily"`, `"brave"` or `"serpapi"` (the last
+ *      three need an API key env var).
  *   3. Nothing configured: a public SearXNG instance (see `DEFAULT_SEARXNG_URL`) — genuinely free
  *      and keyless, but empirically unreliable: while building this tool, nearly every public
  *      instance tried (searx.be and several others from https://searx.space) rate-limited or
@@ -24,7 +24,14 @@
 import type { SearchProvider, SearchResult } from "@alisio/sdk";
 
 export interface WebsearchConfig {
-  provider?: "searxng" | "duckduckgo-instant" | "tavily" | "brave" | "serpapi" | "native";
+  provider?:
+    | "searxng"
+    | "duckduckgo-instant"
+    | "duckduckgo-html"
+    | "tavily"
+    | "brave"
+    | "serpapi"
+    | "native";
   /** Overrides the default public instance; self-hosted or another public instance. */
   searxngUrl?: string;
   /** Environment variable holding the API key for `tavily`, `brave` or `serpapi`. */
@@ -163,6 +170,156 @@ export function duckDuckGoInstantProvider(): SearchProvider {
   };
 }
 
+// --- DuckDuckGo lite (HTML) ---
+// The keyless `lite.duckduckgo.com/lite/` page answers a plain GET with real, general web-search
+// results (unlike the Instant Answer API). It is a scrape of HTML that DuckDuckGo may change at any
+// time, so the parser below is deliberately tolerant: only `result-link` anchors whose href goes
+// through the `//duckduckgo.com/l/?uddg=` redirector are trusted as results; ads/related links and
+// the surrounding table/div markup are ignored. Verified live (2026-09): the full
+// `html.duckduckgo.com/html/` endpoint returns HTTP 202 with a captcha challenge for automated
+// requests, while `lite.duckduckgo.com/lite/` answers HTTP 200 with results and no key.
+const DUCKDUCKGO_LITE_UA = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0";
+const DUCKDUCKGO_LITE_URL = "https://lite.duckduckgo.com/lite/";
+
+/** Minimal local HTML-entity decoder (no dependency): the common named ones plus numeric forms. */
+function decodeHtmlEntities(text: string): string {
+  return text.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos|nbsp);/g, (raw, entity: string) => {
+    const lower = entity.toLowerCase();
+    if (lower === "amp") return "&";
+    if (lower === "lt") return "<";
+    if (lower === "gt") return ">";
+    if (lower === "quot") return '"';
+    if (lower === "apos") return "'";
+    if (lower === "nbsp") return "\u00a0";
+    try {
+      const code = lower.startsWith("#x")
+        ? parseInt(lower.slice(2), 16)
+        : lower.startsWith("#")
+          ? parseInt(lower.slice(1), 10)
+          : NaN;
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : raw;
+    } catch {
+      return raw;
+    }
+  });
+}
+
+/** Strips tags and collapses whitespace, keeping the text usable as a title or snippet. */
+function htmlToText(fragment: string): string {
+  return decodeHtmlEntities(fragment.replace(/<[^>]*>/g, ""))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const RESULT_LINK = /<a\b[^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi;
+const HREF_ATTR = /href\s*=\s*"([^"]*)"/i;
+const SNIPPET_CELL = /class=['"]result-snippet['"]>([\s\S]*?)<\/td>/gi;
+const UDDG_PARAM = /uddg=([^&"]+)/i;
+
+/**
+ * Parses DuckDuckGo lite HTML into `SearchResult`s (exported so tests can exercise it without the
+ * network). Ignores every anchor that is not a `result-link` whose href starts with
+ * `//duckduckgo.com/l/?uddg=` — ads and related-search links never count. Snippets are taken from
+ * the `result-snippet` cell that follows each result and precedes the next one. Returns [] for a
+ * lite page that legitimately has no results.
+ */
+export function parseDuckDuckGoLiteHtml(html: string): SearchResult[] {
+  const anchors = [...html.matchAll(RESULT_LINK)];
+  const snippets = [...html.matchAll(SNIPPET_CELL)];
+  const results: SearchResult[] = [];
+  for (let i = 0; i < anchors.length; i++) {
+    const anchor = anchors[i]!;
+    const tag = anchor[0];
+    const href = HREF_ATTR.exec(tag)?.[1] ?? "";
+    if (!href.startsWith("//duckduckgo.com/l/?uddg=")) continue;
+    const raw = UDDG_PARAM.exec(href)?.[1];
+    let url = "";
+    if (raw) {
+      try {
+        url = decodeURIComponent(raw);
+      } catch {
+        url = "";
+      }
+    }
+    if (!url) continue;
+    const title = htmlToText(anchor[1] ?? "");
+    if (!title) continue;
+    let snippet = "";
+    const limit = anchors[i + 1] ? anchors[i + 1]!.index : html.length;
+    for (const cell of snippets) {
+      if (cell.index !== undefined && cell.index > (anchor.index ?? 0) && cell.index < limit) {
+        snippet = htmlToText(cell[1] ?? "");
+        break;
+      }
+    }
+    results.push({ title, url, snippet });
+  }
+  return results;
+}
+
+/**
+ * DuckDuckGo's keyless HTML "lite" endpoint: a real general web search (unlike the Instant Answer
+ * API), scraped without an API key or cookie machinery. Works when the default public SearXNG
+ * instance is bot-blocked. See `parseDuckDuckGoLiteHtml` for the HTML parsing contract.
+ */
+export function duckDuckGoHtmlProvider(): SearchProvider {
+  return {
+    id: "duckduckgo-html",
+    async search(query, options) {
+      const url = new URL(DUCKDUCKGO_LITE_URL);
+      url.searchParams.set("q", query);
+      url.searchParams.set("kl", "us-en");
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          headers: { "User-Agent": DUCKDUCKGO_LITE_UA, Accept: "text/html" },
+          // Never follow a redirect blindly: on this endpoint a redirect is a bot-check detour,
+          // not a moved page, and following it would just land on a captcha.
+          redirect: "error",
+          signal: options?.signal,
+        });
+      } catch (error) {
+        throw new Error(
+          `DuckDuckGo lite search request failed: ${
+            error instanceof Error ? error.message : String(error)
+          }. The provider is duckduckgo-html (${DUCKDUCKGO_LITE_URL}); possible causes: a network ` +
+            "failure, a redirect (treated as a bot-check detour), or rate limiting. Try again later " +
+            "or switch websearch.provider via /settings.",
+        );
+      }
+      if (res.status !== 200) {
+        throw new Error(
+          `DuckDuckGo lite search failed: HTTP ${res.status}. The endpoint may be showing a ` +
+            "bot-check/captcha challenge instead of results (the full html.duckduckgo.com endpoint " +
+            "returns HTTP 202 for automated requests). Try again later, or switch websearch.provider " +
+            "via /settings (e.g. searxng with your own instance).",
+        );
+      }
+      const html = await res.text();
+      if (html.length <= 200) {
+        throw new Error(
+          "DuckDuckGo lite search returned an unexpectedly empty response (no HTML to parse); the " +
+            "endpoint may be bot-blocked. Try again later or switch websearch.provider via /settings.",
+        );
+      }
+      if (
+        !html.includes("result-link") &&
+        !html.includes("result-snippet") &&
+        !/action=['"]\/lite\/['"]/.test(html)
+      ) {
+        throw new Error(
+          "DuckDuckGo lite did not return recognizable DuckDuckGo lite HTML results; it may be " +
+            "showing a bot-check/captcha challenge instead. Try again later or switch " +
+            "websearch.provider via /settings.",
+        );
+      }
+      return parseDuckDuckGoLiteHtml(html).slice(0, 10);
+    },
+  };
+}
+
 export function tavilyProvider(apiKey: string): SearchProvider {
   return {
     id: "tavily",
@@ -258,6 +415,16 @@ function resolveBuiltin(config: WebsearchConfig | undefined): ResolvedSearch {
       limitation:
         "DuckDuckGo's Instant Answer API only answers direct factual/infobox-style queries, not " +
         "general web search. An empty result here does not mean nothing exists on the web.",
+    };
+  if (provider === "duckduckgo-html")
+    return {
+      provider: duckDuckGoHtmlProvider(),
+      source: "duckduckgo-html",
+      limitation:
+        "DuckDuckGo lite HTML provider: keyless and free, but it scrapes HTML DuckDuckGo may " +
+        "change at any time, and heavy automation can be bot-checked. Use it as a keyless fallback " +
+        "when the default public SearXNG instance is bot-blocked; self-hosted SearXNG remains the " +
+        "most reliable option.",
     };
   if (provider === "native")
     throw new Error(

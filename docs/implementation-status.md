@@ -348,8 +348,12 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `read_file`). `websearch(query)` resuelve un proveedor en orden: una extensión `websearch`
   registrada por un plugin (nuevo punto de extensión, mismo mecanismo que `mascot`/`startup-screen`,
   con reintento seguro y diagnóstico ante un proveedor que falla) → `websearch.provider` configurado
-  (`searxng`, `duckduckgo-instant`, `tavily`, `brave`, `serpapi`, `native`) → una instancia pública
-  de SearXNG por defecto. Modo `native`: añade la herramienta nativa del proveedor
+  (`searxng`, `duckduckgo-instant`, `duckduckgo-html`, `tavily`, `brave`, `serpapi`, `native`) → una
+  instancia pública de SearXNG por defecto. `duckduckgo-html` implementa la búsqueda web real sin
+  clave como un raspado tolerante del endpoint `https://lite.duckduckgo.com/lite/` (solo confía en
+  anclas `result-link` cuyo `href` pasa por el redireccionador `//duckduckgo.com/l/?uddg=`, decodifica
+  la URL destino y las entidades HTML, y toma el fragmento de la celda `result-snippet` siguiente).
+  Modo `native`: añade la herramienta nativa del proveedor
   (`websearch.nativeToolType`, por defecto `web_search`) a la petición de la Responses API en vez de
   implementar la llamada HTTP propia; exige `provider.apiMode: "responses"` y no registra la
   herramienta `websearch`. `execute(code)` ("Code Mode") ejecuta un fragmento JS en el módulo `vm`
@@ -770,6 +774,18 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   ajustar el proveedor a un `User-Agent` de navegador y a detectar JSON por contenido en vez de por
   cabecera `Content-Type`, ya que la API de DuckDuckGo devuelve JSON válido con un
   `Content-Type: application/x-javascript` en ciertas condiciones).
+- Hallazgo empírico nuevo sobre DuckDuckGo (2026-09): una solicitud automatizada a
+  `https://html.duckduckgo.com/html/?q=...` devuelve HTTP 202 con un desafío de captcha, mientras
+  que `https://lite.duckduckgo.com/lite/?q=...&kl=us-en` responde HTTP 200 con resultados reales y
+  sin clave. Sobre esa base se añadió el proveedor `duckduckgo-html` (sin clave, sin cookies) con un
+  analizador tolerante de HTML; su cobertura sin red (Vitest) incluye: extracción de 3+ resultados
+  con URL destino decodificada desde `uddg`, entidades HTML decodificadas en títulos, fragmentos
+  (`snippet`) extraídos y sin etiquetas, anclas no resultantes (anuncios/relacionados) ignoradas,
+  respuesta de desafío/captcha (HTTP 202 o página no reconocible) que lanza un error accionable que
+  nombra al proveedor y sus causas posibles, y una página lite legítima sin resultados que devuelve
+  `[]`; `searchWithFallback` resuelve el proveedor tanto por config como el menú `/settings` lo
+  lista. Una llamada real a `lite.duckduckgo.com/lite/` con el `User-Agent` de navegador del
+  proveedor devolvió resultados reales para «node.js web framework».
 - Hallazgo empírico honesto sobre el proveedor SearXNG por defecto (sin configurar nada): se
   probaron 9 instancias públicas distintas listadas en searx.space (incluida la que se dejó como
   URL por defecto, `searx.be`) con una única solicitud automatizada fresca cada una; **todas**

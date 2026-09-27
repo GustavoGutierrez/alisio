@@ -145,7 +145,15 @@ const configObjectSchema = z
     websearch: z
       .object({
         provider: z
-          .enum(["searxng", "duckduckgo-instant", "tavily", "brave", "serpapi", "native"])
+          .enum([
+            "searxng",
+            "duckduckgo-instant",
+            "duckduckgo-html",
+            "tavily",
+            "brave",
+            "serpapi",
+            "native",
+          ])
           .optional(),
         searxngUrl: z.string().optional(),
         apiKeyEnv: z.string().optional(),
