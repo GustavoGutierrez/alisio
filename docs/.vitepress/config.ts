@@ -14,6 +14,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
         "prompt-templates",
         "configuration",
         "tools",
+        "tool-validation",
       ].map(item),
     },
     {
@@ -47,6 +48,7 @@ const en = {
   "prompt-templates": "Prompt templates",
   configuration: "Configuration",
   tools: "Tools & permissions",
+  "tool-validation": "Tool validation",
   context: "Context & AGENTS.md",
   subagents: "Subagents",
   compaction: "Context compaction",
@@ -73,6 +75,7 @@ const es = {
   "prompt-templates": "Plantillas de prompts",
   configuration: "Configuración",
   tools: "Herramientas y permisos",
+  "tool-validation": "Validación de herramientas",
   context: "Contexto y AGENTS.md",
   subagents: "Subagentes",
   compaction: "Compactación de contexto",
