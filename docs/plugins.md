@@ -216,6 +216,10 @@ parent run aborts its running descendants. The core contains no agent logic; the
 `permission?: { write?, process? }` (`allow`, `ask` or `deny`), `workspace?` (for example a git
 worktree), `maxTurns?`, `timeoutMs?` and `maxTokens?`.
 
+`sessions.run` resolves with `{ id, status, text, usage, error? }`. A child that exhausts its turn
+cap is NOT a failure: it resolves with `status: "completed"` and `turnsExceeded: true`, and `text`
+holds a usable partial report (only real errors, cancellations and timeouts set a failure status).
+
 ```ts
 api.tools.register({
   name: "second_opinion",

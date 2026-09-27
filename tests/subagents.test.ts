@@ -251,6 +251,51 @@ describe("delegation basics", () => {
       await a.close();
     }
   });
+
+  it("delivers a turn-capped child as usable partial output, not an error", async () => {
+    let parentSaw = "";
+    const { app: a, session } = await app(
+      scripted((t) => {
+        if (t.key === "PARENT") {
+          if (t.round === 1)
+            return {
+              calls: [
+                {
+                  name: "task",
+                  args: { description: "d", prompt: "CHILD-LOOP", subagent_type: "explore" },
+                },
+              ],
+            };
+          const tool = t.messages.findLast((m) => m.role === "tool");
+          parentSaw = JSON.stringify(tool);
+          return { text: "ok" };
+        }
+        // The child never finishes: it keeps reading files until its turn cap (2) kicks in,
+        // while streaming partial observations.
+        return {
+          text: `scan round ${t.round}`,
+          calls: [{ name: "read_file", args: { path: "config.json" } }],
+        };
+      }),
+      { plugin: { maxTurns: 2 } },
+    );
+    try {
+      const { text } = await a.runner.run(session, "PARENT");
+      expect(text).toBe("ok");
+      // Partial result, NOT a failure: no error flag, state="completed", progress delivered.
+      expect(parentSaw).not.toContain('"isError":true');
+      expect(parentSaw).not.toContain('state="failed"');
+      expect(parentSaw).not.toContain("provider exploded");
+      expect(parentSaw).toContain("scan round 2");
+      // The caller is warned that the report may be incomplete.
+      expect(parentSaw).toContain("reached its turn limit");
+      expect(parentSaw).toContain("may be incomplete");
+      const children = a.store.children(session);
+      expect(children.map((c) => [c.agent, c.status])).toEqual([["explore", "completed"]]);
+    } finally {
+      await a.close();
+    }
+  });
 });
 
 describe("child output token budgets", () => {

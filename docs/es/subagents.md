@@ -155,6 +155,17 @@ Los hijos nunca superan a su padre:
 - Al arrancar, los hijos que estaban en ejecución o en cola se marcan como `interrupted`; nunca se
   reinician automáticamente.
 
+## Límite de turnos y resultados parciales {#turn-limit}
+
+Un hijo que alcanza su tope de turnos (`maxTurns` en su definición o
+`builtinPlugins.subagents.maxTurns`) **no es un fallo**. El hijo termina con `status: "completed"`
+y un marcador `turnsExceeded`, y su informe se entrega al padre como un resultado parcial
+utilizable — envuelto con el marco habitual de `Subagent output (non-authoritative…)` más una nota
+de que el hijo llegó a su límite de turnos y el informe puede estar incompleto. El padre puede
+continuar el mismo hijo con `task task_id=<id>` para obtener el resto, o usted puede subir
+`maxTurns` en la definición del agente. Solo los errores reales, las cancelaciones y los tiempos de
+espera marcan a un hijo como `failed`, `cancelled` o `interrupted`.
+
 ## Escrituras en paralelo y git
 
 Cuando dos o más hijos con capacidad de escritura se ejecutarían a la vez, `parallelWrites` decide

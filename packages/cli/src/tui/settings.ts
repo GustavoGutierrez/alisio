@@ -70,7 +70,7 @@ export interface SettingsMenuInput {
 export const defaultConfig: SettingsConfigView = {
   compaction: { auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 },
   context: { claudeMdFallback: false, maxBytes: 32 * 1024 },
-  limits: { maxTurns: 20, maxOutputTokens: 16_384, maxContextChars: 800_000, timeoutMs: 300_000 },
+  limits: { maxTurns: 100, maxOutputTokens: 16_384, maxContextChars: 800_000, timeoutMs: 300_000 },
   tui: { paddingX: 1, skillSlashCommands: true },
   mcp: { allow: false },
   websearch: { provider: undefined },
@@ -191,7 +191,7 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     values: [5, 10, 15, 20, 30, 50, 100],
     read: (config) => config.limits.maxTurns,
     description:
-      "Maximum agent-loop turns per run before the run ends. Applied from the next run; longer tasks may need a higher budget.",
+      "Maximum agent-loop turns per run. Reaching the limit ends the run softly: everything so far is kept and the session stays usable, so you can just say continue. Raise it for long read-heavy audits. Applied from the next run.",
   },
   {
     id: "limits.maxOutputTokens",

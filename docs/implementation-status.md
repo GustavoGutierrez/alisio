@@ -43,6 +43,13 @@ funcional, no solo interfaces o stubs.
 
 - Núcleo propio: streaming, tool loop, validación de entradas, límites de turnos/tiempo/contexto,
   presupuesto de tokens reportados, cancelación y eventos versionados.
+- Límite de turnos SUAVE (`limits.maxTurns`, por defecto `100`): al alcanzar el tope, la ejecución
+  termina con `status: "turns-exceeded"` y evento `run_turns_exceeded` (datos con el tope) en lugar
+  de fallar: el transcript hasta ese punto se conserva íntegro, la TUI muestra un aviso amable (no
+  un error), la siguiente ejecución en la misma sesión continúa donde quedó, y un subagente que agota
+  su tope entrega su informe parcial como `completed` con el marcador `turnsExceeded` (nunca
+  `failed`). Los topes duros reales siguen siendo el presupuesto de tokens (`maxTokens`) y el
+  tiempo de espera (`timeoutMs`), sin cambios de semántica.
 - API compatible con OpenAI configurable: Chat Completions y Responses, modelo/URL/clave,
   ausencia de autenticación y diferencias de parámetros de tokens.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
@@ -203,8 +210,9 @@ funcional, no solo interfaces o stubs.
 - Versión en tiempo de ejecución por paquete: metadatos de plugins, `user-agent` por defecto y el
   cliente MCP leen la versión de su propio `package.json` (con la inyección
   `ALISIO_PACKAGE_VERSION` para binarios autónomos y `dev` como último recurso); la cabecera de la
-  TUI, el banner y `--version` comparten el mismo valor del CLI, sin literales que puedan
-  desincronizarse de la publicación.
+  TUI muestra **Alisio Code** y, junto con el banner y `--version`, resuelve la versión del CLI
+  caminando hacia arriba hasta el `package.json` de `@alisio/alisio-code` (límite de 8 niveles),
+  sin literales que puedan desincronizarse de la publicación.
 - Compactación de contexto en el núcleo (manual y automática por umbral), con resumen del
   proveedor actual, emparejamiento de llamadas/resultados preservado y persistencia
   transaccional (migración 2: columna `messages.compacted`).

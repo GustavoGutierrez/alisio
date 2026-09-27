@@ -406,6 +406,10 @@ export class SubagentManager {
         task.status = result.status;
         task.tokens = Math.max(task.tokens, result.usage.input + result.usage.output);
         if (task.worktree && result.status === "completed") await this.summarizeWorktree(task);
+        if (result.status === "completed" && result.turnsExceeded)
+          task.notes.push(
+            "This subagent reached its turn limit; the report above may be incomplete. Ask it to continue or raise its maxTurns in the agent definition.",
+          );
         task.result =
           result.status === "completed"
             ? this.wrap(task, "completed", result.text || "(no final message)")

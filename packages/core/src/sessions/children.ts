@@ -207,8 +207,18 @@ export class ChildSessions implements SessionsAPI {
       );
       usage.input += result.usage.input;
       usage.output += result.usage.output;
+      // A child that hit its turn limit still produced a usable partial result: it completes
+      // with a turnsExceeded marker instead of failing, so orchestration treats the text as
+      // partial output. state "failed" stays reserved for real errors/aborts.
+      const turnsExceeded = result.status === "turns-exceeded";
       this.o.store.updateSession(id, { status: "completed", usage });
-      return { id, status: "completed", text: result.text, usage };
+      return {
+        id,
+        status: "completed",
+        text: result.text,
+        usage,
+        ...(turnsExceeded ? { turnsExceeded: true } : {}),
+      };
     } catch (error) {
       const aborted = this.cancelled.has(id) || signals.some((s) => s.aborted);
       const status: SessionStatus = aborted ? "cancelled" : "failed";

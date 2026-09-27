@@ -739,7 +739,8 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
     }
     case "run_completed":
     case "run_failed":
-    case "run_cancelled": {
+    case "run_cancelled":
+    case "run_turns_exceeded": {
       const ended = {
         ...state,
         streaming: false,
@@ -751,6 +752,11 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
       };
       if (event.type === "run_failed")
         return addItem(ended, { kind: "error", text: String(d.error ?? "Run failed") });
+      if (event.type === "run_turns_exceeded")
+        return addItem(ended, {
+          kind: "notice",
+          text: "Turn limit reached — the answer may be incomplete. Continue with another prompt or raise limits.maxTurns (/settings → Max turns).",
+        });
       if (event.type === "run_cancelled") {
         const reason = String(d.error ?? "cancelled");
         return addItem(ended, {

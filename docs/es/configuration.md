@@ -87,7 +87,7 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
     "tokenParameter": "max_tokens",
     "streamUsage": false
   },
-  "limits": { "maxTurns": 20, "timeoutMs": 300000 },
+  "limits": { "maxTurns": 100, "timeoutMs": 300000 },
   "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
@@ -125,7 +125,7 @@ selección anterior determina cuándo se usa esa configuración en lugar del per
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `maxTurns` | `20` | Turnos del modelo por ejecución (1–100). Cada turno es una respuesta del modelo; una ejecución que solo llama a herramientas muchas veces puede agotarlos |
+| `maxTurns` | `100` | Turnos del modelo por ejecución (1–100). Cada turno es una respuesta del modelo; una ejecución que solo llama a herramientas muchas veces puede agotarlos. El límite es un **carril de seguridad, no un tope duro**: al alcanzarlo la ejecución termina *suavemente* — todo lo producido hasta ese punto se conserva en el transcript, la ejecución se reporta como `turns-exceeded` (resultado parcial, sin fallo) y puedes simplemente volver a pedir para continuar en la misma sesión. Los topes duros reales son el presupuesto de tokens (`maxTokens`) y el tiempo de espera de ejecución. Súbelo para auditorías extensas con mucha lectura |
 | `timeoutMs` | `300000` | Tiempo límite de la ejecución en milisegundos (mínimo 100); incluye las esperas de aprobación |
 | `maxContextChars` | `800000` | Límite de longitud del contexto en caracteres. El valor por defecto (800k caracteres ≈ 200k tokens) es una **suposición para ventanas de modelo desconocidas** — el mismo presupuesto de ~200k tokens que OpenCode asume para proveedores personalizados — para que los servidores locales que no informan su ventana (p. ej. llama.cpp) obtengan ~200k tokens en lugar de ~40k. Actúa como **disparador de compactación por defecto (fallback)** cuando la ventana del modelo es desconocida (o absurdamente grande; ver [compactación](/es/configuration#compaction)) — tokens estimados (`~caracteres/4`) que alcanzan `maxContextChars / 4` — y como **límite duro** que debe caber tras una compactación. Una ventana **conocida** anula el respaldo, y `/settings` → Presupuesto de caracteres de contexto permite bajarlo en cualquier momento |
 | `maxOutputTokens` | `16384` | Tokens de salida por petición. Cuando un modelo alcanza este presupuesto a mitad de respuesta, Alisio conserva el texto producido, avisa de que la respuesta se cortó (`response cut by max output tokens`), completa la ejecución con normalidad y marca la finalización como `truncated` en `run_completed`. Las llamadas a herramientas totalmente escritas siguen ejecutándose. Aumente este presupuesto para respuestas más largas; los modelos con razonamiento pueden gastar casi todo en razonamiento antes de producir texto, así que no lo fije demasiado bajo. Editable desde `/settings` → Tope de tokens de salida del agente |

@@ -1,7 +1,23 @@
 # @alisio/sdk
 
-The typed plugin contract for [Alisio](https://github.com/GustavoGutierrez/alisio). Types plus two tiny
-helpers (`definePlugin`, `textResult`); no runtime dependencies and no provider SDKs.
+**The typed plugin contract for [Alisio](https://github.com/GustavoGutierrez/alisio).** Types plus
+two tiny helpers (`definePlugin`, `textResult`) — no runtime dependencies and no provider SDKs.
+
+## What it is
+
+`@alisio/sdk` is what plugins depend on. It declares the `Plugin` and `PluginAPI` shapes, the tool
+and provider contracts, compaction and session hooks, the SQLite storage port and the extension
+points. A plugin ships JavaScript, declares the `alisio-plugin` npm keyword and lists
+`@alisio/sdk` as a peer dependency. Because the package is types-only plus helpers, it is safe to
+import from any runtime Alisio runs on.
+
+## Installation
+
+```sh
+npm i @alisio/sdk        # peer dependency of every plugin; use it in devDependencies too
+```
+
+## Quick start: your first plugin
 
 ```ts
 import { definePlugin, textResult } from "@alisio/sdk";
@@ -24,35 +40,64 @@ export default definePlugin({
 });
 ```
 
+Load it with `alisio --plugin ./dist/index.js` (path) or `alisio install npm:acme-hello` (npm
+package). See [Writing plugins](https://gustavogutierrez.github.io/alisio/plugins) for the full
+walkthrough including tool permissions, naming/prefix rules and an example package.
+
+## The PluginAPI
+
+Everything a plugin registers is removed automatically when it unloads; every `register`/`on`
+returns an unregister function.
+
+- **tools** — `tools.register(ToolDefinition)`; effects `read | write | process | external |
+  internal`, optional `paths()` for write checks, `concurrent` for same-turn parallel calls.
+- **commands** — `commands.register(name, handler, { description?, argumentHint? })`, invoked as
+  `/command plugin.id:name args`.
+- **events** — versioned `RunEvent`s (`schemaVersion: 1`).
+- **context** — `context.register(() => Promise<string>)` adds text to the model context.
+- **resources** — `skills(path)`, `prompts(path)`, `agents(path)` and `list(kind)` for skill,
+  prompt-template and agent-definition directories.
+- **state** — small per-plugin JSON state persisted in the session database.
+- **compaction** — `compaction.register({ beforeCompact, afterCompact })` contributes instructions,
+  extra summarizer output fields, recalled context and reports.
+- **session** — `session.onStart(info)` (text injected on a fresh session) and
+  `session.onEnd(info)` (called on `/clear`, `/exit`, quit; bounded by a timeout).
+- **model** — provider-agnostic `model.complete(request)`; plugins never import provider SDKs.
+- **models** — credential-free `models.list()` / `models.resolve(reference)` over configured
+  `/connect` profiles.
+- **providers** — `providers.register(registration)` adds a selectable model provider to `/connect`;
+  registrations coexist instead of competing.
+- **storage** — `storage.sqlite(path)` opens a private (0600) SQLite file (FTS5 available); the
+  host provides the driver, so plugins never depend on a specific runtime.
+- **sessions** — child sessions (`spawn`, `create`, `run`, `get`, `children`, `cancel`, `enqueue`,
+  …): separate conversations with fresh context and narrowed permissions that never exceed the
+  parent.
+- **ui** — `status`, `panel`, `select`, `askQuestions`, `open`, `interactive()`; interactive-only
+  calls resolve `undefined` headless instead of hanging.
+
 ## Extension points
 
-Typed, generic extension points let plugins replace parts of the experience without core
-changes. Today: `mascot`, `startup-screen` and `websearch`.
+Typed, generic extension points let plugins replace parts of the experience without core changes.
+Today: `mascot`, `startup-screen` and `websearch`.
 
 ```ts
 api.extensions.register("mascot", {
   id: "kite",
   render: ({ terminal }) => (terminal.unicode ? ["  ◢◣", " ◢██◣", " ◥██◤", "  ◥◤"] : ["  /\\", " /  \\", " \\  /", "  \\/"]),
 }, { priority: 10 });
-
-api.extensions.register("websearch", {
-  id: "brave-example",
-  search: async (query) => [{ title: "...", url: "https://...", snippet: "..." }],
-}, { priority: 10 });
 ```
 
-The highest `priority` wins; ties break by plugin `id`, then registration order, and are reported
-as `extension_conflict`. A renderable provider (`mascot`, `startup-screen`) receives only its
-context (`terminal.color`, `unicode`, `columns`); its output is sanitized and clamped, and a
-failing provider falls back to the default. `websearch` fully replaces Alisio's built-in
-search-provider resolution while registered (a throwing provider also falls back, with a
-diagnostic). A declarative `extensions: { mascot, "startup-screen", websearch }` field on the
-plugin is also accepted. Plugins are identified by `id` (not `name`).
+The highest `priority` wins; ties break by plugin `id`, then registration order (reported as
+`extension_conflict`). A renderable provider receives only its context (`terminal.color`,
+`unicode`, `columns`); output is sanitized and clamped, and a failing provider falls back to the
+default. `websearch` fully replaces Alisio's built-in search-provider resolution while registered.
+A declarative `extensions` field on the plugin is accepted too, at priority 0. Plugins are
+identified by `id`, not `name`.
 
 ## Prompt templates
 
-`api.resources.prompts("./prompts")` registers a directory of Markdown templates that become
-slash commands (for example `/review src/app.ts`):
+`api.resources.prompts("./prompts")` registers a directory of Markdown templates that become slash
+commands (for example `/review src/app.ts`):
 
 ```md
 ---
@@ -67,27 +112,18 @@ Review $1 carefully. Extra focus: $ARGUMENTS
 Precedence: built-in < plugin < user (`~/.config/alisio/prompts`) < trusted project
 (`.alisio/prompts`).
 
-## Child sessions, panels and choices
+## Publishing
 
-Generic building blocks used by the built-in subagents plugin and available to any plugin:
+Publish plugins as JavaScript with the `alisio-plugin` keyword and `@alisio/sdk` as a peer
+dependency; the entry resolves from `exports["."]`, then `main`, then `./index.js`. Guide:
+[Writing plugins](https://gustavogutierrez.github.io/alisio/plugins) ·
+[Publishing](https://gustavogutierrez.github.io/alisio/publishing).
 
-- `api.sessions.spawn/run/cancel/enqueue/...`: child sessions with a parent link, fresh context
-  and narrowed permissions (a child never exceeds its parent); aborting a parent aborts them.
-- `api.ui.panel(id, { title, nodes, action })`: a collapsible tree under the TUI editor.
-- `api.ui.select({ title, options })`: ask the user to choose one (resolves `undefined` headless).
-- `api.ui.askQuestions({ questions, session?, label?, signal? })`: ask 1-4 multiple-choice questions
-  (2-4 options each, an optional `recommended` one); resolves every question id `undefined` headless.
-  `session`/`label` attribute the question to the asking (sub)session, mirroring `ApprovalRequest`.
-- `api.ui.interactive()`: true when an interactive UI is bound at all (never per-session), so a
-  child session under an interactive root can safely call `select`/`askQuestions` too.
-- `api.ui.open(sessionId)`, `api.resources.agents(dir)`, `api.resources.list(kind)`.
-- `ToolContext.label`: who is asking (an agent path such as `"general › explore"`), set for tool
-  calls made by a labeled child session; mirrors `ApprovalRequest.label`.
-- `ToolDefinition.concurrent`: run alongside other read/concurrent calls of the same turn.
+## Requirements
 
-The API covers tools, commands, events, context providers, compaction hooks, session start/end
-hooks, provider-agnostic `model.complete`, a SQLite storage port and UI status. Publish plugins as
-JavaScript with the `alisio-plugin` keyword and `@alisio/sdk` as a peer dependency. Guide:
-[Writing plugins](https://gustavogutierrez.github.io/alisio/plugins).
+Node.js **>= 22.16** (types-only package; consumers run on Node or Bun).
 
-Maintainer: Gustavo Gutiérrez · License: MIT
+## License
+
+MIT. Maintained by Gustavo Gutiérrez Mercado. Source: <https://github.com/GustavoGutierrez/alisio> ·
+npm: <https://www.npmjs.com/settings/alisio/packages>.

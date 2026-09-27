@@ -313,15 +313,25 @@ describe("runner.applySettings", () => {
       expect(runner.contextBudget("test").compactionAt).toBe(50);
       // maxTurns is honored from the next run, without recreating the runner.
       runner.applySettings({ maxTurns: 1, maxOutputTokens: 8_192 });
-      // One turn is not enough to finish (the provider still wants a tool): the cap rejects.
-      await expect(runner.run(session.id, "first")).rejects.toThrow("Maximum turns reached");
+      // One turn is not enough to finish (the provider still wants a tool): the run ends SOFTLY
+      // with a turns-exceeded result and keeps everything produced so far — no throw, no failure.
+      const capped = await runner.run(session.id, "first");
+      expect(capped.status).toBe("turns-exceeded");
+      expect(capped.text).toBe("tool");
       expect(round).toBe(1);
+      expect(events.some((event) => event.type === "run_failed")).toBe(false);
+      expect(events.some((event) => event.type === "run_turns_exceeded")).toBe(true);
+      expect(events.some((event) => event.type === "run_completed")).toBe(false);
       round = 0;
       runner.applySettings({ maxTurns: 2 });
+      // The very next run continues in the SAME session: the capped transcript stays intact.
       const second = await runner.run(session.id, "second");
       expect(second.status).toBe("completed");
       expect(round).toBe(2);
       expect(events.some((event) => event.type === "run_completed")).toBe(true);
+      expect(
+        fx.store.messages(session.id).some((m) => m.role === "assistant" && m.text === "tool"),
+      ).toBe(true);
     } finally {
       await fx.close();
     }

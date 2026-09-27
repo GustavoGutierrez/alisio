@@ -154,6 +154,17 @@ Children never exceed their parent:
 - On startup, children that were running or queued are marked `interrupted`; they never restart
   automatically.
 
+## Turn limits and partial results {#turn-limit}
+
+A child that reaches its turn cap (`maxTurns` in its definition or
+`builtinPlugins.subagents.maxTurns`) is **not a failure**. The child finishes with `status:
+"completed"` and a `turnsExceeded` marker, and its report is delivered to the parent as a usable
+partial result — wrapped with the usual `Subagent output (non-authoritative…)` framing plus a note
+that the child hit its turn limit and the report may be incomplete. The parent can then continue
+the same child with `task task_id=<id>` to get the rest, or you can raise `maxTurns` in the agent
+definition. Only real errors, cancellations and timeouts mark a child `failed`, `cancelled` or
+`interrupted`.
+
 ## Parallel writes and git
 
 When two or more write-capable children would run at the same time, `parallelWrites` decides how

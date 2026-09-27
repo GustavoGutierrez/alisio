@@ -880,3 +880,154 @@ describe("context-budget reduction after compaction", () => {
     }
   });
 });
+
+/**
+ * Turn-limit soft completion: reaching `maxTurns` ends the run successfully-but-marked
+ * (`turns-exceeded`) instead of the historical fatal throw. Everything produced up to that
+ * point stays in the transcript, no `run_failed` is emitted, and the next run in the same
+ * session continues where the capped run left off. The token budget and timeout remain the
+ * hard stops — the turn count is a safety rail, mirroring Claude Code / OpenCode.
+ */
+describe("turn-limit soft completion", () => {
+  it("returns turns-exceeded with partial text instead of throwing past the cap", async () => {
+    const fx = await fixture();
+    try {
+      let round = 0;
+      let finish = false;
+      const provider = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          round++;
+          if (finish) yield { type: "completed", message: completed("final answer") };
+          else
+            yield {
+              type: "completed",
+              message: completed(`step ${round}`, [
+                { id: `c${round}`, name: "hello", arguments: "{}" },
+              ]),
+            };
+        },
+      };
+      const session = fx.store.create(fx.root, "test", "test");
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: provider as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxTurns: 20,
+        onEvent,
+      });
+      const result = await runner.run(session.id, "audit");
+      expect(round).toBe(20);
+      expect(result.status).toBe("turns-exceeded");
+      expect(result.text).toBe("step 20");
+      expect(result.usage).toMatchObject({ input: 0, output: 0 });
+      const turnsEvent = events.find((e) => e.type === "run_turns_exceeded");
+      expect(turnsEvent?.data).toEqual({ turns: 20, maxTurns: 20 });
+      // No fatal path: run_failed is never emitted and the transcript is intact.
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+      expect(events.some((e) => e.type === "run_completed")).toBe(false);
+      const stored = fx.store.messages(session.id);
+      const assistants = stored.filter((m) => m.role === "assistant");
+      expect(assistants).toHaveLength(20);
+      const calls = assistants.flatMap((m) =>
+        m.role === "assistant" ? m.calls.map((c) => c.id) : [],
+      );
+      expect(calls).toHaveLength(20);
+      const done = new Set(stored.filter((m) => m.role === "tool").map((m) => m.callId));
+      for (const id of calls) expect(done.has(id)).toBe(true);
+      // The next run in the SAME session continues where the capped run left off.
+      finish = true;
+      const again = await runner.run(session.id, "continue");
+      expect(again.status).toBe("completed");
+      expect(again.text).toBe("final answer");
+      expect(round).toBe(21);
+      expect(events.some((e) => e.type === "run_turns_exceeded")).toBe(true); // only the first run
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("runs 25 tool turns under the default 100-turn cap and completes", async () => {
+    // The default maxTurns is 100, not 20: a 25-turn read-heavy tool loop completes instead of
+    // dying at the old cap.
+    const fx = await fixture();
+    try {
+      let round = 0;
+      const provider = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          round++;
+          if (round < 25)
+            yield {
+              type: "completed",
+              message: completed(`step ${round}`, [
+                { id: `c${round}`, name: "hello", arguments: "{}" },
+              ]),
+            };
+          else yield { type: "completed", message: completed("audit done") };
+        },
+      };
+      const session = fx.store.create(fx.root, "test", "test");
+      const { events, onEvent } = recorder();
+      const runner = new AgentRunner({
+        provider: provider as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        onEvent,
+      });
+      const result = await runner.run(session.id, "audit everything");
+      expect(result.status).toBe("completed");
+      expect(round).toBe(25);
+      expect(result.text).toBe("audit done");
+      expect(events.some((e) => e.type === "run_turns_exceeded")).toBe(false);
+      expect(events.some((e) => e.type === "run_failed")).toBe(false);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("lets a per-run maxTurns override beat the runner-level cap", async () => {
+    const fx = await fixture();
+    try {
+      let round = 0;
+      const provider = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          round++;
+          yield {
+            type: "completed",
+            message: completed(`step ${round}`, [
+              { id: `c${round}`, name: "hello", arguments: "{}" },
+            ]),
+          };
+        },
+      };
+      const session = fx.store.create(fx.root, "test", "test");
+      const runner = new AgentRunner({
+        provider: provider as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        maxTurns: 100,
+      });
+      const result = await runner.run(session.id, "audit", undefined, { maxTurns: 2 });
+      expect(result.status).toBe("turns-exceeded");
+      expect(round).toBe(2);
+      expect(result.text).toBe("step 2");
+    } finally {
+      await fx.close();
+    }
+  });
+});

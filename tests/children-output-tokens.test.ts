@@ -139,3 +139,110 @@ describe("child sessions forward maxOutputTokens", () => {
     }
   });
 });
+
+describe("child turn-limit soft completion", () => {
+  it("marks a turn-capped child as completed with a turnsExceeded partial result, not failed", async () => {
+    const fx = await fixture();
+    try {
+      let round = 0;
+      const looping = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          round++;
+          yield {
+            type: "completed",
+            message: {
+              role: "assistant",
+              text: `step ${round}`,
+              calls: [{ id: `c${round}`, name: "hello", arguments: "{}" }],
+            },
+          };
+        },
+      };
+      const r = new AgentRunner({
+        provider: looping as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+      });
+      const parent = fx.store.create(fx.root, "test", "test");
+      const child = children(fx, r).spawn({
+        parentId: parent.id,
+        title: "deep audit",
+        agent: "explore",
+        maxTurns: 2,
+      });
+      const result = await children(fx, r).run(child.id, "audit everything");
+      expect(round).toBe(2);
+      // The child exhausted its turn cap: usable partial output, NOT a failure.
+      expect(result.status).toBe("completed");
+      expect(result.turnsExceeded).toBe(true);
+      expect(result.text).toBe("step 2");
+      expect(result.error).toBeUndefined();
+      expect(fx.store.get(child.id).status).toBe("completed");
+      // The capped transcript is intact: a continuation run in the same child session completes.
+      const continuing = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          yield {
+            type: "completed",
+            message: { role: "assistant", text: "report", calls: [] },
+          };
+        },
+      };
+      const r2 = new AgentRunner({
+        provider: continuing as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+      });
+      const again = await children(fx, r2).run(child.id, "continue");
+      expect(again.status).toBe("completed");
+      expect(again.turnsExceeded).toBeUndefined();
+      expect(again.text).toBe("report");
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("still marks a child failed on a real runner error", async () => {
+    const fx = await fixture();
+    try {
+      // The provider never completes a response: the runner throws, so the child must FAIL.
+      const broken = {
+        id: "test",
+        model: "test",
+        async *stream() {
+          yield { type: "text_delta", delta: "hello" };
+        },
+      };
+      const r = new AgentRunner({
+        provider: broken as any,
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+      });
+      const parent = fx.store.create(fx.root, "test", "test");
+      const child = children(fx, r).spawn({
+        parentId: parent.id,
+        title: "broken child",
+        agent: "general",
+      });
+      const result = await children(fx, r).run(child.id, "work");
+      expect(result.status).toBe("failed");
+      expect(result.turnsExceeded).toBeUndefined();
+      expect(result.error).toContain("Provider stream ended without a completed response");
+      expect(fx.store.get(child.id).status).toBe("failed");
+    } finally {
+      await fx.close();
+    }
+  });
+});

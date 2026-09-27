@@ -486,7 +486,8 @@ export class AgentRunner {
       const budget =
         options.maxTokens ?? o.maxTokens ?? defaultTokenBudget(o.contextWindow?.(model));
       const compaction = o.compaction ?? {};
-      for (let turn = 0; turn < (options.maxTurns ?? o.maxTurns ?? 20); turn++) {
+      const maxTurns = options.maxTurns ?? o.maxTurns ?? 100;
+      for (let turn = 0; turn < maxTurns; turn++) {
         combined.throwIfAborted();
         // Input queued while the run was working (e.g. a parent's message to a child).
         if (turn > 0)
@@ -751,7 +752,12 @@ export class AgentRunner {
         }
         if (tokens >= budget) throw new Error("Token budget exhausted");
       }
-      throw new Error("Maximum turns reached");
+      // Turn cap reached. This is NOT a failure: everything produced up to this point stays in
+      // the transcript and the run returns a successful-but-marked partial result, so the user
+      // can simply prompt again to continue in the same session. The real hard stops remain the
+      // token budget (`maxTokens`) and the timeout; the turn count is a safety rail.
+      emit("run_turns_exceeded", { turns: maxTurns, maxTurns });
+      return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
     } catch (error) {
       // On cancellation report the abort reason, not the transport's secondary error.
       const cause = combined.aborted ? (combined.reason ?? error) : error;

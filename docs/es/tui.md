@@ -48,7 +48,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 
 | Zona | Contenido |
 | --- | --- |
-| Cabecera | Versión, modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
+| Cabecera | **Alisio Code** y la versión del paquete en ejecución (el mismo valor que imprime `--version`), modelo, host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown (títulos, negritas, listas, código en línea y en bloque, enlaces). El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos |
 | Barra de estado | Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
@@ -148,7 +148,7 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Tope de bytes de AGENTS.md (`context.maxBytes`) | 4 KiB – 1 MiB en pasos de 4 KiB | `32768` | siguiente turno |
 | Proveedor de búsqueda web (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | sin definir (cadena de respaldo) | siguiente llamada de búsqueda |
 | Recordar consentimiento MCP (`mcp.allow`) | `true` / `false` | `false` | inmediato |
-| Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | siguiente ejecución |
+| Máximo de turnos (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `100` | siguiente ejecución |
 | Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | siguiente ejecución |
 | Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k / 800k | `800000` | siguiente ejecución |
 | Tiempo de espera de ejecución (`limits.timeoutMs`) | 30 s – 600 s en pasos de 30 s (se persiste en ms) | `300000 ms` (5 min) | siguiente ejecución |
@@ -373,6 +373,20 @@ muestra con el marcador `partial` y apunta a `compaction.maxOutputTokens` (véas
 máquina: `alisio run --json` nunca imprime el texto del aviso y solo lleva el estado en los datos
 del evento — `run_completed` incluye `"truncated": true` cuando la respuesta final se cortó, y
 `compaction_completed` incluye `"partial": true` para un resumen cortado.
+
+## Límite de turnos {#turn-limit}
+
+`limits.maxTurns` es un **carril de seguridad, no un tope duro** (los topes duros reales son el
+presupuesto de tokens y el tiempo de espera de ejecución). Cuando una ejecución alcanza el tope de
+turnos, Alisio conserva todo lo producido hasta ese momento y termina la ejecución **suavemente**:
+la TUI añade un aviso amable —
+`Turn limit reached — the answer may be incomplete. Continue with another prompt or raise
+limits.maxTurns (/settings → Max turns).` — en lugar de un bloque de error, y usted puede
+simplemente escribir `continue` para seguir en la misma sesión (el transcript queda intacto). Los
+consumidores sin interfaz ven el evento `run_turns_exceeded` con el tope en sus datos, y el
+resultado de la ejecución trae `"status": "turns-exceeded"` con el texto parcial. Los subagentes
+que alcanzan su tope devuelven su informe parcial como salida utilizable con un marcador
+`turnsExceeded`, nunca como un fallo (véase [Subagentes](/es/subagents#turn-limit)).
 
 ## Aprobaciones interactivas {#interactive-approvals}
 

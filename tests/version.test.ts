@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -38,11 +38,41 @@ describe("package version loading", () => {
     expect(loadCoreVersion(fromHere)).toBe("7.6.5-manifest");
   });
 
-  it("returns dev when neither the injection nor the manifest is available", () => {
+  it("walks up to a manifest several levels above a nested module (TUI depth)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-version-nested-"));
+    // A module at <root>/src/tui/app.ts must still resolve <root>/package.json, two levels up —
+    // the depth of packages/cli/src/tui/app.ts in the real tree (the regression that made the
+    // TUI header show "vdev" when the single-level lookup missed).
+    await writeJson(join(root, "package.json"), { version: "6.4.2-nested" });
+    const fromHere = pathToFileURL(join(root, "src", "tui", "app.ts")).href;
+    expect(loadCliVersion(fromHere)).toBe("6.4.2-nested");
+    expect(loadCoreVersion(fromHere)).toBe("6.4.2-nested");
+  });
+
+  it("prefers the CLI manifest name when several manifests are hit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-version-monorepo-"));
+    // Monorepo shape: a versioned repo-root manifest plus a real CLI package manifest deeper in
+    // the tree. The CLI loader must return the @alisio/alisio-code manifest, not the root one.
+    await writeJson(join(root, "package.json"), { name: "alisio-monorepo", version: "1.1.1-mono" });
+    await mkdir(join(root, "packages", "cli"), { recursive: true });
+    await writeJson(join(root, "packages", "cli", "package.json"), {
+      name: "@alisio/alisio-code",
+      version: "7.7.7-cli",
+    });
+    const fromHere = pathToFileURL(join(root, "packages", "cli", "src", "tui", "app.ts")).href;
+    expect(loadCliVersion(fromHere)).toBe("7.7.7-cli");
+  });
+
+  it("returns dev when no manifest is reachable within the walk bound", async () => {
     vi.stubEnv("ALISIO_PACKAGE_VERSION", "");
-    const missing = pathToFileURL(
-      join(tmpdir(), "alisio-version-missing", "src", "loader.ts"),
-    ).href;
+    const root = await mkdtemp(join(tmpdir(), "alisio-version-bound-"));
+    // A versioned manifest exists at <root>, but the module is 9 directories deep: the loader
+    // walks the module dir plus 8 parents and never reaches <root>, so every loader falls back.
+    // The deep path also keeps the walk inside the temp subtree (it never scans shared dirs).
+    await writeJson(join(root, "package.json"), { version: "9.9.9-out-of-reach" });
+    let deep = root;
+    for (let depth = 0; depth < 9; depth++) deep = join(deep, `d${depth}`);
+    const missing = pathToFileURL(join(deep, "loader.ts")).href;
     for (const load of [
       loadCliVersion,
       loadCoreVersion,

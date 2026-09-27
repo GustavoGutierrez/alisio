@@ -14,7 +14,7 @@ Fuentes:
 | --- | --- |
 | CLI lista para recibir entrada | idle |
 | run_started | working |
-| run_completed / run_cancelled | idle |
+| run_completed / run_cancelled / run_turns_exceeded | idle |
 | run_failed | blocked, con mensaje breve |
 | Cierre | pane release-agent |
 

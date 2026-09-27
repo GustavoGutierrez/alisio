@@ -90,7 +90,7 @@ defined the value.
     "tokenParameter": "max_tokens",
     "streamUsage": false
   },
-  "limits": { "maxTurns": 20, "timeoutMs": 300000 },
+  "limits": { "maxTurns": 100, "timeoutMs": 300000 },
   "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
@@ -127,7 +127,7 @@ legacy configuration is used instead of an active `/connect` profile.
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `maxTurns` | `20` | Model turns per run (1–100). Each turn is one model response; a run that only calls tools many times can exhaust this |
+| `maxTurns` | `100` | Model turns per run (1–100). Each turn is one model response; a run that only calls tools many times can exhaust this. The limit is a **safety rail, not a hard stop**: when it is reached the run ends *softly* — everything produced so far stays in the transcript, the run is reported as `turns-exceeded` (partial result, no failure) and you can simply prompt again to continue in the same session. The real hard stops are the token budget (`maxTokens`) and the run timeout. Raise it for long read-heavy audits |
 | `timeoutMs` | `300000` | Run timeout in milliseconds (minimum 100); includes approval waits |
 | `maxContextChars` | `800000` | Context length limit in characters. The default (800k chars ≈ 200k tokens) is an **assumption for unknown model windows** — the same ~200k-token budget OpenCode assumes for custom providers — so local servers that do not report a window (e.g. llama.cpp) get ~200k tokens instead of ~40k. Acts as the **fallback auto-compaction trigger** when the model window is unknown (or absurdly large, see [compaction](/configuration#compaction)) — estimated tokens (`~chars/4`) reaching `maxContextChars / 4` — and as the **hard limit** that must fit after a compaction. A **known** window overrides the fallback, and `/settings` → Context char budget can lower it at any time |
 | `maxOutputTokens` | `16384` | Output tokens per request. When a model hits this budget mid-answer, Alisio keeps the text produced so far, warns that the response was cut (`response cut by max output tokens`), completes the run normally and flags the completion as `truncated` in `run_completed`. Tool calls that were fully written still execute. Raise this budget for longer answers; reasoning models can spend most of it on reasoning before any text, so don't set it too low. Editable from `/settings` → Agent max output tokens |

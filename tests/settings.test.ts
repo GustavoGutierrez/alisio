@@ -142,6 +142,14 @@ describe("filtering", () => {
   });
 });
 
+it("defaults max turns to 100 and keeps 100 a bounded candidate", () => {
+  const row = rows().find((r) => r.id === "limits.maxTurns") as SettingRow;
+  expect(row.current).toBe(100);
+  expect(row.values?.at(-1)).toBe(100);
+  // 101 is not an option: cycling moves a hand-edited value to a candidate (wraps to 5).
+  expect(cycleSettingValue(row, 101)).toBe(5);
+});
+
 describe("value display and cycling", () => {
   it("formats booleans, percents and numbers for the value column", () => {
     const byId = (id: string) => rows().find((row) => row.id === id) as SettingRow;

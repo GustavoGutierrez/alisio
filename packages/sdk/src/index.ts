@@ -399,6 +399,8 @@ export interface ChildRunResult {
   text: string;
   usage: { input: number; output: number };
   error?: string;
+  /** True when the child hit its turn limit: `text` is a usable partial result, not an error. */
+  turnsExceeded?: boolean;
 }
 /** Generic tree node contributed to an interactive panel (e.g. running agents). */
 export interface PanelNode {

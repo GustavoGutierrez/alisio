@@ -687,6 +687,21 @@ describe("event reduction", () => {
     expect(s.items.at(-1)).toMatchObject({ kind: "notice" });
   });
 
+  it("shows a gentle notice, not an error block, when the turn limit is reached", () => {
+    let s = initialViewState("m1");
+    s = reduceEvent(s, ev("run_started", { model: "m1" }));
+    s = reduceEvent(
+      s,
+      ev("run_turns_exceeded", { turns: 20, maxTurns: 20 }, "2026-01-01T00:00:05.000Z"),
+    );
+    expect(s.streaming).toBe(false);
+    const item = s.items.at(-1);
+    expect(item?.kind).toBe("notice");
+    expect(item && "text" in item ? item.text : "").toContain("may be incomplete");
+    expect(item && "text" in item ? item.text : "").toContain("limits.maxTurns");
+    expect(s.items.some((i) => i.kind === "error")).toBe(false);
+  });
+
   it("shows plugin compaction reports, hook failures and injected context generically", () => {
     let s = initialViewState("m1");
     s = reduceEvent(

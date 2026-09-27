@@ -221,6 +221,11 @@ interfaces y las aprobaciones), `instructions?`, `tools?: { allow?, deny? }` (`*
 herramientas del padre), `model?`, `readOnly?`, `permission?: { write?, process? }` (`allow`, `ask`
 o `deny`), `workspace?` (por ejemplo, un worktree de git), `maxTurns?`, `timeoutMs?` y `maxTokens?`.
 
+`sessions.run` resuelve con `{ id, status, text, usage, error? }`. Un hijo que agota su tope de
+turnos NO es un fallo: resuelve con `status: "completed"` y `turnsExceeded: true`, y `text` contiene
+un informe parcial utilizable (solo los errores reales, las cancelaciones y los tiempos de espera
+producen un estado de fallo).
+
 ```ts
 api.tools.register({
   name: "second_opinion",

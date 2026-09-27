@@ -156,7 +156,7 @@ const configObjectSchema = z
       .default(() => ({ nativeToolType: "web_search" })),
     limits: z
       .object({
-        maxTurns: z.number().int().min(1).max(100).default(20),
+        maxTurns: z.number().int().min(1).max(100).default(100),
         timeoutMs: z.number().int().min(100).default(300000),
         maxContextChars: z.number().int().positive().default(800000),
         /**
@@ -168,7 +168,7 @@ const configObjectSchema = z
         maxTokens: z.number().int().positive().optional(),
       })
       .default(() => ({
-        maxTurns: 20,
+        maxTurns: 100,
         timeoutMs: 300000,
         maxContextChars: 800000,
         maxOutputTokens: 16384,

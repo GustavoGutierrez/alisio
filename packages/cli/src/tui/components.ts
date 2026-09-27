@@ -85,7 +85,7 @@ export class Header implements Component {
       v = this.view();
     const line1 = line(
       [
-        { text: "◆ alisio", priority: 8, paint: (t) => style.bold(style.brightCyan(t)) },
+        { text: "◆ Alisio Code", priority: 8, paint: (t) => style.bold(style.brightCyan(t)) },
         { text: `v${i.version}`, priority: 1, paint: style.gray },
         {
           text: v.model || "not connected",

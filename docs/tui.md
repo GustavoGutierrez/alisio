@@ -46,7 +46,7 @@ The screen reflows when the terminal is resized, and every line is truncated or 
 
 | Area | Content |
 | --- | --- |
-| Header | Version, model, provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
+| Header | **Alisio Code** and the running package version (the same value `--version` prints), model, provider host (never the key or path), API mode, shortened working directory, short session ID, the git branch of the working directory when it is inside a git repository (`⎇ main`, or the commit SHA on a detached HEAD) and colored permissions (`write`/`process`: `on`, `ask` or `off`; `mcp:on` when the effective runtime permission is granted, `mcp:off` otherwise; `read-only`) |
 | Conversation | Highlighted user messages; streamed assistant answers rendered as Markdown (headings, bold, lists, inline and block code, links). Visible reasoning sent by the provider (for example DeepSeek `reasoning_content`) is shown dimmed while it arrives, then collapsed to one line; it is never persisted or sent back |
 | Tool blocks | One block per call: name, summarized argument (path, command, pattern), spinner while running, ✓/✗ status, duration and a truncated preview. `edit_file`/`write_file` show a `+`/`-` diff computed from the arguments |
 | Status bar | Context used versus the **effective budget**, `used / total (pct%)`, with a green/yellow/red bar that turns red exactly where auto-compaction triggers; accumulated input/output tokens and cached tokens (`⚡`) when reported; turns; current turn duration; state; plugin status (for example `mem N`) |
@@ -144,7 +144,7 @@ hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on 
 | AGENTS.md max bytes (`context.maxBytes`) | 4 KiB – 1 MiB in 4 KiB steps | `32768` | next turn |
 | Web search provider (`websearch.provider`) | `searxng` / `duckduckgo-instant` / `tavily` / `brave` / `serpapi` / `native` | unset (fallback chain) | next search call |
 | Remember MCP consent (`mcp.allow`) | `true` / `false` | `false` | immediately |
-| Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `20` | next run |
+| Max turns (`limits.maxTurns`) | 5 / 10 / 15 / 20 / 30 / 50 / 100 | `100` | next run |
 | Agent max output tokens (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | next run |
 | Context char budget (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k / 800k | `800000` | next run |
 | Run timeout (`limits.timeoutMs`) | 30 s – 600 s in 30 s steps (persisted as ms) | `300000 ms` (5 min) | next run |
@@ -354,6 +354,19 @@ with a `partial` marker and points at `compaction.maxOutputTokens` (see
 never prints the notice text and carries the state only in event data — `run_completed` includes
 `"truncated": true` when the final answer was cut, and `compaction_completed` includes
 `"partial": true` for a cut summary.
+
+## Turn limit {#turn-limit}
+
+`limits.maxTurns` is a **safety rail, not a hard stop** (the real hard stops are the token budget
+and the run timeout). When a run reaches the turn cap, Alisio keeps everything produced so far and
+ends the run **softly**: the TUI adds a gentle notice —
+`Turn limit reached — the answer may be incomplete. Continue with another prompt or raise
+limits.maxTurns (/settings → Max turns).` — instead of an error block, and you can simply type
+`continue` to keep going in the same session (the transcript is intact). Headless consumers see the
+`run_turns_exceeded` event with the cap in its data, and the run result carries
+`"status": "turns-exceeded"` with the partial text. Subagents that hit their cap return their
+partial report as usable output with a `turnsExceeded` marker, never as a failure (see
+[Subagents](/subagents#turn-limit)).
 
 ## Interactive approvals
 

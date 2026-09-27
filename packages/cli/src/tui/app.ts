@@ -425,7 +425,15 @@ export async function runTui(options: TuiOptions): Promise<void> {
       tui.requestRender();
       return;
     }
-    if (["run_completed", "run_failed", "run_cancelled", "compaction_failed"].includes(event.type))
+    if (
+      [
+        "run_completed",
+        "run_failed",
+        "run_cancelled",
+        "run_turns_exceeded",
+        "compaction_failed",
+      ].includes(event.type)
+    )
       terminalEvent = true;
     view = reduceEvent(view, event);
     sync();

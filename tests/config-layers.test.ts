@@ -458,7 +458,7 @@ describe("token budgets in configuration", () => {
     const parsed = configSchema.parse({});
     expect(parsed.compaction.maxOutputTokens).toBe(16_000);
     expect(parsed.limits.maxOutputTokens).toBe(16_384);
-    expect(parsed.limits.maxTurns).toBe(20);
+    expect(parsed.limits.maxTurns).toBe(100);
   });
 
   it("accepts explicit values and rejects non-positive budgets", () => {
@@ -470,5 +470,8 @@ describe("token budgets in configuration", () => {
     expect(parsed.limits.maxOutputTokens).toBe(8192);
     expect(parsed.limits.maxTurns).toBe(10);
     expect(() => configSchema.parse({ compaction: { maxOutputTokens: 0 } })).toThrow();
+    // The turn cap stays bounded: 0 is rejected and unset resolves to the default — never unlimited.
+    expect(() => configSchema.parse({ limits: { maxTurns: 0 } })).toThrow();
+    expect(configSchema.parse({}).limits.maxTurns).toBe(100);
   });
 });

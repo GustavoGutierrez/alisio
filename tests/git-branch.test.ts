@@ -271,3 +271,28 @@ describe("Header branch segment", () => {
     }
   });
 });
+
+describe("Header identity", () => {
+  const line1 = (info: HeaderInfo, width = 90) =>
+    new Header(
+      () => info,
+      () => initialViewState("m1"),
+    ).render(width)[0] ?? "";
+
+  it("renders the product name and the real running version", () => {
+    withUnicodeLocale(() => {
+      const rendered = line1(baseInfo({ version: "0.1.0-alpha.12" }));
+      expect(rendered).toContain("◆ Alisio Code");
+      expect(rendered).toContain("v0.1.0-alpha.12");
+      expect(rendered).not.toContain("vdev");
+    });
+  });
+
+  it("falls back to the dev marker when the version input says so", () => {
+    withUnicodeLocale(() => {
+      const rendered = line1(baseInfo({ version: "dev" }));
+      expect(rendered).toContain("◆ Alisio Code");
+      expect(rendered).toContain("vdev");
+    });
+  });
+});
