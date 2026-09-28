@@ -41,7 +41,7 @@ trust.
 | `version` | SemVer, for example `0.1.0` or `0.1.0-beta.1` |
 | `apiVersion` | Always `1` |
 | `name`, `description` | Optional human-friendly catalog text used by `/plugins` |
-| `categories` | Optional capabilities such as `model-provider`; the host also derives this category from provider registrations |
+| `categories` | Optional catalog capabilities: `model-provider` or `methodology-harness`. The host also derives `model-provider` from provider registrations |
 | `setup(api)` | Registers everything; may be async. If it fails, partial registrations are rolled back |
 | `extensions` | Optional; declarative providers for [extension points](#extension-points), registered at priority 0 |
 | `dispose()` | Optional; releases resources when Alisio closes |

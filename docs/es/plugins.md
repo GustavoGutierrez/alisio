@@ -41,7 +41,7 @@ código en el que confíe.
 | `version` | SemVer, por ejemplo `0.1.0` o `0.1.0-beta.1` |
 | `apiVersion` | Siempre `1` |
 | `name`, `description` | Texto opcional y legible para el catálogo de `/plugins` |
-| `categories` | Capacidades opcionales como `model-provider`; el host también deriva esta categoría de los registros de proveedores |
+| `categories` | Capacidades de catálogo opcionales: `model-provider` o `methodology-harness`. El host también deriva `model-provider` de los registros de proveedores |
 | `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
 | `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
 | `dispose()` | Opcional; libera recursos cuando Alisio se cierra |

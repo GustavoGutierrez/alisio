@@ -321,14 +321,22 @@ export interface MascotProvider {
   id: string;
   render(ctx: MascotContext): string | string[];
 }
-export type PluginCategory = "model-provider";
+/**
+ * Catalog grouping a plugin declares or the host derives from its registrations. Accepted
+ * values: `"model-provider"` (registers model providers) and `"methodology-harness"` (bundles a
+ * development-methodology workflow).
+ */
+export type PluginCategory = "model-provider" | "methodology-harness";
 export interface PluginMetadata {
   id: string;
   version: string;
   builtin: boolean;
   name?: string;
   description?: string;
-  /** Categories are derived by the host from registrations made by this plugin. */
+  /**
+   * Categories declared by the plugin or derived by the host from its registrations
+   * (`"model-provider"`, `"methodology-harness"`).
+   */
   categories?: PluginCategory[];
 }
 export interface StartupFact {
@@ -604,6 +612,7 @@ export interface Plugin {
   /** Provider-neutral catalog metadata. Hosts may derive additional categories from registrations. */
   name?: string;
   description?: string;
+  /** Accepted values: `"model-provider"` and `"methodology-harness"` (see `PluginCategory`). */
   categories?: PluginCategory[];
   /** Declarative sugar for `api.extensions.register(point, provider)` at priority 0. */
   extensions?: { [K in keyof ExtensionPoints]?: ExtensionPoints[K] };

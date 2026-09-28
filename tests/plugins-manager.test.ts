@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { definePlugin } from "@alisio/sdk";
+import { definePlugin, type Plugin } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type BuiltinPlugin,
@@ -307,5 +307,76 @@ describe("project plugin manager", () => {
     expect(host.commands.size).toBe(0);
     expect(host.status.size).toBe(0);
     expect(tools.list()).toEqual([]);
+  });
+});
+
+describe("plugin category validation", () => {
+  const categoryHost = () =>
+    new PluginHost(new ToolRegistry(), state(), {}, new ProviderRegistry());
+
+  const categoryPlugin = (
+    id: string,
+    categories: Plugin["categories"],
+    setup: Plugin["setup"] = () => {},
+  ): Plugin => ({ id, version: "1.0.0", apiVersion: 1, categories, setup });
+
+  it("activates a plugin that declares the methodology-harness category", async () => {
+    const host = categoryHost();
+    await host.activate(categoryPlugin("methodology", ["methodology-harness"]), ".");
+    expect(host.metadata()).toEqual([
+      {
+        id: "methodology",
+        version: "1.0.0",
+        builtin: false,
+        categories: ["methodology-harness"],
+      },
+    ]);
+  });
+
+  it("activates a plugin that declares both accepted categories", async () => {
+    const host = categoryHost();
+    await host.activate(categoryPlugin("both", ["methodology-harness", "model-provider"]), ".");
+    expect(host.metadata()).toContainEqual(
+      expect.objectContaining({
+        id: "both",
+        categories: ["methodology-harness", "model-provider"],
+      }),
+    );
+  });
+
+  it("rejects an unknown category instead of accepting free-form strings", async () => {
+    const host = categoryHost();
+    const invalid = {
+      id: "unknown-category",
+      version: "1.0.0",
+      apiVersion: 1,
+      categories: ["not-a-category"],
+      setup() {},
+    } as unknown as Plugin;
+    await expect(host.activate(invalid, ".")).rejects.toThrow();
+    expect(host.metadata()).toEqual([]);
+  });
+
+  it("keeps deriving model-provider from provider registrations", async () => {
+    const host = categoryHost();
+    await host.activate(
+      categoryPlugin("provider", ["methodology-harness"], (api) => {
+        api.providers.register({
+          id: "provider",
+          name: "Provider",
+          fields: [],
+          create: () => ({ id: "provider", model: "m", async *stream() {} }),
+        });
+      }),
+      ".",
+    );
+    expect(host.metadata()).toEqual([
+      {
+        id: "provider",
+        version: "1.0.0",
+        builtin: false,
+        categories: ["methodology-harness", "model-provider"],
+      },
+    ]);
   });
 });
