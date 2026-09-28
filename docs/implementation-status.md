@@ -1,4 +1,4 @@
-# Estado de implementación — 0.1.0-alpha.1
+# Estado de implementación — `__ALISIO_VERSION__`
 
 La especificación original es la dirección del producto, no una declaración de que todos
 sus criterios de release estén superados. Esta entrega inicia el proyecto con una alpha

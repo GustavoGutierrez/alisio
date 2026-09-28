@@ -5,7 +5,7 @@ This page is an English translation of the limitations and pending work recorded
 That Spanish file in the repository is the source of truth; the
 [Spanish version of this page](/es/limitations) includes it verbatim.
 
-Alisio `0.1.0-alpha.1` is a functional alpha. The original specification sets the product direction;
+Alisio `__ALISIO_VERSION__` is a functional alpha. The original specification sets the product direction;
 it is not a statement that all of its release criteria are met.
 
 ## Pending to stabilize v0.1

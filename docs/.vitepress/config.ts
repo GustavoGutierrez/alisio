@@ -1,4 +1,5 @@
 import { type DefaultTheme, defineConfig } from "vitepress";
+import { substituteTokens } from "./version";
 
 const repo = "https://github.com/GustavoGutierrez/alisio";
 
@@ -98,6 +99,18 @@ export default defineConfig({
   lastUpdated: true,
   head: [["link", { rel: "icon", href: "/alisio/assets/favicon.png" }]],
   sitemap: { hostname: "https://gustavogutierrez.github.io/alisio/" },
+  markdown: {
+    config(md) {
+      // Replace the `__ALISIO_VERSION__` token with the current CLI version at build time so
+      // docs never hardcode a version that goes stale (see docs/.vitepress/version.ts). The
+      // rule runs before inline parsing, so heading slugs, header anchors and the TOC all pick
+      // up the substituted version. It also applies to content pulled in via `@include`
+      // (VitePress inlines it before markdown-it runs).
+      md.core.ruler.before("inline", "alisio-version-substitution", (state) => {
+        substituteTokens(state.tokens);
+      });
+    },
+  },
   srcExclude: [
     "specification.md",
     "herdr.md",

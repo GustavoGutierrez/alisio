@@ -604,14 +604,17 @@ alisio-plugin-hello/
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@alisio/sdk": "^0.1.0-alpha.1"
+    "@alisio/sdk": "^0.1.0-alpha.16"
   },
   "devDependencies": {
-    "@alisio/sdk": "^0.1.0-alpha.1",
+    "@alisio/sdk": "^0.1.0-alpha.16",
     "typescript": "^5.9.0"
   }
 }
 ```
+
+Use the latest published `@alisio/sdk` version when you scaffold your own plugin — check
+`npm view @alisio/sdk version` for the current one.
 
 `tsconfig.json`:
 
