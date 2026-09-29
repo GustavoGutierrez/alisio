@@ -32,7 +32,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
     { text: labels.groupExtend ?? "Extend", items: ["plugins", "architecture"].map(item) },
     {
       text: labels.groupProject ?? "Project",
-      items: ["about", "publishing", "limitations", "contributing"].map(item),
+      items: ["about", "style-guide", "publishing", "limitations", "contributing"].map(item),
     },
   ];
 }
@@ -60,6 +60,7 @@ const en = {
   herdr: "Herdr",
   publishing: "Publishing",
   about: "About",
+  "style-guide": "Style guide",
   limitations: "Known limitations",
   contributing: "Contributing",
 };
@@ -87,6 +88,7 @@ const es = {
   herdr: "Herdr",
   publishing: "Publicación",
   about: "Acerca de",
+  "style-guide": "Guía de estilo",
   limitations: "Limitaciones conocidas",
   contributing: "Contribuir",
 };

@@ -46,6 +46,17 @@ Alisio is a coding-agent harness with its own TypeScript core. It connects to an
 endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
 headless for scripts and CI.
 
+<section data-component="video" aria-labelledby="alisio-cli-demo-heading">
+  <div data-component="video-copy">
+    <h2 id="alisio-cli-demo-heading">See the CLI in action</h2>
+    <p>A short look at Alisio running in the terminal, from a prompt to tool-assisted work.</p>
+  </div>
+  <video autoplay playsinline loop muted preload="auto" poster="/assets/alisio-cli-demo-poster.jpg">
+    <source src="/assets/alisio-cli-demo.mp4" type="video/mp4" />
+    Your browser does not support the Alisio CLI demonstration video.
+  </video>
+</section>
+
 It includes:
 
 - An interactive TUI and a headless CLI (`alisio run`, JSONL events, session resume).

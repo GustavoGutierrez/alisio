@@ -46,6 +46,17 @@ Alisio es un arnés de agentes de programación con núcleo propio en TypeScript
 endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en su terminal,
 como TUI interactiva o en modo headless para scripts y CI.
 
+<section data-component="video" aria-labelledby="alisio-cli-demo-heading">
+  <div data-component="video-copy">
+    <h2 id="alisio-cli-demo-heading">Vea la CLI en acción</h2>
+    <p>Un vistazo breve a Alisio trabajando en la terminal, desde un prompt hasta el uso de herramientas.</p>
+  </div>
+  <video autoplay playsinline loop muted preload="auto" poster="/assets/alisio-cli-demo-poster.jpg">
+    <source src="/assets/alisio-cli-demo.mp4" type="video/mp4" />
+    Su navegador no admite el video de demostración de la CLI de Alisio.
+  </video>
+</section>
+
 Incluye:
 
 - Una TUI interactiva y una CLI headless (`alisio run`, eventos JSONL, reanudación de sesiones).
