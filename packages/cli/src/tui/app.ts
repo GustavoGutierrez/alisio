@@ -88,6 +88,7 @@ import {
   formatTokens,
   hostOf,
   initialViewState,
+  isGroupHeader,
   itemsFromHistory,
   lastAssistantText,
   mcpServerItems,
@@ -102,43 +103,99 @@ import {
   richPartsOf,
   shortenPath,
   shortId,
+  skipGroupHeaders,
   slashCompletionCommands,
   summarizeToolArgs,
   type TranscriptItem,
   type ViewState,
   validateEffortLevel,
+  visibleGroupedItems,
 } from "./state.ts";
 import { editorTheme, selectListTheme, style } from "./theme.ts";
 
 const VERSION = loadVersion(import.meta.url);
 
-/** Inline selection list with type-to-filter, rendered above the editor. */
-class Picker implements Component {
-  private list: SelectList;
+/**
+ * Inline selection list with type-to-filter, rendered above the editor.
+ *
+ * Grouped item builders (pluginCatalogItems) interleave their output with non-selectable
+ * `__group:` header items. Headers stay in the SelectList so they render, scroll and truncate
+ * like rows, but selection is owned here: navigation jumps over headers via skipGroupHeaders
+ * (wrapping both directions), Enter never fires onSelect for a header, and the whole display
+ * sequence is re-derived on every filter keystroke so headers of fully-filtered groups vanish.
+ */
+export class Picker implements Component {
+  private list: SelectList = new SelectList([], 1, selectListTheme);
   private filter = "";
+  /** Full item sequence (group headers + rows) before any filtering. */
+  private readonly allItems: SelectItem[];
+  /** Display sequence: filtered rows plus the headers of groups that still match. */
+  private items: SelectItem[] = [];
+  /** Selection index within `items`; always a real row, never a group header. */
+  private index = 0;
+  /** Picker height target: counted on real rows only, so headers never stretch the list. */
+  private readonly maxVisible: number;
   constructor(
     private title: string,
     items: SelectItem[],
-    onSelect: (item: SelectItem) => void,
-    onCancel: () => void,
+    private readonly onSelectItem: (item: SelectItem) => void,
+    private readonly onCancelPick: () => void,
     private filterable = false,
     private detail?: string,
   ) {
-    this.list = new SelectList(items, Math.min(10, Math.max(1, items.length)), selectListTheme);
-    this.list.onSelect = onSelect;
-    this.list.onCancel = onCancel;
+    this.allItems = items;
+    this.maxVisible = Math.min(
+      10,
+      Math.max(1, items.filter((item) => !isGroupHeader(item)).length),
+    );
+    this.resetList();
+  }
+  /** Copies items, dimming group-header labels (style helpers stay plain under NO_COLOR). */
+  private static displayItems(items: SelectItem[]): SelectItem[] {
+    return items.map((item) =>
+      isGroupHeader(item) ? { ...item, label: style.gray(item.label) } : item,
+    );
+  }
+  /** (Re)builds the SelectList over the filtered display sequence; selection starts on a row. */
+  private resetList(): void {
+    this.items = Picker.displayItems(
+      this.filter ? visibleGroupedItems(this.allItems, this.filter) : this.allItems,
+    );
+    this.list = new SelectList(this.items, this.maxVisible, selectListTheme);
+    this.list.onSelect = (item) => {
+      if (!isGroupHeader(item)) this.onSelectItem(item);
+    };
+    this.list.onCancel = this.onCancelPick;
+    this.index = this.items.length ? skipGroupHeaders(this.items, -1, 1) : 0;
+    if (this.index < 0) this.index = 0;
+    this.list.setSelectedIndex(this.index);
   }
   invalidate(): void {
     this.list.invalidate();
   }
+  /** The currently selected item — always a real row, never a group header. */
+  getSelectedItem(): SelectItem | null {
+    return this.items[this.index] ?? null;
+  }
   handleInput(data: string): void {
     if (this.filterable && matchesKey(data, Key.backspace)) {
       this.filter = this.filter.slice(0, -1);
-      this.list.setFilter(this.filter);
+      this.resetList();
     } else if (this.filterable && data.length === 1 && data >= " " && data <= "~") {
       this.filter += data;
-      this.list.setFilter(this.filter);
-    } else this.list.handleInput(data);
+      this.resetList();
+    } else if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+      const dir = matchesKey(data, Key.down) ? 1 : -1;
+      this.index = this.items.length ? skipGroupHeaders(this.items, this.index, dir) : 0;
+      this.list.setSelectedIndex(this.index);
+    } else if (matchesKey(data, Key.enter)) {
+      const item = this.items[this.index];
+      if (item && !isGroupHeader(item)) this.onSelectItem(item);
+    } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) {
+      this.onCancelPick();
+    } else {
+      this.list.handleInput(data);
+    }
   }
   render(width: number): string[] {
     const hint = this.filterable

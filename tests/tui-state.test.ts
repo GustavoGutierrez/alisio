@@ -9,8 +9,10 @@ import {
   formatContext,
   formatDuration,
   formatTokens,
+  GROUP_HEADER_PREFIX,
   hostOf,
   initialViewState,
+  isGroupHeader,
   itemsFromHistory,
   lastAssistantText,
   mcpServerItems,
@@ -25,8 +27,10 @@ import {
   type SkillCompletionEntry,
   shortenPath,
   skillCompletions,
+  skipGroupHeaders,
   slashCompletionCommands,
   summarizeToolArgs,
+  visibleGroupedItems,
 } from "../packages/cli/src/tui/state.ts";
 import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
 import { createSubagentsPlugin } from "../packages/plugin-subagents/src/index.ts";
@@ -803,7 +807,7 @@ describe("event reduction", () => {
     expect(reservedCommandNames()).not.toContain("init");
   });
 
-  it("formats plugin navigation with non-color status, source markers and a General heading", () => {
+  it("formats plugin navigation with non-color status markers and a grouped General heading", () => {
     const builtin = {
       id: "memory",
       name: "Memory",
@@ -825,17 +829,18 @@ describe("event reduction", () => {
       enabled: false,
     };
     expect(pluginCatalogItems([builtin, external])).toEqual([
+      { value: "__group:General", label: "General ›" },
       expect.objectContaining({
-        label: "General · [x] Memory · built-in",
+        label: "  [x] Memory · built-in",
         description: expect.stringContaining("Persistent memory"),
       }),
-      expect.objectContaining({ label: "[ ] Acme · project package: @acme/plugin" }),
+      expect.objectContaining({ label: "  [ ] Acme · project package: @acme/plugin" }),
     ]);
     expect(pluginToggleNeedsConfirmation(builtin)).toBe(false);
     expect(pluginToggleNeedsConfirmation(external)).toBe(true);
   });
 
-  it("groups the real memory and subagents built-ins under their own categories", () => {
+  it("groups the real memory and subagents built-ins under their own headers", () => {
     // The real plugin definitions declare their categories, so the catalog must group them
     // under "memory" and "subagents" headings instead of the "General" fallback.
     const context = {
@@ -867,13 +872,20 @@ describe("event reduction", () => {
       view(createSubagentsPlugin({}, context)),
     ]);
     expect(items.map((item) => item.label)).toEqual([
-      "memory · [x] Memory · built-in",
-      "subagents · [x] Subagents · built-in",
+      "memory ›",
+      "  [x] Memory · built-in",
+      "subagents ›",
+      "  [x] Subagents · built-in",
     ]);
-    expect(items.map((item) => item.value)).toEqual(["memory", "subagents"]);
+    expect(items.map((item) => item.value)).toEqual([
+      "__group:memory",
+      "memory",
+      "__group:subagents",
+      "subagents",
+    ]);
   });
 
-  it("groups plugins by first category with a heading only on the group's first row", () => {
+  it("groups plugins by first category with a non-selectable header per group", () => {
     const base = {
       description: "Plugin",
       builtin: true,
@@ -889,15 +901,26 @@ describe("event reduction", () => {
       { ...base, id: "d", name: "Delta", categories: ["model-provider"] },
     ]);
     expect(items.map((item) => item.label)).toEqual([
-      "model-provider · [x] Alpha · built-in",
-      "[x] Delta · built-in",
-      "memory · [x] Beta · built-in",
-      "tools · [x] Gamma · built-in",
+      "model-provider ›",
+      "  [x] Alpha · built-in",
+      "  [x] Delta · built-in",
+      "memory ›",
+      "  [x] Beta · built-in",
+      "tools ›",
+      "  [x] Gamma · built-in",
     ]);
-    expect(items.map((item) => item.value)).toEqual(["a", "d", "b", "c"]);
+    expect(items.map((item) => item.value)).toEqual([
+      "__group:model-provider",
+      "a",
+      "d",
+      "__group:memory",
+      "b",
+      "__group:tools",
+      "c",
+    ]);
   });
 
-  it("falls back to General for empty categories and keeps the heading off subsequent rows", () => {
+  it("falls back to General for empty categories with the header emitted once", () => {
     const base = {
       description: "Plugin",
       categories: [] as string[],
@@ -913,11 +936,12 @@ describe("event reduction", () => {
       { ...base, id: "y", name: "Plugin Y" },
     ]);
     expect(items.map((item) => item.label)).toEqual([
-      "General · [ ] Memory · built-in",
-      "[ ] Plugin X · project",
-      "[ ] Plugin Y · project",
+      "General ›",
+      "  [ ] Memory · built-in",
+      "  [ ] Plugin X · project",
+      "  [ ] Plugin Y · project",
     ]);
-    expect(items.map((item) => item.value)).toEqual(["m", "x", "y"]);
+    expect(items.map((item) => item.value)).toEqual(["__group:General", "m", "x", "y"]);
   });
 
   it("preserves entry order within each group and keeps groups in first-seen order", () => {
@@ -936,11 +960,104 @@ describe("event reduction", () => {
       { ...base, id: "fourth", name: "Fourth", categories: ["memory"] },
     ]);
     expect(items.map((item) => item.label)).toEqual([
-      "memory · [x] Third · built-in",
-      "[x] Fourth · built-in",
-      "model-provider · [x] First · built-in",
-      "[x] Second · built-in",
+      "memory ›",
+      "  [x] Third · built-in",
+      "  [x] Fourth · built-in",
+      "model-provider ›",
+      "  [x] First · built-in",
+      "  [x] Second · built-in",
     ]);
-    expect(items.map((item) => item.value)).toEqual(["third", "fourth", "first", "second"]);
+    expect(items.map((item) => item.value)).toEqual([
+      "__group:memory",
+      "third",
+      "fourth",
+      "__group:model-provider",
+      "first",
+      "second",
+    ]);
+  });
+
+  it("recognizes group headers by their reserved prefix", () => {
+    const check: Array<{ value: string; label: string }> = [
+      { value: "__group:memory", label: "memory ›" },
+      { value: "__group:General", label: "General ›" },
+      { value: "memory", label: "  [x] Memory · built-in" },
+      { value: "model-provider", label: "  [x] Alpha · built-in" },
+    ];
+    expect(isGroupHeader(check[0]!)).toBe(true);
+    expect(isGroupHeader(check[1]!)).toBe(true);
+    expect(isGroupHeader(check[2]!)).toBe(false);
+    expect(isGroupHeader(check[3]!)).toBe(false);
+    expect(GROUP_HEADER_PREFIX).toBe("__group:");
+  });
+
+  it("skips group headers when navigating up/down, wrapping at the edges", () => {
+    const items: Array<{ value: string }> = [
+      { value: "__group:model-provider" },
+      { value: "a" },
+      { value: "d" },
+      { value: "__group:memory" },
+      { value: "b" },
+      { value: "__group:tools" },
+      { value: "c" },
+    ];
+    const down = skipGroupHeaders(items, -1, 1);
+    expect(down).toBe(1);
+    // Down steps row by row inside a group (headers only exist between groups).
+    expect(skipGroupHeaders(items, 1, 1)).toBe(2);
+    // Down from the last row of a group jumps the next group's header to its first row.
+    expect(skipGroupHeaders(items, 2, 1)).toBe(4);
+    expect(skipGroupHeaders(items, 4, 1)).toBe(6);
+    // Down from the last row wraps to the first row (never onto a header).
+    expect(skipGroupHeaders(items, 6, 1)).toBe(1);
+    // Up from the first row wraps to the last row, skipping every header on the way.
+    expect(skipGroupHeaders(items, 1, -1)).toBe(6);
+    // Up jumps the header above back to the previous group's last row.
+    expect(skipGroupHeaders(items, 4, -1)).toBe(2);
+    expect(skipGroupHeaders(items, 6, -1)).toBe(4);
+    // Empty lists never move; a header-free list behaves like a plain list.
+    expect(skipGroupHeaders([], 0, 1)).toBe(-1);
+    const plain = [{ value: "x" }, { value: "y" }];
+    expect(skipGroupHeaders(plain, 0, -1)).toBe(1);
+    expect(skipGroupHeaders(plain, 1, 1)).toBe(0);
+  });
+
+  it("keeps the header of a group with visible rows and drops headers of filtered-out groups", () => {
+    const items = [
+      { value: "__group:model-provider", label: "model-provider ›" },
+      { value: "deepseek", label: "  [x] DeepSeek" },
+      { value: "openai", label: "  [x] OpenAI" },
+      { value: "__group:memory", label: "memory ›" },
+      { value: "memory", label: "  [x] Memory" },
+      { value: "__group:subagents", label: "subagents ›" },
+      { value: "methodology-harness", label: "  [x] Methodology" },
+    ] as const;
+    // Empty filter keeps every row and every header, in original order.
+    expect(visibleGroupedItems(items, "").map((i) => i.value)).toEqual([
+      "__group:model-provider",
+      "deepseek",
+      "openai",
+      "__group:memory",
+      "memory",
+      "__group:subagents",
+      "methodology-harness",
+    ]);
+    // "mem" matches only the memory rows: its header stays, the other headers disappear.
+    expect(visibleGroupedItems(items, "mem").map((i) => i.value)).toEqual([
+      "__group:memory",
+      "memory",
+    ]);
+    // Case-insensitive prefix matching, same as the SelectList filter.
+    expect(visibleGroupedItems(items, "DEEP").map((i) => i.value)).toEqual([
+      "__group:model-provider",
+      "deepseek",
+    ]);
+    // "openai" keeps its own group header even though the sibling deepseek row vanished.
+    expect(visibleGroupedItems(items, "openai").map((i) => i.label)).toEqual([
+      "model-provider ›",
+      "  [x] OpenAI",
+    ]);
+    // No matches: no headers, no rows.
+    expect(visibleGroupedItems(items, "zzz")).toEqual([]);
   });
 });

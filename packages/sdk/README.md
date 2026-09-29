@@ -67,6 +67,12 @@ returns an unregister function.
   `/connect` profiles.
 - **providers** — `providers.register(registration)` adds a selectable model provider to `/connect`;
   registrations coexist instead of competing.
+- **categories** — declare `categories` on `Plugin`/`PluginMetadata` from the accepted set:
+  `model-provider`, `methodology-harness`, `memory`, `subagents`, `search`, `tools`, `security`,
+  `analytics`, `mcp`, `storage`, `ui` (see the
+  [plugin categories table](https://gustavogutierrez.github.io/alisio/plugins#plugin-categories)).
+  The TUI groups `/plugins` rows by the first category, falling back to "General"; the host
+  derives `model-provider` automatically when a plugin registers providers.
 - **storage** — `storage.sqlite(path)` opens a private (0600) SQLite file (FTS5 available); the
   host provides the driver, so plugins never depend on a specific runtime.
 - **sessions** — child sessions (`spawn`, `create`, `run`, `get`, `children`, `cancel`, `enqueue`,

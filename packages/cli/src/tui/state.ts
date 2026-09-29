@@ -57,6 +57,61 @@ export interface PluginCatalogView {
 }
 /** Text markers remain meaningful without color: [x] active, [ ] inactive, [!] failed, [*] pending. */
 /** Group headings are derived from the primary category (or "General") of each plugin. */
+/**
+ * Reserved value prefix marking a non-selectable group-header row in picker item lists. It can
+ * never collide with real entry ids (plugin ids, server names), which never start with "_".
+ */
+export const GROUP_HEADER_PREFIX = "__group:";
+/** True when the item is a group header emitted under GROUP_HEADER_PREFIX (never selectable). */
+export const isGroupHeader = (item: { value: string }): boolean =>
+  item.value.startsWith(GROUP_HEADER_PREFIX);
+/**
+ * Nearest non-header index from `index` stepping `dir` (1 = down, -1 = up), wrapping at the
+ * edges exactly like a plain list would, so navigation skips header rows in both directions and
+ * never stops on one. Returns -1 for an empty list and `index` unchanged when every item is a
+ * header (callers then treat it as "no move").
+ */
+export function skipGroupHeaders(
+  items: readonly { value: string }[],
+  index: number,
+  dir: 1 | -1,
+): number {
+  const count = items.length;
+  if (!count) return -1;
+  let next = (index + dir + count) % count;
+  for (let steps = 0; steps < count && next !== index; steps++) {
+    if (!isGroupHeader(items[next]!)) return next;
+    next = (next + dir + count) % count;
+  }
+  return index;
+}
+/**
+ * The display sequence a picker should render for a filter: rows matching SelectList's own
+ * prefix semantics, plus the group header of every group that still has at least one visible
+ * row, in original order. Groups with no match emit no header.
+ */
+export function visibleGroupedItems(
+  items: ReadonlyArray<{ value: string; label: string; description?: string }>,
+  filter: string,
+): Array<{ value: string; label: string; description?: string }> {
+  const query = filter.toLowerCase();
+  const visible: Array<{ value: string; label: string; description?: string }> = [];
+  let header: { value: string; label: string; description?: string } | undefined;
+  for (const item of items) {
+    if (isGroupHeader(item)) {
+      header = item;
+      continue;
+    }
+    if (item.value.toLowerCase().startsWith(query)) {
+      if (header) {
+        visible.push(header);
+        header = undefined;
+      }
+      visible.push(item);
+    }
+  }
+  return visible;
+}
 export function pluginCatalogItems(entries: PluginCatalogView[]) {
   const marker = (entry: PluginCatalogView) =>
     entry.status === "active"
@@ -71,13 +126,15 @@ export function pluginCatalogItems(entries: PluginCatalogView[]) {
     const primary = entry.categories[0] ?? "General";
     grouped.set(primary, [...(grouped.get(primary) ?? []), entry]);
   }
-  return [...grouped].flatMap(([title, group]) =>
-    group.map((entry, index) => ({
+  // Every group opens with its own non-selectable header row; plugin rows are indented under it.
+  return [...grouped].flatMap(([title, group]) => [
+    { value: `${GROUP_HEADER_PREFIX}${title}`, label: `${title} ›` },
+    ...group.map((entry) => ({
       value: entry.id,
-      label: `${index === 0 ? `${title} · ` : ""}${marker(entry)} ${entry.name} · ${entry.builtin ? "built-in" : entry.source}`,
+      label: `  ${marker(entry)} ${entry.name} · ${entry.builtin ? "built-in" : entry.source}`,
       description: `${entry.status}${entry.categories.length ? ` · ${entry.categories.join(", ")}` : ""} · ${entry.description}`,
     })),
-  );
+  ]);
 }
 export const pluginToggleNeedsConfirmation = (entry: PluginCatalogView): boolean => !entry.builtin;
 export interface McpServerView {
