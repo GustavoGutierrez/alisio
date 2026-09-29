@@ -161,6 +161,10 @@ export default defineConfig({
         nav: [
           { text: "Guide", link: "/quick-start" },
           { text: "Plugins", link: "/plugins" },
+          {
+            text: "Complete plugin catalog",
+            link: "https://gustavogutierrez.github.io/alisio-plugins/",
+          },
           { text: "Configuration", link: "/configuration" },
         ],
         sidebar: sidebar("", en),
@@ -183,6 +187,10 @@ export default defineConfig({
         nav: [
           { text: "Guía", link: "/es/quick-start" },
           { text: "Plugins", link: "/es/plugins" },
+          {
+            text: "Catálogo completo de plugins",
+            link: "https://gustavogutierrez.github.io/alisio-plugins/",
+          },
           { text: "Configuración", link: "/es/configuration" },
         ],
         sidebar: sidebar("/es", es),
