@@ -123,6 +123,7 @@ export default defineConfig({
     "README.md",
   ],
   themeConfig: {
+    logo: "/assets/logo.png",
     socialLinks: [{ icon: "github", link: repo }],
     footer: { message: "Released under the MIT License. Maintainer: Gustavo Gutiérrez." },
     search: {
