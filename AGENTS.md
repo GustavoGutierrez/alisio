@@ -14,6 +14,15 @@ headless for scripts and CI.
   LinkedIn: <https://www.linkedin.com/in/gustavo-gutierrez-mercado>.
 - **Documentation** (EN/ES): <https://gustavogutierrez.github.io/alisio/>.
 
+## Publishing (skill)
+
+Whenever the user asks to publish/release/bump any Alisio package, load the skill
+`.opencode/skills/alisio-publish/SKILL.md` and follow its canonical flow: manual alpha bump,
+commit+push, `pnpm run publish -- --package …`, verification with HTTP 200 tarballs and real
+install. Never run `npm publish` directly; `package@version` is immutable; npm publishes are
+async; OTP is entered by the operator, never shared in chat. Produce the commands with the
+repo root completed (no absolute user paths inside the skill itself).
+
 Use pnpm for dependencies (keep only pnpm-lock.yaml). The runtime is Node-first (Node >=22.16)
 and must keep working on Bun; Bun also builds the optional standalone binary.
 Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`,
