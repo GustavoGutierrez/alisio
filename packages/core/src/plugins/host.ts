@@ -195,7 +195,23 @@ export class PluginHost implements RunnerExtensions {
       apiVersion: z.literal(1),
       name: z.string().min(1).optional(),
       description: z.string().min(1).optional(),
-      categories: z.array(z.enum(["model-provider", "methodology-harness"])).optional(),
+      categories: z
+        .array(
+          z.enum([
+            "model-provider",
+            "methodology-harness",
+            "memory",
+            "subagents",
+            "search",
+            "tools",
+            "security",
+            "analytics",
+            "mcp",
+            "storage",
+            "ui",
+          ]),
+        )
+        .optional(),
       setup: z.function(),
     })
       .passthrough()

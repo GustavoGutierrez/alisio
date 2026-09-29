@@ -41,12 +41,34 @@ código en el que confíe.
 | `version` | SemVer, por ejemplo `0.1.0` o `0.1.0-beta.1` |
 | `apiVersion` | Siempre `1` |
 | `name`, `description` | Texto opcional y legible para el catálogo de `/plugins` |
-| `categories` | Capacidades de catálogo opcionales: `model-provider` o `methodology-harness`. El host también deriva `model-provider` de los registros de proveedores |
+| `categories` | Categorías de catálogo opcionales (consulte la sección siguiente, Categorías de plugins). El host también deriva `model-provider` de los registros de proveedores |
 | `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
 | `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
 | `dispose()` | Opcional; libera recursos cuando Alisio se cierra |
 
 `definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de plugin duplicados.
+
+## Categorías de plugins
+
+`categories` es una lista de agrupaciones de catálogo. La TUI agrupa las filas de `/plugins` por la
+primera categoría declarada y usa "General" cuando el plugin no declara ninguna; la vista de detalle
+lista todas las categorías. Los autores de plugins pueden declarar cualquier valor aceptado; el host
+solo deriva `model-provider` por su cuenta, a partir de los registros de proveedores. Las categorías
+describen qué hace el plugin, así que un mismo plugin puede declarar varias.
+
+| Categoría | Significado | Usada por los integrados |
+| --- | --- | --- |
+| `model-provider` | Registra proveedores de modelos | `deepseek`, `opencode`, `opencode-go`, `openai-compatible` |
+| `methodology-harness` | Agrupa un flujo de trabajo de metodología de desarrollo | — |
+| `memory` | Memoria persistente, recuerdo y resúmenes de sesión | `memory` |
+| `subagents` | Delegación, sesiones hijas y gestión de agentes | `subagents` |
+| `search` | Proveedores de búsqueda web o vectorial | — |
+| `tools` | Colecciones de herramientas de propósito general | — |
+| `security` | Herramientas de auditoría, sandbox o permisos | — |
+| `analytics` | Instrumentación de uso/métricas (estadísticas de sesión, costo) | — |
+| `mcp` | Gestión de servidores MCP o utilidades para empaquetarlos | — |
+| `storage` | Backends de almacenamiento durable más allá del SQLite por defecto | — |
+| `ui` | Proveedores de presentación TUI (pantallas de inicio, mascotas, paneles) | — |
 
 ## Gestionar plugins en la TUI
 

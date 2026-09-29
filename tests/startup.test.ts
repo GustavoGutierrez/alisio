@@ -161,8 +161,8 @@ describe("startup plugin summary", () => {
           builtin: true,
           categories: ["model-provider" as const],
         })),
-        { id: "memory", version: "1", builtin: true },
-        { id: "subagents", version: "1", builtin: true },
+        { id: "memory", version: "1", builtin: true, categories: ["memory" as const] },
+        { id: "subagents", version: "1", builtin: true, categories: ["subagents" as const] },
       ]),
     )[0];
     expect(line).toBe("  with 4 model providers, memory (builtin), subagents (builtin)  ");
@@ -234,6 +234,10 @@ describe("startup plugin summary", () => {
       }).lines.join("\n");
       expect(rendered).toContain("with 4 model providers, memory (builtin), subagents (builtin)");
       expect(rendered).not.toMatch(/deepseek \(|openai-compatible \(|opencode \(|opencode-go \(/);
+      // The real built-ins now carry their declared categories in host metadata.
+      const metadata = host.metadata();
+      expect(metadata.find((p) => p.id === "memory")?.categories).toEqual(["memory"]);
+      expect(metadata.find((p) => p.id === "subagents")?.categories).toEqual(["subagents"]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

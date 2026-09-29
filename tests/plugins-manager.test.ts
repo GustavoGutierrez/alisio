@@ -344,6 +344,27 @@ describe("plugin category validation", () => {
     );
   });
 
+  it("accepts every category of the PluginCategory union", async () => {
+    const host = categoryHost();
+    const all = [
+      "model-provider",
+      "methodology-harness",
+      "memory",
+      "subagents",
+      "search",
+      "tools",
+      "security",
+      "analytics",
+      "mcp",
+      "storage",
+      "ui",
+    ] as Plugin["categories"];
+    await host.activate(categoryPlugin("all-categories", all), ".");
+    expect(host.metadata()).toEqual([
+      { id: "all-categories", version: "1.0.0", builtin: false, categories: all },
+    ]);
+  });
+
   it("rejects an unknown category instead of accepting free-form strings", async () => {
     const host = categoryHost();
     const invalid = {

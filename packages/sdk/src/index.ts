@@ -322,11 +322,33 @@ export interface MascotProvider {
   render(ctx: MascotContext): string | string[];
 }
 /**
- * Catalog grouping a plugin declares or the host derives from its registrations. Accepted
- * values: `"model-provider"` (registers model providers) and `"methodology-harness"` (bundles a
- * development-methodology workflow).
+ * Catalog grouping a plugin declares in its manifest; the host derives `"model-provider"` from
+ * provider registrations. The TUI groups `/plugins` by the first declared category. Accepted
+ * values:
+ * - `"model-provider"` — registers model providers.
+ * - `"methodology-harness"` — bundles a development-methodology workflow.
+ * - `"memory"` — persistent memory, recollection and session summaries.
+ * - `"subagents"` — delegation, child sessions and agent management.
+ * - `"search"` — web or vector search providers.
+ * - `"tools"` — general-purpose tool collections.
+ * - `"security"` — audit, sandbox or permission tooling.
+ * - `"analytics"` — usage/metrics instrumentation (session stats, cost tracking).
+ * - `"mcp"` — MCP-server management or bundling helpers.
+ * - `"storage"` — durable storage backends beyond the default SQLite state.
+ * - `"ui"` — TUI presentation providers (startup screens, mascots, panels).
  */
-export type PluginCategory = "model-provider" | "methodology-harness";
+export type PluginCategory =
+  | "model-provider"
+  | "methodology-harness"
+  | "memory"
+  | "subagents"
+  | "search"
+  | "tools"
+  | "security"
+  | "analytics"
+  | "mcp"
+  | "storage"
+  | "ui";
 export interface PluginMetadata {
   id: string;
   version: string;
@@ -334,8 +356,8 @@ export interface PluginMetadata {
   name?: string;
   description?: string;
   /**
-   * Categories declared by the plugin or derived by the host from its registrations
-   * (`"model-provider"`, `"methodology-harness"`).
+   * Categories declared by the plugin or derived by the host from its registrations; any value of
+   * the `PluginCategory` union.
    */
   categories?: PluginCategory[];
 }
@@ -612,7 +634,7 @@ export interface Plugin {
   /** Provider-neutral catalog metadata. Hosts may derive additional categories from registrations. */
   name?: string;
   description?: string;
-  /** Accepted values: `"model-provider"` and `"methodology-harness"` (see `PluginCategory`). */
+  /** Optional catalog categories; any value of the `PluginCategory` union. */
   categories?: PluginCategory[];
   /** Declarative sugar for `api.extensions.register(point, provider)` at priority 0. */
   extensions?: { [K in keyof ExtensionPoints]?: ExtensionPoints[K] };

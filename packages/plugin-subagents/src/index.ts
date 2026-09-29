@@ -53,6 +53,7 @@ export function createSubagentsPlugin(
     id: "subagents",
     name: "Subagents",
     description: "Delegation to specialized agents in isolated child sessions",
+    categories: ["subagents"],
     version: loadVersion(import.meta.url),
     apiVersion: 1,
     async setup(api) {

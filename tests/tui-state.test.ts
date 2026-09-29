@@ -28,6 +28,8 @@ import {
   slashCompletionCommands,
   summarizeToolArgs,
 } from "../packages/cli/src/tui/state.ts";
+import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
+import { createSubagentsPlugin } from "../packages/plugin-subagents/src/index.ts";
 
 let seq = 0;
 const ev = (type: string, data: unknown, at = "2026-01-01T00:00:00.000Z"): RunEvent => ({
@@ -831,6 +833,44 @@ describe("event reduction", () => {
     ]);
     expect(pluginToggleNeedsConfirmation(builtin)).toBe(false);
     expect(pluginToggleNeedsConfirmation(external)).toBe(true);
+  });
+
+  it("groups the real memory and subagents built-ins under their own categories", () => {
+    // The real plugin definitions declare their categories, so the catalog must group them
+    // under "memory" and "subagents" headings instead of the "General" fallback.
+    const context = {
+      workspace: "/w",
+      stateHome: "/s",
+      configHome: "/c",
+      configDir: "/c",
+      home: "/h",
+      trusted: false,
+    };
+    const view = (plugin: {
+      id: string;
+      name?: string;
+      description?: string;
+      categories?: string[];
+    }) => ({
+      id: plugin.id,
+      name: plugin.name ?? plugin.id,
+      description: plugin.description ?? "",
+      categories: plugin.categories ?? [],
+      builtin: true,
+      source: "built-in",
+      status: "active" as const,
+      enabled: true,
+      manageable: true,
+    });
+    const items = pluginCatalogItems([
+      view(createMemoryPlugin({}, context)),
+      view(createSubagentsPlugin({}, context)),
+    ]);
+    expect(items.map((item) => item.label)).toEqual([
+      "memory · [x] Memory · built-in",
+      "subagents · [x] Subagents · built-in",
+    ]);
+    expect(items.map((item) => item.value)).toEqual(["memory", "subagents"]);
   });
 
   it("groups plugins by first category with a heading only on the group's first row", () => {

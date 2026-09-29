@@ -70,6 +70,7 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
     id: "memory",
     name: "Memory",
     description: "Persistent memory and memory-aware context compaction",
+    categories: ["memory"],
     version: loadVersion(import.meta.url),
     apiVersion: 1,
     async setup(api) {

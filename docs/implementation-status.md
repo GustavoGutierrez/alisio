@@ -121,6 +121,12 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 
 ### Plugins, extensiones y MCP
 
+- Categorías de plugins: la unión `PluginCategory` del SDK se amplió a `memory`, `subagents`,
+  `search`, `tools`, `security`, `analytics`, `mcp`, `storage` y `ui` (más `model-provider` y
+  `methodology-harness`), validadas por esquema en el host. Los integrados `memory` y `subagents`
+  declaran su categoría: `/plugins` los agrupa bajo encabezados propios en lugar de "General" y la
+  vista de detalle los lista, sin cambios en la pantalla de inicio ni en el conteo de proveedores.
+  La documentación de plugins (EN/ES) lista las categorías aceptadas con su significado.
 - Puntos de extensión genéricos: `api.sessions`, `api.ui.panel/select/open/interactive`,
   `api.resources.agents/list`, `ToolDefinition.concurrent`, contexto de sesión en comandos.
 - Plugins locales y manifiestos de directorio: herramientas, comandos, eventos, contexto,

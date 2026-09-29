@@ -41,12 +41,34 @@ trust.
 | `version` | SemVer, for example `0.1.0` or `0.1.0-beta.1` |
 | `apiVersion` | Always `1` |
 | `name`, `description` | Optional human-friendly catalog text used by `/plugins` |
-| `categories` | Optional catalog capabilities: `model-provider` or `methodology-harness`. The host also derives `model-provider` from provider registrations |
+| `categories` | Optional catalog categories (see [Plugin categories](#plugin-categories)). The host also derives `model-provider` from provider registrations |
 | `setup(api)` | Registers everything; may be async. If it fails, partial registrations are rolled back |
 | `extensions` | Optional; declarative providers for [extension points](#extension-points), registered at priority 0 |
 | `dispose()` | Optional; releases resources when Alisio closes |
 
 `definePlugin` is an identity function that only adds typing. Duplicate plugin IDs are rejected.
+
+## Plugin categories
+
+`categories` is a list of catalog groupings. The TUI groups `/plugins` rows by the first declared
+category and falls back to "General" when a plugin declares none; the detail view lists every
+category. Plugin authors may declare any accepted value; the host only ever derives
+`model-provider` by itself, from provider registrations. Categories describe what a plugin does,
+so a single plugin may declare several.
+
+| Category | Meaning | Used by built-ins |
+| --- | --- | --- |
+| `model-provider` | Registers model providers | `deepseek`, `opencode`, `opencode-go`, `openai-compatible` |
+| `methodology-harness` | Bundles a development-methodology workflow | — |
+| `memory` | Persistent memory, recollection and session summaries | `memory` |
+| `subagents` | Delegation, child sessions and agent management | `subagents` |
+| `search` | Web or vector search providers | — |
+| `tools` | General-purpose tool collections | — |
+| `security` | Audit, sandbox or permission tooling | — |
+| `analytics` | Usage/metrics instrumentation (session stats, cost tracking) | — |
+| `mcp` | MCP-server management or bundling helpers | — |
+| `storage` | Durable storage backends beyond the default SQLite state | — |
+| `ui` | TUI presentation providers (startup screens, mascots, panels) | — |
 
 ## Managing plugins in the TUI
 
