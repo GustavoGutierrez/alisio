@@ -263,6 +263,23 @@ function isUsableLegacyModel(model: string): boolean {
 }
 
 /**
+ * Appends the entries of `selected` after the `global` list, dropping exact duplicates so the
+ * global entries keep their order and the selected layer only ever ADDS to the collection. An
+ * empty `selected` list therefore leaves the global list intact. Entries were already resolved
+ * per layer by `parseLayer`, so deduplication happens on the resolved strings.
+ */
+function mergeUnique(global: string[], selected: string[]): string[] {
+  const seen = new Set(global);
+  const merged = [...global];
+  for (const entry of selected)
+    if (!seen.has(entry)) {
+      seen.add(entry);
+      merged.push(entry);
+    }
+  return merged;
+}
+
+/**
  * Whether legacy provider selection should take priority over a saved plugin profile for this
  * run: an explicit endpoint override, or a trusted project/explicit layer whose parsed root
  * `provider.model` is actually usable (non-empty and not the `alisio setup` placeholder).
@@ -356,10 +373,41 @@ export async function loadConfigWithProvenance(
     const overlaid = { ...config };
     for (const key of selected.keys) {
       if (key === "mcp" || key === "mcpServers") continue;
-      if (key in selected.config)
-        (overlaid as unknown as Record<string, unknown>)[key] = (
-          selected.config as unknown as Record<string, unknown>
-        )[key];
+      if (!(key in selected.config)) continue;
+      // Additive collections: the selected layer ADDS to the global list (global entries
+      // first, exact duplicates dropped); an empty selected list never clears the global one.
+      if (key === "plugins") {
+        overlaid.plugins = mergeUnique(overlaid.plugins, selected.config.plugins);
+        continue;
+      }
+      if (key === "skills") {
+        overlaid.skills = mergeUnique(overlaid.skills, selected.config.skills);
+        continue;
+      }
+      // Additive records: merge by key, the selected layer wins per key.
+      if (key === "pluginOverrides") {
+        overlaid.pluginOverrides = {
+          ...overlaid.pluginOverrides,
+          ...selected.config.pluginOverrides,
+        };
+        continue;
+      }
+      if (key === "skillOverrides") {
+        // Global skill overrides were reset above (skill activation is project-local); the
+        // selected overrides still merge into that empty record and win per key.
+        overlaid.skillOverrides = { ...overlaid.skillOverrides, ...selected.config.skillOverrides };
+        continue;
+      }
+      if (key === "builtinPlugins") {
+        // Per-plugin options merge by plugin id: the selected entry wins per id, so
+        // `{id: {enabled: false}}` in the selected layer still disables that built-in while
+        // every other global entry stays.
+        overlaid.builtinPlugins = { ...overlaid.builtinPlugins, ...selected.config.builtinPlugins };
+        continue;
+      }
+      (overlaid as unknown as Record<string, unknown>)[key] = (
+        selected.config as unknown as Record<string, unknown>
+      )[key];
     }
     if (selected.keys.has("mcp") || selected.keys.has("mcpServers"))
       // Only servers merge upward; `mcp.allow` is a global/user preference and is deliberately

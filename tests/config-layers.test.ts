@@ -85,7 +85,7 @@ describe("layered configuration", () => {
     expect(Object.keys(selected.mcp.servers).sort()).toEqual(["explicit", "global", "shared"]);
   });
 
-  it("does not concatenate executable lists with undefined cross-layer semantics", async () => {
+  it("adds project plugin and skill entries to the global lists, keeping global order first", async () => {
     const { global, workspace } = await fixture();
     await json(join(global, "config.json"), {
       plugins: ["./global-plugin.mjs"],
@@ -97,8 +97,15 @@ describe("layered configuration", () => {
       skills: ["./project-skills"],
     });
     const config = await loadConfig(workspace, { trustProject: true });
-    expect(config.plugins).toEqual([resolve(workspace, ".alisio/project-plugin.mjs")]);
-    expect(config.skills).toEqual([resolve(workspace, ".alisio/project-skills")]);
+    expect(config.plugins).toEqual([
+      resolve(global, "global-plugin.mjs"),
+      resolve(workspace, ".alisio/project-plugin.mjs"),
+    ]);
+    expect(config.skills).toEqual([
+      resolve(global, "global-skills"),
+      resolve(workspace, ".alisio/project-skills"),
+    ]);
+    // Non-additive keys still replace their global counterpart.
     expect(config.provider.model).toBe("global-model");
   });
 
@@ -123,6 +130,148 @@ describe("layered configuration", () => {
       command: resolve(workspace, ".alisio/bin/project"),
       args: [resolve(workspace, "shared.json")],
     });
+  });
+});
+
+describe("additive plugin and skill layers", () => {
+  it("leaves the global plugin and skill lists intact when the project lists are empty", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      plugins: ["./global-plugin-a.mjs", "./global-plugin-b.mjs"],
+      skills: ["./global-skill-basic"],
+      pluginOverrides: { global: { enabled: true } },
+      builtinPlugins: { memory: { enabled: false }, notes: { customOption: "global" } },
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      plugins: [],
+      skills: [],
+      pluginOverrides: {},
+      builtinPlugins: {},
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.plugins).toEqual([
+      resolve(global, "global-plugin-a.mjs"),
+      resolve(global, "global-plugin-b.mjs"),
+    ]);
+    expect(config.skills).toEqual([resolve(global, "global-skill-basic")]);
+    expect(config.pluginOverrides).toEqual({ global: { enabled: true } });
+    expect(config.builtinPlugins).toEqual({
+      memory: { enabled: false },
+      notes: { customOption: "global" },
+    });
+  });
+
+  it("appends project plugin and skill entries after the global ones, dropping exact duplicates", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      plugins: ["alisio-plugin-a", "alisio-plugin-b"],
+      skills: ["./skill-a", "./skill-b"],
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      plugins: ["alisio-plugin-c", "alisio-plugin-b"],
+      skills: ["./skill-c", "./skill-a"],
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.plugins).toEqual(["alisio-plugin-a", "alisio-plugin-b", "alisio-plugin-c"]);
+    // Path entries stay resolved per layer; a project "./skill-a" resolves elsewhere, so the
+    // exact resolved strings differ and both are kept.
+    expect(config.skills).toEqual([
+      resolve(global, "skill-a"),
+      resolve(global, "skill-b"),
+      resolve(workspace, ".alisio/skill-c"),
+      resolve(workspace, ".alisio/skill-a"),
+    ]);
+  });
+
+  it("merges override records by id with the selected layer winning per id", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      pluginOverrides: { "global-only": { enabled: true }, both: { enabled: true } },
+      skillOverrides: { "global-skill": { enabled: false } },
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      pluginOverrides: { "project-only": { enabled: false }, both: { enabled: false } },
+      // Skill activation is project-local: the global entry never carries over, and the
+      // selected entry applies.
+      skillOverrides: { "project-skill": { enabled: true } },
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.pluginOverrides).toEqual({
+      "global-only": { enabled: true },
+      both: { enabled: false },
+      "project-only": { enabled: false },
+    });
+    expect(config.skillOverrides).toEqual({ "project-skill": { enabled: true } });
+  });
+
+  it("merges builtinPlugins by id, letting a project disable one built-in while keeping others", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      builtinPlugins: {
+        memory: { enabled: true, injectBudgetTokens: 2000 },
+        notes: { customOption: "global" },
+      },
+    });
+    await json(join(workspace, ".alisio", "config.json"), {
+      builtinPlugins: { memory: { enabled: false } },
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.builtinPlugins).toEqual({
+      memory: { enabled: false },
+      notes: { customOption: "global" },
+    });
+  });
+
+  it("keeps global MCP servers when the project layer declares an empty mcp/mcpServers map", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      mcp: {
+        servers: { shared: { command: "global-command" }, global: { command: "global-only" } },
+      },
+    });
+    // Empty canonical map in the project layer must not clear global servers.
+    await json(join(workspace, ".alisio", "config.json"), {
+      mcp: { servers: {} },
+    });
+    const canonical = await loadConfig(workspace, { trustProject: true });
+    expect(Object.keys(canonical.mcp.servers).sort()).toEqual(["global", "shared"]);
+    // Empty compatibility-alias map behaves the same.
+    await json(join(workspace, ".alisio", "config.json"), { mcpServers: {} });
+    const alias = await loadConfig(workspace, { trustProject: true });
+    expect(Object.keys(alias.mcp.servers).sort()).toEqual(["global", "shared"]);
+  });
+
+  it("applies the same additive semantics to an explicit --config layer", async () => {
+    const { root, global, workspace } = await fixture();
+    const explicitDir = join(root, "explicit");
+    const explicit = join(explicitDir, "config.json");
+    await json(join(global, "config.json"), {
+      plugins: ["alisio-plugin-global"],
+      skills: ["./global-skills"],
+      pluginOverrides: { global: { enabled: true } },
+      builtinPlugins: { memory: { enabled: true } },
+    });
+    await json(explicit, {
+      plugins: ["alisio-plugin-explicit", "alisio-plugin-global"],
+      skills: ["./explicit-skills"],
+      pluginOverrides: { explicit: { enabled: false }, global: { enabled: false } },
+      builtinPlugins: { subagents: { enabled: false } },
+    });
+    const config = await loadConfig(workspace, { file: explicit });
+    expect(config.plugins).toEqual(["alisio-plugin-global", "alisio-plugin-explicit"]);
+    expect(config.skills).toEqual([
+      resolve(global, "global-skills"),
+      resolve(explicitDir, "explicit-skills"),
+    ]);
+    expect(config.pluginOverrides).toEqual({
+      global: { enabled: false },
+      explicit: { enabled: false },
+    });
+    expect(config.builtinPlugins).toEqual({
+      memory: { enabled: true },
+      subagents: { enabled: false },
+    });
+    expect(config.mcpSources).toEqual({});
   });
 });
 

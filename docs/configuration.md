@@ -73,10 +73,13 @@ Alisio always reads `<ALISIO_CONFIG_HOME>/config.json` (default
 trusted `--config <file>` overlays global configuration and replaces the project layer, even when
 project trust is enabled. An untrusted project file is never read. Unknown keys are rejected.
 
-Top-level settings in the selected project/explicit layer replace their global counterpart; Alisio
-does not concatenate executable plugin or skill lists. MCP servers are the defined exception: they
-merge by name, with the selected layer winning. Relative paths are resolved against the file that
-defined the value.
+Top-level settings in the selected project/explicit layer replace their global counterpart, with
+additive exceptions: MCP servers merge by name, and `plugins`, `skills`, `pluginOverrides`,
+`skillOverrides` and `builtinPlugins` ADD to the global layer instead of replacing it. Additive
+lists keep the global entries first (exact duplicates dropped) and append the selected layer's new
+entries, so an empty array in a lower layer never clears the global collection. Additive records
+merge by key, with the selected layer winning per key. Relative paths are resolved against the file
+that defined the value.
 
 ```json
 {
@@ -188,7 +191,9 @@ See [Context: AGENTS.md and skills](/context).
 ## `builtinPlugins`
 
 Options for built-in plugins, keyed by plugin ID. Every entry accepts `enabled`; each plugin
- validates the rest of its section. The built-in plugins are `deepseek`, `opencode`, `opencode-go`,
+ validates the rest of its section. Entries merge across configuration layers by plugin ID — the
+ project/explicit entry wins per ID, so `{ "memory": { "enabled": false } }` in a project disables
+ the memory built-in there while every other global entry stays. The built-in plugins are `deepseek`, `opencode`, `opencode-go`,
  `openai-compatible`, `memory` and `subagents`; the
 `subagents` options are listed in [Subagents](/subagents#limits). `memory` options:
 
@@ -213,6 +218,9 @@ See [Persistent memory](/memory).
 ## `plugins`
 
 A list of trusted plugins: paths (resolved relative to the configuration file) or npm package names.
+Project/explicit `plugins` entries ADD to the global list: global entries stay first, exact
+duplicates are dropped, then the selected layer's new entries follow. An empty `plugins` array in a
+project never clears the global plugins.
 See [Writing plugins](/plugins#loading-plugins).
 
 ```json
@@ -238,6 +246,8 @@ They do not alter global provider profiles or the separate credentials store.
 ## `skills`
 
 Extra Agent Skills roots, resolved relative to the configuration file.
+Project/explicit `skills` entries ADD to the global list with the same global-first, deduplicated
+merge; an empty `skills` array in a project never clears the global roots.
 
 ```json
 { "skills": ["./skills"] }

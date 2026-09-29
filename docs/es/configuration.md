@@ -189,7 +189,10 @@ Consulte [Contexto: AGENTS.md y skills](/es/context).
 ## `builtinPlugins`
 
 Opciones de los plugins integrados, indexadas por ID de plugin. Cada entrada acepta `enabled`; cada
-plugin valida el resto de su sección. Los plugins integrados son `deepseek`, `opencode`, `opencode-go`,
+plugin valida el resto de su sección. Las entradas se combinan entre capas de configuración por ID
+de plugin — la entrada del proyecto o del archivo explícito gana por ID, de modo que
+`{ "memory": { "enabled": false } }` en un proyecto desactiva el plugin de memoria allí mientras
+todas las demás entradas globales se conservan. Los plugins integrados son `deepseek`, `opencode`, `opencode-go`,
 `openai-compatible`, `memory` y `subagents`; las
 opciones de `subagents` se detallan en [Subagentes](/es/subagents#limits). Opciones de `memory`:
 
@@ -214,7 +217,11 @@ Consulte [Memoria persistente](/es/memory).
 ## `plugins`
 
 Lista de plugins de confianza: rutas (resueltas respecto al archivo de configuración) o nombres de
-paquetes npm. Consulte [Escribir plugins](/es/plugins#loading-plugins).
+paquetes npm. Las entradas `plugins` del proyecto o del archivo explícito SE SUMAN a la lista
+global: las entradas globales se conservan primero (sin duplicados exactos) y después siguen las
+entradas nuevas de la capa seleccionada. Un array `plugins` vacío en un proyecto nunca vacía los
+plugins globales.
+Consulte [Escribir plugins](/es/plugins#loading-plugins).
 
 ```json
 { "plugins": ["alisio-plugin-foo", "./plugins/local.js"] }
@@ -242,6 +249,9 @@ separado de credenciales.
 ## `skills`
 
 Raíces adicionales de Agent Skills, resueltas respecto al archivo de configuración.
+Las entradas `skills` del proyecto o del archivo explícito SE SUMAN a la lista global con la misma
+combinación global-primero y sin duplicados; un array `skills` vacío en un proyecto nunca vacía las
+raíces globales.
 
 ```json
 { "skills": ["./skills"] }
@@ -291,10 +301,13 @@ Alisio siempre lee `<ALISIO_CONFIG_HOME>/config.json` (por defecto
 `~/.config/alisio/config.json`). La configuración de un proyecto de confianza se superpone desde
 `<workspace>/.alisio/config.json`. Un `--config <archivo>` explícito y de confianza se superpone a la
 configuración global y reemplaza la capa del proyecto. Un archivo de proyecto sin confianza nunca se
-lee. Los ajustes superiores de la capa seleccionada reemplazan los globales; las listas ejecutables
-de plugins y skills no se concatenan. Los servidores MCP son la excepción definida: se combinan por
-nombre y gana la capa seleccionada. Las rutas relativas se resuelven respecto al archivo que las
-definió.
+lee. Los ajustes superiores de la capa seleccionada reemplazan los globales, con excepciones
+aditivas: los servidores MCP se combinan por nombre, y las claves `plugins`, `skills`,
+`pluginOverrides`, `skillOverrides` y `builtinPlugins` SE SUMAN a la capa global en lugar de
+reemplazarla. Las listas aditivas conservan las entradas globales primero (sin duplicados exactos)
+y añaden después las entradas nuevas de la capa seleccionada, de modo que un array vacío en una capa
+inferior nunca vacía la colección global. Los registros aditivos se combinan por clave y gana la
+capa seleccionada por clave. Las rutas relativas se resuelven respecto al archivo que las definió.
 
 La forma canónica es `mcp.servers`, indexada por nombre. `transport` puede ser explícito o inferirse
 de `command`/`url`.
