@@ -22,8 +22,12 @@ Todos los paquetes se publican bajo la
 - Núcleo: [`@alisio/core`](https://www.npmjs.com/package/@alisio/core)
 - SDK: [`@alisio/sdk`](https://www.npmjs.com/package/@alisio/sdk)
 - Plugins: `@alisio/plugin-memory`, `@alisio/plugin-subagents`,
-  `@alisio/plugin-deepseek`, `@alisio/plugin-openai-compatible`, `@alisio/plugin-opencode`,
-  `@alisio/plugin-opencode-go`
+  `@alisio/plugin-openai-compatible`
+
+Los proveedores dedicados de modelos (`@alisio/plugin-deepseek`, `@alisio/plugin-opencode`,
+`@alisio/plugin-opencode-go`) se publican desde el monorepo
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) y se instalan con
+`alisio install npm:@alisio/plugin-...`.
 
 ## Documentación
 

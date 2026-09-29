@@ -24,7 +24,7 @@ Los paquetes y flags desconocidos fallan rápido, antes de construir o publicar 
 
 | Flag | Significado |
 | --- | --- |
-| `--all` | Todos los paquetes publicables (`sdk`, `core`, `plugin-memory`, `plugin-subagents`, `plugin-deepseek`, `plugin-openai-compatible`, `plugin-opencode`, `plugin-opencode-go`, `cli`) |
+| `--all` | Todos los paquetes publicables (`sdk`, `core`, `plugin-memory`, `plugin-subagents`, `plugin-openai-compatible`, `cli`) |
 | `--package <nombre>` | Un paquete, repetible; combinado con `--all` es la unión |
 | `--version <v>` | Fija atómicamente `<v>` en cada `package.json` seleccionado antes de empaquetar (restaura todos los archivos si falla alguna escritura, de modo que un bump parcial nunca sale) |
 | `--dry-run` | Imprime exactamente lo que se publicaría (nombres, versiones, tarballs, orden) y sale — sin build, sin bump, sin empaquetar, sin publicar |

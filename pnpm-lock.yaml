@@ -11,24 +11,18 @@ importers:
 
   .:
     devDependencies:
+      '@alisio/alisio-code':
+        specifier: workspace:*
+        version: link:packages/cli
       '@alisio/core':
         specifier: workspace:*
         version: link:packages/core
-      '@alisio/plugin-deepseek':
-        specifier: workspace:*
-        version: link:packages/plugin-deepseek
       '@alisio/plugin-memory':
         specifier: workspace:*
         version: link:packages/plugin-memory
       '@alisio/plugin-openai-compatible':
         specifier: workspace:*
         version: link:packages/plugin-openai-compatible
-      '@alisio/plugin-opencode':
-        specifier: workspace:*
-        version: link:packages/plugin-opencode
-      '@alisio/plugin-opencode-go':
-        specifier: workspace:*
-        version: link:packages/plugin-opencode-go
       '@alisio/plugin-subagents':
         specifier: workspace:*
         version: link:packages/plugin-subagents
@@ -47,9 +41,6 @@ importers:
       '@types/node':
         specifier: 26.6.2
         version: 26.6.2
-      alisio:
-        specifier: workspace:*
-        version: link:packages/cli
       bun:
         specifier: 1.4.2
         version: 1.4.2
@@ -71,21 +62,12 @@ importers:
       '@alisio/core':
         specifier: workspace:*
         version: link:../core
-      '@alisio/plugin-deepseek':
-        specifier: workspace:*
-        version: link:../plugin-deepseek
       '@alisio/plugin-memory':
         specifier: workspace:*
         version: link:../plugin-memory
       '@alisio/plugin-openai-compatible':
         specifier: workspace:*
         version: link:../plugin-openai-compatible
-      '@alisio/plugin-opencode':
-        specifier: workspace:*
-        version: link:../plugin-opencode
-      '@alisio/plugin-opencode-go':
-        specifier: workspace:*
-        version: link:../plugin-opencode-go
       '@alisio/plugin-subagents':
         specifier: workspace:*
         version: link:../plugin-subagents
@@ -127,16 +109,6 @@ importers:
         specifier: 5.0.6
         version: 5.0.6
 
-  packages/plugin-deepseek:
-    dependencies:
-      openai:
-        specifier: 7.23.0
-        version: 7.23.0(zod@4.6.5)
-    devDependencies:
-      '@alisio/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-
   packages/plugin-memory:
     dependencies:
       zod:
@@ -152,18 +124,6 @@ importers:
       openai:
         specifier: 7.23.0
         version: 7.23.0(zod@4.6.5)
-    devDependencies:
-      '@alisio/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-
-  packages/plugin-opencode:
-    devDependencies:
-      '@alisio/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-
-  packages/plugin-opencode-go:
     devDependencies:
       '@alisio/sdk':
         specifier: workspace:*

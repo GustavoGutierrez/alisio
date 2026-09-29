@@ -58,7 +58,7 @@ describen qué hace el plugin, así que un mismo plugin puede declarar varias.
 
 | Categoría | Significado | Usada por los integrados |
 | --- | --- | --- |
-| `model-provider` | Registra proveedores de modelos | `deepseek`, `opencode`, `opencode-go`, `openai-compatible` |
+| `model-provider` | Registra proveedores de modelos | `openai-compatible` |
 | `methodology-harness` | Agrupa un flujo de trabajo de metodología de desarrollo | — |
 | `memory` | Memoria persistente, recuerdo y resúmenes de sesión | `memory` |
 | `subagents` | Delegación, sesiones hijas y gestión de agentes | `subagents` |
@@ -69,6 +69,12 @@ describen qué hace el plugin, así que un mismo plugin puede declarar varias.
 | `mcp` | Gestión de servidores MCP o utilidades para empaquetarlos | — |
 | `storage` | Backends de almacenamiento durable más allá del SQLite por defecto | — |
 | `ui` | Proveedores de presentación TUI (pantallas de inicio, mascotas, paneles) | — |
+
+El único proveedor de modelos integrado es `openai-compatible`. Los proveedores dedicados
+(DeepSeek, OpenCode Console (Zen), OpenCode Go) son plugins independientes publicados desde el
+monorepo [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) e instalables con
+`alisio install npm:@alisio/plugin-{deepseek,opencode,opencode-go}`; una vez instalados se
+registran como plugins `model-provider` y aparecen en `/connect` y `/model`.
 
 ## Gestionar plugins en la TUI
 

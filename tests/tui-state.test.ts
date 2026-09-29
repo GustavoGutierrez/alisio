@@ -50,15 +50,15 @@ describe("formatters", () => {
   it("makes model ownership explicit in selector items", () => {
     expect(
       providerModelItems(
-        "OpenCode Go",
-        [{ id: "opencode-go/kimi-k3", name: "Kimi K3", contextWindow: 128000 }],
-        "opencode-go/kimi-k3",
+        "Custom Provider",
+        [{ id: "custom/kimi-k3", name: "Kimi K3", contextWindow: 128000 }],
+        "custom/kimi-k3",
       ),
     ).toEqual([
       {
-        value: "opencode-go/kimi-k3",
-        label: "OpenCode Go · Kimi K3 (current)",
-        description: "opencode-go/kimi-k3 · 128k context",
+        value: "custom/kimi-k3",
+        label: "Custom Provider · Kimi K3 (current)",
+        description: "custom/kimi-k3 · 128k context",
       },
     ]);
   });
@@ -68,17 +68,17 @@ describe("formatters", () => {
       configuredProviderModelItems(
         [
           {
-            profile: "deepseek",
-            provider: "deepseek",
-            title: "DeepSeek",
+            profile: "provider-a",
+            provider: "provider-a",
+            title: "Provider A",
             configuredModel: "shared",
             models: [{ id: "shared", name: "Shared" }],
             unavailable: false,
           },
           {
-            profile: "opencode",
-            provider: "opencode",
-            title: "OpenCode Console",
+            profile: "provider-b",
+            provider: "provider-b",
+            title: "Provider B",
             configuredModel: "shared",
             models: [{ id: "shared", name: "Shared" }],
             unavailable: false,
@@ -100,13 +100,13 @@ describe("formatters", () => {
             unavailable: false,
           },
         ],
-        { provider: "opencode", model: "shared" },
+        { provider: "provider-b", model: "shared" },
       ).map(({ label, description, unavailable }) => ({ label, description, unavailable })),
     ).toEqual([
-      { label: "DeepSeek · Shared", description: "deepseek/shared", unavailable: false },
+      { label: "Provider A · Shared", description: "provider-a/shared", unavailable: false },
       {
-        label: "OpenCode Console · Shared (current)",
-        description: "opencode/shared",
+        label: "Provider B · Shared (current)",
+        description: "provider-b/shared",
         unavailable: false,
       },
       {
@@ -173,7 +173,7 @@ describe("formatters", () => {
     expect(shortenPath("/home/u/a/very/deep/nested/project", "/home/u", 20)).toBe(
       "…/nested/project",
     );
-    expect(hostOf("https://api.deepseek.com/v1")).toBe("api.deepseek.com");
+    expect(hostOf("https://api.example.test/v1")).toBe("api.example.test");
     expect(hostOf("http://127.0.0.1:8080/v1?key=secret")).toBe("127.0.0.1:8080");
     expect(hostOf("not a url")).toBe("unknown");
   });
@@ -202,7 +202,7 @@ describe("formatters", () => {
 
 describe("commands", () => {
   it("parses slash commands and arguments", () => {
-    expect(parseCommand("/model deepseek-chat")).toEqual({ name: "model", args: "deepseek-chat" });
+    expect(parseCommand("/model example-chat")).toEqual({ name: "model", args: "example-chat" });
     expect(parseCommand("/compact   focus on tests  ")).toEqual({
       name: "compact",
       args: "focus on tests",
@@ -1025,7 +1025,7 @@ describe("event reduction", () => {
   it("keeps the header of a group with visible rows and drops headers of filtered-out groups", () => {
     const items = [
       { value: "__group:model-provider", label: "model-provider ›" },
-      { value: "deepseek", label: "  [x] DeepSeek" },
+      { value: "provider-a", label: "  [x] Provider A" },
       { value: "openai", label: "  [x] OpenAI" },
       { value: "__group:memory", label: "memory ›" },
       { value: "memory", label: "  [x] Memory" },
@@ -1035,7 +1035,7 @@ describe("event reduction", () => {
     // Empty filter keeps every row and every header, in original order.
     expect(visibleGroupedItems(items, "").map((i) => i.value)).toEqual([
       "__group:model-provider",
-      "deepseek",
+      "provider-a",
       "openai",
       "__group:memory",
       "memory",
@@ -1048,11 +1048,11 @@ describe("event reduction", () => {
       "memory",
     ]);
     // Case-insensitive prefix matching, same as the SelectList filter.
-    expect(visibleGroupedItems(items, "DEEP").map((i) => i.value)).toEqual([
+    expect(visibleGroupedItems(items, "PROV").map((i) => i.value)).toEqual([
       "__group:model-provider",
-      "deepseek",
+      "provider-a",
     ]);
-    // "openai" keeps its own group header even though the sibling deepseek row vanished.
+    // "openai" keeps its own group header even though the sibling provider-a row vanished.
     expect(visibleGroupedItems(items, "openai").map((i) => i.label)).toEqual([
       "model-provider ›",
       "  [x] OpenAI",

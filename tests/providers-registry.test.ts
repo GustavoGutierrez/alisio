@@ -8,7 +8,6 @@ import {
   ProviderRegistry,
   ProviderSettingsStore,
 } from "@alisio/core";
-import { createDeepSeekPlugin } from "@alisio/plugin-deepseek";
 import { createOpenAICompatiblePlugin } from "@alisio/plugin-openai-compatible";
 import { definePlugin, type ModelProvider } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,10 +25,73 @@ const builtin: BuiltinPlugin = {
   defaultProvider: true,
   create: createOpenAICompatiblePlugin,
 };
-const deepseekBuiltin: BuiltinPlugin = {
-  id: "deepseek",
+
+/**
+ * Stand-in for a dedicated model-provider plugin (the DeepSeek/OpenCode plugins moved to the
+ * alisio-plugins monorepo). The registry tests only need a provider whose credentials never
+ * hit the profile: stored key first, then the profile-named environment variable.
+ */
+const dedicatedBuiltin: BuiltinPlugin = {
+  id: "dedicated",
   description: "test",
-  create: createDeepSeekPlugin,
+  create: () =>
+    definePlugin({
+      id: "dedicated",
+      version: "1.0.0",
+      apiVersion: 1,
+      setup(api) {
+        api.providers.register({
+          id: "dedicated",
+          name: "Dedicated",
+          fields: [
+            { key: "apiKey", kind: "secret", required: true, label: "API key" },
+            {
+              key: "baseURL",
+              label: "Base URL",
+              kind: "url",
+              required: true,
+              defaultValue: "https://api.dedicated.example",
+            },
+            {
+              key: "apiMode",
+              label: "API mode",
+              kind: "select",
+              required: true,
+              defaultValue: "chat",
+              options: [
+                { value: "chat", label: "Chat Completions" },
+                { value: "responses", label: "Responses" },
+              ],
+            },
+            {
+              key: "apiKeyEnv",
+              label: "API key environment variable",
+              kind: "text",
+              required: false,
+              defaultValue: "DEDICATED_API_KEY",
+            },
+          ],
+          create(request) {
+            const apiKey = request.credentials.apiKey;
+            const apiKeyEnv =
+              typeof request.profile.apiKeyEnv === "string" && request.profile.apiKeyEnv
+                ? request.profile.apiKeyEnv
+                : "DEDICATED_API_KEY";
+            if (!apiKey && !process.env[apiKeyEnv])
+              throw new Error(
+                `Dedicated API key is required (set it in /connect or export ${apiKeyEnv})`,
+              );
+            const baseURL = (
+              typeof request.profile.baseURL === "string" && request.profile.baseURL.trim()
+                ? request.profile.baseURL
+                : "https://api.dedicated.example"
+            ).replace(/\/$/, "");
+            const apiMode = request.profile.apiMode === "responses" ? "responses" : "chat";
+            return provider(`dedicated:${apiMode}:${baseURL}`, String(request.profile.model ?? ""));
+          },
+        });
+      },
+    }),
 };
 async function providerFixture(prefix: string) {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -47,12 +109,12 @@ async function json(file: string, value: unknown) {
   await mkdir(join(file, ".."), { recursive: true });
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
 }
-async function saveDeepSeek(config: string, model = "saved-model") {
+async function saveDedicated(config: string, model = "saved-model") {
   await new ProviderSettingsStore(config).saveActive(
-    "deepseek",
+    "dedicated",
     {
-      provider: "deepseek",
-      values: { baseURL: "https://api.deepseek.com", apiMode: "chat" },
+      provider: "dedicated",
+      values: { baseURL: "https://api.dedicated.example", apiMode: "chat" },
       model,
     },
     { apiKey: "fake-test-key" },
@@ -110,7 +172,7 @@ describe("provider settings", () => {
 describe("application provider selection", () => {
   it("restores a saved profile through trusted MCP-only project configuration", async () => {
     const { config, workspace } = await providerFixture("alisio-provider-mcp-project-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     await json(join(config, "config.json"), {
       provider: {
         baseURL: "https://global-legacy.example.test/v1",
@@ -124,18 +186,18 @@ describe("application provider selection", () => {
     const app = await createApplication({
       cwd: workspace,
       trustProject: true,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
       expect(
         startupInput(app, {
           version: "test",
           terminal: { color: false, unicode: true, columns: 80, interactive: false },
         }),
-      ).toMatchObject({ model: "saved-model", provider: "api.deepseek.com" });
+      ).toMatchObject({ model: "saved-model", provider: "api.dedicated.example" });
     } finally {
       await app.close();
     }
@@ -143,7 +205,7 @@ describe("application provider selection", () => {
 
   it("restores a saved profile through project plugin/skills-only configuration", async () => {
     const { config, workspace } = await providerFixture("alisio-provider-project-tools-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     await json(join(workspace, ".alisio", "config.json"), {
       plugins: ["./missing-plugin.mjs"],
       skills: ["./skills"],
@@ -151,11 +213,11 @@ describe("application provider selection", () => {
     const app = await createApplication({
       cwd: workspace,
       trustProject: true,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
     } finally {
       await app.close();
@@ -164,17 +226,17 @@ describe("application provider selection", () => {
 
   it("restores a saved profile through explicit MCP-only configuration", async () => {
     const { root, config, workspace } = await providerFixture("alisio-provider-mcp-explicit-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     const explicit = join(root, "explicit.json");
     await json(explicit, { mcp: { servers: { fixture: { command: "fixture-mcp" } } } });
     const app = await createApplication({
       cwd: workspace,
       config: explicit,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
     } finally {
       await app.close();
@@ -185,7 +247,7 @@ describe("application provider selection", () => {
     "lets an actual %s legacy provider override the saved profile for that run",
     async (layer) => {
       const { root, config, workspace } = await providerFixture(`alisio-provider-${layer}-legacy-`);
-      await saveDeepSeek(config);
+      await saveDedicated(config);
       const file =
         layer === "project"
           ? join(workspace, ".alisio", "config.json")
@@ -200,14 +262,14 @@ describe("application provider selection", () => {
       const app = await createApplication({
         cwd: workspace,
         ...(layer === "project" ? { trustProject: true } : { config: file }),
-        builtins: [builtin, deepseekBuiltin],
+        builtins: [builtin, dedicatedBuiltin],
         noHerdr: true,
       });
       try {
         expect(app.provider.id).toContain(`${layer}.example.test`);
         expect(app.provider.model).toBe(`${layer}-model`);
         expect(app.providerInfo).toMatchObject({ id: "openai-compatible", persisted: false });
-        expect((await app.providerSettings.active())?.profile.provider).toBe("deepseek");
+        expect((await app.providerSettings.active())?.profile.provider).toBe("dedicated");
       } finally {
         await app.close();
       }
@@ -221,18 +283,18 @@ describe("application provider selection", () => {
     "keeps a saved profile when the trusted project provider has %s",
     async (_label, model) => {
       const { config, workspace } = await providerFixture("alisio-provider-unusable-");
-      await saveDeepSeek(config);
+      await saveDedicated(config);
       await json(join(workspace, ".alisio", "config.json"), {
         provider: { baseURL: "https://project.example.test/v1", auth: "none", model },
       });
       const app = await createApplication({
         cwd: workspace,
         trustProject: true,
-        builtins: [builtin, deepseekBuiltin],
+        builtins: [builtin, dedicatedBuiltin],
         noHerdr: true,
       });
       try {
-        expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+        expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
         expect(app.provider.model).toBe("saved-model");
       } finally {
         await app.close();
@@ -242,7 +304,7 @@ describe("application provider selection", () => {
 
   it("lets a real non-placeholder project model override the saved profile for that run", async () => {
     const { config, workspace } = await providerFixture("alisio-provider-real-model-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     await json(join(workspace, ".alisio", "config.json"), {
       provider: {
         baseURL: "https://project.example.test/v1",
@@ -253,14 +315,14 @@ describe("application provider selection", () => {
     const app = await createApplication({
       cwd: workspace,
       trustProject: true,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
       expect(app.provider.id).toContain("project.example.test");
       expect(app.provider.model).toBe("project-model");
       expect(app.providerInfo).toMatchObject({ id: "openai-compatible", persisted: false });
-      expect((await app.providerSettings.active())?.profile.provider).toBe("deepseek");
+      expect((await app.providerSettings.active())?.profile.provider).toBe("dedicated");
     } finally {
       await app.close();
     }
@@ -268,7 +330,7 @@ describe("application provider selection", () => {
 
   it("lets an endpoint override win over a saved profile even with a placeholder project provider", async () => {
     const { config, workspace } = await providerFixture("alisio-provider-endpoint-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     await json(join(workspace, ".alisio", "config.json"), {
       provider: {
         baseURL: "https://project.example.test/v1",
@@ -280,13 +342,13 @@ describe("application provider selection", () => {
     const app = await createApplication({
       cwd: workspace,
       trustProject: true,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
       expect(app.provider.id).toContain("env.example.test");
       expect(app.providerInfo).toMatchObject({ persisted: false });
-      expect((await app.providerSettings.active())?.profile.provider).toBe("deepseek");
+      expect((await app.providerSettings.active())?.profile.provider).toBe("dedicated");
     } finally {
       await app.close();
     }
@@ -319,17 +381,17 @@ describe("application provider selection", () => {
 
   it("keeps a saved profile when only the global config has a legacy provider", async () => {
     const { config, workspace } = await providerFixture("alisio-provider-global-only-");
-    await saveDeepSeek(config);
+    await saveDedicated(config);
     await json(join(config, "config.json"), {
       provider: { baseURL: "https://global.example.test/v1", auth: "none", model: "global-model" },
     });
     const app = await createApplication({
       cwd: workspace,
-      builtins: [builtin, deepseekBuiltin],
+      builtins: [builtin, dedicatedBuiltin],
       noHerdr: true,
     });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
     } finally {
       await app.close();
@@ -376,16 +438,16 @@ describe("application provider selection", () => {
     "applies a model-only %s override within the saved provider",
     async (source, model) => {
       const { config, workspace } = await providerFixture("alisio-provider-model-override-");
-      await saveDeepSeek(config);
+      await saveDedicated(config);
       if (source === "environment") vi.stubEnv("ALISIO_MODEL", model);
       const app = await createApplication({
         cwd: workspace,
         ...(source === "CLI" ? { model } : {}),
-        builtins: [builtin, deepseekBuiltin],
+        builtins: [builtin, dedicatedBuiltin],
         noHerdr: true,
       });
       try {
-        expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+        expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
         expect(app.provider.model).toBe(model);
       } finally {
         await app.close();
@@ -529,28 +591,31 @@ describe("application provider selection", () => {
     const root = await mkdtemp(join(tmpdir(), "alisio-dedicated-persistence-"));
     vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
     vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
-    const deepseek: BuiltinPlugin = {
-      id: "deepseek",
-      description: "test",
-      create: createDeepSeekPlugin,
-    };
-    const first = await createApplication({ cwd: root, builtins: [deepseek], noHerdr: true });
+    const first = await createApplication({
+      cwd: root,
+      builtins: [dedicatedBuiltin],
+      noHerdr: true,
+    });
     try {
       await first.activateProvider(
-        "deepseek",
-        { baseURL: "https://api.deepseek.com", apiMode: "chat" },
+        "dedicated",
+        { baseURL: "https://api.dedicated.example", apiMode: "chat" },
         { apiKey: "fake-test-key" },
-        "deepseek-flash",
+        "dedicated-flash",
       );
-      expect(first.provider.id).toBe("deepseek:chat:https://api.deepseek.com");
+      expect(first.provider.id).toBe("dedicated:chat:https://api.dedicated.example");
     } finally {
       await first.close();
     }
-    const second = await createApplication({ cwd: root, builtins: [deepseek], noHerdr: true });
+    const second = await createApplication({
+      cwd: root,
+      builtins: [dedicatedBuiltin],
+      noHerdr: true,
+    });
     try {
-      expect(second.provider.id).toBe("deepseek:chat:https://api.deepseek.com");
-      expect(second.provider.model).toBe("deepseek-flash");
-      expect(second.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(second.provider.id).toBe("dedicated:chat:https://api.dedicated.example");
+      expect(second.provider.model).toBe("dedicated-flash");
+      expect(second.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
     } finally {
       await second.close();
     }
@@ -591,24 +656,24 @@ describe("application provider selection", () => {
     const root = await mkdtemp(join(tmpdir(), "alisio-api-key-env-"));
     vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
     vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
-    vi.stubEnv("DEEPSEEK_API_KEY", "fake-environment-test-key");
+    vi.stubEnv("DEDICATED_API_KEY", "fake-environment-test-key");
     // No stored credential: only the remembered environment-variable name.
     await new ProviderSettingsStore(join(root, "config")).saveActive(
-      "deepseek",
+      "dedicated",
       {
-        provider: "deepseek",
+        provider: "dedicated",
         values: {
-          baseURL: "https://api.deepseek.com",
+          baseURL: "https://api.dedicated.example",
           apiMode: "chat",
-          apiKeyEnv: "DEEPSEEK_API_KEY",
+          apiKeyEnv: "DEDICATED_API_KEY",
         },
         model: "saved-model",
       },
       {},
     );
-    const app = await createApplication({ cwd: root, builtins: [deepseekBuiltin], noHerdr: true });
+    const app = await createApplication({ cwd: root, builtins: [dedicatedBuiltin], noHerdr: true });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
     } finally {
       await app.close();
@@ -619,23 +684,23 @@ describe("application provider selection", () => {
     const root = await mkdtemp(join(tmpdir(), "alisio-credential-precedence-"));
     vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
     vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
-    vi.stubEnv("DEEPSEEK_API_KEY", "fake-environment-test-key");
+    vi.stubEnv("DEDICATED_API_KEY", "fake-environment-test-key");
     await new ProviderSettingsStore(join(root, "config")).saveActive(
-      "deepseek",
+      "dedicated",
       {
-        provider: "deepseek",
+        provider: "dedicated",
         values: {
-          baseURL: "https://api.deepseek.com",
+          baseURL: "https://api.dedicated.example",
           apiMode: "chat",
-          apiKeyEnv: "DEEPSEEK_API_KEY",
+          apiKeyEnv: "DEDICATED_API_KEY",
         },
         model: "saved-model",
       },
       { apiKey: "fake-stored-test-key" },
     );
-    const app = await createApplication({ cwd: root, builtins: [deepseekBuiltin], noHerdr: true });
+    const app = await createApplication({ cwd: root, builtins: [dedicatedBuiltin], noHerdr: true });
     try {
-      expect(app.providerInfo).toMatchObject({ id: "deepseek", persisted: true });
+      expect(app.providerInfo).toMatchObject({ id: "dedicated", persisted: true });
       expect(app.provider.model).toBe("saved-model");
       // The stored credential is what identification uses; the environment value is never read.
       expect((await app.providerSettings.active())?.credentials.apiKey).toBe(

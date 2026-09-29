@@ -35,12 +35,14 @@ activación y la persistencia de proveedores.
 | `@alisio/sdk` | Contrato público de plugins: tipos más `definePlugin` y `textResult`. Sin imports de runtime ni de proveedores | Nada |
 | `@alisio/core` | Runner agnóstico del proveedor, registro/activación/persistencia de proveedores, herramientas, adaptadores de runtime, host de plugins, sesiones hijas, configuración y MCP | `@alisio/sdk`, cliente MCP, `ajv`, `yaml`, `zod` |
 | `@alisio/plugin-openai-compatible` | Adaptador integrado Chat Completions/Responses y descubrimiento de modelos | `@alisio/sdk` (peer), `openai` |
-| `@alisio/plugin-deepseek` | Adaptador dedicado DeepSeek Chat/Responses y descubrimiento con metadatos | `@alisio/sdk` (peer), `openai` |
-| `@alisio/plugin-opencode` | Transporte Responses/Chat/Messages de OpenCode Console (Zen) y mapa de modelos cerrado | `@alisio/sdk` (peer) |
-| `@alisio/plugin-opencode-go` | Transporte independiente Responses/Chat/Messages de OpenCode Go y mapa de modelos cerrado | `@alisio/sdk` (peer) |
 | `@alisio/plugin-memory` | Plugin integrado de memoria persistente | `@alisio/sdk` (peer), `zod` |
 | `@alisio/plugin-subagents` | Plugin integrado de [subagentes](/es/subagents): definiciones de agentes, herramientas de delegación, límites, worktrees de git y el árbol de agentes | `@alisio/sdk` (peer), `yaml`, `zod` |
 | `alisio` | CLI, TUI y registro que conecta los plugins integrados de proveedor, memoria y subagentes | `@alisio/core`, todos los plugins integrados, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+
+Los proveedores dedicados de modelos (DeepSeek, OpenCode Console (Zen), OpenCode Go) son paquetes
+`@alisio/plugin-*` publicados desde el monorepo
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) e instalables por separado con
+`alisio install npm:@alisio/plugin-...`.
 
 Los SDKs de proveedores y los imports específicos de un runtime quedan fuera del SDK público y de los
 contratos del núcleo del agente.

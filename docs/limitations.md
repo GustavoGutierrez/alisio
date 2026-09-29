@@ -198,7 +198,8 @@ and an automatic compaction with a real provider were not verified. The full det
 source file linked above.
 
 Truncation handling was verified with mocked providers only (Vitest, no network):
-the four adapters (OpenAI-compatible, DeepSeek, OpenCode Console, OpenCode Go) emit
+the four adapters (the built-in OpenAI-compatible adapter and the DeepSeek, OpenCode Console and
+OpenCode Go plugin adapters) emit
 `completed` with `truncated: true` when a cut (`finish_reason` `length`, `response.incomplete`
 or `stop_reason` `max_tokens`) left usable text with complete tool calls, and still throw on
 empty text, partial tool calls or an abrupt end; the runner completes a cut no-tool-call turn

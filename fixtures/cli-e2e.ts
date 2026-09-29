@@ -206,14 +206,7 @@ try {
   );
   assert.equal(plugins.tools.length, 1);
   assert.deepEqual(plugins.commands, ["compiled:hi"]);
-  assert.deepEqual(plugins.builtin, [
-    "deepseek",
-    "opencode",
-    "opencode-go",
-    "openai-compatible",
-    "memory",
-    "subagents",
-  ]);
+  assert.deepEqual(plugins.builtin, ["openai-compatible", "memory", "subagents"]);
 
   // `alisio install npm:<name>` installs into the global plugins directory through a PATH-shim fake
   // npm (no network), persists the npm name in the global config, refuses headless without --yes

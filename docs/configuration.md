@@ -20,8 +20,8 @@ Each connection also remembers its API key environment variable name: the profil
 store `apiKeyEnv` (the name you chose for that connection). When a provider needs a key, the
 precedence is: the stored credential in `credentials.json` first, then `process.env[apiKeyEnv]`
 using the **profile's** remembered variable name, then the plugin's default variable name (for
-example `DEEPSEEK_API_KEY` for the DeepSeek plugin, `OPENAI_API_KEY` for OpenAI-compatible) only
-when the profile does not record one. Because the name is persisted with the profile, the
+example `OPENAI_API_KEY` for OpenAI-compatible; dedicated provider plugins such as DeepSeek record
+their own default) only when the profile does not record one. Because the name is persisted with the profile, the
 environment fallback keeps working even if the stored credential is later removed. No new secret
 store is involved: the environment variable name is a non-secret configuration value, and keys
 themselves are only ever read from the credentials file or that environment variable.
@@ -54,7 +54,11 @@ other settings alone do not. Otherwise the active `/connect` profile is restored
 profile exists, so it does not permanently defeat a `/connect` selection.
 Headless modes never prompt.
 
-Four provider choices are built in and enabled by default:
+One model provider is built in and enabled by default — **OpenAI compatible**. The dedicated
+providers below are separate plugins published from the
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) monorepo: install them with
+`alisio install npm:@alisio/plugin-deepseek`, `alisio install npm:@alisio/plugin-opencode` and
+`alisio install npm:@alisio/plugin-opencode-go`, and they appear in `/connect` like the built-in:
 
 | Provider | Scope |
 | --- | --- |

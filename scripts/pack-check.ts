@@ -19,10 +19,7 @@ const packages = [
   "sdk",
   "core",
   "plugin-memory",
-  "plugin-deepseek",
   "plugin-openai-compatible",
-  "plugin-opencode",
-  "plugin-opencode-go",
   "plugin-subagents",
   "cli",
 ];

@@ -40,7 +40,8 @@ Endpoint compatible con OpenAI (`my-api.json`):
 }
 ```
 
-DeepSeek (`deepseek.json`):
+DeepSeek (`deepseek.json`, tras instalar el plugin DeepSeek con
+`alisio install npm:@alisio/plugin-deepseek`):
 
 ```json
 {

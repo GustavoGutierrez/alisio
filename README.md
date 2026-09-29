@@ -22,8 +22,10 @@ extend it without touching the core.
 
 - **Terminal UI**: streaming Markdown, tool blocks with spinners, durations and diffs, a context/token
   bar, slash commands with autocomplete, model switching, interactive approvals and copy-on-select.
-- **Any OpenAI-compatible provider**: Chat Completions and Responses APIs, DeepSeek, local servers.
-  Keys are read from environment variables only.
+- **Any OpenAI-compatible provider**: Chat Completions and Responses APIs, DeepSeek-style endpoints, local servers.
+  Keys are read from environment variables only. Dedicated DeepSeek, OpenCode Console (Zen) and
+  OpenCode Go providers are separate plugins: `alisio install npm:@alisio/plugin-deepseek`,
+  `alisio install npm:@alisio/plugin-opencode`, `alisio install npm:@alisio/plugin-opencode-go`.
 - **Local tools with explicit permissions**: reads by default; the TUI asks before every
   write/process/network call unless you pass `--allow-write`/`--allow-process`/`--allow-external`
   (skip asking) or `--read-only` (never even offered). Not a sandbox, and it says so. A repository's
@@ -92,10 +94,12 @@ All packages are published under the [alisio npm organization](https://www.npmjs
 | [`@alisio/sdk`](packages/sdk) | [npm](https://www.npmjs.com/package/@alisio/sdk) | Typed plugin contract, zero runtime dependencies |
 | [`@alisio/plugin-memory`](packages/plugin-memory) | [npm](https://www.npmjs.com/package/@alisio/plugin-memory) | Built-in persistent memory plugin |
 | [`@alisio/plugin-subagents`](packages/plugin-subagents) | [npm](https://www.npmjs.com/package/@alisio/plugin-subagents) | Subagent delegation plugin |
-| [`@alisio/plugin-deepseek`](packages/plugin-deepseek) | [npm](https://www.npmjs.com/package/@alisio/plugin-deepseek) | Dedicated DeepSeek model provider |
-| [`@alisio/plugin-openai-compatible`](packages/plugin-openai-compatible) | [npm](https://www.npmjs.com/package/@alisio/plugin-openai-compatible) | Generic OpenAI-compatible model provider |
-| [`@alisio/plugin-opencode`](packages/plugin-opencode) | [npm](https://www.npmjs.com/package/@alisio/plugin-opencode) | OpenCode Zen model provider |
-| [`@alisio/plugin-opencode-go`](packages/plugin-opencode-go) | [npm](https://www.npmjs.com/package/@alisio/plugin-opencode-go) | OpenCode Go model provider |
+| [`@alisio/plugin-openai-compatible`](packages/plugin-openai-compatible) | [npm](https://www.npmjs.com/package/@alisio/plugin-openai-compatible) | Built-in generic OpenAI-compatible model provider |
+
+Dedicated model providers are independent plugins published from the
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) monorepo and installed
+separately: `alisio install npm:@alisio/plugin-deepseek`,
+`alisio install npm:@alisio/plugin-opencode`, `alisio install npm:@alisio/plugin-opencode-go`.
 
 ## Development
 

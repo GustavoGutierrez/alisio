@@ -5,16 +5,10 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadVersion as loadCliVersion } from "../packages/cli/src/version.ts";
 import { loadVersion as loadCoreVersion } from "../packages/core/src/version.ts";
-import { createDeepSeekPlugin } from "../packages/plugin-deepseek/src/index.ts";
-import { loadVersion as loadDeepSeekVersion } from "../packages/plugin-deepseek/src/version.ts";
 import { createMemoryPlugin } from "../packages/plugin-memory/src/index.ts";
 import { loadVersion as loadMemoryVersion } from "../packages/plugin-memory/src/version.ts";
 import { createOpenAICompatiblePlugin } from "../packages/plugin-openai-compatible/src/index.ts";
 import { loadVersion as loadOpenAICompatibleVersion } from "../packages/plugin-openai-compatible/src/version.ts";
-import { createOpenCodePlugin } from "../packages/plugin-opencode/src/index.ts";
-import { loadVersion as loadOpenCodeVersion } from "../packages/plugin-opencode/src/version.ts";
-import { createOpenCodeGoPlugin } from "../packages/plugin-opencode-go/src/index.ts";
-import { loadVersion as loadOpenCodeGoVersion } from "../packages/plugin-opencode-go/src/version.ts";
 import { createSubagentsPlugin } from "../packages/plugin-subagents/src/index.ts";
 import { loadVersion as loadSubagentsVersion } from "../packages/plugin-subagents/src/version.ts";
 
@@ -26,7 +20,6 @@ describe("package version loading", () => {
     vi.stubEnv("ALISIO_PACKAGE_VERSION", "9.8.7-injected");
     expect(loadCliVersion(import.meta.url)).toBe("9.8.7-injected");
     expect(loadCoreVersion(import.meta.url)).toBe("9.8.7-injected");
-    expect(loadOpenCodeVersion(import.meta.url)).toBe("9.8.7-injected");
   });
 
   it("reads the version from the package manifest next to the module", async () => {
@@ -76,11 +69,8 @@ describe("package version loading", () => {
     for (const load of [
       loadCliVersion,
       loadCoreVersion,
-      loadDeepSeekVersion,
       loadMemoryVersion,
       loadOpenAICompatibleVersion,
-      loadOpenCodeVersion,
-      loadOpenCodeGoVersion,
       loadSubagentsVersion,
     ])
       expect(load(missing)).toBe("dev");
@@ -97,9 +87,6 @@ describe("plugin metadata version source", () => {
           await readFile(join(repoRoot(), "packages", packageDir, "package.json"), "utf8"),
         ) as { version?: string }
       ).version ?? "dev";
-    expect(createOpenCodePlugin().version).toBe(await manifestVersion("plugin-opencode"));
-    expect(createOpenCodeGoPlugin().version).toBe(await manifestVersion("plugin-opencode-go"));
-    expect(createDeepSeekPlugin().version).toBe(await manifestVersion("plugin-deepseek"));
     expect(createOpenAICompatiblePlugin().version).toBe(
       await manifestVersion("plugin-openai-compatible"),
     );

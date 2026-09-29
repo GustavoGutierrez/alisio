@@ -22,8 +22,12 @@ All packages are published under the
 - Core: [`@alisio/core`](https://www.npmjs.com/package/@alisio/core)
 - SDK: [`@alisio/sdk`](https://www.npmjs.com/package/@alisio/sdk)
 - Plugins: `@alisio/plugin-memory`, `@alisio/plugin-subagents`,
-  `@alisio/plugin-deepseek`, `@alisio/plugin-openai-compatible`, `@alisio/plugin-opencode`,
-  `@alisio/plugin-opencode-go`
+  `@alisio/plugin-openai-compatible`
+
+Dedicated model providers (`@alisio/plugin-deepseek`, `@alisio/plugin-opencode`,
+`@alisio/plugin-opencode-go`) are published from the
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) monorepo and install with
+`alisio install npm:@alisio/plugin-...`.
 
 ## Documentation
 

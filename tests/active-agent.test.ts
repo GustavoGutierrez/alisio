@@ -209,8 +209,8 @@ describe("reasoning effort resolution", () => {
 describe("status-line identity parts", () => {
   const input = {
     agent: "build",
-    model: "DeepSeek V4 Flash",
-    provider: "OpenCode Go",
+    model: "Fixture Model 9",
+    provider: "Example Provider",
     effort: "max",
   };
   it("orders agent · model · provider · effort with distinct roles", () => {
@@ -218,8 +218,8 @@ describe("status-line identity parts", () => {
     expect(parts.map((p) => p.role)).toEqual(["agent", "model", "provider", "effort"]);
     expect(parts.map((p) => p.text)).toEqual([
       "agent: build",
-      "DeepSeek V4 Flash",
-      "OpenCode Go",
+      "Fixture Model 9",
+      "Example Provider",
       "max",
     ]);
   });
@@ -237,7 +237,7 @@ describe("status-line identity parts", () => {
       "provider",
       "effort",
     ]);
-    expect(fitIdentityParts(input, 48).map((p) => p.role)).toEqual(["agent", "model", "provider"]);
+    expect(fitIdentityParts(input, 50).map((p) => p.role)).toEqual(["agent", "model", "provider"]);
     expect(fitIdentityParts(input, 34).map((p) => p.role)).toEqual(["agent", "model"]);
     // A lone surviving part is truncated with an ellipsis instead of overflowing.
     const survivor = fitIdentityParts(input, 8);

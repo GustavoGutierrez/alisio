@@ -126,7 +126,7 @@ narrow scope) and, only when a plugin provider failed over to the built-in chain
 Alisio appends a raw provider-native tool definition (`{ type: websearch.nativeToolType }`,
 default `"web_search"`) to the Responses API request instead of implementing its own HTTP call; the
 provider answers the search server-side, so the `websearch` tool is not registered in this mode.
-Most OpenAI-compatible providers — including the DeepSeek configuration Alisio ships with — do
+Most OpenAI-compatible providers — including the DeepSeek plugin configuration — do
 **not** support this; check your provider's own documentation for the exact tool type it expects
 before opting in. An unsupported/rejected tool surfaces as a normal provider error, the same as any
 other request failure.

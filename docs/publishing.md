@@ -23,7 +23,7 @@ Unknown packages and unknown flags fail fast before anything is built or publish
 
 | Flag | Meaning |
 | --- | --- |
-| `--all` | Every publishable package (`sdk`, `core`, `plugin-memory`, `plugin-subagents`, `plugin-deepseek`, `plugin-openai-compatible`, `plugin-opencode`, `plugin-opencode-go`, `cli`) |
+| `--all` | Every publishable package (`sdk`, `core`, `plugin-memory`, `plugin-subagents`, `plugin-openai-compatible`, `cli`) |
 | `--package <name>` | One package, repeatable; combined with `--all` it is the union |
 | `--version <v>` | Atomically set `<v>` in every selected `package.json` before packing (restores all files if any write fails, so a partial bump never ships) |
 | `--dry-run` | Print exactly what would be published (names, versions, tarballs, order) and exit — no build, no bump, no pack, no publish |

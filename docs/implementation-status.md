@@ -55,7 +55,9 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   reinicio tras `/model`; no consulta configuración ni credenciales reales del usuario.
   El formulario de `/connect` acepta pegado normal y bracketed paste por fragmentos, permite editar
   URL con cursor y mantiene los secretos enmascarados fuera del historial y del transcript.
-  Hay tres plugins dedicados adicionales y publicables: `@alisio/plugin-deepseek` usa el endpoint
+  Hay tres plugins dedicados adicionales, publicados como paquetes independientes desde el
+  monorepo alisio-plugins e instalables con `alisio install npm:@alisio/plugin-...` (ya no son
+  integrados de Alisio): `@alisio/plugin-deepseek` usa el endpoint
   oficial por defecto, descubre metadatos de contexto/salida/modalidades/capacidades y admite Chat
   Completions y Responses; `@alisio/plugin-opencode` integra Console/Zen con referencias
   `opencode/<id-del-modelo>`; y `@alisio/plugin-opencode-go` usa `opencode-go/<id-del-modelo>`.
@@ -161,9 +163,10 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   runtimes), `node:fs` y `node:child_process` detrás de la capa de runtime; el
   `ExperimentalWarning` de SQLite se filtra de forma específica sin ocultar otros avisos.
 - Monorepo publicable: `@alisio/sdk` (contrato, sin dependencias), `@alisio/core` (núcleo
-  embebible), `@alisio/plugin-memory`, `@alisio/plugin-deepseek`,
-  `@alisio/plugin-opencode`, `@alisio/plugin-opencode-go`, `@alisio/plugin-openai-compatible`, `@alisio/plugin-subagents` y
-  `alisio` (CLI/TUI, registro de plugins integrados). Build con `tsc` a `dist/` (JS + `.d.ts`),
+  embebible), `@alisio/plugin-memory`, `@alisio/plugin-openai-compatible`,
+  `@alisio/plugin-subagents` y
+  `alisio` (CLI/TUI, registro de plugins integrados). Los plugins dedicados de proveedores
+  (DeepSeek, OpenCode Console/Go) se publican desde el monorepo alisio-plugins. Build con `tsc` a `dist/` (JS + `.d.ts`),
   `publishConfig.exports` sin fuentes, changesets para versionado y publicación con provenance.
   Nuevo `scripts/publish.ts` (`pnpm publish`): empaqueta y publica en orden dependiente seguro
   (sdk → core → plugins → cli), con `--all`/`--package <nombre>` obligatorios, `--version`
@@ -929,7 +932,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No verificado: una llamada real a un proveedor de pago (`tavily`/`brave`/`serpapi`) — ninguna
   clave de esos servicios está disponible en este entorno y no se fabricó ninguna; solo se probaron
   con un servidor HTTP local simulando su forma de respuesta. Tampoco se verificó el modo `native`
-  contra un proveedor real que lo soporte (la configuración de DeepSeek que trae Alisio no lo
+  contra un proveedor real que lo soporte (la configuración de DeepSeek no lo
   soporta, como se documenta); su validación (`apiMode: "responses"` requerido) y el paso del tipo
   de herramienta nativa hacia la petición sí están cubiertos por el flujo normal de tipos y por
   inspección de código, no por una llamada real.

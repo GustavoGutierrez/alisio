@@ -21,8 +21,9 @@ Cada conexión también recuerda el nombre de la variable de entorno de su clave
 del perfil guardan `apiKeyEnv` (el nombre que elegiste para esa conexión). Cuando un proveedor
 necesita una clave, la precedencia es: primero la credencial guardada en `credentials.json`, luego
 `process.env[apiKeyEnv]` usando el **nombre recordado en el perfil** y, solo si el perfil no lo
-registra, el nombre por defecto del plugin (por ejemplo `DEEPSEEK_API_KEY` para el plugin DeepSeek,
-`OPENAI_API_KEY` para el compatible con OpenAI). Como el nombre se persiste con el perfil, el
+registra, el nombre por defecto del plugin (por ejemplo `OPENAI_API_KEY` para OpenAI-compatible;
+los plugins de proveedores dedicados como DeepSeek registran su propio valor).
+Como el nombre se persiste con el perfil, el
 respaldo por entorno sigue funcionando aunque luego se elimine la credencial guardada. No interviene
 ningún almacén de secretos nuevo: el nombre de la variable de entorno es un valor de configuración
 no secreto, y las claves solo se leen del archivo de credenciales o de esa variable de entorno.
@@ -56,7 +57,11 @@ reemplazar su modelo. El `provider` heredado global es el respaldo cuando no exi
 guardado, por lo que no anula de forma permanente una selección de `/connect`.
 Los modos headless nunca preguntan.
 
-Hay cuatro proveedores integrados y activados por defecto:
+Un proveedor de modelos está integrado y activado por defecto: **Compatible con OpenAI**. Los
+proveedores dedicados de la tabla siguiente son plugins independientes publicados desde el
+monorepo [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins): instálelos con
+`alisio install npm:@alisio/plugin-deepseek`, `alisio install npm:@alisio/plugin-opencode` y
+`alisio install npm:@alisio/plugin-opencode-go`, y aparecerán en `/connect` como el integrado:
 
 | Proveedor | Alcance |
 | --- | --- |

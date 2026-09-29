@@ -6,7 +6,6 @@ import type { ModelInfo, ModelProvider } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApplication } from "../packages/core/src/application.ts";
 import { ProviderSettingsStore } from "../packages/core/src/providers/settings.ts";
-import { DeepSeekProvider } from "../packages/plugin-deepseek/src/provider.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -65,7 +64,7 @@ describe("honest context budget", () => {
       provider: provider({
         async listModels() {
           return [
-            { id: "deepseek-flash", contextWindow: 1_000_000 },
+            { id: "wide-flash", contextWindow: 1_000_000 },
             { id: "small", contextWindow: 8_000 },
           ] as ModelInfo[];
         },
@@ -73,10 +72,10 @@ describe("honest context budget", () => {
     });
     try {
       // Before any catalog load the budget is honestly unknown.
-      expect(app.contextBudget("deepseek-flash").basis).toBe("unknown");
-      expect(app.contextBudget("deepseek-flash").total).toBeUndefined();
+      expect(app.contextBudget("wide-flash").basis).toBe("unknown");
+      expect(app.contextBudget("wide-flash").total).toBeUndefined();
       await app.loadModels(AbortSignal.timeout(5_000));
-      expect(app.contextBudget("deepseek-flash")).toEqual({
+      expect(app.contextBudget("wide-flash")).toEqual({
         total: 1_000_000,
         basis: "window",
         compactionAt: 85,
@@ -144,40 +143,27 @@ describe("honest context budget", () => {
     }
   });
 
-  it("maps DeepSeek official context_window metadata into the bar's window", async () => {
+  it("maps provider catalog context_window metadata into the bar's window", async () => {
     const cwd = await root();
     vi.stubEnv("ALISIO_CONFIG_HOME", join(cwd, "config"));
     vi.stubEnv("ALISIO_STATE_HOME", join(cwd, "state"));
-    const deepseek = new DeepSeekProvider(
-      {
-        baseURL: "https://api.deepseek.com",
-        apiKey: "fixture-key",
-        apiKeyEnv: "UNUSED",
-        model: "deepseek-flash",
-        apiMode: "chat",
-        auth: "bearer",
-        tokenParameter: "max_tokens",
-        streamUsage: true,
-      },
-      {
-        models: {
-          async *list() {
-            yield {
-              id: "deepseek-flash",
-              object: "model",
-              owned_by: "deepseek",
-              context_window: 1_000_000,
-              max_output_tokens: 64000,
-            };
-          },
+    const app = await createApplication({
+      cwd,
+      noHerdr: true,
+      provider: provider({
+        id: "catalog:fixture",
+        model: "wide-flash",
+        async listModels() {
+          return [
+            { id: "wide-flash", contextWindow: 1_000_000, maxOutputTokens: 64000 },
+          ] as ModelInfo[];
         },
-      } as never,
-    );
-    const app = await createApplication({ cwd, noHerdr: true, provider: deepseek });
+      }),
+    });
     try {
       await app.loadModels(AbortSignal.timeout(5_000));
-      expect(app.contextWindow("deepseek-flash")).toBe(1_000_000);
-      expect(app.contextBudget("deepseek-flash")).toEqual({
+      expect(app.contextWindow("wide-flash")).toBe(1_000_000);
+      expect(app.contextBudget("wide-flash")).toEqual({
         total: 1_000_000,
         basis: "window",
         compactionAt: 85,

@@ -19,10 +19,10 @@ const view = (id: string, name: string, category: string, extra: Partial<PluginC
     ...extra,
   }) as PluginCatalogView;
 
-// Display sequence: model-provider › / DeepSeek / OpenAI / memory › / Memory / subagents › / Harness
+// Display sequence: model-provider › / Provider A / OpenAI / memory › / Memory / subagents › / Harness
 const catalog = () =>
   pluginCatalogItems([
-    view("deepseek", "DeepSeek", "model-provider"),
+    view("provider-a", "Provider A", "model-provider"),
     view("openai", "OpenAI compatible", "model-provider"),
     view("memory", "Memory", "memory"),
     view("methodology-harness", "Harness", "subagents"),
@@ -44,27 +44,27 @@ describe("Picker with grouped plugin items", () => {
     const onSelect = vi.fn();
     const onCancel = vi.fn();
     const picker = new Picker("Plugins", catalog(), onSelect, onCancel, true);
-    expect(picker.getSelectedItem()?.value).toBe("deepseek");
+    expect(picker.getSelectedItem()?.value).toBe("provider-a");
     const lines = picker.render(100);
     const text = lines.join("\n");
     // Our own styling stays plain under NO_COLOR: the header line carries no ANSI.
     expect(lines).toContain("  model-provider ›");
     // Header rows render before their groups; rows are indented under them.
     expect(text).toContain("model-provider ›");
-    expect(text).toContain("  [x] DeepSeek");
+    expect(text).toContain("  [x] Provider A");
     expect(lines.findIndex((l) => l.includes("model-provider ›"))).toBeLessThan(
-      lines.findIndex((l) => l.includes("  [x] DeepSeek")),
+      lines.findIndex((l) => l.includes("  [x] Provider A")),
     );
     // Exactly one row is selected (the `→ ` prefix) and it is never a header.
     const selected = lines.filter((l) => l.startsWith("→ "));
     expect(selected).toHaveLength(1);
-    expect(selected[0]).toContain("DeepSeek");
+    expect(selected[0]).toContain("Provider A");
     expect(selected[0]).not.toContain("›");
   });
 
   it("skips headers when navigating and wraps in both directions", () => {
     const picker = new Picker("Plugins", catalog(), vi.fn(), vi.fn(), true);
-    expect(picker.getSelectedItem()?.value).toBe("deepseek");
+    expect(picker.getSelectedItem()?.value).toBe("provider-a");
     picker.handleInput(down);
     expect(picker.getSelectedItem()?.value).toBe("openai");
     picker.handleInput(down);
@@ -72,7 +72,7 @@ describe("Picker with grouped plugin items", () => {
     picker.handleInput(down);
     expect(picker.getSelectedItem()?.value).toBe("methodology-harness"); // jumped subagents ›
     picker.handleInput(down);
-    expect(picker.getSelectedItem()?.value).toBe("deepseek"); // wrapped past the headers
+    expect(picker.getSelectedItem()?.value).toBe("provider-a"); // wrapped past the headers
     picker.handleInput(up);
     expect(picker.getSelectedItem()?.value).toBe("methodology-harness"); // wrapped up
     picker.handleInput(up);
@@ -80,7 +80,7 @@ describe("Picker with grouped plugin items", () => {
     picker.handleInput(up);
     expect(picker.getSelectedItem()?.value).toBe("openai");
     picker.handleInput(up);
-    expect(picker.getSelectedItem()?.value).toBe("deepseek");
+    expect(picker.getSelectedItem()?.value).toBe("provider-a");
   });
 
   it("never lands on a header across long navigation runs and never emits one", () => {
@@ -96,7 +96,7 @@ describe("Picker with grouped plugin items", () => {
     }
     picker.handleInput(enter);
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect.mock.calls[0]?.[0]?.value).toBe("deepseek");
+    expect(onSelect.mock.calls[0]?.[0]?.value).toBe("provider-a");
     expect(onSelect.mock.calls[0]?.[0]?.value).not.toMatch(/^__group:/);
   });
 
@@ -130,7 +130,7 @@ describe("Picker with grouped plugin items", () => {
     expect(text).toContain("  [x] Memory");
     expect(text).not.toContain("model-provider ›");
     expect(text).not.toContain("subagents ›");
-    expect(text).not.toContain("DeepSeek");
+    expect(text).not.toContain("Provider A");
     expect(picker.getSelectedItem()?.value).toBe("memory"); // reset onto the first visible row
     picker.handleInput(down);
     expect(picker.getSelectedItem()?.value).toBe("memory"); // single-row list wraps on itself

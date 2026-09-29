@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DeepSeekProvider } from "@alisio/plugin-deepseek";
 import type { Message, RunEvent, ToolCall } from "@alisio/sdk";
 import { textResult } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
@@ -200,7 +199,7 @@ describe("agent loop auto-compaction metric", () => {
     expect(events.some((e) => e.type === "compaction_started")).toBe(true);
   });
 
-  it("does NOT compact on the char budget when a large window is known (DeepSeek case)", async () => {
+  it("does NOT compact on the char budget when a large window is known", async () => {
     // ~6k chars (~1500 tokens) far below 85% of the 1M window (850k tokens); the known window
     // disables the char fallback, so nothing compacts early. The bar shows the same 0% it
     // measured against, instead of compacting invisibly.
@@ -388,45 +387,22 @@ describe("compaction truncation handling", () => {
     }
   });
 
-  it("ends a run normally when the DeepSeek responses stream completes truncated after text", async () => {
+  it("ends a run normally when a responses provider completes truncated after text", async () => {
     const fx = await fixture();
     try {
-      const responsesClient = {
-        responses: {
-          async create() {
-            return (async function* () {
-              yield { type: "response.output_text.delta", delta: "partial " };
-              yield { type: "response.output_text.delta", delta: "answer" };
-              yield {
-                type: "response.incomplete",
-                incomplete_details: { reason: "max_output_tokens" },
-                response: {
-                  output: [
-                    { type: "message", content: [{ type: "output_text", text: "partial answer" }] },
-                  ],
-                },
-              };
-            })();
-          },
+      const provider = {
+        id: "responses-fixture",
+        model: "responses-fixture",
+        async *stream() {
+          yield { type: "text_delta", delta: "partial " };
+          yield { type: "text_delta", delta: "answer" };
+          yield { type: "completed", message: completed("partial answer", [], true) };
         },
       };
-      const deepseek = new DeepSeekProvider(
-        {
-          baseURL: "https://api.deepseek.com",
-          apiKey: "fake",
-          apiKeyEnv: "UNUSED",
-          model: "deepseek-flash",
-          apiMode: "responses",
-          auth: "bearer",
-          tokenParameter: "max_tokens",
-          streamUsage: false,
-        },
-        responsesClient as any,
-      );
-      const session = fx.store.create(fx.root, deepseek.id, "deepseek-flash");
+      const session = fx.store.create(fx.root, provider.id, "responses-fixture");
       const { events, onEvent } = recorder();
       const runner = new AgentRunner({
-        provider: deepseek,
+        provider: provider as any,
         registry: fx.registry,
         store: fx.store,
         context: new ProjectContext(fx.root),
@@ -449,47 +425,22 @@ describe("compaction truncation handling", () => {
     }
   });
 
-  it("keeps a truncated DeepSeek responses summary as a partial checkpoint", async () => {
+  it("keeps a truncated responses summary as a partial checkpoint", async () => {
     const fx = await fixture();
     try {
-      const responsesClient = {
-        responses: {
-          async create() {
-            return (async function* () {
-              yield {
-                type: "response.incomplete",
-                incomplete_details: { reason: "max_output_tokens" },
-                response: {
-                  output: [
-                    {
-                      type: "message",
-                      content: [{ type: "output_text", text: JSON.stringify(checkpoint) }],
-                    },
-                  ],
-                },
-              };
-            })();
-          },
+      const summary = JSON.stringify(checkpoint);
+      const provider = {
+        id: "responses-fixture",
+        model: "responses-fixture",
+        async *stream() {
+          yield { type: "completed", message: completed(summary, [], true) };
         },
       };
-      const deepseek = new DeepSeekProvider(
-        {
-          baseURL: "https://api.deepseek.com",
-          apiKey: "fake",
-          apiKeyEnv: "UNUSED",
-          model: "deepseek-flash",
-          apiMode: "responses",
-          auth: "bearer",
-          tokenParameter: "max_tokens",
-          streamUsage: false,
-        },
-        responsesClient as any,
-      );
-      const session = fx.store.create(fx.root, "deepseek", "deepseek-flash");
+      const session = fx.store.create(fx.root, "responses-fixture", "responses-fixture");
       for (const message of history()) fx.store.append(session.id, message);
       const { events, onEvent } = recorder();
       const runner = new AgentRunner({
-        provider: deepseek,
+        provider: provider as any,
         registry: fx.registry,
         store: fx.store,
         context: new ProjectContext(fx.root),
@@ -507,39 +458,22 @@ describe("compaction truncation handling", () => {
     }
   });
 
-  it("fails a DeepSeek responses compaction that is truncated before any text", async () => {
+  it("fails a responses compaction that is truncated before any text", async () => {
     const fx = await fixture();
     try {
-      const responsesClient = {
-        responses: {
-          async create() {
-            return (async function* () {
-              yield {
-                type: "response.incomplete",
-                incomplete_details: { reason: "max_output_tokens" },
-                response: { output: [] },
-              };
-            })();
-          },
+      const provider = {
+        id: "responses-fixture",
+        model: "responses-fixture",
+        async *stream() {
+          throw new Error(
+            "Provider response cut off by max output tokens before any usable content",
+          );
         },
       };
-      const deepseek = new DeepSeekProvider(
-        {
-          baseURL: "https://api.deepseek.com",
-          apiKey: "fake",
-          apiKeyEnv: "UNUSED",
-          model: "deepseek-flash",
-          apiMode: "responses",
-          auth: "bearer",
-          tokenParameter: "max_tokens",
-          streamUsage: false,
-        },
-        responsesClient as any,
-      );
-      const session = fx.store.create(fx.root, "deepseek", "deepseek-flash");
+      const session = fx.store.create(fx.root, "responses-fixture", "responses-fixture");
       for (const message of history()) fx.store.append(session.id, message);
       const runner = new AgentRunner({
-        provider: deepseek,
+        provider: provider as any,
         registry: fx.registry,
         store: fx.store,
         context: new ProjectContext(fx.root),

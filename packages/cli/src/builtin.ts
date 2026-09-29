@@ -2,38 +2,16 @@
  * Built-in plugin registry wired by the CLI. Built-ins load through the trusted path of the
  * plugin host (unprefixed names, `internal` effect) and can be disabled by configuration
  * (`builtinPlugins.<id>.enabled: false`) or `--disable-plugin <id>`. Add a built-in by
- * appending an entry here.
+ * appending an entry here. Dedicated model providers (DeepSeek, OpenCode Console, OpenCode Go)
+ * are no longer built-ins: users install them independently via
+ * `alisio install npm:@alisio/plugin-{deepseek,opencode,opencode-go}`.
  */
 import type { BuiltinPlugin } from "@alisio/core";
-import { createDeepSeekPlugin } from "@alisio/plugin-deepseek";
 import { createMemoryPlugin } from "@alisio/plugin-memory";
 import { createOpenAICompatiblePlugin } from "@alisio/plugin-openai-compatible";
-import { createOpenCodePlugin } from "@alisio/plugin-opencode";
-import { createOpenCodeGoPlugin } from "@alisio/plugin-opencode-go";
 import { createSubagentsPlugin } from "@alisio/plugin-subagents";
 
 export const BUILTIN_PLUGINS: BuiltinPlugin[] = [
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    description: "Dedicated DeepSeek Chat Completions and Responses provider",
-    categories: ["model-provider"],
-    create: createDeepSeekPlugin,
-  },
-  {
-    id: "opencode",
-    name: "OpenCode Console (Zen)",
-    description: "Dedicated OpenCode Console (Zen) multi-protocol provider",
-    categories: ["model-provider"],
-    create: createOpenCodePlugin,
-  },
-  {
-    id: "opencode-go",
-    name: "OpenCode Go",
-    description: "Dedicated OpenCode Go multi-protocol provider",
-    categories: ["model-provider"],
-    create: createOpenCodeGoPlugin,
-  },
   {
     id: "openai-compatible",
     name: "OpenAI compatible",

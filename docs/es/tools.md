@@ -135,7 +135,7 @@ la cadena integrada, un `diagnostic`.
 procesar (`{ type: websearch.nativeToolType }`, por defecto `"web_search"`) a la petición de la
 Responses API en lugar de implementar su propia llamada HTTP; el proveedor responde la búsqueda del
 lado del servidor, así que la herramienta `websearch` no se registra en este modo. La mayoría de
-proveedores compatibles con OpenAI —incluida la configuración de DeepSeek que trae Alisio— **no**
+proveedores compatibles con OpenAI —incluida la configuración de DeepSeek— **no**
 admiten esto; consulte la documentación de su proveedor para conocer el tipo exacto de herramienta
 que espera antes de activarlo. Una herramienta no admitida/rechazada aparece como un error normal
 del proveedor, igual que cualquier otro fallo de la petición.

@@ -49,10 +49,7 @@ export const PACKAGE_DIRS: Record<string, string> = {
   core: "core",
   "plugin-memory": "plugin-memory",
   "plugin-subagents": "plugin-subagents",
-  "plugin-deepseek": "plugin-deepseek",
   "plugin-openai-compatible": "plugin-openai-compatible",
-  "plugin-opencode": "plugin-opencode",
-  "plugin-opencode-go": "plugin-opencode-go",
   cli: "cli",
 };
 
@@ -66,10 +63,7 @@ const RANK: Record<string, number> = {
   core: 1,
   "plugin-memory": 2,
   "plugin-subagents": 2,
-  "plugin-deepseek": 2,
   "plugin-openai-compatible": 2,
-  "plugin-opencode": 2,
-  "plugin-opencode-go": 2,
   cli: 3,
 };
 

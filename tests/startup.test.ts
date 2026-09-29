@@ -32,8 +32,8 @@ const base = {
   version: "0.1.0-alpha.1",
   cwd: "/home/dev/projects/alisio",
   home: "/home/dev",
-  model: "deepseek-flash",
-  provider: "api.deepseek.com",
+  model: "test-model",
+  provider: "example.test",
   facts: [
     { label: "permissions", value: "write:ask process:ask" },
     { label: "memory", value: "on" },
@@ -91,7 +91,7 @@ describe("default startup screen", () => {
       expect(result.screen).toBe("alisio.default");
       expect(result.mascot).toBe("alisio.default");
       expect(allWithin(result.lines, columns)).toBe(true);
-      for (const piece of ["Alisio", "0.1.0-alpha.1", "deepseek-flash", "api.deepseek.com", "Tip"])
+      for (const piece of ["Alisio", "0.1.0-alpha.1", "test-model", "example.test", "Tip"])
         expect(text).toContain(piece);
       expect(text).toContain("alisio");
       expect(result.diagnostics).toEqual([]);
@@ -155,7 +155,7 @@ describe("startup plugin summary", () => {
   it("groups model providers without expanding their names", () => {
     const line = pluginsSection(
       context([
-        ...["deepseek", "openai-compatible", "opencode", "opencode-go"].map((id) => ({
+        ...["provider-a", "openai-compatible", "provider-b", "provider-c"].map((id) => ({
           id,
           version: "1",
           builtin: true,
@@ -166,7 +166,7 @@ describe("startup plugin summary", () => {
       ]),
     )[0];
     expect(line).toBe("  with 4 model providers, memory (builtin), subagents (builtin)  ");
-    expect(line).not.toMatch(/deepseek|openai-compatible|opencode/);
+    expect(line).not.toMatch(/provider-a|openai-compatible|provider-b|provider-c/);
   });
 
   it("uses singular grammar for one registered model-provider plugin", () => {
@@ -232,8 +232,8 @@ describe("startup plugin summary", () => {
         ...base,
         terminal: terminal({ columns: 120 }),
       }).lines.join("\n");
-      expect(rendered).toContain("with 4 model providers, memory (builtin), subagents (builtin)");
-      expect(rendered).not.toMatch(/deepseek \(|openai-compatible \(|opencode \(|opencode-go \(/);
+      expect(rendered).toContain("with 1 model provider, memory (builtin), subagents (builtin)");
+      expect(rendered).not.toMatch(/openai-compatible \(/);
       // The real built-ins now carry their declared categories in host metadata.
       const metadata = host.metadata();
       expect(metadata.find((p) => p.id === "memory")?.categories).toEqual(["memory"]);

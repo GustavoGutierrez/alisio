@@ -28,9 +28,9 @@ describe("publish script: ordering", () => {
     expect(order[0]).toBe("sdk");
     expect(order[1]).toBe("core");
     expect(order.indexOf("cli")).toBe(order.length - 1);
-    for (const plugin of ["plugin-deepseek", "plugin-memory", "plugin-opencode"])
+    for (const plugin of ["plugin-memory", "plugin-openai-compatible", "plugin-subagents"])
       expect(order.indexOf(plugin)).toBeGreaterThan(order.indexOf("core"));
-    expect(order.indexOf("cli")).toBeGreaterThan(order.indexOf("plugin-opencode-go"));
+    expect(order.indexOf("cli")).toBeGreaterThan(order.indexOf("plugin-openai-compatible"));
   });
 });
 
