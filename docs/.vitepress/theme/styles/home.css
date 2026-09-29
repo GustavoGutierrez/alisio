@@ -1,0 +1,67 @@
+/* Decorative artwork is background-only; all content remains in semantic HTML. */
+.VPHome .VPHero {
+  position: relative;
+  background-color: var(--alisio-deep-navy);
+  background-image: var(--alisio-panel-overlay), url("/assets/background-box.jpg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  border-bottom: 0;
+}
+
+.VPHome .VPHero .text {
+  color: var(--alisio-panel-text);
+}
+
+.VPHome .VPHero .tagline {
+  color: var(--alisio-panel-text-muted);
+}
+
+.VPNavBar.home.top {
+  background-color: var(--vp-c-bg);
+}
+
+.VPFooter.VPFooter {
+  background-color: var(--alisio-deep-navy);
+  background-image: var(--alisio-footer-overlay), url("/assets/footer-background.jpg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  border-top: 0;
+}
+
+.VPFooter.VPFooter .message,
+.VPFooter.VPFooter .copyright,
+.VPFooter.VPFooter a {
+  color: var(--alisio-panel-text-muted);
+}
+
+.VPFooter.VPFooter a:hover {
+  color: var(--alisio-panel-text);
+}
+
+@media (max-width: 959px) {
+  .VPHome .VPHero {
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(2, 14, 28, 0.3) 0%,
+        rgba(2, 14, 28, 0.42) 32%,
+        rgba(2, 14, 28, 0.82) 44%,
+        rgba(2, 14, 28, 0.9) 58%,
+        rgba(2, 14, 28, 0.92) 100%
+      ),
+      url("/assets/background-box.jpg");
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

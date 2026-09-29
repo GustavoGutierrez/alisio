@@ -92,6 +92,7 @@ const es = {
 };
 
 export default defineConfig({
+  theme: "./theme/index.ts",
   base: "/alisio/",
   title: "Alisio",
   description: "An extensible, provider-agnostic coding-agent harness for your terminal.",

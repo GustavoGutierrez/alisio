@@ -1,0 +1,188 @@
+/**
+ * Alisio visual tokens mapped to VitePress' default theme. The palette comes
+ * from `guia-estilo-alisio.md`; the three adjusted roles preserve accessible
+ * contrast for light-mode links, subdued text, and focus indicators.
+ */
+:root {
+  --alisio-50: #effcff;
+  --alisio-100: #d8f7fe;
+  --alisio-200: #b6f0fc;
+  --alisio-300: #85e7fb;
+  --alisio-400: #60e0f9;
+  --alisio-500: #07c4f9;
+  --alisio-600: #01a5f7;
+  --alisio-700: #087bc1;
+  --alisio-800: #075a92;
+  --alisio-900: #06345f;
+  --alisio-950: #031c36;
+
+  --alisio-cyan-light: var(--alisio-400);
+  --alisio-sky: var(--alisio-500);
+  --alisio-blue: var(--alisio-600);
+  --alisio-blue-deep: var(--alisio-700);
+  --alisio-ocean: var(--alisio-800);
+  --alisio-navy: var(--alisio-900);
+  --alisio-deep-navy: var(--alisio-950);
+  --alisio-midnight: #020e1c;
+
+  --alisio-success: #22c78a;
+  --alisio-warning: #f5b942;
+  --alisio-error: #f05d6c;
+  --alisio-info: var(--alisio-sky);
+  --alisio-focus: var(--alisio-cyan-light);
+  --alisio-success-soft: rgba(34, 199, 138, 0.14);
+  --alisio-warning-soft: rgba(245, 185, 66, 0.16);
+  --alisio-error-soft: rgba(240, 93, 108, 0.14);
+  --alisio-info-soft: rgba(7, 196, 249, 0.12);
+
+  --alisio-gradient-brand: linear-gradient(135deg, #60e0f9 0%, #07c4f9 45%, #01a5f7 100%);
+  --alisio-gradient-deep: linear-gradient(135deg, #60e0f9 0%, #01a5f7 45%, #075a92 100%);
+  --alisio-gradient-dark: linear-gradient(135deg, #031c36 0%, #06345f 45%, #01a5f7 100%);
+
+  --alisio-primary: var(--alisio-blue);
+  --alisio-primary-hover: var(--alisio-blue-deep);
+  --alisio-accent: var(--alisio-sky);
+  --alisio-highlight: var(--alisio-cyan-light);
+  --alisio-bg: #f8fcff;
+  --alisio-bg-secondary: #eff9fe;
+  --alisio-surface: #ffffff;
+  --alisio-surface-hover: #e8f7fd;
+  --alisio-border: #cdecf8;
+  --alisio-border-strong: #8edaf2;
+  --alisio-text: #06233d;
+  --alisio-text-secondary: #45647a;
+  --alisio-text-muted: #6f8798;
+  --alisio-code-bg: #f0f8fc;
+
+  /* Audited substitutions: #075A92 links, #5A7385 subdued text, #087BC1 focus. */
+  --alisio-text-subtle: #5a7385;
+  --alisio-link: var(--alisio-ocean);
+  --alisio-link-hover: var(--alisio-navy);
+  --alisio-solid: var(--alisio-ocean);
+  --alisio-solid-strong: var(--alisio-navy);
+  --alisio-focus-ring: var(--alisio-blue-deep);
+
+  --alisio-panel-text: #edf9ff;
+  --alisio-panel-text-muted: #a8cddd;
+  --alisio-panel-overlay: linear-gradient(
+    90deg,
+    rgba(2, 14, 28, 0.92) 0%,
+    rgba(2, 14, 28, 0.88) 48%,
+    rgba(2, 14, 28, 0.62) 78%,
+    rgba(2, 14, 28, 0.36) 100%
+  );
+  --alisio-footer-overlay: linear-gradient(
+    180deg,
+    rgba(2, 14, 28, 0.5) 0%,
+    rgba(2, 14, 28, 0.78) 30%,
+    rgba(2, 14, 28, 0.88) 50%,
+    rgba(2, 14, 28, 0.78) 70%,
+    rgba(2, 14, 28, 0.46) 100%
+  );
+
+  --vp-c-brand-1: var(--alisio-link);
+  --vp-c-brand-2: var(--alisio-link-hover);
+  --vp-c-brand-3: var(--alisio-solid);
+  --vp-c-brand-soft: rgba(1, 165, 247, 0.14);
+  --vp-c-bg: var(--alisio-bg);
+  --vp-c-bg-alt: var(--alisio-bg-secondary);
+  --vp-c-bg-elv: var(--alisio-surface);
+  --vp-c-bg-soft: var(--alisio-bg-secondary);
+  --vp-c-text-1: var(--alisio-text);
+  --vp-c-text-2: var(--alisio-text-secondary);
+  --vp-c-text-3: var(--alisio-text-subtle);
+  --vp-c-border: var(--alisio-border-strong);
+  --vp-c-divider: var(--alisio-border);
+  --vp-c-gutter: var(--alisio-border);
+  --vp-c-default-1: var(--alisio-300);
+  --vp-c-default-2: var(--alisio-200);
+  --vp-c-default-3: var(--alisio-100);
+  --vp-c-default-soft: rgba(7, 196, 249, 0.12);
+  --vp-c-success-soft: var(--alisio-success-soft);
+  --vp-c-warning-soft: var(--alisio-warning-soft);
+  --vp-c-danger-soft: var(--alisio-error-soft);
+  --vp-c-caution-soft: var(--alisio-error-soft);
+  --vp-code-block-bg: var(--alisio-code-bg);
+  --vp-code-bg: rgba(1, 165, 247, 0.1);
+  --vp-code-color: var(--vp-c-brand-1);
+  --vp-local-search-highlight-bg: var(--vp-c-brand-1);
+  --vp-local-search-highlight-text: #ffffff;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: var(--alisio-deep-navy);
+  --vp-button-brand-bg: var(--alisio-cyan-light);
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: var(--alisio-deep-navy);
+  --vp-button-brand-hover-bg: var(--alisio-sky);
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: var(--alisio-deep-navy);
+  --vp-button-brand-active-bg: var(--alisio-blue);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: var(--alisio-gradient-brand);
+  --vp-home-hero-image-background-image: var(--alisio-gradient-dark);
+  --vp-home-hero-image-filter: blur(48px) opacity(0.85);
+}
+
+.dark {
+  --alisio-primary: var(--alisio-sky);
+  --alisio-primary-hover: var(--alisio-cyan-light);
+  --alisio-accent: var(--alisio-blue);
+  --alisio-bg: var(--alisio-midnight);
+  --alisio-bg-secondary: var(--alisio-deep-navy);
+  --alisio-surface: #062747;
+  --alisio-surface-hover: #08385f;
+  --alisio-border: #0a456e;
+  --alisio-border-strong: var(--alisio-blue-deep);
+  --alisio-text: #edf9ff;
+  --alisio-text-secondary: #a8cddd;
+  --alisio-text-muted: #7297a9;
+  --alisio-code-bg: #03182d;
+  --alisio-text-subtle: var(--alisio-text-muted);
+  --alisio-link: var(--alisio-sky);
+  --alisio-link-hover: var(--alisio-highlight);
+  --alisio-solid: var(--alisio-blue-deep);
+  --alisio-solid-strong: var(--alisio-ocean);
+  --alisio-focus-ring: var(--alisio-highlight);
+  --vp-c-brand-1: var(--alisio-link);
+  --vp-c-brand-2: var(--alisio-link-hover);
+  --vp-c-brand-3: var(--alisio-solid);
+  --vp-c-brand-soft: rgba(7, 196, 249, 0.16);
+  --vp-c-bg: var(--alisio-bg);
+  --vp-c-bg-alt: var(--alisio-bg-secondary);
+  --vp-c-bg-elv: var(--alisio-surface);
+  --vp-c-bg-soft: var(--alisio-surface);
+  --vp-c-text-1: var(--alisio-text);
+  --vp-c-text-2: var(--alisio-text-secondary);
+  --vp-c-text-3: var(--alisio-text-subtle);
+  --vp-c-border: var(--alisio-border-strong);
+  --vp-c-divider: var(--alisio-border);
+  --vp-c-gutter: var(--alisio-bg-secondary);
+  --vp-c-default-1: var(--alisio-border);
+  --vp-c-default-2: var(--alisio-border);
+  --vp-c-default-3: var(--alisio-surface-hover);
+  --vp-c-default-soft: rgba(7, 196, 249, 0.16);
+  --vp-code-block-bg: var(--alisio-code-bg);
+  --vp-code-bg: rgba(7, 196, 249, 0.14);
+  --vp-code-color: var(--vp-c-brand-1);
+  --vp-local-search-highlight-bg: var(--vp-c-brand-1);
+  --vp-local-search-highlight-text: var(--alisio-midnight);
+}
+
+.VPButton.brand {
+  background-image: var(--alisio-gradient-brand);
+}
+
+.VPButton.brand:hover,
+.VPButton.brand:active {
+  background-image: var(--alisio-gradient-brand);
+  filter: brightness(0.96);
+}
+
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--alisio-focus-ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background-color: var(--alisio-highlight);
+  color: var(--alisio-deep-navy);
+}
