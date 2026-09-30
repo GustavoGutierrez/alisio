@@ -621,6 +621,43 @@ export function isSettableSettingKey(key: string): key is SettableSettingKey {
   return Object.prototype.hasOwnProperty.call(SETTABLE_KEYS, key);
 }
 
+export interface SettableSettingInfo {
+  key: SettableSettingKey;
+  kind: "boolean" | "number" | "string" | "enum";
+  options?: string[];
+}
+
+/** Unwraps optional/default/nullable wrappers down to the value schema. */
+function settingLeaf(schema: z.ZodTypeAny): z.ZodTypeAny {
+  let current = schema as z.ZodTypeAny & { def?: { type?: string; innerType?: z.ZodTypeAny } };
+  for (let depth = 0; depth < 8; depth++) {
+    const type = current.def?.type;
+    if (
+      (type === "optional" || type === "default" || type === "nullable") &&
+      current.def?.innerType
+    )
+      current = current.def.innerType as typeof current;
+    else break;
+  }
+  return current;
+}
+
+/** Every settable key with its value kind (and enum options), for settings editors. */
+export function settableSettings(): SettableSettingInfo[] {
+  return (Object.keys(SETTABLE_KEYS) as SettableSettingKey[]).map((key) => {
+    const leaf = settingLeaf(SETTABLE_KEYS[key]) as z.ZodTypeAny & {
+      def?: { type?: string };
+      options?: unknown[];
+    };
+    const type = leaf.def?.type;
+    if (type === "enum")
+      return { key, kind: "enum", options: (leaf.options ?? []).map((o) => String(o)) };
+    if (type === "boolean") return { key, kind: "boolean" };
+    if (type === "number" || type === "int") return { key, kind: "number" };
+    return { key, kind: "string" };
+  });
+}
+
 /**
  * Atomically sets one user-facing setting in the global config file (`<config home>/config.json`)
  * while preserving every unrelated JSON field. The value is validated against the same zod leaf

@@ -2,6 +2,7 @@
  * Pure presentation logic for the TUI: formatting, command parsing and the reduction of
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
+import { CommandCatalog } from "@alisio/core";
 import type { Message, ModelInfo, RunEvent, ToolResult, TreeNode, UiBlock } from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
@@ -342,67 +343,33 @@ export function fitSegments<T extends Segment>(
   return kept;
 }
 
+/** Built-ins only: plugin, template and skill commands are resolved against the live app. */
+const BUILTIN_CATALOG = new CommandCatalog();
 export interface CommandSpec {
   name: string;
   description: string;
   argumentHint?: string;
   aliases?: string[];
 }
-export const COMMANDS: CommandSpec[] = [
-  { name: "help", description: "Show commands and keys" },
-  { name: "connect", description: "Configure a provider and choose its active model" },
-  {
-    name: "model",
-    description: "Switch provider and model",
-    aliases: ["models"],
-  },
-  { name: "compact", description: "Summarize older history", argumentHint: "[focus]" },
-  { name: "stats", description: "Session statistics" },
-  { name: "clear", description: "Start a new session", aliases: ["new"] },
-  { name: "sessions", description: "List recent sessions" },
-  { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
-  { name: "tools", description: "List tools and permission state" },
-  {
-    name: "plugins",
-    description: "Browse and manage project plugins",
-    aliases: ["plugin"],
-  },
-  {
-    name: "skills",
-    description: "Browse and manage effective skills",
-    aliases: ["skill"],
-  },
-  { name: "mcp", description: "Browse and manage MCP servers" },
-  {
-    name: "settings",
-    description: "Open the settings menu",
-    aliases: ["prefs"],
-  },
-  { name: "copy", description: "Copy the last assistant response to the clipboard" },
-  {
-    name: "agents",
-    description: "List and switch the active agent (applies from the next prompt)",
-    argumentHint: "[<verb>]",
-  },
-  {
-    name: "effort",
-    description: "Set the reasoning effort level for the active model",
-    argumentHint: "[level]",
-  },
-  {
-    name: "ask",
-    description: "Ask the agent to turn your question into a multiple-choice ask_user_question",
-    argumentHint: "<question>",
-  },
-  { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
-];
+/**
+ * Built-in slash commands the TUI offers, derived from the core `CommandCatalog` (the TUI
+ * surface of `BUILTIN_COMMANDS`). Kept as `COMMANDS` for compatibility.
+ */
+export const COMMANDS: CommandSpec[] = BUILTIN_CATALOG.list("tui")
+  .filter((c) => c.source === "builtin")
+  .map((c) => ({
+    name: c.name,
+    description: c.description,
+    ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
+    ...(c.aliases ? { aliases: c.aliases } : {}),
+  }));
 /** Every TUI slash name (commands, aliases and routing prefixes); templates cannot take them. */
 export function reservedCommandNames(): string[] {
   return [...COMMANDS.flatMap((c) => [c.name, ...(c.aliases ?? [])]), "command"];
 }
 export function resolveCommand(name: string): string | undefined {
-  const lower = name.toLowerCase();
-  return COMMANDS.find((c) => c.name === lower || c.aliases?.includes(lower))?.name;
+  const found = BUILTIN_CATALOG.resolve(name);
+  return found?.source === "builtin" && found.surfaces.includes("tui") ? found.name : undefined;
 }
 export function parseCommand(input: string): { name: string; args: string } | undefined {
   const match = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(input.trim());
@@ -1128,10 +1095,73 @@ export function isUiBlock(value: unknown): value is UiBlock {
       );
     case "markdown":
       return typeof block.text === "string";
+    case "diff":
+      return optionalStrings(block, ["path", "patch", "before", "after", "lang", "caption"]);
+    case "terminal":
+      return (
+        typeof block.output === "string" &&
+        optionalStrings(block, ["command", "cwd"]) &&
+        optionalNumbers(block, ["exitCode", "durationMs"]) &&
+        (block.truncated === undefined || typeof block.truncated === "boolean")
+      );
+    case "mermaid":
+      return typeof block.source === "string" && optionalStrings(block, ["title"]);
+    case "math":
+      return (
+        typeof block.latex === "string" &&
+        (block.display === undefined || typeof block.display === "boolean")
+      );
+    case "json":
+      return (
+        "value" in block &&
+        optionalNumbers(block, ["collapsedDepth"]) &&
+        optionalStrings(block, ["caption"])
+      );
+    case "test-results":
+      return (
+        optionalStrings(block, ["framework"]) &&
+        optionalNumbers(block, ["durationMs"]) &&
+        Array.isArray(block.suites) &&
+        (block.suites as unknown[]).every(
+          (suite) =>
+            isRecord(suite) &&
+            typeof suite.name === "string" &&
+            optionalStrings(suite, ["file"]) &&
+            Array.isArray(suite.cases) &&
+            (suite.cases as unknown[]).every(
+              (c) =>
+                isRecord(c) &&
+                typeof c.name === "string" &&
+                TEST_STATUSES.has(c.status as string) &&
+                optionalStrings(c, ["error"]) &&
+                optionalNumbers(c, ["durationMs", "line"]),
+            ),
+        )
+      );
+    case "progress":
+      return (
+        optionalStrings(block, ["title"]) &&
+        Array.isArray(block.steps) &&
+        (block.steps as unknown[]).every(
+          (step) =>
+            isRecord(step) &&
+            typeof step.label === "string" &&
+            PROGRESS_STATUSES.has(step.status as string) &&
+            optionalStrings(step, ["detail"]),
+        )
+      );
     default:
       return false;
   }
 }
+const TEST_STATUSES = new Set(["passed", "failed", "skipped", "todo"]);
+const PROGRESS_STATUSES = new Set(["pending", "running", "completed", "failed", "cancelled"]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const optionalStrings = (record: Record<string, unknown>, keys: string[]) =>
+  keys.every((key) => record[key] === undefined || typeof record[key] === "string");
+const optionalNumbers = (record: Record<string, unknown>, keys: string[]) =>
+  keys.every((key) => record[key] === undefined || typeof record[key] === "number");
 
 /** True when an unknown event value is a `{type:"image"}`-style part (mime + base64 data). */
 export function isImagePart(value: unknown): value is { mimeType: string; data: string } {
@@ -1140,13 +1170,31 @@ export function isImagePart(value: unknown): value is { mimeType: string; data: 
   return typeof record.mimeType === "string" && typeof record.data === "string";
 }
 
+/**
+ * Display blocks the standard tools attach for the web UI only (spec §8.6): the TUI already
+ * shows the same content from the text (output rows, exit line), so rendering them would repeat it.
+ */
+const WEB_ONLY_UI: Record<string, UiBlock["kind"]> = {
+  write_file: "diff",
+  edit_file: "diff",
+  shell: "terminal",
+  run_process: "terminal",
+};
+
 /** Rich (ui/image) parts of a persisted tool result, if any. */
-export function richPartsOf(result: ToolResult | undefined): {
+export function richPartsOf(
+  result: ToolResult | undefined,
+  toolName?: string,
+): {
   ui?: UiBlock;
   image?: { mimeType: string; data: string };
 } {
   if (!result) return {};
-  const ui = result.content.find((part) => part.type === "ui");
+  const skip =
+    toolName !== undefined && Object.hasOwn(WEB_ONLY_UI, toolName)
+      ? WEB_ONLY_UI[toolName]
+      : undefined;
+  const ui = result.content.find((part) => part.type === "ui" && part.block.kind !== skip);
   const image = result.content.find((part) => part.type === "image");
   return {
     ...(ui?.type === "ui" ? { ui: ui.block } : {}),
@@ -1538,7 +1586,7 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
           preview,
           toolKind: toolKindOf(c.name),
           ...exitCodePart(preview),
-          ...richPartsOf(r?.result),
+          ...richPartsOf(r?.result, c.name),
         });
       }
     }

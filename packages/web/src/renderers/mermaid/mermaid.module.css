@@ -1,0 +1,120 @@
+.block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.label {
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 26px;
+  justify-content: center;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.action:disabled {
+  opacity: 0.4;
+}
+
+.viewport {
+  max-height: 560px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.canvas {
+  min-width: 120px;
+}
+
+.canvas :global(svg) {
+  display: block;
+  width: 100%;
+  max-width: none !important;
+  height: auto;
+}
+
+.source {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.error {
+  margin: 0;
+  padding: 8px 12px 0;
+  color: var(--warn);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px 24px;
+  background: rgb(0 0 0 / 70%);
+}
+
+.overlayBody {
+  width: min(1400px, 100%);
+  max-height: 100%;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--code-bg);
+  overflow: auto;
+}
+
+.overlayClose {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  background: var(--panel);
+}

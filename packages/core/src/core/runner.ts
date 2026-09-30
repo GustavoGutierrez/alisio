@@ -1,8 +1,11 @@
 import {
   type Attachment,
+  isEphemeralRunEventType,
   type Message,
   type ModelProvider,
   type RunEvent,
+  type RunEventDataMap,
+  type RunEventType,
   type ToolDefinition,
   type ToolResult,
   textProjection,
@@ -27,6 +30,7 @@ import type {
   Policy,
   RunnerExtensions,
   SessionStore,
+  TerminalRunStatus,
 } from "./contracts.ts";
 import type { ToolRegistry } from "./registry.ts";
 export interface CompactionSettings {
@@ -120,6 +124,10 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Reasoning effort level for this run; beats the runner-level default when set. */
   reasoningEffort?: string;
+  /** Run id to use for this run's events (e.g. preassigned by an embedder); a UUID otherwise. */
+  runId?: string;
+  /** Copied to every event of this run as `RunEvent.correlationId` (e.g. an HTTP request id). */
+  correlationId?: string;
 }
 /**
  * Default cumulative token budget for one run: several context windows (each turn re-sends the
@@ -145,7 +153,8 @@ export interface CompactionResult {
   after: number;
   summary: Extract<Message, { role: "user" }>;
 }
-type Emit = (type: string, data: unknown) => void;
+/** Typed emitter: payloads are checked against the SDK `RunEventDataMap` contract. */
+type Emit = <T extends RunEventType>(type: T, data: RunEventDataMap[T]) => void;
 export class AgentRunner {
   /** Sessions with an active run or compaction (one at a time per session). */
   private active = new Map<string, AbortController>();
@@ -174,8 +183,9 @@ export class AgentRunner {
       ...(compaction ? { compaction: { ...this.options.compaction, ...compaction } } : {}),
     };
   }
-  private emitter(sessionId: string): Emit {
-    const runId = crypto.randomUUID();
+  private emitter(sessionId: string, run: { runId?: string; correlationId?: string } = {}): Emit {
+    const runId = run.runId ?? crypto.randomUUID();
+    const correlationId = run.correlationId;
     let seq = 0;
     return (type, data) => {
       const event: RunEvent = {
@@ -187,8 +197,14 @@ export class AgentRunner {
         timestamp: new Date().toISOString(),
         data,
       };
-      if (type !== "text_delta" && type !== "tool_progress" && type !== "reasoning_delta")
-        this.options.store.event(sessionId, runId, type, data);
+      if (!isEphemeralRunEventType(type)) {
+        const persisted =
+          correlationId !== undefined
+            ? this.options.store.event(sessionId, runId, type, data, { correlationId })
+            : this.options.store.event(sessionId, runId, type, data);
+        if (typeof persisted === "number") event.eventId = String(persisted);
+      }
+      if (correlationId !== undefined) event.correlationId = correlationId;
       try {
         this.options.onEvent?.(event);
       } catch {
@@ -430,8 +446,17 @@ export class AgentRunner {
     usage: { input: number; output: number };
   }> {
     const controller = this.claim(sessionId);
+    const runId = options.runId ?? crypto.randomUUID();
     const o = this.options,
-      emit = this.emitter(sessionId);
+      emit = this.emitter(sessionId, { runId, correlationId: options.correlationId });
+    /** Run journal (v4 stores only): an auxiliary record that never changes the run outcome. */
+    const finish = (status: TerminalRunStatus, error?: string) => {
+      try {
+        o.store.endRun?.(runId, { status, usage: usageTotal, ...(error ? { error } : {}) });
+      } catch {
+        /* A journal write failure cannot invalidate an executed run. */
+      }
+    };
     const limit = o.maxContextChars ?? 800_000;
     let tokens = 0,
       lastText = "",
@@ -449,6 +474,13 @@ export class AgentRunner {
       return options.instructions ? `${base}\n\n${options.instructions}` : base;
     };
     try {
+      o.store.beginRun?.({
+        id: runId,
+        session: sessionId,
+        status: "running",
+        model: o.store.get(sessionId).model,
+        ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+      });
       o.store.acquire(sessionId);
       acquired = true;
       o.store.reconcile(sessionId);
@@ -579,6 +611,8 @@ export class AgentRunner {
         const providerMessages = messages.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
+        const requested = Date.now();
+        let firstDelta: number | undefined;
         for await (const e of provider.stream({
           instructions,
           messages: providerMessages,
@@ -593,6 +627,7 @@ export class AgentRunner {
             : {}),
         })) {
           combined.throwIfAborted();
+          if (e.type !== "completed") firstDelta ??= Date.now();
           if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
           else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
           else {
@@ -606,6 +641,7 @@ export class AgentRunner {
           }
         }
         if (!completion) throw new Error("Provider stream ended without a completed response");
+        const durationMs = Date.now() - requested;
         const ids = completion.calls.map((c) => c.id);
         const previousIds = new Set(
           messages.flatMap((m) => (m.role === "assistant" ? m.calls.map((c) => c.id) : [])),
@@ -628,6 +664,8 @@ export class AgentRunner {
           calls: completion.calls.length,
           model,
           ...(usage ? { usage } : {}),
+          durationMs,
+          ...(firstDelta !== undefined ? { ttftMs: firstDelta - requested } : {}),
         });
         if (!completion.calls.length) {
           const final: { tokens: number; text: string; truncated?: boolean } = {
@@ -643,6 +681,7 @@ export class AgentRunner {
             final.truncated = true;
           }
           emit("run_completed", final);
+          finish("completed");
           return { sessionId, text: lastText, status: "completed", usage: usageTotal };
         }
         const prepared = completion.calls.map((call) => {
@@ -732,7 +771,7 @@ export class AgentRunner {
                 throw new Error(`Capability ${effect} denied by the user for this call`);
               if (decision === "session") policy[effect] = true;
             }
-            o.store.beginCall(sessionId, call);
+            o.store.beginCall(sessionId, call, { runId, effect });
             result = await p.tool.execute(p.input, {
               signal: combined,
               workspace,
@@ -755,9 +794,12 @@ export class AgentRunner {
                   }
                 : {}),
             });
-            if (JSON.stringify(result).length > 48_000)
+            // The bound applies to what the model sees (the text projection): display-only
+            // ui/image parts are bounded by their producers and must not push text over it.
+            const projected = textProjection(result);
+            if (JSON.stringify(projected).length > 48_000)
               result = textResult(
-                `${JSON.stringify(result).slice(0, 40_000)}\n[tool output truncated]`,
+                `${JSON.stringify(projected).slice(0, 40_000)}\n[tool output truncated]`,
                 result.isError,
               );
             if (pendingUpdate && effect === "read") {
@@ -825,13 +867,14 @@ export class AgentRunner {
       // can simply prompt again to continue in the same session. The real hard stops remain the
       // token budget (`maxTokens`) and the timeout; the turn count is a safety rail.
       emit("run_turns_exceeded", { turns: maxTurns, maxTurns });
+      finish("turns_exceeded");
       return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
     } catch (error) {
       // On cancellation report the abort reason, not the transport's secondary error.
       const cause = combined.aborted ? (combined.reason ?? error) : error;
-      emit(combined.aborted ? "run_cancelled" : "run_failed", {
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      const message = cause instanceof Error ? cause.message : String(cause);
+      emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
+      finish(combined.aborted ? "cancelled" : "failed", message);
       throw error;
     } finally {
       if (acquired) o.store.release(sessionId);

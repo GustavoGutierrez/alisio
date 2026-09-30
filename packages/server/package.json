@@ -1,0 +1,62 @@
+{
+  "name": "@alisio/server",
+  "version": "0.1.0-alpha.1",
+  "description": "Local HTTP + SSE server behind `alisio serve`: multi-workspace, multi-session web access to the Alisio agent core with a launch-token cookie, strict Host/Origin checks and fail-closed approvals. node:http only; runs on Node >=22.16 and Bun.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GustavoGutierrez/alisio.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "bugs": {
+    "url": "https://github.com/GustavoGutierrez/alisio/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "agent-harness",
+    "server",
+    "sse",
+    "web-ui"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "alisio-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-web.mjs"
+  },
+  "dependencies": {
+    "@alisio/core": "workspace:*",
+    "@alisio/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@alisio/web": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "registry": "https://registry.npmjs.com/"
+  }
+}

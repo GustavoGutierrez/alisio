@@ -306,6 +306,23 @@ persisted active agent's system prompt and read-only narrowing to each run (the 
 TUI feature: it is sent only by the interactive TUI, after validation against the active model's
 catalog).
 
+## Changes made from the web UI
+
+The **Settings** pages of [`alisio serve`](/web) write to the same files as the terminal:
+
+| Change | Where it is written |
+| --- | --- |
+| Agent settings (General page) | `<config home>/config.json`, through the same validated writer as `/settings`; only the settable keys are accepted |
+| Provider profiles (Models page) | `<config home>/providers.json` (non-secret values only, `0600`) |
+| Credentials (Models page) | `<config home>/credentials.json` (`0600`, atomic writes); the web can set or delete them but never reads them back |
+| Plugin and skill switches | The project's `.alisio/config.json` (trusted workspaces only) |
+| MCP server switches | The configuration layer that defines the server |
+| MCP consent with **Remember for this user** | `mcp.allow` in `<config home>/config.json` |
+
+**Open configuration file** in Settings shows these paths with copy buttons; the server does not
+open editors. Activating a profile from the web also makes it the default profile (`active` in
+`providers.json`), as `/connect` does in the terminal.
+
 ## Prompt templates
 
 There is no configuration key for templates. They are read from `<config home>/prompts/` and, for
@@ -416,7 +433,8 @@ prompt on every restart.
   unsandboxed with your user privileges, so only enable global consent when you trust every server
   you configure.
 - The TUI `/mcp` manager can set this (Grant and remember) and revoke it; see
-  [Terminal UI](/tui#mcp).
+  [Terminal UI](/tui#mcp). In the web UI, **Settings → MCP servers → Grant MCP access** asks for
+  an explicit confirmation and can remember the grant the same way; see [Web UI](/web).
 
 ## Environment variables
 
@@ -428,6 +446,7 @@ prompt on every restart.
 | `ALISIO_API_MODE` | Overrides `provider.apiMode` |
 | `ALISIO_CONFIG_HOME` | Global configuration directory (default `$XDG_CONFIG_HOME/alisio` or `~/.config/alisio`) |
 | `ALISIO_STATE_HOME` | State directory for `sessions.sqlite`, `memory.sqlite` and `trust.json` (default `$XDG_STATE_HOME/alisio` or `~/.local/state/alisio`) |
+| `ALISIO_LOG_LEVEL` | Log level of `alisio serve` JSON log lines on stderr: `debug`, `info` (default), `warn`, `error`, `silent` |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Standard XDG base directories used when the `ALISIO_*` variables are unset |
 | `CI` | When set (and not `false` or `0`), the startup screen is not shown |
 | `NO_COLOR` | Disables color in the startup screen |
@@ -487,6 +506,18 @@ Commands:
 | `alisio plugins doctor` | Load plugins and show their tools and commands |
 | `alisio mcp list` | List configured MCP servers |
 | `alisio mcp doctor <server>` | Connect to a server (requires `--allow-mcp`) |
+| `alisio serve` | Start the local [web UI server](/web) |
+
+`alisio serve` flags (the global permission flags are the ceiling of every web session):
+
+| Flag | Description |
+| --- | --- |
+| `--port <port>` | Port to listen on (default `4317`; `0` picks a free one) |
+| `--host <address>` | Address to bind (default `127.0.0.1`); non-loopback requires `--allow-remote` |
+| `--allow-remote` | Allow a non-loopback `--host` (no TLS; prefer an SSH tunnel) |
+| `--no-open` | Do not open the browser |
+| `--max-workspaces <n>` | Workspaces with an open application at once (default `4`) |
+| `--max-runs <n>` | Concurrent runs across all sessions (default `4`) |
 
 ## `AGENTS.md`
 

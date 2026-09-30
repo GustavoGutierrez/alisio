@@ -15,18 +15,19 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
-  de razonamiento.
+  de razonamiento; servidor web (`alisio serve`).
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
   skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
-  agente activo y effort).
+  agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
+  comandos; servidor web).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
-  Herdr; agente activo y effort.
+  Herdr; agente activo y effort; servidor web.
 
 ## Implementado
 
@@ -84,6 +85,32 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   ausencia de autenticación y diferencias de parámetros de tokens.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
   bloqueo de sesión y recuperación conservadora de efectos inciertos.
+- Contratos de la fase 0 de `alisio serve` (aditivos, `schemaVersion` sigue en `1`): el SDK tipa
+  cada evento que emite el runner (`RunEventType`, `RunEventDataMap`, `KnownRunEvent`,
+  `EphemeralRunEventType`/`isEphemeralRunEventType`); `RunEvent` gana `eventId` opcional (el
+  `events.seq` global persistido, ausente en `text_delta`/`reasoning_delta`/`tool_progress`) y
+  `correlationId` opcional; `SessionStore.event` devuelve `number | void`; `RunOptions` acepta
+  `runId` y `correlationId`; `turn_completed` añade `durationMs` y `ttftMs`. `UiBlock` gana los
+  kinds `diff`, `terminal`, `mermaid`, `math`, `json`, `test-results` y `progress` (lista en
+  `UI_BLOCK_KINDS`) con fallback de texto en la TUI y en la proyección de texto del núcleo; un kind
+  desconocido o mal formado se muestra como JSON etiquetado en lugar de fallar. El SDK añade los
+  tipos del protocolo web v1 (`ServerFrame`, `PendingApproval`, `PendingInteraction`,
+  `CommandDescriptor`, `SessionUiStatus`, `BlobRef`, `ApiError`), como borrador sin servidor aún.
+  `Attachment.data` sigue siendo obligatorio: las subidas por hash viajan como `BlobRef` y el host
+  las resuelve a `data` (fase 1).
+- Persistencia v4 y catálogo de comandos (fase 1 de `alisio serve`): migración aditiva v4 de
+  `SQLiteStore` (tablas `runs`, `workspaces` y `blobs`; columnas nulables en `sessions`, `events` y
+  `tool_calls`; índice único parcial `(session, request_id)`); métodos opcionales de `SessionStore`
+  (`beginRun`, `endRun`, `runByRequest`, `runs`, `messagesPage`, `eventsPage`, `interruptRuns`); el
+  runner registra cada ejecución (también TUI y headless) y marca las llamadas a herramientas con
+  `run_id`, nombre, efecto y tiempos; `createApplication` marca como `interrupted` las ejecuciones de
+  procesos muertos al arrancar (junto a `interruptStale()`, que se invoca en el constructor de
+  `ChildSessions`). `BlobStore` (`app.blobs`) guarda adjuntos por SHA-256 en
+  `<state home>/blobs/sha256/<aa>/<hash>` y resuelve un `BlobRef` a un `Attachment` en base64
+  verificado. `CommandCatalog` y `BUILTIN_COMMANDS` en `@alisio/core` describen los comandos de barra
+  (integrados, plugins, plantillas, skills) con superficies y modo de ejecución; la TUI toma de ahí
+  su lista y resolución y delega `/tools` y `/sessions`. La lógica pura del agente activo vive en
+  `@alisio/core` (`agents/active.ts`); la CLI la reexporta.
 
 ### Herramientas, AGENTS.md y skills
 
@@ -499,6 +526,141 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - `alisio doctor` y la pantalla de inicio avisan explícitamente cuando el modelo resuelto está
   vacío o es el marcador `YOUR_MODEL_ID` que escribe `alisio setup`, en vez de dejar que el primer
   turno real falle contra un modelo inexistente.
+
+### Servidor web (`alisio serve`)
+
+- Paquete nuevo `@alisio/server` (solo `node:http`, sin dependencias de runtime nuevas, sin
+  WebSocket), cargado por `alisio serve` con `import()` dinámico: `alisio`, `alisio run` y la TUI no
+  lo cargan (comprobado por traza de resolución de módulos).
+- Seguridad local: enlace a `127.0.0.1` por defecto (`--allow-remote` obligatorio para otra
+  dirección), token de arranque de 256 bits por proceso canjeado una vez por una cookie
+  `HttpOnly; SameSite=Strict` con nombre por puerto (`alisio_session_<port>`) y otro secreto,
+  comprobación de `Host` y `Origin`, `Content-Type: application/json` en peticiones con efecto,
+  cabeceras de seguridad y CSP que incluye el hash de los scripts en línea del build web.
+  `/api/health` (sin autenticación), `/api/ready`, `/api/metrics`; logs JSON por línea en stderr
+  (`ALISIO_LOG_LEVEL`).
+- `WorkspaceHost`: una `Application` por workspace (raíz git del `realpath`), creada al usarse,
+  desalojo LRU al llegar a `--max-workspaces`, `503 workspace_limit` si todos están ocupados, cierre
+  tras 10 minutos de inactividad y confianza leída del almacén de confianza de la terminal (la web
+  nunca la concede).
+- Sesiones (crear, listar, leer, modificar; sin borrado: se archivan), mensajes, eventos y
+  ejecuciones paginados; prompts idempotentes por `requestId` (índice único de `runs`), texto
+  encolado durante una ejecución, `session_busy`, `session_locked`, cancelación y compactación
+  manual. `RunScheduler` con semáforo global `--max-runs` y cola FIFO.
+- Stream SSE multiplexado por pestaña con snapshot por sesión construido y registrado en el mismo
+  tick, frames durables con `id` = `eventId`, deltas agrupados cada 33 ms, latido cada 15 s y cola
+  acotada por cliente que termina el stream con `resync` si se desborda.
+- `ApprovalBridge` e `InteractionBridge` con fallo cerrado (denegar/cancelar sin observadores tras
+  30 s, al abortar o tras 10 min), primera respuesta gana, aprobaciones de sesiones hijas en su
+  sesión raíz. Presets de permisos por sesión con techo en los flags de arranque; cada sesión recibe
+  su propio objeto `RunOptions.policy`, así que "permitir para la sesión" no se filtra a otras
+  sesiones del workspace.
+- Apagado ordenado (`SIGINT`/`SIGTERM`: 503, runs cancelados, aprobaciones denegadas, streams
+  cerrados, apps cerradas con los topes existentes; segundo `SIGINT` fuerza la salida) y
+  reconciliación de runs al arrancar.
+- Rutas de la fase 3 en `@alisio/server`: `GET /api/commands?session=|workspace=` (el
+  `CommandCatalog` compartido filtrado a la superficie `web`) y `POST /api/sessions/:sid/commands`
+  (`{requestId, name, args?}` → `CommandOutcome`: los comandos `core` se ejecutan en el servidor; las
+  plantillas de prompt, las skills y `/ask` devuelven un prompt expandido que el cliente envía;
+  `/help` lista los comandos web; `/effort` se guarda por sesión en vez de cambiar el ajuste
+  global; `/model` y `/compact` responden `409 session_busy` durante una ejecución; `requestId`
+  repetido → `{duplicate:true}`), `GET /api/sessions/:sid/models` (`SessionModels`: catálogo del
+  proveedor de la sesión con niveles de esfuerzo, `unavailable` si no se puede listar),
+  `GET /api/sessions/:sid/context` (`SessionContextUsage`: `runner.estimateContext` y
+  `contextBudget`) y `GET /api/sessions/:sid/export` (JSONL: eventos durables en orden de
+  `events.seq` y después una línea `{"type":"message"}` por mensaje, incluidos los compactados).
+  Las ejecuciones web aplican ahora el agente de la sesión (`sessions.options.agent`, si no el
+  agente activo de la app): instrucciones por ejecución y, si es de solo lectura, política sin
+  efectos y sin aprobaciones. Las sesiones sin título muestran su primer prompt (una línea, 60
+  caracteres), derivado al leer y nunca persistido.
+- Interfaz web `@alisio/web` (paquete privado; su build viaja dentro de `@alisio/server` en
+  `dist/web`, copiado por `scripts/copy-web.mjs` tras `tsc`): Vite 8 + Preact 10 +
+  `@preact/signals`, CSS Modules con tokens en custom properties, sin Tailwind ni librerías de
+  componentes. Reductores puros (`store/transcript.ts`, `sessions.ts`, `pending.ts`,
+  `composer.ts`), cliente SSE con lotes por `requestAnimationFrame`, backoff con jitter 0,5→10 s y
+  reapertura tras `resync`; sidebar de workspaces y sesiones, cabecera con título editable, insignia
+  de agente y preset y descarga del log; transcript con burbuja de usuario, filas compactas de
+  herramientas y razonamiento, Markdown incremental con bloques congelados (tokens de `marked`
+  renderizados como nodos Preact, sin `innerHTML`), código resaltado de forma diferida con shiki
+  (motor JavaScript, 14 gramáticas cargadas bajo demanda); compositor con paleta `/`, historial,
+  preset, modelo + esfuerzo, anillo de contexto y enviar/detener; panel de aprobaciones e
+  interacciones que ocupa el lugar del compositor; temas oscuro/claro/sistema sin parpadeo, EN/ES y
+  `prefers-reduced-motion`. `pnpm web:size` (también dentro de `pnpm pack:check`) exige JS inicial ≤
+  90 KB y CSS inicial ≤ 20 KB gzip.
+- Fase 4 (renderizadores de desarrollo, explorador y adjuntos):
+  - Renderizadores web diferidos por kind (un chunk cada uno, resolución probada en T-17 con
+    fallback para kinds desconocidos y cargas fallidas): `diff` (parser de parche unificado propio y
+    diff de líneas Myers para bloques con solo `before`/`after`; unificado o lado a lado, hunks
+    plegables, navegación por archivos), `terminal` (parser SGR propio: 16 colores con tokens por
+    tema, 256 colores y truecolor, negrita/tenue/cursiva/subrayado/inverso; descarta el resto de
+    escapes; `\r` resuelto; últimas 2 000 líneas con "mostrar todo"; streaming desde
+    `tool_progress` para `shell`/`run_process`), `json` (árbol plegable, profundidad
+    `collapsedDepth`, copia de valor y de JSONPath, > 1 000 hijos truncados), `test-results`
+    (resumen, filtro de fallos, error y `archivo:línea`) y `progress`. Sin dependencias nuevas.
+  - Núcleo: `write_file`/`edit_file` añaden un bloque `diff` (parche unificado de
+    `runtime/diff.ts`, ≤ 200 KB cortado por línea) y `shell`/`run_process` un bloque `terminal`
+    (stdout y luego stderr, últimos 256 KB, código de salida y duración) después del texto actual,
+    que sigue siendo la primera parte y lo único que ve el proveedor (`textProjection`). La TUI
+    ignora esos dos bloques en esas cuatro herramientas (`richPartsOf(result, toolName)`) para no
+    duplicar la salida que ya muestra.
+  - Servidor: `GET /api/workspaces/:wid/tree|file|diff` y `GET /api/sessions/:sid/changes`
+    (`routes/files.ts`: `safePath` del núcleo más comprobación del `realpath`; páginas de 1 000
+    entradas; vista previa ≤ 2 MB con `X-Truncated`/`X-File-Size` y `download=1`; imágenes por bytes
+    mágicos, SVG como texto, binarios como descarga; `git` con `spawn` sin shell, 2 s, sin
+    fsmonitor, diff externo ni textconv). `POST /api/blobs` (cuerpo binario ≤ 10 MB, único `POST`
+    sin JSON; PNG/JPEG/GIF/WebP por bytes mágicos con dimensiones; `201 BlobRef`) y
+    `GET /api/blobs/:hash` (tipo guardado, `inline`, `private, max-age=31536000, immutable`), sobre
+    un `BlobStore` del servidor con la misma raíz que el de cada workspace.
+  - Web: panel lateral con Archivos (árbol perezoso), Cambios (diff frente a `HEAD`) y Vista
+    previa (código, Markdown, JSON, imagen; mencionar como `@ruta`); rutas de filas de herramientas,
+    enlaces Markdown relativos y cabeceras de diff abren el archivo. Compositor con adjuntos (`+`,
+    pegar, arrastrar; miniaturas, subida inmediata, quitar; máx. 8 por mensaje) y miniaturas en las
+    burbujas. Pestaña Trayectoria (eventos durables agrupados por run, cargados por páginas e
+    incrementalmente) y línea de estadísticas bajo el compositor (último run; totales de la sesión
+    al pasar el ratón; caché "—" si el proveedor no la informa). JS inicial 56,3 KB y CSS 7,8 KB
+    gzip.
+- Fase 5 (renderizadores ricos y gestión):
+  - Web: `mermaid` (11.17.2) y `math` (KaTeX 0.18.9) como chunks diferidos. La vista de Mermaid
+    (chunk pequeño) importa Mermaid y DOMPurify (3.4.16) solo cuando el bloque entra en pantalla y
+    nunca mientras se genera; `securityLevel: "strict"`, `htmlLabels: false`, renders serializados
+    y reinicialización al cambiar de tema; el SVG pasa por DOMPurify (perfil SVG) antes del DOM.
+    Fuente/diagrama, zoom, exportar SVG, pantalla completa y copiar. KaTeX va con su vista, su CSS y
+    sus fuentes (servidas como archivos: la CSP no admite `data:` en fuentes), con `trust: false`,
+    `throwOnError: false`, `maxExpand: 500`, `maxSize: 50` y macros por bloque; el HTML se sanea con
+    DOMPurify. Un error de Mermaid o de KaTeX muestra la fuente y el mensaje (`renderMath`/
+    `renderMermaid` puros, T-17). Markdown: extensión de `marked` para `\( … \)` en línea (token
+    `inlineMath`); ` ```math `, ` ```latex ` y párrafos `$$ … $$` siguen siendo display; `$` suelto
+    no se interpreta (T-16).
+  - Servidor (`routes/management.ts`, `routes/providers.ts`): `GET/PATCH /api/plugins`,
+    `GET/PATCH /api/skills`, `GET/PATCH /api/mcp` y `POST /api/mcp/consent`, `GET /api/agents`,
+    `GET/PATCH /api/settings`, `GET /api/providers`, `PUT /api/providers/:profile`,
+    `PUT/DELETE /api/providers/:profile/credentials`, `POST /api/providers/:profile/activate` y
+    `GET /api/models`, todas con `?workspace=` o `{workspace}` (id opaco o ruta absoluta) y
+    validación propia. Los cambios emiten `catalog_changed` (`commands`, `plugins`, `skills`,
+    `mcp`, `models`, `agents`). MCP nunca devuelve comando, argumentos ni URL. Las credenciales
+    son de solo escritura: las respuestas llevan `{configured, source: "file"|"env", tail?}` con
+    `tail` (`…XYZ`) solo para secretos de 16 caracteres o más.
+  - Decisión (plugins): `setPluginEnabled` escribe el ajuste del proyecto y la app en curso queda
+    `restart-required`; el servidor recicla la `Application` del workspace (`WorkspaceHost.recycle`)
+    en cuanto no tiene runs (en el momento o cuando termina el último run, vía el `onChange` del
+    `RunScheduler`). Los workspaces no confiables marcan todos los plugins como no gestionables
+    (su `.alisio/config.json` se ignoraría). Las skills se aplican en caliente.
+  - Decisión (proveedores, P-01): activar un perfil responde `409 runs_active` si el workspace tiene
+    runs en cola o en curso; si no, `activateProviderProfile` cambia la app del workspace y guarda
+    el perfil como activo en `providers.json`. Otros workspaces abiertos mantienen su proveedor.
+  - Núcleo (aditivo): `ProviderSettingsStore.saveProfile/setCredentials/deleteCredentials/
+    credentialStatus` y `maskSecret`; `settableSettings()` (tipo y opciones de cada
+    `SettableSettingKey`); `PluginHost.toolsOf(plugin)` (dueño de cada tool registrada, también
+    para built-ins); `grantMcpRuntimePermission` y `rememberGlobalMcpConsent` aceptan la fuente
+    `"interactive-web"` (P-07).
+  - Web: el modal de Ajustes (chunk propio, cargado al abrirlo) con General (idioma y ajustes del
+    agente), Modelos (perfiles, credenciales con campos de contraseña que se vacían al guardar,
+    activación con modelo), Plugins (pestañas, buscador, contador y tarjetas de `image2.png`),
+    Skills, Servidores MCP (confirmación explícita antes de conceder acceso), Presets de agente
+    (usar en la sesión abierta) y Apariencia, más "Abrir archivo de configuración" con rutas
+    copiables. Las filas de tools de plugins muestran el nombre de la tool y el plugin como
+    etiqueta. JS inicial 60,6 KB y CSS 7,5 KB gzip (antes 56,3 y 7,8); chunk de `math` 75 KB gzip
+    (KaTeX incluido), Mermaid 32 KB de motor más ~138 KB de núcleo y un chunk por tipo de diagrama.
 
 ## Validación
 
@@ -1010,6 +1172,145 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   lógica con un decisor inyectado). Las llamadas anidadas de `execute` nunca abren un aviso nuevo:
   solo alcanzan directorios ya aprobados para la sesión.
 
+## Contratos de eventos y bloques UI: alcance de la verificación
+
+- Vitest: `tests/run-events-contract.test.ts` ejecuta el `AgentRunner` real con `SQLiteStore` y un
+  proveedor simulado (razonamiento, texto, llamada con aprobación, progreso, segundo turno, fallo,
+  cancelación, cambio de modelo y compactación omitida) y valida cada evento contra un espejo en
+  tiempo de ejecución de `RunEventDataMap` (exhaustivo por tipo en compilación); comprueba que los
+  eventos durables llevan `eventId` igual a `events.seq`, que los efímeros no, que `seq` sigue siendo
+  por ejecución, que `runId`/`correlationId` se propagan y que un store que no devuelve nada deja los
+  eventos sin `eventId`. `tests/ui-blocks-fallback.test.ts` renderiza cada kind nuevo en la TUI (con
+  y sin Unicode) y en la proyección de texto, y comprueba que un kind desconocido o mal formado no
+  lanza.
+- No verificado en pseudo-terminal: el aspecto visual de los nuevos bloques en la TUI (sí sus
+  líneas). Ningún productor integrado emite todavía los kinds nuevos (las herramientas los añadirán
+  en la fase 4). `ttftMs` mide hasta el primer delta de texto o razonamiento; un proveedor que solo
+  entrega la respuesta completa no lo informa. Los tipos del protocolo web no tienen implementación
+  todavía y pueden cambiar hasta que exista `@alisio/server`.
+
+## Persistencia v4, blobs y catálogo de comandos: alcance de la verificación
+
+- Vitest: `tests/store-migration-v4.test.ts` construye una base v3 con el DDL antiguo y datos, la abre
+  con `SQLiteStore` (sin pérdida de filas, versión 4 registrada, migración idempotente al reabrir),
+  comprueba la unicidad de `runs` por `(session, request_id)` (reintento devuelve la ejecución
+  existente; el índice parcial rechaza un duplicado directo), la transición `queued` → `running` →
+  terminal sin sobrescribir un estado terminal, `interruptRuns` (solo dueños muertos o ausentes; se
+  conservan los de este proceso y los de otro proceso vivo), marcas de tiempo de sesiones raíz,
+  columnas nuevas de `tool_calls`, paginación de mensajes y eventos, el registro de ejecuciones del
+  runner (completada, preasignada en cola, fallida, cancelada, `turns_exceeded`, store sin métodos
+  opcionales) y la reconciliación en `createApplication`. `tests/blobs.test.ts` cubre deduplicación,
+  permisos `0600`/`0700`, hashes inválidos, contenido manipulado, la resolución a base64 que llega al
+  proveedor y los adjuntos en línea heredados. `tests/command-catalog.test.ts` cubre fuentes,
+  superficies, alias, colisiones y los manejadores core; `tests/command-catalog-tui-parity.test.ts`
+  compara la lista de comandos, la resolución y la salida de `/tools` y `/sessions` con las
+  implementaciones previas de la TUI.
+- Bun: el escenario `store-migration` de `fixtures/scenarios.ts` (ejecutado en Node y Bun por
+  `tests/integration.test.ts`) verifica la migración y el índice único parcial en Bun, y
+  `pnpm test:compiled` comprueba que el binario Bun escribe filas en `runs` al ejecutar `alisio run`.
+- No verificado: la TUI en pseudo-terminal tras delegar `/tools` y `/sessions` (sí su texto).
+  `workspaces`, `sessions.pinned`/`archived_at`, `messagesPage` y `eventsPage` los consume
+  `@alisio/server` (ver la sección del servidor web).
+
+## Servidor web (`alisio serve`): alcance de la verificación
+
+- Vitest, con el servidor real en un puerto efímero, base de datos temporal y proveedor falso
+  inyectado por `AppOptions.provider`: `tests/server-auth.test.ts` (T-07: cookie ausente, canje del
+  token con 303, token erróneo, `Host` y `Origin` ajenos, `Content-Type`, `--allow-remote`, salud,
+  cabeceras, assets estáticos, fallback SPA y confinamiento de rutas), `tests/server-workspaces.test.ts`
+  (T-18), `tests/server-prompts.test.ts` (T-09: idempotencia secuencial y concurrente, `enqueue`,
+  `session_busy`, `session_locked` con un PID vivo ajeno, cola FIFO con `--max-runs 1`,
+  cancelación en cola y en curso, compactación), `tests/server-sse.test.ts` (T-08: snapshot y
+  deltas sin huecos, reconexión a mitad de ejecución sin duplicar texto, `tool_result`, estado de
+  sesión para el sidebar, latido, límites; el desbordamiento con `resync` se prueba sobre el hub con
+  un socket que no drena), `tests/server-approvals.test.ts` (T-10) y `tests/server-shutdown.test.ts`
+  (T-13, apagado llamado en proceso). `tests/store-web-metadata.test.ts` cubre los métodos nuevos
+  de `SQLiteStore`.
+- T-12 (`tests/startup-no-server.test.ts`): ejecuta el código fuente de la CLI en Node con un hook
+  `module.registerHooks` que registra cada módulo resuelto y comprueba que `--help`, `run`, el modo
+  sin argumentos y `serve --help` no cargan `packages/server` ni `node:http`. Bun no tiene un hook
+  equivalente: en el binario solo se comprueba `serve --help`.
+- `pnpm test:cli` (Node) y `pnpm test:compiled` (binario Bun): `serve --help`, rechazo de
+  `--host 0.0.0.0` sin `--allow-remote`, arranque con `--no-open --port 0`, `/api/health` sin
+  cookie, `401` sin cookie, canje del token y parada con `SIGTERM` (código 0).
+- `tests/server-web-routes.test.ts`: catálogo web sin comandos solo de TUI, ejecución de comandos
+  `core`, expansión de plantillas y `/ask`, `/help`, `/clear` con sesión nueva, `/effort` por
+  sesión, `unknown_command`, idempotencia, `session_busy` de `/model` durante una ejecución, modelos
+  (con y sin catálogo), contexto con ventana conocida, exportación JSONL ordenada, título derivado
+  del primer prompt y agente `plan` aplicado (instrucciones y sin `write_file`).
+- Interfaz web: Vitest sin DOM sobre los módulos puros — `tests/web-transcript-store.test.ts` (T-15:
+  snapshot, deltas, `message` que sustituye el eco local y el texto en curso, resultados de
+  herramientas en cualquier orden, avisos, notas locales tras un snapshot, páginas anteriores),
+  `tests/web-events.test.ts` (lotes por frame, reapertura por cambio de sesiones y tras `resync`,
+  backoff, `nudge`, protocolo distinto), `tests/web-markdown-incremental.test.ts` (T-16: mismo
+  resultado que un parseo completo con cualquier tamaño de trozo, identidad de bloques congelados,
+  fence sin cerrar, fences especiales), `tests/web-composer.test.ts` (paleta, historial,
+  aprobaciones pendientes, todos los kinds de `UiBlock` con renderer y paridad de claves y
+  marcadores EN/ES), `tests/web-api-sessions.test.ts` y `tests/web-tools.test.ts`.
+- Prueba manual con Playwright (Chromium) contra `node packages/cli/dist/main.js serve` y un
+  proveedor OpenAI-compatible simulado: canje del token, crear sesión, streaming con razonamiento,
+  dos lecturas y Markdown con tabla y código resaltado, fallo de herramienta visible, panel de
+  aprobación con foco y respuesta por teclado (`O`) que devuelve el foco al compositor, paleta `/` y
+  `/stats`, tema claro tras recargar y ancho de 390 px sin desbordamiento horizontal; consola sin
+  errores. No verificado: lectores de pantalla reales, Firefox/Safari, otros sistemas, la
+  interacción de preguntas de plugins en un navegador (solo sus reductores), la reconexión tras un
+  corte de red real y el rendimiento con sesiones de 10 000 mensajes.
+- No verificado: la apertura automática del navegador, el apagado por señal con ejecuciones activas
+  fuera de las pruebas en proceso, Windows/macOS y la contención de SQLite con varias apps y runs
+  concurrentes reales (P-03).
+- Fase 4: `tests/server-files.test.ts` (T-11: orden y tamaños del árbol, páginas de 1 000,
+  `.gitignore`, traversal con `..`, rutas absolutas y symlinks de directorio y de archivo hacia
+  fuera → 403 sin filtrar contenido, 404, truncado a 2 MB y descarga completa, detección de
+  imágenes, SVG y binarios, cambios de la sesión con estado git, diff frente a `HEAD`, archivo sin
+  seguimiento y `409 not_a_git_repo`), `tests/server-blobs.test.ts` (detección y dimensiones de
+  PNG/JPEG/GIF/WebP, deduplicación, 415 por contenido y por tipo declarado, vacío, `Origin` ajeno,
+  401, 413 por encima de 10 MB, servicio con tipo y caché, y T-09: un prompt con `BlobRef` llega al
+  proveedor como adjunto base64 y un hash desconocido da 400), `tests/standard-tools-ui.test.ts`
+  (parches unificados, bloques de las cuatro herramientas con el texto intacto como primera parte,
+  límite de 200 KB y la TUI sin esos bloques), `tests/web-renderers.test.ts` (parser de parches,
+  diff Myers, filas lado a lado, SGR, `\r`, JSONPath y resumen de tests),
+  `tests/web-renderer-registry.test.ts` (T-17), `tests/web-dock.test.ts`,
+  `tests/web-attachments.test.ts`, `tests/web-stats-trajectory.test.ts` (RF-16 y agrupación de la
+  trayectoria) y T-15 ampliado (miniaturas y sustitución del eco con adjuntos). Los componentes
+  Preact no tienen pruebas con DOM: se verificaron a mano con Playwright (Chromium, 1440 px y
+  390 px) contra `alisio serve` con un proveedor OpenAI-compatible simulado y un plugin local que
+  devuelve bloques `test-results`, `json`, `progress` y un kind desconocido: diff de
+  `write_file`/`edit_file`, salida ANSI de `shell` con 2 306 líneas y "mostrar todo", código de
+  salida, árbol JSON de un fence largo, fallback de kind desconocido, panel de archivos (árbol sin
+  `dist/` ni `*.log` ignorados, vista previa de código, imagen y Markdown, Cambios con estado git y
+  diff frente a `HEAD`), subida de una imagen con `+` que llega al proveedor como `image_url`,
+  miniatura persistida tras recargar, Trayectoria con duraciones y línea de estadísticas; consola
+  sin errores ni avisos y sin desbordamiento horizontal a 390 px. La prueba encontró y corrigió dos
+  defectos: el límite de 48 KB del runner medía también los bloques de visualización (ahora mide
+  la proyección de texto) y la tabla de la trayectoria ocultaba la columna de duración. No
+  verificado: rendimiento del árbol con 50 000 entradas reales en el navegador, `git`
+  ausente y lectores de pantalla.
+- Fase 5: `tests/web-rich-renderers.test.ts` (T-17: opciones de KaTeX, display/inline, error de
+  análisis → fuente y mensaje, `\href{javascript:}` sin enlace, fallo inesperado del motor;
+  configuración estricta de Mermaid, SVG saneado, diagrama inválido sin llamar a `render`),
+  T-16 ampliado (`\( … \)` en línea, `$` de precios, `\(` sin cerrar, código en línea,
+  ` ```math ` y `$$` durante el streaming), `tests/web-tools.test.ts` (etiquetas de tools de
+  plugins), `tests/provider-credentials-store.test.ts` (máscara, estado sin valores, 0600,
+  borrado, perfil sin cambiar el activo, metadatos de ajustes), `tests/server-management.test.ts`
+  (plugins con tools/comandos, reciclado inmediato y diferido hasta el fin del run,
+  `catalog_changed` y paleta actualizada, 400/403/404, workspace no confiable, skills fuera de la
+  paleta y sin rutas, MCP sin comando ni argumentos, `mcp_not_permitted`, consentimiento que exige
+  `confirmed: true`, agentes y ajustes con validación) y `tests/server-secrets.test.ts` (T-14:
+  recorre todas las respuestas de gestión, sus cabeceras, los frames SSE y las líneas de log
+  buscando dos claves guardadas; `credentials.json` en 0600; `source: "env"` sin `tail`; perfiles
+  sin valores secretos; activación real y `409 runs_active`). Verificado a mano con Playwright
+  (Chromium, 1400 px) contra `alisio serve --trust-project` con un proveedor OpenAI-compatible
+  simulado, un plugin de proyecto, una skill y un servidor MCP inexistente: diagrama Mermaid en
+  oscuro y claro, pantalla completa, fórmulas en línea y en bloque, fallback de Mermaid y KaTeX
+  inválidos, cada página de Ajustes, "Abrir archivo de configuración", guardar una credencial (ni
+  el DOM, ni `localStorage`, ni `/api/providers` contienen el valor; solo `…XYZ`), activar
+  `fake-small`, deshabilitar el plugin y la skill (la paleta `/` pierde `/smoke-tools:smoke-hello`
+  y `/skill:tidy`), conceder MCP y ver el fallo de conexión saneado. La prueba encontró y corrigió
+  fuentes de KaTeX inlineadas como `data:` que la CSP bloqueaba. No verificado: 390 px del modal de
+  Ajustes, lectores de pantalla, Firefox/Safari y un servidor MCP real conectado desde la web.
+
+## Límites conocidos
+
 ## Límites conocidos
 
 ### Runtime y empaquetado
@@ -1193,7 +1494,18 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - El adaptador chat soporta texto y function tools; bloques privados de razonamiento de
   proveedores de terceros no se normalizan. Para continuation de OpenAI use Responses.
 - La sesión restaura el historial activo (el compactado queda archivado). Hay migraciones
-  hacia adelante e idempotentes (v1 → v2); no hay migraciones hacia atrás.
+  hacia adelante e idempotentes (v1 → v4); no hay migraciones hacia atrás.
+- Los blobs no tienen recolección de basura. Un adjunto resuelto desde un blob se persiste en el
+  mensaje como base64 (igual que un adjunto en línea), porque `Attachment.data` sigue siendo
+  obligatorio; el blob solo evita repetir la subida.
+- `interruptRuns()` conserva las ejecuciones cuyo `owner_pid` es el del proceso actual (otra
+  `Application` del mismo proceso); si el PID de un proceso muerto se reutiliza, esas filas siguen en
+  `running` hasta el siguiente arranque con otro PID.
+- Los manejadores core del catálogo son deliberadamente mínimos: `model` cambia el id de modelo de la
+  sesión sin cambiar de proveedor, `effort` persiste el nivel sin validarlo contra el catálogo del
+  modelo (la TUI sí lo valida) y `stats` resume el registro de ejecuciones, no las estadísticas en
+  memoria de la TUI. La TUI solo delega `/tools` y `/sessions`; el resto de comandos sigue en su
+  `switch`.
 - Lectura/edición de texto limitada a 1 MiB. Búsquedas/salidas extensas se truncan explícitamente.
 - La integración Herdr permite intercambio por terminales; no promete autonomía multiagente
   completa ni planificación distribuida.
@@ -1218,3 +1530,55 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   plugin de subagentes: los verbos de gestión de tareas (con argumento) siguen enrutándose al
   plugin, pero el autocompletado del editor y `/help` muestran solo el comando de la TUI; la
   gestión de tareas sigue siempre disponible como `/agents <verbo>` y `/command agents <verbo>`.
+
+### Servidor web
+
+- Bloqueo de un solo host (PID en `sessions.locked_pid`); la web no recibe en vivo los cambios que
+  hace una TUI en una sesión: se ven al reabrirla. Una sesión usada por otro proceso responde
+  `409 session_locked`.
+- Sin TLS; `--allow-remote` es opcional y pensado para túneles SSH. Con enlace a una dirección
+  comodín (`0.0.0.0`, `::`) se aceptan cabeceras `Host` con IP literal además de las de loopback.
+- El proveedor es por workspace (una `Application`): el cambio de perfil de proveedor afecta a todas
+  sus sesiones; por sesión solo cambia el modelo (`runner.setModel`), y el evento `model_changed` no
+  lleva `correlationId` (tampoco la compactación manual).
+- La idempotencia de los prompts encolados es en memoria (100 ids por sesión, 10 min) y la cola de
+  `enqueue` del runner se pierde si el proceso cae; un prompt con adjuntos durante una ejecución, o
+  cualquier prompt mientras la sesión espera en cola o compacta, responde `409 session_busy`.
+- Gestión (fase 5): no se instalan plugins desde la web; un cambio de plugin se aplica cuando el
+  workspace queda sin runs (se recarga su app); el permiso MCP concedido desde la web vale para un
+  workspace hasta que se detiene el servidor (salvo "recordar"); la credencial nueva de un perfil
+  activo se usa al volver a activarlo; `DELETE .../credentials` borra todas las del perfil; la
+  edición de definiciones de agentes queda fuera de v1; los estados de servidores MCP se muestran
+  con su identificador sin traducir.
+- Renderizadores ricos (fase 5): Mermaid pesa varios cientos de KB gzip repartidos en chunks
+  (se carga solo con un diagrama visible); Mermaid incluye su propia copia de KaTeX para
+  diagramas con fórmulas, distinta de la del renderizador `math`.
+- Archivos (fase 4): el árbol, la lectura y el diff se limitan al workspace (las raíces de
+  `--add-dir` no se exponen); `safePath` rechaza cualquier segmento que sea un enlace simbólico, así
+  que los symlinks se listan pero no se abren aunque apunten dentro del workspace. El filtrado por
+  `.gitignore` se hace por página (una página puede traer menos de 1 000 entradas) y necesita `git`;
+  sin `git` se muestra todo salvo `.git`. **Cambios** deriva de las llamadas con efecto `write`
+  (argumento `path` de `write_file`/`edit_file`) de la sesión y sus hijas y solo se anota con
+  `git status`: los archivos que cambia un comando de shell no aparecen. Rutas fuera del workspace
+  se omiten. El diff de un archivo sin seguimiento o de un repositorio sin commits se genera frente
+  a `/dev/null` (máx. 1 MB leído); el de un archivo con seguimiento es `git diff HEAD` (incluye lo
+  preparado y lo no preparado). La vista previa HTML/SVG es solo código (sin iframe).
+- Blobs (fase 4): sin recolección de basura (spec §9.3); el tipo guardado es el detectado por
+  bytes mágicos, no el declarado; la cabecera `Content-Type` de la subida solo admite los cuatro
+  tipos de imagen o `application/octet-stream`.
+- Métricas (fase 4): la línea de estadísticas se calcula en el cliente a partir de
+  `run_started`/`turn_completed`/`tool_completed` (paginados por `GET /events` con `types=`); los
+  tokens por segundo solo cuentan turnos que informan `usage.output` y `durationMs`; con eventos de
+  versiones anteriores sin `durationMs` los tiempos LLM salen en 0.
+- La interfaz web no vigila el stream con un temporizador de 45 s: el latido del servidor es un
+  comentario SSE que `EventSource` no expone, así que la reconexión depende del propio navegador y
+  de `online`/`visibilitychange`. La salida de comandos, los avisos y el razonamiento solo existen
+  mientras la página está abierta; tras recargar, las filas de herramientas no muestran su duración.
+- `Ctrl+K` lleva el foco a la búsqueda del sidebar (no hay una paleta de sesiones aparte), y los
+  turnos terminados no se pliegan a un resumen "N pasos".
+- Cada reconexión SSE recibe un snapshot completo (no se reenvían solo los eventos desde
+  `Last-Event-ID`); la trayectoria en `GET /api/sessions/:sid/events` usa `events.seq` global como
+  `seq`. Tras una compactación el cliente debe recargar los mensajes (el evento
+  `compaction_completed` se lo indica).
+- El binario independiente sirve solo la API y una página provisional: los assets web van con el
+  paquete npm.

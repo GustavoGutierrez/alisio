@@ -1,6 +1,19 @@
 /** @alisio/core public API: embed the Alisio agent programmatically. */
 export * from "@alisio/sdk";
 export {
+  type ActiveAgent,
+  type AgentPickerItem,
+  activeAgentCatalog,
+  agentCatalogFromState,
+  agentPickerItems,
+  agentRunOptions,
+  BUILTIN_AGENTS,
+  DEFAULT_AGENT_ID,
+  type MainCapableAgentRecord,
+  mainAgentFromRecord,
+  resolveActiveAgent,
+} from "./agents/active.ts";
+export {
   type AppOptions,
   type BuiltinContext,
   type BuiltinPlugin,
@@ -9,6 +22,15 @@ export {
   type PluginCatalogEntry,
   type PluginCatalogStatus,
 } from "./application.ts";
+export {
+  BUILTIN_COMMANDS,
+  type BuiltinCommand,
+  CommandCatalog,
+  type CommandExecutionContext,
+  type CommandHost,
+  type CommandResult,
+  type CommandSurface,
+} from "./commands/catalog.ts";
 export {
   type Config,
   type ConfigLoadResult,
@@ -22,12 +44,14 @@ export {
   loadConfigWithProvenance,
   type McpServerSource,
   overridesSavedProviderProfile,
+  type SettableSettingInfo,
   type SettableSettingKey,
   setConfigValue,
   setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
+  settableSettings,
   stateHome,
 } from "./config.ts";
 export {
@@ -49,12 +73,22 @@ export type {
   ApprovalDecision,
   ApprovalHandler,
   ApprovalRequest,
+  BeginRunInput,
   ContextSource,
+  EndRunInput,
+  EventPage,
   HookFailure,
+  MessagePage,
+  PageOptions,
   Policy,
   RunnerExtensions,
+  RunRecord,
+  RunStatus,
   Session,
   SessionStore,
+  StoredEvent,
+  TerminalRunStatus,
+  ToolCallMeta,
 } from "./core/contracts.ts";
 export { ToolRegistry } from "./core/registry.ts";
 export {
@@ -103,6 +137,7 @@ export {
   resolveProviderModel,
 } from "./providers/routing.ts";
 export {
+  maskSecret,
   type ProviderProfile,
   type ProviderSettings,
   ProviderSettingsStore,
@@ -141,6 +176,8 @@ export {
   type PathAccessOptions,
   type ResolvePathOptions,
 } from "./runtime/access.ts";
+export { BlobStore, type BlobStoreOptions } from "./runtime/blobs.ts";
+export { clipLines, unifiedPatch } from "./runtime/diff.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {
   defaultGlobalRoots,
@@ -148,7 +185,7 @@ export {
   PLUGIN_KEYWORD,
   resolvePluginSpec,
 } from "./runtime/modules.ts";
-export { findWorkspace, outsideRootsMessage, safePath } from "./runtime/paths.ts";
+export { findWorkspace, inside, outsideRootsMessage, safePath } from "./runtime/paths.ts";
 export {
   isMissingCommand,
   type ProcessResult,

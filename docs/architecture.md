@@ -94,6 +94,68 @@ Alisio runs on Node.js >= 22.16 or Bun >= 1.4.2. Both provide `node:sqlite`, whi
 (conversation, events, tool journal, plugin state, session lock) and memory. Node.js 22.16 is the
 minimum because earlier 22.x builds lack FTS5.
 
+## Run events {#run-events}
+
+The runner reports progress as `RunEvent`s: to `onEvent` embedders, to plugins (`events.on`) and as
+JSONL with `alisio run --json`. `schemaVersion` stays `1` while changes are additive, so consumers
+must ignore unknown fields and event types.
+
+| Field | Meaning |
+| --- | --- |
+| `runId` | One run of the agent loop. Embedders may preassign it (`RunOptions.runId`); otherwise a UUID |
+| `seq` | Per-run counter starting at 1; it restarts on every run |
+| `eventId` | Optional. The persisted global `events.seq` as a string, unique and increasing across runs. Absent for ephemeral events |
+| `correlationId` | Optional. Copied from `RunOptions.correlationId` (for example an HTTP request id) to every event of the run |
+
+`text_delta`, `reasoning_delta` and `tool_progress` are ephemeral (`EphemeralRunEventType`): they
+stream to observers but are never stored, so they carry no `eventId`. Every other event is stored
+before observers see it. `turn_completed` adds `durationMs` (provider request to completed response)
+and `ttftMs` (time to the first streamed delta, absent when the provider streamed nothing).
+`RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
+emits; `tests/run-events-contract.test.ts` checks the runner against them.
+
+## Session database (v4) {#session-database}
+
+`SQLiteStore` migrates forward only and additively: a database written by an older Alisio opens at
+schema version 4 without losing rows, and an older binary ignores the new tables and columns.
+Version 4 adds:
+
+| Addition | Purpose |
+| --- | --- |
+| `runs` table | One row per `AgentRunner.run` (`id` = `RunEvent.runId`): `queued` → `running` → `completed`, `turns_exceeded`, `failed`, `cancelled` or `interrupted`, with model, usage, times, error, owner process and an optional `request_id` unique per session |
+| `workspaces` table | Optional UI metadata (label, pin, last opened) |
+| `blobs` table | Metadata of content-addressed attachment bytes |
+| New nullable columns | Session pin/archive, event `created_at`/`correlation_id`, tool call `run_id`/`name`/`effect`/`started_at`/`ended_at` |
+
+The runner journals every run when the store implements the optional `SessionStore` methods
+(`beginRun`, `endRun`, `runByRequest`, `runs`, `messagesPage`, `eventsPage`, `interruptRuns`), so TUI
+and headless runs are recorded too; other `SessionStore` implementations keep working without them.
+Retrying `beginRun` with the same `requestId` in a session returns the existing run instead of
+creating one. At startup `createApplication` marks runs left `queued`/`running` by a dead process as
+`interrupted`, next to the existing reconciliation of child sessions. Root sessions now record
+`createdAt`/`updatedAt`.
+
+## Attachment blobs {#blobs}
+
+`BlobStore` (`app.blobs`) keeps uploaded bytes under `<state home>/blobs/sha256/<aa>/<hash>`
+(directories `0700`, files `0600`, written atomically and deduplicated by SHA-256) and their metadata
+in the `blobs` table. `Attachment.data` is still required, so a blob never reaches the runner by
+reference: the host turns a `BlobRef` into a verified base64 image `Attachment` with
+`blobs.attachment(ref)` before `runner.run`. Messages therefore keep storing base64, exactly like
+inline attachments, which keep working unchanged.
+
+## Command catalog {#command-catalog}
+
+`CommandCatalog` lists, resolves and runs slash commands for every surface. Its sources are the
+built-in commands (`BUILTIN_COMMANDS`), plugin commands, prompt templates and effective skills
+(`skill:<id>`); on a name collision the first source in that order wins. Each `CommandDescriptor`
+declares its `surfaces` (`tui`, `web`, `api`) and its `execution`: `core` commands (`compact`,
+`model`, `effort`, `clear`/`new`, `sessions`, `resume`, `stats`, `tools`, `skills`, `plugins`, `mcp`,
+`agents` and plugin commands) run through `execute(name, args, { sessionId })`; `surface` commands
+(`help`, `connect`, `settings`, `copy`, `ask`, `exit`, templates and skills) are handled by each UI.
+The TUI takes its command list and name resolution from the catalog and delegates `/tools` and
+`/sessions` to it; its output is unchanged.
+
 ## Source resolution in development
 
 Each package exports its built `dist` files, plus a development-only `alisio-source` export condition

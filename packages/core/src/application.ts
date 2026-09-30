@@ -41,6 +41,7 @@ import { ProjectContext } from "./resources/context.ts";
 import { expandSlashPrompt, loadPromptTemplates, promptSources } from "./resources/prompts.ts";
 import { Skills, skillRoots } from "./resources/skills.ts";
 import { type ExternalDirectoryHandler, PathAccess } from "./runtime/access.ts";
+import { BlobStore } from "./runtime/blobs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
@@ -194,6 +195,14 @@ export async function createApplication(options: AppOptions = {}) {
     readOnly: !!options.readOnly,
   });
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
+  // Content-addressed attachment bytes next to the session database (no I/O until `put`).
+  const blobs = new BlobStore({
+    root:
+      options.db && options.db !== ":memory:"
+        ? join(dirname(options.db), "blobs")
+        : join(stateHome(), "blobs"),
+    db: store.db,
+  });
   const registry = new ToolRegistry(),
     skills = new Skills({ overrides: config.skillOverrides }),
     context = new ProjectContext(workspace, {
@@ -694,6 +703,10 @@ export async function createApplication(options: AppOptions = {}) {
     // Child sessions (generic delegation service for plugins). Contexts are cached per workspace
     // so a child in a git worktree reads that worktree's AGENTS.md files.
     const contexts = new Map<string, ProjectContext>([[workspace, context]]);
+    // Startup reconciliation: runs left queued/running by a dead process become `interrupted`
+    // (runs of this process, e.g. another Application in a server, are kept). Child sessions are
+    // reconciled by `interruptStale()` in the ChildSessions constructor right below.
+    store.interruptRuns();
     plugins.setSessions(
       new ChildSessions({
         store,
@@ -772,6 +785,8 @@ export async function createApplication(options: AppOptions = {}) {
       prompts,
       expandPrompt,
       store,
+      /** Uploaded attachment bytes; resolve a `BlobRef` with `blobs.attachment(ref)` before a run. */
+      blobs,
       registry,
       context,
       skills,
@@ -877,11 +892,17 @@ export async function createApplication(options: AppOptions = {}) {
       mcpStartupFailures() {
         return [...mcpStartupFailures];
       },
-      /** Host-owned interactive consent boundary. Headless callers remain blocked unless flagged. */
-      grantMcpRuntimePermission(request: { source: "interactive-tui"; confirmed: boolean }) {
+      /**
+       * Host-owned interactive consent boundary: the TUI and the web UI (`alisio serve`, after an
+       * explicit confirmation dialog) may grant. Headless callers remain blocked unless flagged.
+       */
+      grantMcpRuntimePermission(request: {
+        source: "interactive-tui" | "interactive-web";
+        confirmed: boolean;
+      }) {
         if (!request.confirmed) return mcpRuntimePermission;
-        if (request.source !== "interactive-tui")
-          throw new Error("MCP runtime permission may only be granted by the interactive TUI");
+        if (request.source !== "interactive-tui" && request.source !== "interactive-web")
+          throw new Error("MCP runtime permission may only be granted by an interactive UI");
         if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
         if (mcpRuntimePermission === "granted") return mcpRuntimePermission;
         mcp.grantRuntimePermission();
@@ -890,11 +911,13 @@ export async function createApplication(options: AppOptions = {}) {
         return mcpRuntimePermission;
       },
       /** Persist global consent atomically, then grant runtime permission for this process. */
-      async rememberGlobalMcpConsent(): Promise<void> {
+      async rememberGlobalMcpConsent(
+        source: "interactive-tui" | "interactive-web" = "interactive-tui",
+      ): Promise<void> {
         if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
         await setGlobalMcpAllow({ allow: true });
         persistedMcpAllow = true;
-        this.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
+        this.grantMcpRuntimePermission({ source, confirmed: true });
       },
       /**
        * Clear the persisted global consent atomically and drop the runtime permission (disconnecting

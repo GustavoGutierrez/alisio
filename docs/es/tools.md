@@ -53,6 +53,23 @@ Los plugins integrados añaden más herramientas: `memory_*` de [Memoria persist
 `task`, `task_status`, `task_wait` y `send_message` de [Subagentes](/es/subagents), todas con el
 efecto `internal`.
 
+## Partes de visualización para la interfaz web {#ui-parts}
+
+Algunas herramientas incluidas añaden un bloque de visualización después de su resultado de texto
+habitual, para clientes que muestran salida enriquecida como la [interfaz web](/es/web). El texto
+sigue siendo la primera parte y es la única que recibe un modelo (los resultados de herramientas
+llegan a los proveedores como su proyección de texto), así que la entrada del modelo, `alisio run
+--json` y la TUI no cambian.
+
+| Herramienta | Bloque | Contenido |
+| --- | --- | --- |
+| `write_file`, `edit_file` | `diff` | Parche unificado del cambio (`/dev/null` para un archivo nuevo), con la extensión del archivo como `lang`; recortado en un límite de línea a partir de 200 KB con un rótulo que lo indica |
+| `shell`, `run_process` | `terminal` | Línea de comando, salida estándar y después error estándar (los últimos 256 KB), código de salida y duración |
+
+Escribir un contenido idéntico no añade bloque. La TUI sigue mostrando estas herramientas como
+antes, a partir de su texto; los bloques de los mismos tipos que devuelven plugins y servidores MCP
+se siguen mostrando en la TUI.
+
 ## Preguntar al usuario {#ask-user-question}
 
 `ask_user_question` permite al modelo hacer de 1 a 4 preguntas de opción múltiple (2 a 4 opciones

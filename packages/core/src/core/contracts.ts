@@ -15,6 +15,10 @@ export interface Session {
   options?: Record<string, unknown>;
   createdAt?: number;
   updatedAt?: number;
+  /** Root sessions pinned in web clients (v4). */
+  pinned?: boolean;
+  /** When a root session was archived in web clients (v4); absent when not archived. */
+  archivedAt?: number;
 }
 export interface ChildSessionRecord {
   id?: string;
@@ -26,6 +30,77 @@ export interface ChildSessionRecord {
   title: string;
   depth: number;
   options: Record<string, unknown>;
+}
+/** `queued` and `running` are the only non-terminal run states. */
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "turns_exceeded"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+export type TerminalRunStatus = Exclude<RunStatus, "queued" | "running">;
+/** One `AgentRunner.run` execution (v4 `runs` table). `id` equals `RunEvent.runId`. */
+export interface RunRecord {
+  id: string;
+  session: string;
+  status: RunStatus;
+  /** Client idempotency key; absent for TUI/headless runs. */
+  requestId?: string;
+  correlationId?: string;
+  /** Process that executes (or executed) the run, for startup reconciliation. */
+  ownerPid?: number;
+  model?: string;
+  createdAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  error?: string;
+  usage?: { input: number; output: number; cachedInput?: number };
+}
+export interface BeginRunInput {
+  id: string;
+  session: string;
+  /** `queued` for scheduled runs, `running` (default) when execution starts now. */
+  status?: "queued" | "running";
+  requestId?: string;
+  correlationId?: string;
+  model?: string;
+}
+export interface EndRunInput {
+  status: TerminalRunStatus;
+  error?: string;
+  usage?: { input: number; output: number; cachedInput?: number };
+}
+export interface PageOptions {
+  /** Only rows with a sequence greater than this (ascending from there). */
+  after?: number;
+  /** Only rows with a sequence lower than this (the newest `limit` of them). */
+  before?: number;
+  limit?: number;
+}
+export interface MessagePage {
+  items: Array<{ seq: number; message: Message; compacted: boolean }>;
+  /** More rows exist beyond the page in the paging direction. */
+  hasMore: boolean;
+}
+export interface StoredEvent {
+  /** Global `events.seq` as a string (same value as `RunEvent.eventId`). */
+  eventId: string;
+  runId: string;
+  type: string;
+  data: unknown;
+  createdAt?: number;
+  correlationId?: string;
+}
+export interface EventPage {
+  items: StoredEvent[];
+  hasMore: boolean;
+}
+/** Optional tool-call metadata (v4 columns); stores may ignore it. */
+export interface ToolCallMeta {
+  runId?: string;
+  effect?: string;
 }
 export interface SessionStore {
   create(workspace: string, provider: string, model: string): Session;
@@ -61,12 +136,40 @@ export interface SessionStore {
   overwrite(id: string, messages: Message[]): void;
   acquire(id: string): void;
   release(id: string): void;
-  beginCall(session: string, call: ToolCall): void;
+  beginCall(session: string, call: ToolCall, meta?: ToolCallMeta): void;
   endCall(session: string, call: ToolCall, result: ToolResult): void;
   /** The persisted result of a completed tool call, for replay of rich (ui/image) parts. */
   callResult(session: string, callId: string): ToolResult | undefined;
   reconcile(id: string, acknowledge?: boolean): void;
-  event(id: string, runId: string, type: string, data: unknown): void;
+  /**
+   * Persist a durable run event. Stores that assign a global, monotonic sequence return it; the
+   * runner exposes it as `RunEvent.eventId`. Returning nothing is allowed (no `eventId`).
+   */
+  event(
+    id: string,
+    runId: string,
+    type: string,
+    data: unknown,
+    meta?: { correlationId?: string },
+  ): number | void;
+  /*
+   * Optional v4 run journal and paging. The runner calls them only when present, so other
+   * implementers (tests, embedders) keep compiling without them.
+   */
+  /**
+   * Records a run, or moves an existing `queued` run with the same id to `running`. A run whose
+   * `(session, requestId)` already exists is returned as is (`created: false`): idempotency.
+   */
+  beginRun?(input: BeginRunInput): { run: RunRecord; created: boolean };
+  /** Moves a non-terminal run to a terminal state; terminal runs are never overwritten. */
+  endRun?(id: string, input: EndRunInput): void;
+  runByRequest?(session: string, requestId: string): RunRecord | undefined;
+  /** Runs of a session, newest first. */
+  runs?(session: string, options?: { limit?: number }): RunRecord[];
+  messagesPage?(session: string, options?: PageOptions & { compacted?: boolean }): MessagePage;
+  eventsPage?(session: string, options?: PageOptions): EventPage;
+  /** Marks queued/running runs whose owner process is not alive as interrupted. */
+  interruptRuns?(): number;
 }
 export interface ContextSource {
   /** System instructions; `sessionId` scopes lazily attached nested instructions. */

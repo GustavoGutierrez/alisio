@@ -238,7 +238,7 @@ export interface TuiOptions extends AppOptions {
 }
 
 export async function runTui(options: TuiOptions): Promise<void> {
-  const { createApplication } = await import("@alisio/core");
+  const { createApplication, CommandCatalog } = await import("@alisio/core");
   const { BUILTIN_PLUGINS } = await import("../builtin.ts");
   const { BUILTIN_PROMPTS } = await import("../prompts/index.ts");
   let dispatch: (event: RunEvent) => void = () => {};
@@ -605,7 +605,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // pulls the persisted rich parts (ui/image) itself so native rendering survives resume.
     if (event.type === "tool_completed") {
       const data = (event.data ?? {}) as Record<string, unknown>;
-      const rich = richPartsOf(app.store.callResult(event.sessionId, String(data.id ?? "")));
+      const rich = richPartsOf(
+        app.store.callResult(event.sessionId, String(data.id ?? "")),
+        String(data.name ?? ""),
+      );
       if (rich.ui !== undefined || rich.image !== undefined)
         event = { ...event, data: { ...data, ...rich } };
     }
@@ -1704,23 +1707,6 @@ export async function runTui(options: TuiOptions): Promise<void> {
     notice(`Resumed session ${found.id}`);
     refreshEstimate();
   };
-  const toolsReport = () => {
-    const policy = app.runner.policy;
-    const rows = app.registry
-      .list()
-      .map((t) => {
-        const effect = t.effect ?? "external";
-        const state =
-          effect === "read" || effect === "internal" || policy[effect]
-            ? "enabled"
-            : app.runner.approvals && (effect === "write" || effect === "process")
-              ? "ask"
-              : "disabled";
-        return `| \`${t.name}\` | ${effect} | ${state} |`;
-      })
-      .join("\n");
-    return `**Tools**\n\n| Tool | Effect | State |\n| --- | --- | --- |\n${rows}\n\n\`ask\` prompts before running (allow once / session / deny). Use --allow-write / --allow-process to pre-allow; --read-only disables them. Paths outside the workspace ask per directory; pre-allow with --add-dir or the \`additionalDirectories\` config key. \`internal\` tools (built-in plugins) only write Alisio's own state.`;
-  };
   const statsReport = () => {
     const s = view.stats;
     const budget = app.contextBudget(view.model);
@@ -1794,6 +1780,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
+  const commandCatalog = new CommandCatalog(app);
   const mutating = new Set([
     "connect",
     "model",
@@ -1844,7 +1831,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
         case "stats":
           return info(statsReport());
         case "tools":
-          return info(toolsReport());
+        case "sessions": {
+          // Text-identical core handlers (parity-tested): output comes from the CommandCatalog.
+          const result = await commandCatalog.execute(name, parsed.args, { sessionId: session });
+          return result.tone === "notice" ? notice(result.text ?? "") : info(result.text ?? "");
+        }
         case "connect":
           return await connect();
         case "model":
@@ -1912,20 +1903,6 @@ export async function runTui(options: TuiOptions): Promise<void> {
           notice(`New session ${session}`);
           void app.herdr.report("idle", session);
           return refreshEstimate();
-        }
-        case "sessions": {
-          const list = workspaceSessions().slice(0, 20);
-          if (!list.length) return notice("No sessions in this workspace");
-          return info(
-            [
-              "**Recent sessions** (use `/resume <id-prefix>`)",
-              "",
-              ...list.map(
-                (s) =>
-                  `- \`${s.id}\` ${s.id === session ? "**(current)** " : ""}${s.model} · ${app.store.messages(s.id).length} msgs · ${firstPrompt(s.id) || "_empty_"}`,
-              ),
-            ].join("\n"),
-          );
         }
         case "resume":
           if (parsed.args) return resume(parsed.args);

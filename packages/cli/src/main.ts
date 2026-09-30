@@ -271,6 +271,19 @@ program
   .action((id, prompt, _opts, cmd) => run(cmd, prompt, id));
 program.action((_opts, cmd) => run(cmd));
 program
+  .command("serve")
+  .description("Start the local web UI server (HTTP + SSE)")
+  .option("--port <port>", "Port to listen on (0 picks a free one)", "4317")
+  .option("--host <address>", "Address to bind; non-loopback requires --allow-remote", "127.0.0.1")
+  .option("--allow-remote", "Allow a non-loopback --host (no TLS; prefer an SSH tunnel)")
+  .option("--no-open", "Do not open the browser")
+  .option("--max-workspaces <n>", "Maximum workspaces open at once", "4")
+  .option("--max-runs <n>", "Maximum concurrent runs across all sessions", "4")
+  .action(async (flags, cmd) => {
+    const { serve } = await import("./serve.ts");
+    await serve(flags, { ...(await cliDefaults()), ...options(cmd) }, VERSION);
+  });
+program
   .command("setup")
   .description("Write an example configuration without secrets (for AGENTS.md use /init)")
   .action(async (_opts, cmd) => {

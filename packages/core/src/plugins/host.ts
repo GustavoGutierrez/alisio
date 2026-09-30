@@ -55,6 +55,8 @@ export class PluginHost implements RunnerExtensions {
   private startHandlers: Array<{ plugin: string; handler: StartHandler }> = [];
   private endHandlers: Array<{ plugin: string; handler: EndHandler }> = [];
   private fieldOwners = new Map<string, Map<string, string>>();
+  /** Registered tool name → contributing plugin id. */
+  private toolOwners = new Map<string, string>();
   private completer?: (request: CompletionRequest & { signal: AbortSignal }) => Promise<string>;
   private modelsImpl?: PluginAPI["models"];
   observers = new Set<(event: Readonly<RunEvent>) => void>();
@@ -233,19 +235,22 @@ export class PluginHost implements RunnerExtensions {
     };
     const api: PluginAPI = {
       tools: {
-        register: (tool) =>
-          track(
-            this.registry.register(
-              builtin
-                ? tool
-                : {
-                    ...tool,
-                    name: `${pluginPrefix(plugin.id)}_${tool.name}`,
-                    // Only built-ins may claim the always-allowed internal effect.
-                    ...(tool.effect === "internal" ? { effect: "external" as const } : {}),
-                  },
-            ),
-          ),
+        register: (tool) => {
+          const registered = builtin
+            ? tool
+            : {
+                ...tool,
+                name: `${pluginPrefix(plugin.id)}_${tool.name}`,
+                // Only built-ins may claim the always-allowed internal effect.
+                ...(tool.effect === "internal" ? { effect: "external" as const } : {}),
+              };
+          const unregister = this.registry.register(registered);
+          this.toolOwners.set(registered.name, plugin.id);
+          return track(() => {
+            unregister();
+            this.toolOwners.delete(registered.name);
+          });
+        },
       },
       commands: {
         register: (name, handler, info) => {
@@ -581,6 +586,10 @@ export class PluginHost implements RunnerExtensions {
           : {}),
       }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+  /** Registered names of the tools a plugin contributes (namespaced unless built in). */
+  toolsOf(plugin: string): string[] {
+    return [...this.toolOwners].filter(([, owner]) => owner === plugin).map(([name]) => name);
   }
   get hasSessionEndHooks(): boolean {
     return this.endHandlers.length > 0;

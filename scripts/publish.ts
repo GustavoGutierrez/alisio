@@ -50,12 +50,13 @@ export const PACKAGE_DIRS: Record<string, string> = {
   "plugin-memory": "plugin-memory",
   "plugin-subagents": "plugin-subagents",
   "plugin-openai-compatible": "plugin-openai-compatible",
+  server: "server",
   cli: "cli",
 };
 
 /**
  * Dependency-safe publish rank: sdk (no deps) -> core (depends on sdk) -> plugins (peer-dep on
- * sdk) -> cli (depends on core, plugins and sdk). Publishing within a rank is deterministic
+ * sdk) and server (depends on core and sdk) -> cli (depends on core, plugins, server and sdk). Publishing within a rank is deterministic
  * (alphabetical). Unknown names are rejected at parse time.
  */
 const RANK: Record<string, number> = {
@@ -64,6 +65,7 @@ const RANK: Record<string, number> = {
   "plugin-memory": 2,
   "plugin-subagents": 2,
   "plugin-openai-compatible": 2,
+  server: 2,
   cli: 3,
 };
 

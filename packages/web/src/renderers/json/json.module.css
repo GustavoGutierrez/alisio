@@ -1,0 +1,97 @@
+.block {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  font-size: 12.5px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.tree,
+.children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  line-height: 1.6;
+}
+
+.tree {
+  max-height: 480px;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.children {
+  padding-left: 18px;
+}
+
+.row {
+  position: relative;
+}
+
+.toggle {
+  width: 16px;
+  padding: 0;
+  height: 1.6em;
+  font: inherit;
+  line-height: inherit;
+  vertical-align: top;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.key {
+  color: var(--accent-strong);
+}
+
+.string {
+  color: var(--ok);
+}
+
+.number,
+.boolean {
+  color: var(--warn);
+}
+
+.null,
+.preview,
+.more {
+  color: var(--faint);
+}
+
+.tools {
+  display: none;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.row:hover > .tools,
+.row:focus-within > .tools {
+  display: inline-flex;
+}
+
+.tool {
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11.5px;
+}
+
+.tool:hover,
+.tool[aria-pressed="true"] {
+  border-color: var(--border);
+  color: var(--text);
+}

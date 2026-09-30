@@ -1,0 +1,26 @@
+{
+  "name": "@alisio/web",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "Alisio web UI (Preact + signals), served by @alisio/server behind `alisio serve`. Not published: the build ships inside @alisio/server.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "size": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/size.ts"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.2",
+    "dompurify": "3.4.16",
+    "katex": "0.18.9",
+    "marked": "18.0.14",
+    "mermaid": "11.17.2",
+    "preact": "10.29.8",
+    "shiki": "4.4.3"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "workspace:*",
+    "vite": "8.3.1"
+  }
+}

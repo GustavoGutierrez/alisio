@@ -1,0 +1,134 @@
+.tab {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px 24px;
+}
+
+.run {
+  max-width: 1000px;
+  margin: 0 auto 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.runHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.status {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.status[data-status="completed"] {
+  color: var(--ok);
+}
+
+.status[data-status="failed"] {
+  color: var(--danger);
+}
+
+.status[data-status="running"] {
+  color: var(--accent);
+}
+
+.runId,
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.duration {
+  margin-left: auto;
+  font-family: var(--mono);
+}
+
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tr[data-error="true"] td {
+  color: var(--danger);
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.colTime {
+  width: 84px;
+}
+
+.colTurn {
+  width: 52px;
+}
+
+.colType {
+  width: 170px;
+}
+
+.colDuration {
+  width: 80px;
+}
+
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty,
+.error {
+  color: var(--muted);
+  text-align: center;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.more {
+  display: block;
+  margin: 0 auto 10px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+}

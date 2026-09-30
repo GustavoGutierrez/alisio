@@ -12,6 +12,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
         "installation",
         "quick-start",
         "tui",
+        "web",
         "prompt-templates",
         "configuration",
         "tools",
@@ -46,6 +47,7 @@ const en = {
   installation: "Installation",
   "quick-start": "Quick start",
   tui: "Terminal UI",
+  web: "Web UI (alisio serve)",
   "prompt-templates": "Prompt templates",
   configuration: "Configuration",
   tools: "Tools & permissions",
@@ -74,6 +76,7 @@ const es = {
   installation: "Instalación",
   "quick-start": "Inicio rápido",
   tui: "Interfaz de terminal",
+  web: "Interfaz web (alisio serve)",
   "prompt-templates": "Plantillas de prompts",
   configuration: "Configuración",
   tools: "Herramientas y permisos",
@@ -94,7 +97,6 @@ const es = {
 };
 
 export default defineConfig({
-  theme: "./theme/index.ts",
   base: "/alisio/",
   title: "Alisio",
   description: "An extensible, provider-agnostic coding-agent harness for your terminal.",

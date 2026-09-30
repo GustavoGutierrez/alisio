@@ -1,0 +1,135 @@
+.block {
+  --ansi-0: #1b2226;
+  --ansi-1: #e06c75;
+  --ansi-2: #8fcf7f;
+  --ansi-3: #e5c07b;
+  --ansi-4: #61afef;
+  --ansi-5: #c678dd;
+  --ansi-6: #56b6c2;
+  --ansi-7: #c8d0d4;
+  --ansi-8: #5c6770;
+  --ansi-9: #ff8a92;
+  --ansi-10: #a8e39a;
+  --ansi-11: #f2d492;
+  --ansi-12: #8cc8ff;
+  --ansi-13: #de9bf0;
+  --ansi-14: #7fd6e0;
+  --ansi-15: #ffffff;
+
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  overflow: hidden;
+  font-size: 12.5px;
+}
+
+:global(:root[data-theme="light"]) .block {
+  --ansi-0: #1b2226;
+  --ansi-1: #b3261e;
+  --ansi-2: #2f7a2f;
+  --ansi-3: #8a6100;
+  --ansi-4: #1f5fbf;
+  --ansi-5: #8e3aa8;
+  --ansi-6: #0d7680;
+  --ansi-7: #5a656b;
+  --ansi-8: #6b777d;
+  --ansi-9: #d0342c;
+  --ansi-10: #3b8f3b;
+  --ansi-11: #9a6d00;
+  --ansi-12: #2b6fd6;
+  --ansi-13: #a044be;
+  --ansi-14: #108893;
+  --ansi-15: #172125;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.prompt {
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.command {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.action {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.action:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.output {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 480px;
+  overflow: auto;
+  font-family: var(--mono);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty {
+  color: var(--faint);
+}
+
+.more {
+  display: block;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12px;
+  text-align: left;
+}
+
+.footer {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.fail {
+  color: var(--danger);
+}
+
+.running {
+  color: var(--accent);
+}
