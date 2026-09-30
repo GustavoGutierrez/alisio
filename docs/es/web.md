@@ -116,7 +116,18 @@ copiar la ruta, descargar el archivo o mencionarlo (`@ruta`) en el compositor.
 recorren los prompts enviados. Escribir `/` abre la paleta de comandos (flechas para moverse,
 `Enter` o `Tab` para elegir, `Esc` para cerrar): los comandos se ejecutan en el servidor y su salida
 aparece en la conversación; las plantillas de prompt, las skills y `/ask` se convierten en un
-prompt. `/` fuera de un campo de texto lleva el foco al compositor. Debajo del cuadro de texto:
+prompt. `/` fuera de un campo de texto lleva el foco al compositor.
+
+**Preguntas laterales (`/btw`).** `/btw pregunta` consulta algo sobre la sesión actual sin añadirlo a
+la conversación, también mientras un run trabaja. Un panel flotante muestra la pregunta pendiente
+(con **Cancelar**), luego la respuesta en Markdown, el modelo y los tokens usados, un botón de copiar
+y `‹ 2/5 ›` para recorrer las respuestas laterales anteriores (`←`/`→` cuando el foco no está en un
+campo de texto; `Esc` lo cierra y cancela una pregunta pendiente). `/btw` solo abre el panel en tu
+respuesta lateral más reciente, o muestra `Usage: /btw <question>` si no hay ninguna. Las preguntas
+laterales nunca se escriben en la transcripción, los eventos, los runs ni los tokens de la sesión;
+se guardan las 20 últimas por sesión, compartidas con la TUI.
+
+Debajo del cuadro de texto:
 
 | Control | Qué hace |
 | --- | --- |
@@ -285,6 +296,7 @@ GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/se
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
+GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes

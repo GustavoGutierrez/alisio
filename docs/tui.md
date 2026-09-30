@@ -102,6 +102,7 @@ description, and `/resume` suggests matching session IDs.
 | `/settings` (`/prefs`) | Settings menu: an OpenCode-style list of real, wired preferences (compaction, context, MCP consent, limits, editor padding, transcript inset) plus navigation rows for the managers below. Two-column rows (name + current value), type-to-search filter, `(n/total)` counter, footer with the highlighted row's description; Enter/Space changes a value, Esc leaves. Persisted to your user configuration and applied to the running session |
 | `/copy` | Copy the last assistant response to the clipboard as raw text (unformatted, without the ANSI colors you see on screen) |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
+| `/btw [question]` | Ask a side question about the current session without adding it to the conversation: one tool-less call of the session's model sees the active history (oldest messages dropped to fit the context budget) and answers in a panel above the editor, never in the transcript, runs, events or session tokens. It works while a turn is running; Esc cancels a pending question or closes the panel. Without a question it shows your most recent side answer, `←`/`→` browse earlier ones (`2/5`), `↑`/`↓` scroll; with none yet it prints `Usage: /btw <question>`. The last 20 per session are kept and shared with the web UI. In `--no-tui` mode the answer is printed |
 | `/agents` | Open the active-agent picker: every selectable main-session agent with its description, current/default/read-only markers. Selecting one persists `agents.active`, takes effect from the next prompt, and switches the session model when the agent declares one; see [Active agent and effort](#active-agent-and-effort). With an argument (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) it routes to the subagents plugin's task management, see [Subagents](/subagents#in-the-tui) |
 | `/effort [level]` | Set the reasoning effort for the active model when it advertises `effort.supportedLevels`: no argument opens a picker (the model's default is marked), an argument is validated and persisted (`agents.effort`). The level is sent from the next prompt; see [Active agent and effort](#active-agent-and-effort) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
@@ -118,7 +119,7 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
 is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
-interrupt first. The subagent task-management verbs (`/agents open …`, `/agents list`, …) keep working during a run.
+interrupt first. The subagent task-management verbs (`/agents open …`, `/agents list`, …) and `/btw` keep working during a run.
 
 ### Skills catalog and autocompletion
 

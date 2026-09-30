@@ -107,7 +107,18 @@ copy the path, download the file or mention it (`@path`) in the composer.
 through the prompts you sent. Typing `/` opens the command palette (arrows to move, `Enter` or `Tab`
 to pick, `Esc` to close): commands run on the server and their output appears in the conversation;
 prompt templates, skills and `/ask` become a prompt. `/` anywhere outside a text field focuses the
-composer. Below the text box:
+composer.
+
+**Side questions (`/btw`).** `/btw question` asks something about the current session without adding
+it to the conversation, also while a run is working. A floating panel shows the pending question
+(with **Cancel**), then the Markdown answer, the model and the tokens it used, a copy button, and
+`‹ 2/5 ›` to browse earlier side answers (`←`/`→` when the focus is not in a text field; `Esc`
+closes it and cancels a pending question). `/btw` alone opens the panel on your most recent side
+answer, or shows `Usage: /btw <question>` when there is none. Side questions are never written to
+the transcript, events, runs or session tokens; the last 20 per session are kept and shared with the
+TUI.
+
+Below the text box:
 
 | Control | What it does |
 | --- | --- |
@@ -265,6 +276,7 @@ GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/se
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
+GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes

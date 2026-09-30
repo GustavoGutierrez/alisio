@@ -604,6 +604,20 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   agente activo de la app): instrucciones por ejecución y, si es de solo lectura, política sin
   efectos y sin aprobaciones. Las sesiones sin título muestran su primer prompt (una línea, 60
   caracteres), derivado al leer y nunca persistido.
+- Preguntas laterales `/btw [pregunta]` (servicio `SideQuestions` del núcleo, expuesto como
+  `app.sideQuestions` y en el `CommandCatalog` para tui, web y api): una llamada sin herramientas al
+  modelo y proveedor de la sesión con su historial activo serializado como transcripción de texto
+  (como la compactación; se descartan los mensajes más antiguos para caber en `maxContextChars` y en
+  la ventana del modelo) más una instrucción de responder de forma concisa sin actuar. No escribe en
+  `messages`, `tool_calls`, `runs`, `events` ni en el uso de la sesión y no toma el bloqueo de la
+  sesión, así que funciona durante un run con su propio `AbortSignal`. El historial (20 por sesión)
+  vive en `plugin_state` bajo `core:btw`, sin migración. TUI: panel en la ranura de selectores (nunca
+  en la transcripción) con "Thinking…", Esc cancela/cierra, `←`/`→` recorren respuestas, `↑`/`↓`
+  desplazan; modo readline: imprime la respuesta o `Usage: /btw <question>`. Servidor:
+  `GET|POST /api/sessions/:sid/btw` y `POST .../btw/cancel` (también cancela al cerrarse la petición;
+  código nuevo `409 cancelled`, fallos del proveedor `502 provider_unavailable`). Web: el compositor
+  intercepta `/btw` y abre un panel flotante (chunk diferido) con estado pendiente y Cancelar,
+  respuesta en Markdown, tokens, copiar y navegación `2/5`.
 - Interfaz web `@alisio/web` (paquete privado; su build viaja dentro de `@alisio/server` en
   `dist/web`, copiado por `scripts/copy-web.mjs` tras `tsc`): Vite 8 + Preact 10 +
   `@preact/signals`, CSS Modules con tokens en custom properties, sin Tailwind ni librerías de
@@ -1245,6 +1259,17 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ## Servidor web (`alisio serve`): alcance de la verificación
 
+- `/btw`: `tests/side-questions.test.ts` (núcleo y catálogo: sin escrituras en `messages`, `events`,
+  `runs`, `tool_calls` ni en el uso de la sesión; funciona con la sesión ocupada; cancelación;
+  errores del proveedor; validación; límite de 20; recorte al presupuesto; precedencia del built-in;
+  línea de uso), `tests/server-side-questions.test.ts` (HTTP real en puerto efímero con proveedor
+  falso: pregunta durante un run, validación, cancelación explícita y por desconexión del cliente,
+  502, ruta de comandos), `tests/tui-btw.test.ts` (estado puro y render del panel) y
+  `tests/web-btw.test.ts` (intercepción del compositor, navegación, cliente de la API). Verificado a
+  mano: la TUI y el modo `--no-tui` en tmux, y la web con Playwright contra un proveedor
+  OpenAI-compatible simulado (pregunta durante un run, transcripción intacta tras recargar,
+  navegación, cancelación, línea de uso, 390 px de ancho). No hay arnés de pseudo-terminal
+  automatizado para la TUI.
 - Vitest, con el servidor real en un puerto efímero, base de datos temporal y proveedor falso
   inyectado por `AppOptions.provider`: `tests/server-auth.test.ts` (T-07: cookie ausente, canje del
   token con 303, token erróneo, `Host` y `Origin` ajenos, `Content-Type`, `--allow-remote`, salud,
@@ -1581,6 +1606,13 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ### Servidor web
 
+- `/btw`: la transcripción que ve la pregunta lateral es texto (cada mensaje recortado a 4 000
+  caracteres, adjuntos solo como metadatos, sin datos de continuación del proveedor), no el
+  historial nativo; el effort de razonamiento es el por defecto del runner (no el effort por sesión
+  de la web); el historial compartido entre TUI y servidor es lectura-modificación-escritura sin
+  bloqueo entre procesos (dos preguntas simultáneas desde procesos distintos pueden perder una
+  entrada); la ruta no tiene idempotencia por `requestId`; en la TUI, una aprobación que llega
+  mientras el panel está abierto lo sustituye (la respuesta queda en el historial y un aviso lo indica).
 - Bloqueo de un solo host (PID en `sessions.locked_pid`); la web no recibe en vivo los cambios que
   hace una TUI en una sesión: se ven al reabrirla. Una sesión usada por otro proceso responde
   `409 session_locked`.

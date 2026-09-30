@@ -105,6 +105,7 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor, inset del contenido) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
 | `/copy` | Copia la última respuesta del asistente al portapapeles como texto crudo (sin formato, sin los colores ANSI que se ven en pantalla) |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
+| `/btw [pregunta]` | Hace una pregunta lateral sobre la sesión actual sin añadirla a la conversación: una llamada sin herramientas al modelo de la sesión ve el historial activo (se descartan los mensajes más antiguos para caber en el presupuesto de contexto) y responde en un panel sobre el editor, nunca en la transcripción, los runs, los eventos ni los tokens de la sesión. Funciona con un turno en curso; Esc cancela una pregunta pendiente o cierra el panel. Sin pregunta muestra tu respuesta lateral más reciente, `←`/`→` recorren las anteriores (`2/5`) y `↑`/`↓` desplazan; si aún no hay ninguna imprime `Usage: /btw <question>`. Se guardan las 20 últimas por sesión, compartidas con la interfaz web. En modo `--no-tui` la respuesta se imprime |
 | `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulte [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del plugin de subagentes, consulte [Subagentes](/es/subagents#in-the-tui) |
 | `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
@@ -122,7 +123,7 @@ en el autocompletado.
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
-subagentes (`/agents open …`, `/agents list`, …) siguen funcionando durante un turno.
+subagentes (`/agents open …`, `/agents list`, …) y `/btw` siguen funcionando durante un turno.
 
 ### Catálogo de skills y autocompletado
 

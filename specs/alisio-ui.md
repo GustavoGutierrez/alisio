@@ -635,6 +635,9 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 | POST | `/api/sessions/:sid/compact` | `{focus?}` | 202 `{status}` | 409 `session_busy` |
 | POST | `/api/sessions/:sid/commands` | `{requestId, name, args?}` | `{output?: string, effects?: string[]}` | 404 `unknown_command`, 409 |
 | GET | `/api/commands` | `?workspace=&session=` | `CommandDescriptor[]` | — |
+| GET | `/api/sessions/:sid/btw` | — | `SideQuestionEntry[]` (más antigua primero, máx. 20) | 404 |
+| POST | `/api/sessions/:sid/btw` | `{question}` (1–4 000 caracteres) | `SideQuestionEntry {id, question, answer, model, usage, createdAt, truncated?}` | 400, 404, 409 `cancelled`, 502 `provider_unavailable` |
+| POST | `/api/sessions/:sid/btw/cancel` | `{}` | `{cancelled: boolean}` | 404 |
 | GET | `/api/approvals` | `?session=` | `PendingApproval[]` | — |
 | POST | `/api/approvals/:aid` | `{decision: "once"\|"session"\|"deny"}` | `{resolved: true}` | 404, 409 `approval_resolved` |
 | POST | `/api/interactions/:iid` | `{answer}` | `{resolved: true}` | 404, 409 |
@@ -665,6 +668,7 @@ Notas:
 - `GET /api/sessions`: `archived` = `false` (por defecto) | `true` | `all`; orden: fijadas primero y luego `updatedAt` descendente (sin `updatedAt` al final); `cursor`/`next` son desplazamientos opacos. La lista no abre ninguna aplicación de workspace.
 - `POST /api/sessions/:sid/prompts` también responde 409 `session_busy` cuando la sesión tiene un run en cola del `RunScheduler` o una compactación en curso (el texto solo se encola con un run **en ejecución**) y para sesiones hijas (las conduce su sesión padre).
 - En `GET /api/sessions/:sid/events`, cada `RunEvent` lleva `seq` = `events.seq` global (el contador por emisor no se persiste), `eventId` igual, y `timestamp` = `created_at`.
+- **Preguntas laterales (`/btw`)**: `POST /api/sessions/:sid/btw` hace una llamada sin herramientas al modelo de la sesión con su historial activo como contexto (transcripción en texto, se descartan los mensajes más antiguos si no cabe) y una instrucción de pregunta lateral. No escribe en `messages`, `tool_calls`, `runs`, `events` ni en el uso de la sesión, no toma el bloqueo de la sesión (funciona durante un run) y no emite frames SSE. El historial vive en `plugin_state` con el espacio de nombres reservado `core:btw` (un id de plugin no puede contener `:`), clave = id de sesión, 20 entradas. Cerrar la petición o `POST .../btw/cancel` la cancela (409 `cancelled`); un fallo del proveedor es 502 `provider_unavailable`. `/btw` también está en el `CommandCatalog` (superficies tui, web, api): por `POST .../commands` devuelve la respuesta, la más reciente o `Usage: /btw <question>`.
 - `:wid` es un id opaco estable (sha256 corto de la ruta realpath) para no poner rutas en URLs.
 - No hay `DELETE /api/sessions/:sid` en v1: se archiva con `PATCH {archived:true}` (el store no tiene borrado).
 - No hay "retry" de run: el usuario vuelve a enviar (un run fallido no se reejecuta automáticamente; `reconcile` ya evita repetir tools inciertas).
@@ -683,10 +687,13 @@ type ApiErrorCode =
   | "path_outside_workspace" | "not_a_git_repo" | "approval_resolved"
   | "capability_ceiling" | "not_manageable" | "mcp_not_permitted" | "runs_active"
   | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "stream_limit"
-  | "workspace_archived" | "picker_busy" | "picker_unavailable" | "permission_denied" | "internal";
+  | "workspace_archived" | "picker_busy" | "picker_unavailable" | "permission_denied" | "cancelled"
+  | "internal";
 ```
 
 `workspace_archived` (409, `details: {path}`), `picker_busy` (409), `picker_unavailable` (503: sin diálogo nativo, fallo al lanzarlo, o selector/explorador desactivados por enlace no loopback) y `permission_denied` (403, `details: {path}`: el usuario del servidor no puede leer ese directorio) se **añadieron con los workspaces archivados y el selector de carpetas**.
+
+`cancelled` (409, **añadido con `/btw`**): la petición se canceló antes de terminar (una pregunta lateral cancelada con `POST .../btw/cancel`).
 
 `stream_limit` (503, **añadido en fase 2**): más de `maxStreams` (16) streams SSE a la vez.
 
