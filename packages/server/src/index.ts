@@ -5,8 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
-import { SQLiteStore, stateHome } from "@alisio/core";
+import { dirname, join } from "node:path";
+import { BlobStore, SQLiteStore, stateHome } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
@@ -18,6 +18,7 @@ import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
+import { registerBlobRoutes } from "./routes/blobs.ts";
 import { registerCommandRoutes } from "./routes/commands.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerFileRoutes } from "./routes/files.ts";
@@ -124,7 +125,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   let closing = false;
   const base = options.app ?? {};
   // Server-level connection to the shared session database (lists, metadata, snapshots).
-  const catalog = new SQLiteStore(base.db ?? join(stateHome(), "sessions.sqlite"));
+  const dbPath = base.db ?? join(stateHome(), "sessions.sqlite");
+  const catalog = new SQLiteStore(dbPath);
+  // The same content-addressed store every workspace app resolves attachments from.
+  const blobs = new BlobStore({
+    root: dbPath !== ":memory:" ? join(dirname(dbPath), "blobs") : join(stateHome(), "blobs"),
+    db: catalog.db,
+  });
   // Startup reconciliation (RNF-09): runs and child sessions left queued/running by a dead
   // process become interrupted before any client lists them.
   catalog.interruptRuns();
@@ -246,6 +253,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerSessionViewRoutes(router, { catalog, sessions });
   registerFileRoutes(router, { workspaces, catalog, sessions });
+  registerBlobRoutes(router, { blobs });
   registerPromptRoutes(router, { sessions, scheduler });
   registerCommandRoutes(router, { sessions, scheduler, workspaces });
   registerApprovalRoutes(router, { approvals, interactions });
@@ -288,7 +296,10 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       if (!isHealth && !guard.authenticated(req))
         throw new HttpError("unauthorized", "Open the launch URL printed by `alisio serve`");
       if (matched === "method") throw new HttpError("not_found", "Method not supported");
-      if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+      // Every write is JSON (it forces a CORS preflight) except the raw image upload, which
+      // checks its own image content types (also non-safelisted, so also preflighted).
+      const upload = method === "POST" && url.pathname === "/api/blobs";
+      if (!["GET", "HEAD", "OPTIONS"].includes(method) && !upload) {
         const type = String(req.headers["content-type"] ?? "")
           .split(";")[0]
           ?.trim();

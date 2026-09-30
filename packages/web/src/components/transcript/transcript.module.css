@@ -347,3 +347,17 @@ button.processHead:hover,
 .openFile:focus-visible {
   opacity: 1;
 }
+
+.bubbleImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bubbleImages img {
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}

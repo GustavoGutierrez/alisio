@@ -4,6 +4,7 @@
  * `store/app.ts`.
  */
 import type {
+  BlobRef,
   Effect,
   Message,
   RunEvent,
@@ -34,7 +35,15 @@ type Tone = "info" | "warning" | "error";
 
 /** Durable rows (from messages) and local rows (events, command output) in display order. */
 type Entry =
-  | { kind: "user"; key: string; seq: number; text: string; attachments: number }
+  | {
+      kind: "user";
+      key: string;
+      seq: number;
+      text: string;
+      attachments: number;
+      /** Attached images (the persisted base64), shown as thumbnails. */
+      images?: Array<{ mimeType: string; data: string }>;
+    }
   | {
       kind: "assistant";
       key: string;
@@ -65,6 +74,9 @@ export interface Echo {
   display?: string;
   state: "sending" | "failed";
   error?: string;
+  /** Uploaded images sent with the prompt, and their local thumbnails (object URLs). */
+  attachments?: BlobRef[];
+  thumbs?: string[];
 }
 
 export interface LiveRun {
@@ -163,6 +175,11 @@ function fromMessages(
           seq,
           text: message.display ?? message.text,
           attachments: message.attachments?.length ?? 0,
+          ...(message.attachments?.length
+            ? {
+                images: message.attachments.map((a) => ({ mimeType: a.mimeType, data: a.data })),
+              }
+            : {}),
         });
     } else if (message.role === "assistant") {
       for (const call of message.calls)

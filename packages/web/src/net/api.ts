@@ -6,6 +6,7 @@
 import type {
   ApiError,
   ApiErrorCode,
+  BlobRef,
   CommandDescriptor,
   CommandOutcome,
   FileTreePage,
@@ -125,8 +126,10 @@ export class ApiClient {
       "GET",
       `/api/sessions/${enc(id)}/messages?before=${before}&limit=${limit}`,
     );
-  prompt = (id: string, body: { requestId: string; text: string; display?: string }) =>
-    this.request<PromptAccepted>("POST", `/api/sessions/${enc(id)}/prompts`, body);
+  prompt = (
+    id: string,
+    body: { requestId: string; text: string; display?: string; attachments?: BlobRef[] },
+  ) => this.request<PromptAccepted>("POST", `/api/sessions/${enc(id)}/prompts`, body);
   cancel = (id: string) =>
     this.request<{ cancelled: boolean }>("POST", `/api/sessions/${enc(id)}/cancel`, {});
   commands = (sessionId?: string) =>
@@ -172,6 +175,16 @@ export class ApiClient {
       size: Number(res.headers.get("X-File-Size") ?? 0),
       blob: await res.blob(),
     };
+  }
+
+  /** Uploads an image; the server sniffs its bytes and answers its content-addressed reference. */
+  async upload(file: Blob): Promise<BlobRef> {
+    const res = await this.raw("/api/blobs", {
+      method: "POST",
+      body: file,
+      contentType: file.type || "application/octet-stream",
+    });
+    return (await res.json()) as BlobRef;
   }
 
   /** A GET or binary POST whose successful body the caller reads itself. */

@@ -1,7 +1,9 @@
 import type { CommandDescriptor, PermissionPresetId } from "@alisio/sdk";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
+import { newId } from "../../net/api.ts";
 import {
+  api,
   busy,
   cancelRun,
   commands,
@@ -17,14 +19,55 @@ import {
   setEffort,
   setModel,
   setPreset,
+  showToast,
   submit,
 } from "../../store/app.ts";
+import {
+  canSend,
+  checkFile,
+  type PendingAttachment,
+  type Rejection,
+  readyRefs,
+  updateAttachment,
+} from "../../store/attachments.ts";
 import { historyStep, matchCommands } from "../../store/composer.ts";
 import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
 import styles from "./composer.module.css";
 
 const PALETTE_ID = "slash-palette";
+
+/** Thumbnails of the images about to be sent, each removable. */
+function Thumbs(props: { items: PendingAttachment[]; onRemove: (id: string) => void }) {
+  return (
+    <ul class={styles.thumbs} aria-label={t("composer.attachments")}>
+      {props.items.map((item) => (
+        <li
+          key={item.id}
+          class={styles.thumb}
+          data-status={item.status}
+          title={item.error ?? item.name}
+        >
+          <img src={item.url} alt={item.name} />
+          {item.status === "uploading" ? <span class={`${styles.thumbSpinner} spin`} /> : null}
+          {item.status === "failed" ? (
+            <span class={styles.thumbError} role="alert">
+              {t("composer.uploadFailed")}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            class={styles.thumbRemove}
+            aria-label={t("composer.removeAttachment", { name: item.name })}
+            onClick={() => props.onRemove(item.id)}
+          >
+            <Icon name="x" size={12} />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function ContextRing() {
   const usage = context.value;
@@ -113,11 +156,19 @@ export function Composer() {
   const [draft, setDraft] = useState("");
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const files = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
+  // The latest list for async upload callbacks.
+  const current = useRef(attachments);
+  current.current = attachments;
 
   useEffect(() => {
     setText(id ? loadDraft(id) : "");
     setHistoryIndex(undefined);
+    for (const a of current.current) URL.revokeObjectURL(a.url);
+    setAttachments([]);
   }, [id]);
 
   useEffect(() => {
@@ -165,12 +216,59 @@ export function Composer() {
     area.current?.focus();
   };
 
+  const addFiles = (list: Iterable<File>) => {
+    let next = current.current;
+    const rejected = new Set<Rejection>();
+    for (const file of list) {
+      const problem = checkFile(file, next.length);
+      if (problem) {
+        rejected.add(problem);
+        continue;
+      }
+      const item: PendingAttachment = {
+        id: newId(),
+        name: file.name || "image",
+        url: URL.createObjectURL(file),
+        bytes: file.size,
+        status: "uploading",
+      };
+      next = [...next, item];
+      void api.upload(file).then(
+        (ref) =>
+          setAttachments(updateAttachment(current.current, item.id, { status: "ready", ref })),
+        (error: unknown) =>
+          setAttachments(
+            updateAttachment(current.current, item.id, {
+              status: "failed",
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          ),
+      );
+    }
+    current.current = next;
+    setAttachments(next);
+    for (const problem of rejected) showToast(t(`composer.reject.${problem}`));
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    const item = current.current.find((a) => a.id === attachmentId);
+    if (item) URL.revokeObjectURL(item.url);
+    const next = current.current.filter((a) => a.id !== attachmentId);
+    current.current = next;
+    setAttachments(next);
+  };
+
+  const sendable = canSend(text, attachments);
   const send = () => {
-    if (disabled || !text.trim()) return;
+    if (disabled || !sendable) return;
     const value = text;
+    const refs = readyRefs(attachments);
+    const thumbs = attachments.filter((a) => a.status === "ready").map((a) => a.url);
     update("");
     setHistoryIndex(undefined);
-    void submit(value);
+    current.current = [];
+    setAttachments([]);
+    void submit(value, refs.length ? { refs, thumbs } : undefined);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -251,7 +349,27 @@ export function Composer() {
 
   return (
     <div class={styles.dock}>
-      <div class={styles.box} data-disabled={disabled ? "true" : undefined}>
+      <div
+        class={styles.box}
+        data-disabled={disabled ? "true" : undefined}
+        data-dragging={dragging ? "true" : undefined}
+        onDragOver={(event) => {
+          if (disabled || !event.dataTransfer?.types.includes("Files")) return;
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (!(event.currentTarget as Node).contains(event.relatedTarget as Node | null))
+            setDragging(false);
+        }}
+        onDrop={(event) => {
+          if (disabled || !event.dataTransfer?.files.length) return;
+          event.preventDefault();
+          setDragging(false);
+          addFiles(event.dataTransfer.files);
+        }}
+      >
+        {attachments.length ? <Thumbs items={attachments} onRemove={removeAttachment} /> : null}
         {paletteOpen ? <SlashPalette items={matches} active={index} onPick={pick} /> : null}
         <label class="sr-only" for="composer-input">
           {t("composer.label")}
@@ -272,6 +390,14 @@ export function Composer() {
             paletteOpen && matches.length ? `${PALETTE_ID}-${index}` : undefined
           }
           onInput={(event) => update((event.target as HTMLTextAreaElement).value)}
+          onPaste={(event) => {
+            const pasted = [...(event.clipboardData?.files ?? [])].filter((f) =>
+              f.type.startsWith("image/"),
+            );
+            if (!pasted.length) return;
+            event.preventDefault();
+            addFiles(pasted);
+          }}
           onKeyDown={onKeyDown}
           onCompositionStart={() => {
             composing.current = true;
@@ -284,12 +410,25 @@ export function Composer() {
           <button
             type="button"
             class={`icon-btn ${styles.round}`}
-            disabled
+            disabled={disabled}
             aria-label={t("composer.attach")}
             title={t("composer.attach")}
+            onClick={() => files.current?.click()}
           >
             <Icon name="plus" />
           </button>
+          <input
+            ref={files}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            hidden
+            onChange={(event) => {
+              const input = event.currentTarget as HTMLInputElement;
+              if (input.files) addFiles(input.files);
+              input.value = "";
+            }}
+          />
           <Menu
             label={t("composer.preset", { preset: t(`preset.${preset}`) })}
             disabled={disabled || !presets.length}
@@ -354,7 +493,7 @@ export function Composer() {
             <Icon name="chevronDown" size={14} />
           </Menu>
           <ContextRing />
-          {running && !text.trim() ? (
+          {running && !text.trim() && !attachments.length ? (
             <button
               type="button"
               class={`${styles.send} ${styles.stop}`}
@@ -370,7 +509,7 @@ export function Composer() {
               class={styles.send}
               aria-label={t("composer.send")}
               title={t("composer.send")}
-              disabled={disabled || !text.trim()}
+              disabled={disabled || !sendable}
               onClick={send}
             >
               <Icon name="arrowUp" size={18} />

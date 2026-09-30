@@ -18,12 +18,18 @@ function Item({ item }: { item: VisibleItem }) {
       return (
         <div class={styles.userTurn}>
           <div class={styles.bubble}>
-            {item.text}
-            {item.attachments ? (
+            {item.images?.length ? (
+              <span class={styles.bubbleImages}>
+                {item.images.map((image, i) => (
+                  <img key={i} src={`data:${image.mimeType};base64,${image.data}`} alt="" />
+                ))}
+              </span>
+            ) : item.attachments ? (
               <span class={styles.attachments}>
                 {t("transcript.images", { count: item.attachments })}
               </span>
             ) : null}
+            {item.text}
           </div>
           <div class={styles.bubbleActions}>
             <CopyButton text={() => item.text} label={t("transcript.copyMessage")} />
@@ -34,6 +40,13 @@ function Item({ item }: { item: VisibleItem }) {
       return (
         <div class={styles.userTurn}>
           <div class={`${styles.bubble} ${styles.pendingBubble}`}>
+            {item.echo.thumbs?.length ? (
+              <span class={styles.bubbleImages}>
+                {item.echo.thumbs.map((url) => (
+                  <img key={url} src={url} alt="" />
+                ))}
+              </span>
+            ) : null}
             {item.echo.display ?? item.echo.text}
           </div>
           <div class={styles.bubbleActions}>

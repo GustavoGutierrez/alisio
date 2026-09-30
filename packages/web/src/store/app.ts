@@ -5,6 +5,7 @@
  */
 
 import type {
+  BlobRef,
   CommandDescriptor,
   PermissionPresetId,
   ServerFrame,
@@ -348,18 +349,30 @@ function remember(text: string): void {
 }
 
 /** Sends a prompt with an instant local echo; failures stay visible with a retry. */
-async function sendPrompt(text: string, display?: string, requestId = newId()): Promise<void> {
+async function sendPrompt(
+  text: string,
+  display?: string,
+  requestId = newId(),
+  images?: { refs: BlobRef[]; thumbs: string[] },
+): Promise<void> {
   const id = currentId.value;
   if (!id) return;
   const localId = newId();
+  const attachments = images?.refs.length ? images.refs : undefined;
   transcript.value = localEcho(transcript.value, {
     localId,
     requestId,
     text,
     ...(display ? { display } : {}),
+    ...(attachments ? { attachments, thumbs: images?.thumbs ?? [] } : {}),
   });
   try {
-    await api.prompt(id, { requestId, text, ...(display ? { display } : {}) });
+    await api.prompt(id, {
+      requestId,
+      text,
+      ...(display ? { display } : {}),
+      ...(attachments ? { attachments } : {}),
+    });
   } catch (error) {
     if (currentId.value === id)
       transcript.value = failEcho(transcript.value, localId, errorText(error));
@@ -371,14 +384,26 @@ export function retryEcho(localId: string): void {
   const echo = transcript.value.echoes.find((e) => e.localId === localId);
   if (!echo) return;
   transcript.value = dropEcho(transcript.value, localId);
-  void sendPrompt(echo.text, echo.display, echo.requestId);
+  void sendPrompt(
+    echo.text,
+    echo.display,
+    echo.requestId,
+    echo.attachments ? { refs: echo.attachments, thumbs: echo.thumbs ?? [] } : undefined,
+  );
 }
 
-/** Composer submit: a known slash command runs through the catalog, anything else is a prompt. */
-export async function submit(text: string): Promise<void> {
+/**
+ * Composer submit: a known slash command runs through the catalog, anything else is a prompt.
+ * Prompts with images always go to the model (commands take no attachments).
+ */
+export async function submit(
+  text: string,
+  images?: { refs: BlobRef[]; thumbs: string[] },
+): Promise<void> {
   const id = currentId.value;
-  if (!id || !text.trim()) return;
-  remember(text);
+  if (!id || (!text.trim() && !images?.refs.length)) return;
+  if (text.trim()) remember(text);
+  if (images?.refs.length) return sendPrompt(text, undefined, newId(), images);
   const slash = parseSlash(text);
   const known = slash
     ? commands.value.find(
