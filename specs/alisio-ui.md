@@ -1286,6 +1286,29 @@ Cada unidad (U) = un PR. Todas terminan con la batería completa de `AGENTS.md` 
 
 **Docs**: `docs/web.md` + ES; `docs/tools.md` + ES (partes `ui` de las tools estándar).
 
+**Implementado (fase 4), diferencias con el borrador**:
+
+- Sin `diff` ni `anser`: parser de parche unificado y diff Myers propios (`renderers/diff/model.ts`,
+  y `core/src/runtime/diff.ts` para producir los parches) y parser SGR propio
+  (`renderers/terminal/ansi.ts`). Todos los renderers son chunks diferidos; `mermaid`/`math` siguen
+  mostrando la fuente hasta la fase 5 (`renderers/source/view.tsx`).
+- La TUI ignora los bloques `diff`/`terminal` de `write_file`, `edit_file`, `shell` y
+  `run_process` (`richPartsOf(result, toolName)`) porque ya muestra esa salida desde el texto.
+- El límite de 48 KB del runner para resultados de herramientas mide ahora la proyección de texto
+  (antes el resultado entero): si no, los bloques de visualización cambiaban la entrada del modelo.
+- `GET /tree|file|diff` se limitan al workspace (sin raíces `--add-dir`); `safePath` rechaza todo
+  segmento que sea symlink, también los que apuntan dentro. `/file` no devuelve 413: recorta a
+  2 MB (`X-Truncated`, `X-File-Size`) y `download=1` entrega el archivo completo. SVG y HTML se
+  sirven como `text/plain`. `/changes` solo anota con `git status` los archivos escritos por la
+  sesión (y sus hijas); no añade los cambios de git ajenos a la sesión.
+- `POST /api/blobs` responde **201**, admite `Content-Type` de las cuatro imágenes u
+  `application/octet-stream` y guarda el tipo detectado por bytes. El compositor limita a 8
+  imágenes por mensaje; con adjuntos, el texto de barra se envía como prompt (los comandos no
+  llevan adjuntos).
+- Trajectory y la línea de estadísticas se calculan en el cliente desde `GET /events` (paginado con
+  `after`, incremental al llegar eventos durables; las estadísticas piden solo
+  `run_started,turn_completed,tool_completed`).
+
 ### Fase 5 — Renderers ricos y gestión
 
 | U | Archivos | Tareas | Salida |
