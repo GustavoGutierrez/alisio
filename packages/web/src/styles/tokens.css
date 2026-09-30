@@ -26,7 +26,6 @@
   --danger-soft: rgb(240 122 127 / 14%);
   --warn: #e3b55c;
   --ok: #7ccf8e;
-  --mark-bg: #123036;
   --code-bg: #121a1e;
   --shadow: 0 12px 32px rgb(0 0 0 / 45%);
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
@@ -54,7 +53,6 @@
   --danger-soft: rgb(185 47 57 / 9%);
   --warn: #8a5f00;
   --ok: #2b7a3d;
-  --mark-bg: #d8efeb;
   --code-bg: #f1f5f5;
   --shadow: 0 12px 32px rgb(20 40 45 / 16%);
 }

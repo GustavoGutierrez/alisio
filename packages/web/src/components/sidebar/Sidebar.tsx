@@ -17,7 +17,7 @@ import {
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
 import { groupSessions } from "../../store/sessions.ts";
 import { relativeTime } from "../../util/time.ts";
-import { Icon, Mark } from "../icons.tsx";
+import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
 import styles from "./sidebar.module.css";
 
@@ -147,8 +147,10 @@ export function Sidebar() {
       data-mobile-open={mobileSidebar.value ? "true" : undefined}
     >
       <div class={styles.brand}>
-        <Mark />
-        <span class={styles.wordmark}>alisio</span>
+        <img class={styles.logo} src="/logo-64.png" alt="Alisio" width={26} height={26} />
+        <span class={styles.wordmark} aria-hidden="true">
+          alisio
+        </span>
         <button
           type="button"
           class={`icon-btn ${styles.collapse}`}

@@ -71,20 +71,3 @@ export function Icon(props: { name: IconName; size?: number; class?: string }): 
     </svg>
   );
 }
-
-/** The Alisio mark: two trade-wind strokes. */
-export function Mark(props: { size?: number }): JSX.Element {
-  const size = props.size ?? 22;
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="9" fill="var(--mark-bg)" />
-      <path
-        d="M7 20c5-6 13-6 18-2M7 13.5c5-5 11-5 15-2"
-        stroke="var(--accent)"
-        stroke-width="2.6"
-        fill="none"
-        stroke-linecap="round"
-      />
-    </svg>
-  );
-}

@@ -24,6 +24,13 @@
   height: 34px;
 }
 
+.logo {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
 .wordmark {
   font-size: 19px;
   font-weight: 650;
