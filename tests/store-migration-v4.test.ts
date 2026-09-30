@@ -332,16 +332,12 @@ describe("AgentRunner run journal (v4)", () => {
     text,
     calls,
   });
-  function provider(turns: ProviderEvent[][], hang = false): ModelProvider {
+  function provider(turns: ProviderEvent[][]): ModelProvider {
     let turn = 0;
     return {
       id: "test",
       model: "m",
-      async *stream(request) {
-        if (hang)
-          await new Promise((_, reject) =>
-            request.signal?.addEventListener("abort", () => reject(request.signal?.reason)),
-          );
+      async *stream() {
         for (const event of turns[turn++] ?? []) yield event;
       },
     };
@@ -433,7 +429,17 @@ describe("AgentRunner run journal (v4)", () => {
         throw new Error("boom");
       },
     });
-    const cancelled = await setup(provider([], true));
+    // Cancelled deterministically once the provider is streaming.
+    const controller = new AbortController();
+    const cancelled = await setup({
+      id: "test",
+      model: "m",
+      async *stream(request) {
+        controller.abort(new Error("stop"));
+        request.signal?.throwIfAborted();
+        yield { type: "text_delta", delta: "never" };
+      },
+    });
     const capped = await setup(
       provider([
         [
@@ -451,10 +457,9 @@ describe("AgentRunner run journal (v4)", () => {
         status: "failed",
         error: "boom",
       });
-      const controller = new AbortController();
-      const pending = cancelled.runner.run(cancelled.session, "x", controller.signal);
-      setTimeout(() => controller.abort(new Error("stop")), 20);
-      await expect(pending).rejects.toThrow();
+      await expect(cancelled.runner.run(cancelled.session, "x", controller.signal)).rejects.toThrow(
+        "stop",
+      );
       expect(cancelled.store.runs(cancelled.session)[0]).toMatchObject({
         status: "cancelled",
         error: "stop",
