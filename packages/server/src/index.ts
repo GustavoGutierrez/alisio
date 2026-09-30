@@ -8,6 +8,8 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { SQLiteStore, stateHome } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
+import { ApprovalBridge } from "./bridges/approval-bridge.ts";
+import { InteractionBridge } from "./bridges/interaction-bridge.ts";
 import { RunScheduler } from "./host/run-scheduler.ts";
 import { SessionService } from "./host/sessions.ts";
 import { type ServerAppOptions, WorkspaceHost, workspaceId } from "./host/workspace-host.ts";
@@ -15,6 +17,7 @@ import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
+import { registerApprovalRoutes } from "./routes/approvals.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
@@ -24,6 +27,8 @@ import { SseHub } from "./sse/hub.ts";
 import { InflightTracker } from "./sse/inflight.ts";
 
 export { isLoopbackHost } from "./auth/guard.ts";
+export { ApprovalBridge } from "./bridges/approval-bridge.ts";
+export { InteractionBridge } from "./bridges/interaction-bridge.ts";
 export {
   type Application,
   type OpenWorkspace,
@@ -69,6 +74,10 @@ export interface ServerOptions {
   coalesceMs?: number;
   /** Maximum concurrent event streams (default 16). */
   maxStreams?: number;
+  /** Deny an approval when nobody watches its session for this long (default 30 s). */
+  approvalGraceMs?: number;
+  /** Deny an approval after this long even when watched (default 10 min; 0 = no limit). */
+  approvalTimeoutMs?: number;
 }
 
 export interface RunningServer {
@@ -130,7 +139,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       return undefined;
     }
   };
+  let approvals: ApprovalBridge | undefined;
+  let interactions: InteractionBridge | undefined;
   const hub = new SseHub({
+    onSubscribersChanged: () => {
+      approvals?.subscribersChanged();
+      interactions?.subscribersChanged();
+    },
     snapshot: (sessionId) => {
       const service = sessions as SessionService;
       const session = service.get(sessionId);
@@ -142,7 +157,10 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         session: service.wire(session),
         messages: catalog.messagesPage(sessionId, { limit: 50 }),
         ...(current ? { inflight: current } : {}),
-        pending: { approvals: [], interactions: [] },
+        pending: {
+          approvals: approvals?.pending(sessionId) ?? [],
+          interactions: interactions?.pending(sessionId) ?? [],
+        },
       };
     },
     messagesAfter: (sessionId, after) => catalog.messagesPage(sessionId, { after, limit: 200 }),
@@ -159,7 +177,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         inflight.apply(event);
         hub.publish(event);
       },
+      ...(approvals
+        ? { approve: approvals.handler, approveExternalDirectory: approvals.directoryHandler }
+        : {}),
     }),
+    onOpen: (entry) => {
+      if (interactions) entry.app.plugins.setInteractiveUI(interactions.uiFor(entry.id));
+    },
     busy: (id) => scheduler.busyWorkspace(id) || hub.watchesWorkspace(id),
     ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
     ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
@@ -176,6 +200,25 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     scheduler,
     base,
     broadcast: (frame) => hub.broadcast(frame),
+    awaitingInput: (root) => !!approvals?.awaiting(root) || !!interactions?.awaiting(root),
+  });
+  const service = sessions;
+  approvals = new ApprovalBridge({
+    hub,
+    rootOf: (id) => service.rootOf(id),
+    runOf: (id) => scheduler.job(id)?.runId,
+    ...(options.approvalGraceMs !== undefined ? { graceMs: options.approvalGraceMs } : {}),
+    ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
+    onChange: (root) => service.notify(root),
+  });
+  interactions = new InteractionBridge({
+    hub,
+    rootOf: (id) => service.rootOf(id),
+    workspaceOf,
+    ...(options.approvalGraceMs !== undefined ? { graceMs: options.approvalGraceMs } : {}),
+    ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
+    onOpen: (id) => service.notify(id),
+    onChange: (root) => root && service.notify(root),
   });
   const stats = (): ServerStats => ({
     shuttingDown: closing,
@@ -183,7 +226,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     queuedRuns: scheduler.counts().queued,
     openWorkspaces: workspaces.openCount,
     subscribers: hub.size,
-    pendingApprovals: 0,
+    pendingApprovals: approvals?.size ?? 0,
     sseDropped: hub.dropped,
   });
   registerHealthRoutes(router, {
@@ -194,6 +237,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerWorkspaceRoutes(router, { workspaces, catalog });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerPromptRoutes(router, { sessions, scheduler });
+  registerApprovalRoutes(router, { approvals, interactions });
   registerEventRoutes(router, {
     hub,
     sessions,
@@ -292,6 +336,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     async close() {
       closing = true;
       clearInterval(sweeper);
+      approvals?.denyAll();
+      interactions?.cancelAll();
       await scheduler.shutdown();
       hub.closeAll();
       await workspaces.closeAll();
