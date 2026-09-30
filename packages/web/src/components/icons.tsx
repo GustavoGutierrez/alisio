@@ -19,7 +19,7 @@ const PATHS = {
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
   arrowUp: "M12 19V5M6 11l6-6 6 6",
   arrowDown: "M12 5v14M6 13l6 6 6-6",
-  stop: "M8 8h8v8H8z",
+  home: "M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5",
   shield: "M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z",
   file: "M6 3h8l4 4v14H6zM14 3v4h4",
   terminal: "M4 5h16v14H4zM8 10l3 2-3 2M13 15h3",
@@ -49,25 +49,40 @@ const PATHS = {
   key: "M15 9a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM13.8 11.8L20 18v3h-3v-2h-2v-2h-2l-1.2-1.2",
 } as const;
 
-export type IconName = keyof typeof PATHS;
+/** Solid glyphs: filled with `currentColor`, no stroke (e.g. the stop square). */
+const FILLED = {
+  stop: "M9 7h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z",
+} as const;
+
+export type IconName = keyof typeof PATHS | keyof typeof FILLED;
+
+/** Whether an icon renders filled rather than stroked. */
+export const isFilledIcon = (name: IconName): name is keyof typeof FILLED => name in FILLED;
 
 export function Icon(props: { name: IconName; size?: number; class?: string }): JSX.Element {
   const size = props.size ?? 16;
+  const filled = isFilledIcon(props.name);
   return (
     <svg
       class={props.class}
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
+      fill={filled ? "currentColor" : "none"}
+      stroke={filled ? "none" : "currentColor"}
+      stroke-width={filled ? undefined : "1.8"}
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"
       focusable="false"
     >
-      <path d={PATHS[props.name]} />
+      <path
+        d={
+          filled
+            ? FILLED[props.name as keyof typeof FILLED]
+            : PATHS[props.name as keyof typeof PATHS]
+        }
+      />
     </svg>
   );
 }

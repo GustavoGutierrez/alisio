@@ -501,7 +501,12 @@ export function Composer() {
               title={t("composer.stop")}
               onClick={() => void cancelRun()}
             >
-              <Icon name="stop" size={16} />
+              {/* An arc circling the button while the run is active (static with reduced motion). */}
+              <svg class={styles.stopRing} viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+                <circle class={styles.stopTrack} cx="18" cy="18" r="16.5" />
+                <circle class={styles.stopArc} cx="18" cy="18" r="16.5" pathLength="100" />
+              </svg>
+              <Icon name="stop" size={20} class={styles.stopGlyph} />
             </button>
           ) : (
             <button

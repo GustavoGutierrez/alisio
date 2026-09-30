@@ -141,9 +141,78 @@
   color: var(--faint);
 }
 
+/* Stop: a filled rounded square in a neutral disc, circled by a spinning accent arc. */
 .stop {
-  background: var(--text);
-  color: var(--bg);
+  position: relative;
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition:
+    background 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+.stop:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.stop:active .stopGlyph {
+  transform: scale(0.88);
+}
+
+.stopGlyph {
+  position: relative;
+  transition: transform 120ms var(--ease);
+}
+
+.stopRing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  animation: stop-spin 1.2s linear infinite;
+}
+
+.stopRing circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.stopTrack {
+  stroke: transparent;
+}
+
+.stopArc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 26 74;
+}
+
+.stop:hover .stopArc {
+  stroke: var(--danger);
+}
+
+@keyframes stop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stopRing {
+    animation: none;
+  }
+
+  .stopTrack {
+    stroke: var(--accent-soft);
+  }
+
+  .stopArc {
+    stroke-dasharray: 100 0;
+    opacity: 0.7;
+  }
 }
 
 .palette {
