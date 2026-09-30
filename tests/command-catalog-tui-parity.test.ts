@@ -47,6 +47,12 @@ const LEGACY_COMMANDS = [
     description: "Ask the agent to turn your question into a multiple-choice ask_user_question",
     argumentHint: "<question>",
   },
+  // Added after the migration (not legacy): the `/btw` side question.
+  {
+    name: "btw",
+    description: "Ask a side question about the session without adding to the conversation",
+    argumentHint: "[question]",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

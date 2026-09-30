@@ -12,6 +12,12 @@ import type { AgentRunner } from "../core/runner.ts";
 import type { McpServerInfo } from "../mcp/connector.ts";
 import type { PromptTemplate } from "../resources/prompts.ts";
 import type { SkillCatalogEntry } from "../resources/skills.ts";
+import {
+  formatSideQuestion,
+  SIDE_QUESTION_DESCRIPTION,
+  SIDE_QUESTION_USAGE,
+  type SideQuestions,
+} from "../sessions/side-questions.ts";
 import { BUILTIN_COMMANDS, type BuiltinCommand } from "./builtins.ts";
 
 export { BUILTIN_COMMANDS, type BuiltinCommand };
@@ -41,6 +47,8 @@ export interface CommandHost {
   mcp?: { list(): McpServerInfo[] };
   config?: { agents: { active?: string; effort?: string } };
   updateSetting?(key: "agents.effort", value: unknown): Promise<string>;
+  /** `/btw` side questions (tool-less, outside the conversation). */
+  sideQuestions?: Pick<SideQuestions, "ask" | "history">;
 }
 export interface CommandExecutionContext {
   sessionId: string;
@@ -225,6 +233,28 @@ const HANDLERS: Record<string, Handler> = {
         .join("\n")}`,
       data: servers,
     };
+  },
+  async btw(args, ctx, host) {
+    const question = args.trim();
+    const side = host.sideQuestions;
+    if (!question) {
+      const history = side?.history(ctx.sessionId) ?? [];
+      const latest = history.at(-1);
+      if (!latest)
+        return {
+          text: `${SIDE_QUESTION_USAGE}\n${SIDE_QUESTION_DESCRIPTION}`,
+          tone: "notice",
+          data: { history },
+        };
+      return {
+        text: formatSideQuestion(latest, history.length, history.length),
+        data: { history, entry: latest },
+      };
+    }
+    if (!side) throw new Error("Side questions are unavailable here");
+    const entry = await side.ask(ctx.sessionId, question, ctx.signal ? { signal: ctx.signal } : {});
+    const total = side.history(ctx.sessionId).length;
+    return { text: formatSideQuestion(entry, total, total), data: { entry } };
   },
   async agents(args, ctx, host) {
     // With arguments, `/agents <verb>` belongs to the subagents plugin's own command (as in the

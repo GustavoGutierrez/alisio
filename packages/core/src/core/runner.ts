@@ -292,6 +292,41 @@ export class AgentRunner {
       };
     return { total: undefined, basis: "unknown", compactionAt: 100 };
   }
+  /**
+   * What a tool-less side call about a session needs (for example a `/btw` side question): the
+   * session's provider and model, its system instructions, its ACTIVE history and the current
+   * limits. Claims no lock and writes nothing, so it is safe while a run is active.
+   */
+  async sideContext(sessionId: string): Promise<{
+    provider: ModelProvider;
+    model: string;
+    instructions: string;
+    messages: Message[];
+    maxContextChars: number;
+    maxOutputTokens: number;
+    timeoutMs: number;
+    /** Context window of the model in tokens, when known and trusted. */
+    contextWindow?: number;
+    reasoningEffort?: string;
+  }> {
+    const o = this.options;
+    const session = o.store.get(sessionId);
+    const provider = await (o.providerFor?.(session) ?? o.provider);
+    const window = o.contextWindow?.(session.model);
+    return {
+      provider,
+      model: session.model,
+      ...(window !== undefined && window > 0 && window <= MAX_TRUSTED_WINDOW
+        ? { contextWindow: window }
+        : {}),
+      instructions: await o.context.instructions(sessionId),
+      messages: o.store.messages(sessionId),
+      maxContextChars: o.maxContextChars ?? 800_000,
+      maxOutputTokens: o.maxOutputTokens ?? 4096,
+      timeoutMs: o.timeoutMs ?? 300_000,
+      ...(o.reasoningEffort ? { reasoningEffort: o.reasoningEffort } : {}),
+    };
+  }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {
     const id = model.trim();

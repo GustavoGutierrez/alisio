@@ -46,6 +46,7 @@ import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
 import { ChildSessions } from "./sessions/children.ts";
+import { SideQuestions } from "./sessions/side-questions.ts";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /**
@@ -1039,6 +1040,8 @@ export async function createApplication(options: AppOptions = {}) {
         return providerInfo;
       },
       runner,
+      /** `/btw` side questions: tool-less answers about a session outside its conversation. */
+      sideQuestions: new SideQuestions({ runner, state: store }),
       herdr,
       contextWindow,
       /** Effective context budget + compaction point shared by the runner and the TUI bar. */

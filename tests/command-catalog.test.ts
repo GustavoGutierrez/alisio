@@ -214,6 +214,7 @@ describe("CommandCatalog (T-05)", () => {
       "plugins",
       "mcp",
       "agents",
+      "btw",
     ])
       expect(execution[name], name).toBe("core");
     for (const name of ["copy", "exit", "settings", "connect", "help", "ask"])

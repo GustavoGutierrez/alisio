@@ -112,6 +112,13 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
+    name: "btw",
+    description: "Ask a side question about the session without adding to the conversation",
+    argumentHint: "[question]",
+    surfaces: ALL,
+    execution: "core",
+  },
+  {
     name: "exit",
     description: "Exit Alisio",
     aliases: ["quit"],

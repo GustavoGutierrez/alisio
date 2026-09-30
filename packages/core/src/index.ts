@@ -196,6 +196,19 @@ export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
 export { ChildSessions, type ChildSessionsOptions } from "./sessions/children.ts";
 export {
+  formatSideQuestion,
+  SIDE_QUESTION_DESCRIPTION,
+  SIDE_QUESTION_HISTORY_LIMIT,
+  SIDE_QUESTION_INSTRUCTIONS,
+  SIDE_QUESTION_MAX_CHARS,
+  SIDE_QUESTION_USAGE,
+  SIDE_QUESTIONS_NAMESPACE,
+  type SideQuestionEntry,
+  SideQuestions,
+  type SideQuestionsOptions,
+  sideTranscript,
+} from "./sessions/side-questions.ts";
+export {
   composeSideBySide,
   DefaultAlisioMascot,
   DefaultStartupScreen,

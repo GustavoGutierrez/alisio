@@ -1149,6 +1149,24 @@ export interface CommandOutcome {
   effects?: string[];
   duplicate?: boolean;
 }
+/**
+ * One `/btw` side question: a tool-less question about a session answered outside its
+ * conversation (never persisted as messages, events, runs or session usage). Answer of
+ * `POST /api/sessions/:sid/btw`; `GET /api/sessions/:sid/btw` lists them, oldest first.
+ */
+export interface SideQuestionEntry {
+  id: string;
+  question: string;
+  /** Markdown answer. */
+  answer: string;
+  /** Model that answered (the session's model at the time). */
+  model: string;
+  usage: { input: number; output: number };
+  /** Epoch milliseconds. */
+  createdAt: number;
+  /** The provider cut the answer at the output-token budget. */
+  truncated?: boolean;
+}
 /** `GET /api/sessions/:sid/models`: models of the session's provider (credential-free). */
 export interface SessionModels {
   provider: string;
