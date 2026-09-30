@@ -157,9 +157,9 @@ it is not a statement that all of its release criteria are met.
   meant for SSH tunnels; a wildcard bind also accepts IP-literal `Host` headers); the provider is per
   workspace, so only the model changes per session; idempotency of prompts queued while a run is
   active is in memory; every SSE reconnection receives a full snapshot; the standalone binary serves
-  only the API and a placeholder page. File, blob and management routes come in later phases, so the
-  web UI has no attachments, file explorer, trajectory, per-session metrics or rich renderers yet
-  (developer blocks show in a simple form or as code). The UI does not watch the stream with a 45 s
+  only the API and a placeholder page. Management routes come in a later phase, and Mermaid and
+  math blocks still show as source code. The files panel browses the workspace only (no `--add-dir`
+  roots, symbolic links never followed) and uploaded images are not garbage-collected. The UI does not watch the stream with a 45 s
   timer (the server heartbeat is an SSE comment that `EventSource` does not expose); command output,
   notices and reasoning exist only while the page is open. `Ctrl+K` focuses the sidebar search
   (there is no separate session palette) and finished turns are not folded into an "N steps"

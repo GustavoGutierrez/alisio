@@ -53,6 +53,21 @@ Built-in plugins add more tools: `memory_*` from [Persistent memory](/memory) an
 `task_status`, `task_wait` and `send_message` from [Subagents](/subagents), all with the `internal`
 effect.
 
+## Display parts for the web UI {#ui-parts}
+
+Some built-in tools add a display block after their usual text result, for clients that render
+rich output such as the [web UI](/web). The text stays the first part and is the only part a model
+ever receives (tool results reach providers as their text projection), so model input, `alisio run
+--json` and the TUI are unchanged.
+
+| Tool | Block | Contents |
+| --- | --- | --- |
+| `write_file`, `edit_file` | `diff` | Unified patch of the change (`/dev/null` for a new file), with the file extension as `lang`; cut at a line boundary past 200 KB with a caption saying so |
+| `shell`, `run_process` | `terminal` | Command line, standard output then standard error (the last 256 KB), exit code and duration |
+
+Writing identical content adds no block. The TUI keeps showing these tools as before, from their
+text; blocks with the same kinds from plugins and MCP servers still render in the TUI.
+
 ## Asking the user {#ask-user-question}
 
 `ask_user_question` lets the model ask 1-4 multiple-choice questions (2-4 options each, at most one

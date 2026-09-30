@@ -5,10 +5,10 @@ y sesiones a la vez. Conduce el mismo núcleo de agente que la terminal: sesione
 aprobaciones y la base de datos de sesiones se comparten con la TUI y con `alisio run`.
 
 ::: warning Estado
-El servidor, su API y la interfaz del navegador están disponibles. El explorador de archivos, los
-adjuntos de imagen, los renderizadores ricos (diff, terminal, Mermaid, fórmulas), la vista de
-trayectoria y la gestión de plugins y modelos llegan en versiones posteriores. Consulte
-[Limitaciones conocidas](/es/limitations).
+El servidor, su API y la interfaz del navegador están disponibles, incluidos los adjuntos de
+imagen, el panel de archivos, la vista de trayectoria y los renderizadores de desarrollo (diff,
+terminal, JSON, resultados de tests). El renderizado de Mermaid y fórmulas y la gestión de plugins y
+modelos llegan en versiones posteriores. Consulte [Limitaciones conocidas](/es/limitations).
 :::
 
 ## Arrancar el servidor
@@ -62,17 +62,46 @@ un cajón que se abre desde la cabecera.
 **Cabecera.** Haga clic en el título para renombrar la sesión (las sesiones sin título muestran su
 primer prompt). La insignia muestra el agente y el preset de permisos. **Log de sesión** descarga la
 sesión como JSON Lines: cada evento durable en el formato de `alisio run --json` y después una línea
-`{"type":"message"}` por cada mensaje guardado.
+`{"type":"message"}` por cada mensaje guardado. El icono de panel a la derecha abre el panel de
+archivos (más abajo). Las pestañas **Conversación** y **Trayectoria** cambian la vista principal.
 
 **Conversación.** Sus mensajes aparecen a la derecha con un botón de copiar. El trabajo del agente
 aparece como filas de una línea: `Razonamiento · …`, `Inyección de contexto · AGENTS.md` y una fila
 por llamada a herramienta, como `Read · README.md` o `Shell · npm test`. Haga clic en una fila para
 ver su entrada y su salida. La respuesta llega en streaming como Markdown; los bloques de código
 tienen etiqueta de lenguaje, **Ajustar líneas** y **Copiar**, y se resaltan cuando entran en
-pantalla. El razonamiento es solo de visualización: tras recargar, las filas de razonamiento
+pantalla. Los enlaces a rutas del workspace abren el archivo en el panel de archivos. El
+razonamiento es solo de visualización: tras recargar, las filas de razonamiento
 anteriores desaparecen porque nunca se guarda. Al desplazarse hacia arriba, un botón vuelve al
 último mensaje; las sesiones largas muestran los últimos 30 turnos y cargan los mensajes anteriores
 a demanda.
+
+**Salida de herramientas.** Las herramientas que devuelven bloques estructurados tienen una vista
+nativa, que se carga la primera vez que hace falta: las escrituras y ediciones de archivos muestran
+un diff (unificado por defecto, **Lado a lado** a demanda, hunks plegables y una lista de archivos
+cuando un parche toca varios); los comandos de shell muestran su salida con colores ANSI, el código
+de salida y la duración, en streaming mientras se ejecutan y con las últimas 2 000 líneas visibles
+detrás de **Mostrar líneas anteriores**; JSON se muestra como un árbol plegable con copia de valores
+y de su JSONPath; los resultados de tests muestran el total de correctos, fallidos y omitidos con
+un filtro **Solo fallos**; los bloques de progreso muestran sus pasos. El texto original de la
+herramienta, que es lo que recibió el modelo, queda bajo **Salida en bruto**. Un bloque que la
+página no conoce muestra su texto y el JSON plegado. El icono de panel de una fila de herramienta
+con ruta abre ese archivo.
+
+**Trayectoria.** La pestaña **Trayectoria** lista los eventos durables de la sesión agrupados por
+ejecución: estado, hora de inicio, turnos y duración de cada ejecución, y una fila por evento con su
+hora, turno, tipo, un resumen breve y su duración cuando la tiene. Se actualiza a medida que llegan
+eventos; las ejecuciones antiguas quedan detrás de **Mostrar runs anteriores**.
+
+**Panel de archivos.** El icono de panel de la cabecera abre un panel a la derecha (una hoja
+inferior por debajo de 900 px) con tres pestañas. **Archivos** recorre el workspace a demanda, de
+1 000 en 1 000 entradas, ocultando `.git` y, en repositorios git, lo que excluye `.gitignore`.
+**Cambios** lista los archivos que esta sesión (y sus subagentes) escribió, los más recientes
+primero, con su código de `git status`; al elegir uno se ven su diff frente a `HEAD` y el archivo.
+**Vista previa** muestra texto y código resaltado, Markdown, JSON como árbol e imágenes; los
+archivos de más de 2 MB se recortan con un enlace **Descargar**, los binarios solo se pueden
+descargar, y HTML o SVG se muestran como código, nunca como página. Desde la vista previa se puede
+copiar la ruta, descargar el archivo o mencionarlo (`@ruta`) en el compositor.
 
 **Compositor.** `Enter` envía, `Shift+Enter` inserta un salto de línea, y `↑`/`↓` en la primera línea
 recorren los prompts enviados. Escribir `/` abre la paleta de comandos (flechas para moverse,
@@ -82,14 +111,21 @@ prompt. `/` fuera de un campo de texto lleva el foco al compositor. Debajo del c
 
 | Control | Qué hace |
 | --- | --- |
-| `+` | Adjuntar imágenes (desactivado hasta una versión posterior) |
+| `+` | Adjuntar imágenes PNG, JPEG, GIF o WebP, de hasta 10 MB cada una y 8 por mensaje (también se pueden pegar o arrastrar) |
 | Preset de permisos | `Solo lectura`, `Preguntar`, `Escritura en workspace` o `Acceso total` para esta sesión |
 | Modelo y esfuerzo | Modelo del proveedor del workspace y el esfuerzo de razonamiento que admite |
 | Anillo de contexto | Contexto estimado de la próxima petición frente a la ventana del modelo |
 | Enviar / Detener | Detener sustituye a Enviar mientras hay una ejecución activa y el cuadro está vacío |
 
 Mientras hay una ejecución activa puede seguir escribiendo: el texto se encola para el siguiente
-turno de la sesión.
+turno de la sesión. Las imágenes se suben en cuanto se añaden y aparecen como miniaturas que se
+pueden quitar; solo se pueden enviar cuando no hay una ejecución activa.
+
+**Línea de estadísticas.** Bajo el compositor, una línea resume la última ejecución: turnos, pasos
+(llamadas a herramientas), tiempo en el modelo y en herramientas, tiempo medio hasta el primer
+token, tokens de salida por segundo, la parte de la entrada servida desde la caché de prompts del
+proveedor y los tokens de entrada. Al pasar el ratón se ven los totales de toda la sesión. La caché
+muestra `—` cuando el proveedor no informa de la entrada en caché.
 
 **Aprobaciones y preguntas.** Cuando una herramienta necesita aprobación, un panel ocupa el lugar del
 compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Responda con **Denegar**
@@ -172,6 +208,9 @@ POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
+GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
+GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
+POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 ```
 
@@ -191,3 +230,10 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
   paquete npm.
 - La interfaz web conserva la salida de comandos, los avisos y el razonamiento solo mientras la
   página está abierta; al recargar, la conversación se reconstruye desde los mensajes guardados.
+- El panel de archivos muestra solo el workspace: los directorios añadidos con `--add-dir` no se
+  pueden recorrer, los enlaces simbólicos se listan pero nunca se siguen (aunque apunten dentro del
+  workspace) y el filtrado por `.gitignore` necesita `git` en el `PATH`. **Cambios** solo conoce los
+  archivos escritos con `write_file` y `edit_file`; los que cambia un comando de shell aparecen en
+  `git status`, no ahí.
+- Las imágenes subidas se guardan una vez por hash de contenido junto a la base de datos de
+  sesiones y no se borran automáticamente.

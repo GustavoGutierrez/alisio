@@ -587,6 +587,38 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   interacciones que ocupa el lugar del compositor; temas oscuro/claro/sistema sin parpadeo, EN/ES y
   `prefers-reduced-motion`. `pnpm web:size` (también dentro de `pnpm pack:check`) exige JS inicial ≤
   90 KB y CSS inicial ≤ 20 KB gzip.
+- Fase 4 (renderizadores de desarrollo, explorador y adjuntos):
+  - Renderizadores web diferidos por kind (un chunk cada uno, resolución probada en T-17 con
+    fallback para kinds desconocidos y cargas fallidas): `diff` (parser de parche unificado propio y
+    diff de líneas Myers para bloques con solo `before`/`after`; unificado o lado a lado, hunks
+    plegables, navegación por archivos), `terminal` (parser SGR propio: 16 colores con tokens por
+    tema, 256 colores y truecolor, negrita/tenue/cursiva/subrayado/inverso; descarta el resto de
+    escapes; `\r` resuelto; últimas 2 000 líneas con "mostrar todo"; streaming desde
+    `tool_progress` para `shell`/`run_process`), `json` (árbol plegable, profundidad
+    `collapsedDepth`, copia de valor y de JSONPath, > 1 000 hijos truncados), `test-results`
+    (resumen, filtro de fallos, error y `archivo:línea`) y `progress`. Sin dependencias nuevas.
+  - Núcleo: `write_file`/`edit_file` añaden un bloque `diff` (parche unificado de
+    `runtime/diff.ts`, ≤ 200 KB cortado por línea) y `shell`/`run_process` un bloque `terminal`
+    (stdout y luego stderr, últimos 256 KB, código de salida y duración) después del texto actual,
+    que sigue siendo la primera parte y lo único que ve el proveedor (`textProjection`). La TUI
+    ignora esos dos bloques en esas cuatro herramientas (`richPartsOf(result, toolName)`) para no
+    duplicar la salida que ya muestra.
+  - Servidor: `GET /api/workspaces/:wid/tree|file|diff` y `GET /api/sessions/:sid/changes`
+    (`routes/files.ts`: `safePath` del núcleo más comprobación del `realpath`; páginas de 1 000
+    entradas; vista previa ≤ 2 MB con `X-Truncated`/`X-File-Size` y `download=1`; imágenes por bytes
+    mágicos, SVG como texto, binarios como descarga; `git` con `spawn` sin shell, 2 s, sin
+    fsmonitor, diff externo ni textconv). `POST /api/blobs` (cuerpo binario ≤ 10 MB, único `POST`
+    sin JSON; PNG/JPEG/GIF/WebP por bytes mágicos con dimensiones; `201 BlobRef`) y
+    `GET /api/blobs/:hash` (tipo guardado, `inline`, `private, max-age=31536000, immutable`), sobre
+    un `BlobStore` del servidor con la misma raíz que el de cada workspace.
+  - Web: panel lateral con Archivos (árbol perezoso), Cambios (diff frente a `HEAD`) y Vista
+    previa (código, Markdown, JSON, imagen; mencionar como `@ruta`); rutas de filas de herramientas,
+    enlaces Markdown relativos y cabeceras de diff abren el archivo. Compositor con adjuntos (`+`,
+    pegar, arrastrar; miniaturas, subida inmediata, quitar; máx. 8 por mensaje) y miniaturas en las
+    burbujas. Pestaña Trayectoria (eventos durables agrupados por run, cargados por páginas e
+    incrementalmente) y línea de estadísticas bajo el compositor (último run; totales de la sesión
+    al pasar el ratón; caché "—" si el proveedor no la informa). JS inicial 56,3 KB y CSS 7,8 KB
+    gzip.
 
 ## Validación
 
@@ -1184,6 +1216,33 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No verificado: la apertura automática del navegador, el apagado por señal con ejecuciones activas
   fuera de las pruebas en proceso, Windows/macOS y la contención de SQLite con varias apps y runs
   concurrentes reales (P-03).
+- Fase 4: `tests/server-files.test.ts` (T-11: orden y tamaños del árbol, páginas de 1 000,
+  `.gitignore`, traversal con `..`, rutas absolutas y symlinks de directorio y de archivo hacia
+  fuera → 403 sin filtrar contenido, 404, truncado a 2 MB y descarga completa, detección de
+  imágenes, SVG y binarios, cambios de la sesión con estado git, diff frente a `HEAD`, archivo sin
+  seguimiento y `409 not_a_git_repo`), `tests/server-blobs.test.ts` (detección y dimensiones de
+  PNG/JPEG/GIF/WebP, deduplicación, 415 por contenido y por tipo declarado, vacío, `Origin` ajeno,
+  401, 413 por encima de 10 MB, servicio con tipo y caché, y T-09: un prompt con `BlobRef` llega al
+  proveedor como adjunto base64 y un hash desconocido da 400), `tests/standard-tools-ui.test.ts`
+  (parches unificados, bloques de las cuatro herramientas con el texto intacto como primera parte,
+  límite de 200 KB y la TUI sin esos bloques), `tests/web-renderers.test.ts` (parser de parches,
+  diff Myers, filas lado a lado, SGR, `\r`, JSONPath y resumen de tests),
+  `tests/web-renderer-registry.test.ts` (T-17), `tests/web-dock.test.ts`,
+  `tests/web-attachments.test.ts`, `tests/web-stats-trajectory.test.ts` (RF-16 y agrupación de la
+  trayectoria) y T-15 ampliado (miniaturas y sustitución del eco con adjuntos). Los componentes
+  Preact no tienen pruebas con DOM: se verificaron a mano con Playwright (Chromium, 1440 px y
+  390 px) contra `alisio serve` con un proveedor OpenAI-compatible simulado y un plugin local que
+  devuelve bloques `test-results`, `json`, `progress` y un kind desconocido: diff de
+  `write_file`/`edit_file`, salida ANSI de `shell` con 2 306 líneas y "mostrar todo", código de
+  salida, árbol JSON de un fence largo, fallback de kind desconocido, panel de archivos (árbol sin
+  `dist/` ni `*.log` ignorados, vista previa de código, imagen y Markdown, Cambios con estado git y
+  diff frente a `HEAD`), subida de una imagen con `+` que llega al proveedor como `image_url`,
+  miniatura persistida tras recargar, Trayectoria con duraciones y línea de estadísticas; consola
+  sin errores ni avisos y sin desbordamiento horizontal a 390 px. La prueba encontró y corrigió dos
+  defectos: el límite de 48 KB del runner medía también los bloques de visualización (ahora mide
+  la proyección de texto) y la tabla de la trayectoria ocultaba la columna de duración. No
+  verificado: rendimiento del árbol con 50 000 entradas reales en el navegador, `git`
+  ausente y lectores de pantalla.
 
 ## Límites conocidos
 
@@ -1420,10 +1479,25 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - La idempotencia de los prompts encolados es en memoria (100 ids por sesión, 10 min) y la cola de
   `enqueue` del runner se pierde si el proceso cae; un prompt con adjuntos durante una ejecución, o
   cualquier prompt mientras la sesión espera en cola o compacta, responde `409 session_busy`.
-- Las rutas de archivos, blobs y gestión (plugins, skills, MCP, proveedores, ajustes) llegan en
-  fases posteriores; la web no ofrece aún adjuntos, explorador, trayectoria, métricas por sesión ni
-  renderizadores ricos (los bloques `diff`, `terminal`, `json`, `test-results`, `progress`, `mermaid`
-  y `math` se muestran de forma simple o como código).
+- Las rutas de gestión (plugins, skills, MCP, proveedores, ajustes) llegan en la fase 5; los
+  bloques `mermaid` y `math` se muestran aún como código.
+- Archivos (fase 4): el árbol, la lectura y el diff se limitan al workspace (las raíces de
+  `--add-dir` no se exponen); `safePath` rechaza cualquier segmento que sea un enlace simbólico, así
+  que los symlinks se listan pero no se abren aunque apunten dentro del workspace. El filtrado por
+  `.gitignore` se hace por página (una página puede traer menos de 1 000 entradas) y necesita `git`;
+  sin `git` se muestra todo salvo `.git`. **Cambios** deriva de las llamadas con efecto `write`
+  (argumento `path` de `write_file`/`edit_file`) de la sesión y sus hijas y solo se anota con
+  `git status`: los archivos que cambia un comando de shell no aparecen. Rutas fuera del workspace
+  se omiten. El diff de un archivo sin seguimiento o de un repositorio sin commits se genera frente
+  a `/dev/null` (máx. 1 MB leído); el de un archivo con seguimiento es `git diff HEAD` (incluye lo
+  preparado y lo no preparado). La vista previa HTML/SVG es solo código (sin iframe).
+- Blobs (fase 4): sin recolección de basura (spec §9.3); el tipo guardado es el detectado por
+  bytes mágicos, no el declarado; la cabecera `Content-Type` de la subida solo admite los cuatro
+  tipos de imagen o `application/octet-stream`.
+- Métricas (fase 4): la línea de estadísticas se calcula en el cliente a partir de
+  `run_started`/`turn_completed`/`tool_completed` (paginados por `GET /events` con `types=`); los
+  tokens por segundo solo cuentan turnos que informan `usage.output` y `durationMs`; con eventos de
+  versiones anteriores sin `durationMs` los tiempos LLM salen en 0.
 - La interfaz web no vigila el stream con un temporizador de 45 s: el latido del servidor es un
   comentario SSE que `EventSource` no expone, así que la reconexión depende del propio navegador y
   de `online`/`visibilitychange`. La salida de comandos, los avisos y el razonamiento solo existen

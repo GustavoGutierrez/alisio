@@ -5,9 +5,10 @@ sessions at once. It drives the same agent core as the terminal: sessions, runs,
 session database are shared with the TUI and `alisio run`.
 
 ::: warning Status
-The server, its API and the browser interface are available. File explorer, image attachments,
-rich renderers (diff, terminal, Mermaid, math), the trajectory view and plugin/model management
-arrive in later versions. See [Known limitations](/limitations).
+The server, its API and the browser interface are available, including image attachments, the
+files panel, the trajectory view and developer renderers (diff, terminal, JSON, test results).
+Mermaid and math rendering and plugin/model management arrive in later versions. See
+[Known limitations](/limitations).
 :::
 
 ## Start the server
@@ -59,15 +60,41 @@ becomes a drawer opened from the header.
 **Header.** Click the title to rename the session (untitled sessions show their first prompt). The
 badge shows the agent and the permission preset. **Session log** downloads the session as JSON
 Lines: every durable event in the `alisio run --json` format, then one `{"type":"message"}` line per
-stored message.
+stored message. The panel icon at the right opens the files panel (below). The **Conversation** and
+**Trajectory** tabs switch the main view.
 
 **Conversation.** Your messages appear on the right with a copy button. The agent's work appears as
 one-line rows: `Think · …` for reasoning, `Context injection · AGENTS.md`, and one row per tool call
 such as `Read · README.md` or `Shell · npm test`. Click a row to see its input and output. The answer
 streams as Markdown; code blocks have a language label, **Wrap lines** and **Copy**, and are
-highlighted once they scroll into view. Reasoning is display-only: after a reload, earlier `Think`
+highlighted once they scroll into view. Links to workspace paths open the file in the files panel.
+Reasoning is display-only: after a reload, earlier `Think`
 rows are gone because reasoning is never stored. When you scroll up, a button jumps back to the
 latest message; long sessions show the last 30 turns and load older messages on demand.
+
+**Tool output.** Tools that return structured blocks get a native view, each loaded the first time
+it is needed: file writes and edits show a diff (unified by default, **Side by side** on demand,
+foldable hunks, a file list when a patch touches several files); shell commands show their output
+with ANSI colors, the exit code and the duration, streaming while they run and keeping the last
+2 000 lines behind **Show earlier lines**; JSON shows a foldable tree with copy of values and of
+their JSONPath; test results show passed, failed and skipped counts with a **Only failures**
+filter; progress blocks show their steps. The tool's raw text, which is what the model received,
+stays under **Raw output**. A block the page does not know shows its text and the folded JSON. The
+panel icon on a tool row with a path opens that file.
+
+**Trajectory.** The **Trajectory** tab lists the session's durable events grouped by run: status,
+start time, turns and duration per run, and one row per event with its time, turn, type, a short
+summary and its duration when it has one. It updates as events arrive; older runs sit behind
+**Show earlier runs**.
+
+**Files panel.** The panel icon in the header opens a panel on the right (a bottom sheet below
+900 px) with three tabs. **Files** browses the workspace lazily, 1 000 entries at a time, hiding
+`.git` and, in git repositories, what `.gitignore` excludes. **Changes** lists the files this
+session (and its subagents) wrote, most recent first, with their `git status` code; picking one
+shows its diff against `HEAD` and the file. **Preview** shows text and code with highlighting,
+Markdown, JSON as a tree and images; files over 2 MB are cut with a **Download** link, binary files
+are only downloadable, and HTML or SVG shows as source, never as a page. From the preview you can
+copy the path, download the file or mention it (`@path`) in the composer.
 
 **Composer.** `Enter` sends, `Shift+Enter` inserts a new line, and `↑`/`↓` on the first line walk
 through the prompts you sent. Typing `/` opens the command palette (arrows to move, `Enter` or `Tab`
@@ -77,13 +104,20 @@ composer. Below the text box:
 
 | Control | What it does |
 | --- | --- |
-| `+` | Attach images (disabled until a later version) |
+| `+` | Attach PNG, JPEG, GIF or WebP images, up to 10 MB each and 8 per message (paste and drag and drop work too) |
 | Permission preset | `Read only`, `Ask`, `Workspace write` or `Full access` for this session |
 | Model and effort | Model of the workspace's provider and the reasoning effort the model supports |
 | Context ring | Estimated context of the next request against the model window |
 | Send / Stop | Stop replaces Send while a run is active and the box is empty |
 
-While a run is active you can keep typing: text is queued for the session's next turn.
+While a run is active you can keep typing: text is queued for the session's next turn. Images
+upload as soon as you add them and show as thumbnails you can remove; they can only be sent when no
+run is active.
+
+**Stats line.** Under the composer, one line sums up the latest run: turns, steps (tool calls), time
+spent in the model and in tools, the average time to first token, output tokens per second, the
+share of input served from the provider's prompt cache and the input tokens. Hover it for the
+totals of the whole session. Cache shows `—` when the provider does not report cached input.
 
 **Approvals and questions.** When a tool needs approval, a panel takes the composer's place and
 receives focus: it names the tool, the effect and its input. Answer with **Deny** (`D`), **Allow
@@ -160,6 +194,9 @@ POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
+GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
+GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
+POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 ```
 
@@ -178,3 +215,9 @@ protocol version is reported by `/api/health` and in the stream's first frame.
 - The standalone binary serves the API only; the web UI assets ship with the npm package.
 - The web UI keeps command output, notices and reasoning only while the page is open; a reload
   rebuilds the conversation from stored messages.
+- The files panel shows the workspace only: directories added with `--add-dir` are not browsable,
+  symbolic links are listed but never followed (even when they point inside the workspace), and
+  `.gitignore` filtering needs `git` on `PATH`. **Changes** only knows files written through
+  `write_file` and `edit_file`; files a shell command changed appear in `git status`, not there.
+- Uploaded images are stored once per content hash next to the session database and are not
+  deleted automatically.
