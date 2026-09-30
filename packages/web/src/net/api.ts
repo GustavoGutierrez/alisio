@@ -15,6 +15,7 @@ import type {
   PendingApproval,
   PermissionPresetId,
   PromptAccepted,
+  RunEvent,
   SessionChange,
   SessionContextUsage,
   SessionDetail,
@@ -151,6 +152,11 @@ export class ApiClient {
       answer,
     });
   exportUrl = (id: string) => `/api/sessions/${enc(id)}/export`;
+  events = (id: string, after: number, limit = 1000, types?: string[]) =>
+    this.request<{ items: RunEvent[]; next?: string }>(
+      "GET",
+      `/api/sessions/${enc(id)}/events?after=${after}&limit=${limit}${types?.length ? `&types=${enc(types.join(","))}` : ""}`,
+    );
   tree = (workspaceId: string, path: string, cursor?: string) =>
     this.request<FileTreePage>(
       "GET",

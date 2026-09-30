@@ -8,6 +8,8 @@ import { Header } from "./components/header/Header.tsx";
 import { Icon } from "./components/icons.tsx";
 import { SettingsModal } from "./components/settings/SettingsModal.tsx";
 import { Sidebar, searchRequest } from "./components/sidebar/Sidebar.tsx";
+import { StatsLine } from "./components/stats/StatsLine.tsx";
+import { TrajectoryTab } from "./components/trajectory/TrajectoryTab.tsx";
 import { Transcript } from "./components/transcript/Transcript.tsx";
 import { t } from "./i18n/index.ts";
 import {
@@ -19,6 +21,7 @@ import {
   mobileSidebar,
   newSession,
   reloadRequired,
+  sessionTab,
   settingsOpen,
   streamStatus,
   toast,
@@ -94,7 +97,7 @@ export function App() {
         <Header />
         {id ? (
           <>
-            <Transcript />
+            {sessionTab.value === "trajectory" ? <TrajectoryTab /> : <Transcript />}
             {approvals.length ? (
               <ApprovalPanel approvals={approvals} />
             ) : interactions[0] ? (
@@ -102,6 +105,7 @@ export function App() {
             ) : (
               <Composer />
             )}
+            <StatsLine />
           </>
         ) : (
           <div class={styles.none}>

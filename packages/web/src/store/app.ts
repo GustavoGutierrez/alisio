@@ -62,6 +62,10 @@ export const toast = signal<string | undefined>(undefined);
 export const composerInsert = signal<{ text: string; n: number } | undefined>(undefined);
 /** Bumped when a run of the open session ends (the dock refreshes its tree and changes). */
 export const runEnded = signal(0);
+/** Bumped when durable events of the open session arrive (stats and trajectory catch up). */
+export const eventsTick = signal(0);
+/** The session view tab (RF-10). */
+export const sessionTab = signal<"conversation" | "trajectory">("conversation");
 
 export const visible = computed(() => visiblePending(pending.value, transcript.value.session));
 export const sessionStatus = computed(
@@ -168,6 +172,7 @@ function onFrames(frames: ServerFrame[]): void {
   let ended = false;
   let rewritten = false;
   let catalog = false;
+  let durable = false;
   batch(() => {
     transcript.value = applyFrames(transcript.value, frames);
     let nextPending = pending.value;
@@ -179,6 +184,7 @@ function onFrames(frames: ServerFrame[]): void {
         announceAssertive.value = frame.approval.name ?? frame.approval.approvalId;
       if (frame.t === "catalog_changed" && frame.scope === "commands") catalog = true;
       if (frame.t === "event" && frame.sessionId === currentId.value) {
+        durable = true;
         const type = frame.event.type;
         if (type === "run_completed") announcePolite.value = `${Date.now()}`;
         if (type === "run_completed" || type === "run_failed" || type === "run_cancelled")
@@ -190,6 +196,7 @@ function onFrames(frames: ServerFrame[]): void {
     pending.value = nextPending;
     sidebar.value = nextSidebar;
   });
+  if (durable) eventsTick.value++;
   if (sidebar.value.stale) void reloadSidebar();
   if (ended) {
     runEnded.value++;

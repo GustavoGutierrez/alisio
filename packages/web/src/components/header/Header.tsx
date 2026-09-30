@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { api, detail, mobileSidebar, patchCurrent, transcript } from "../../store/app.ts";
+import {
+  api,
+  detail,
+  mobileSidebar,
+  patchCurrent,
+  sessionTab,
+  transcript,
+} from "../../store/app.ts";
 import { dockOpen, setDockOpen } from "../../store/dock.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./header.module.css";
@@ -100,25 +107,20 @@ export function Header() {
       </div>
       {session ? (
         <div class={styles.tabs} role="tablist" aria-label={t("header.titleLabel")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="true"
-            aria-controls="conversation"
-            class={styles.tab}
-          >
-            {t("header.conversation")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-disabled="true"
-            class={styles.tab}
-            title={t("header.trajectorySoon")}
-          >
-            {t("header.trajectory")}
-          </button>
+          {(["conversation", "trajectory"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={sessionTab.value === tab}
+              class={styles.tab}
+              onClick={() => {
+                sessionTab.value = tab;
+              }}
+            >
+              {t(`header.${tab}`)}
+            </button>
+          ))}
         </div>
       ) : null}
     </header>

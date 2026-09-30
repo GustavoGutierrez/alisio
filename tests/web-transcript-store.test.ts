@@ -310,3 +310,27 @@ describe("transcript reducer", () => {
     expect(state.session).toMatchObject({ status: "running", title: "New title" });
   });
 });
+
+describe("attachments in the transcript (phase 4)", () => {
+  it("keeps attached images for thumbnails and replaces the echo that carried them", () => {
+    const image = { kind: "image" as const, mimeType: "image/png", data: "iVBOR", bytes: 5 };
+    let state = applyFrame(emptyTranscript(SID), snapshot([]));
+    state = localEcho(state, {
+      localId: "l1",
+      requestId: "q1",
+      text: "look",
+      attachments: [{ hash: "a".repeat(64), mimeType: "image/png", bytes: 5 }],
+      thumbs: ["blob:local"],
+    });
+    expect(visibleItems(state).find((i) => i.kind === "echo")).toMatchObject({
+      echo: { thumbs: ["blob:local"] },
+    });
+    state = applyFrame(state, message(0, user("look", { attachments: [image] })));
+    const items = visibleItems(state);
+    expect(items.some((i) => i.kind === "echo")).toBe(false);
+    expect(items.find((i) => i.kind === "user")).toMatchObject({
+      attachments: 1,
+      images: [{ mimeType: "image/png", data: "iVBOR" }],
+    });
+  });
+});
