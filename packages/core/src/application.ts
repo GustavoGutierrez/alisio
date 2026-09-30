@@ -694,6 +694,10 @@ export async function createApplication(options: AppOptions = {}) {
     // Child sessions (generic delegation service for plugins). Contexts are cached per workspace
     // so a child in a git worktree reads that worktree's AGENTS.md files.
     const contexts = new Map<string, ProjectContext>([[workspace, context]]);
+    // Startup reconciliation: runs left queued/running by a dead process become `interrupted`
+    // (runs of this process, e.g. another Application in a server, are kept). Child sessions are
+    // reconciled by `interruptStale()` in the ChildSessions constructor right below.
+    store.interruptRuns();
     plugins.setSessions(
       new ChildSessions({
         store,

@@ -30,6 +30,7 @@ import type {
   Policy,
   RunnerExtensions,
   SessionStore,
+  TerminalRunStatus,
 } from "./contracts.ts";
 import type { ToolRegistry } from "./registry.ts";
 export interface CompactionSettings {
@@ -197,7 +198,10 @@ export class AgentRunner {
         data,
       };
       if (!isEphemeralRunEventType(type)) {
-        const persisted = this.options.store.event(sessionId, runId, type, data);
+        const persisted =
+          correlationId !== undefined
+            ? this.options.store.event(sessionId, runId, type, data, { correlationId })
+            : this.options.store.event(sessionId, runId, type, data);
         if (typeof persisted === "number") event.eventId = String(persisted);
       }
       if (correlationId !== undefined) event.correlationId = correlationId;
@@ -442,8 +446,17 @@ export class AgentRunner {
     usage: { input: number; output: number };
   }> {
     const controller = this.claim(sessionId);
+    const runId = options.runId ?? crypto.randomUUID();
     const o = this.options,
-      emit = this.emitter(sessionId, options);
+      emit = this.emitter(sessionId, { runId, correlationId: options.correlationId });
+    /** Run journal (v4 stores only): an auxiliary record that never changes the run outcome. */
+    const finish = (status: TerminalRunStatus, error?: string) => {
+      try {
+        o.store.endRun?.(runId, { status, usage: usageTotal, ...(error ? { error } : {}) });
+      } catch {
+        /* A journal write failure cannot invalidate an executed run. */
+      }
+    };
     const limit = o.maxContextChars ?? 800_000;
     let tokens = 0,
       lastText = "",
@@ -461,6 +474,13 @@ export class AgentRunner {
       return options.instructions ? `${base}\n\n${options.instructions}` : base;
     };
     try {
+      o.store.beginRun?.({
+        id: runId,
+        session: sessionId,
+        status: "running",
+        model: o.store.get(sessionId).model,
+        ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+      });
       o.store.acquire(sessionId);
       acquired = true;
       o.store.reconcile(sessionId);
@@ -661,6 +681,7 @@ export class AgentRunner {
             final.truncated = true;
           }
           emit("run_completed", final);
+          finish("completed");
           return { sessionId, text: lastText, status: "completed", usage: usageTotal };
         }
         const prepared = completion.calls.map((call) => {
@@ -750,7 +771,7 @@ export class AgentRunner {
                 throw new Error(`Capability ${effect} denied by the user for this call`);
               if (decision === "session") policy[effect] = true;
             }
-            o.store.beginCall(sessionId, call);
+            o.store.beginCall(sessionId, call, { runId, effect });
             result = await p.tool.execute(p.input, {
               signal: combined,
               workspace,
@@ -843,13 +864,14 @@ export class AgentRunner {
       // can simply prompt again to continue in the same session. The real hard stops remain the
       // token budget (`maxTokens`) and the timeout; the turn count is a safety rail.
       emit("run_turns_exceeded", { turns: maxTurns, maxTurns });
+      finish("turns_exceeded");
       return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
     } catch (error) {
       // On cancellation report the abort reason, not the transport's secondary error.
       const cause = combined.aborted ? (combined.reason ?? error) : error;
-      emit(combined.aborted ? "run_cancelled" : "run_failed", {
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      const message = cause instanceof Error ? cause.message : String(cause);
+      emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
+      finish(combined.aborted ? "cancelled" : "failed", message);
       throw error;
     } finally {
       if (acquired) o.store.release(sessionId);

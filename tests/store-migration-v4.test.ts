@@ -2,8 +2,18 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { textResult } from "@alisio/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  type ModelProvider,
+  type ProviderEvent,
+  type RunEvent,
+  type ToolCall,
+  textResult,
+} from "@alisio/sdk";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createApplication } from "../packages/core/src/application.ts";
+import { ToolRegistry } from "../packages/core/src/core/registry.ts";
+import { AgentRunner } from "../packages/core/src/core/runner.ts";
+import { ProjectContext } from "../packages/core/src/resources/context.ts";
 import { openDatabase } from "../packages/core/src/runtime/sqlite.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
 
@@ -312,6 +322,198 @@ describe("SQLiteStore v4 timestamps, tool calls and pages", () => {
       expect(store.eventsPage(s, { after: e1 }).items.map((e) => e.eventId)).toEqual([String(e2)]);
     } finally {
       store.close();
+    }
+  });
+});
+
+describe("AgentRunner run journal (v4)", () => {
+  const assistant = (text: string, calls: ToolCall[] = []) => ({
+    role: "assistant" as const,
+    text,
+    calls,
+  });
+  function provider(turns: ProviderEvent[][], hang = false): ModelProvider {
+    let turn = 0;
+    return {
+      id: "test",
+      model: "m",
+      async *stream(request) {
+        if (hang)
+          await new Promise((_, reject) =>
+            request.signal?.addEventListener("abort", () => reject(request.signal?.reason)),
+          );
+        for (const event of turns[turn++] ?? []) yield event;
+      },
+    };
+  }
+  async function setup(p: ModelProvider, maxTurns?: number) {
+    const path = await tempDb();
+    const root = join(path, "..");
+    const store = new SQLiteStore(path);
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "peek",
+      description: "reads",
+      inputSchema: { type: "object", properties: {} },
+      effect: "read",
+      async execute() {
+        return textResult("seen");
+      },
+    });
+    const events: RunEvent[] = [];
+    const runner = new AgentRunner({
+      provider: p,
+      registry,
+      store,
+      context: new ProjectContext(root),
+      workspace: root,
+      policy: { write: false, process: false, external: false },
+      onEvent: (e) => events.push(e),
+      ...(maxTurns ? { maxTurns } : {}),
+    });
+    const session = store.create(root, "test", "m").id;
+    return { store, runner, session, events };
+  }
+
+  it("records a completed run with model, usage, times and the event runId", async () => {
+    const fx = await setup(
+      provider([
+        [
+          {
+            type: "completed",
+            message: assistant("", [{ id: "c1", name: "peek", arguments: "{}" }]),
+            usage: { input: 2, output: 1 },
+          },
+        ],
+        [{ type: "completed", message: assistant("ok"), usage: { input: 3, output: 4 } }],
+      ]),
+    );
+    try {
+      await fx.runner.run(fx.session, "hi", undefined, { correlationId: "corr-1" });
+      const [run] = fx.store.runs(fx.session);
+      expect(run).toMatchObject({
+        status: "completed",
+        model: "m",
+        correlationId: "corr-1",
+        ownerPid: process.pid,
+        usage: { input: 5, output: 5 },
+      });
+      expect(run?.startedAt).toEqual(expect.any(Number));
+      expect(run?.endedAt).toEqual(expect.any(Number));
+      expect(new Set(fx.events.map((e) => e.runId))).toEqual(new Set([run?.id]));
+      const call = fx.store.db
+        .prepare("SELECT * FROM tool_calls WHERE call_id='c1'")
+        .get() as Record<string, unknown>;
+      expect(call).toMatchObject({ run_id: run?.id, name: "peek", effect: "read" });
+      const persisted = fx.store.eventsPage(fx.session).items;
+      expect(persisted.every((e) => e.correlationId === "corr-1")).toBe(true);
+    } finally {
+      fx.store.close();
+    }
+  });
+
+  it("moves a preassigned queued run (with its request id) to running and a terminal state", async () => {
+    const fx = await setup(provider([[{ type: "completed", message: assistant("ok") }]]));
+    try {
+      fx.store.beginRun({ id: "pre", session: fx.session, status: "queued", requestId: "req" });
+      await fx.runner.run(fx.session, "hi", undefined, { runId: "pre" });
+      expect(fx.store.runs(fx.session)).toEqual([
+        expect.objectContaining({ id: "pre", status: "completed", requestId: "req" }),
+      ]);
+    } finally {
+      fx.store.close();
+    }
+  });
+
+  it("records failed, cancelled and turns_exceeded outcomes", async () => {
+    const failing = await setup({
+      id: "test",
+      model: "m",
+      async *stream() {
+        throw new Error("boom");
+      },
+    });
+    const cancelled = await setup(provider([], true));
+    const capped = await setup(
+      provider([
+        [
+          {
+            type: "completed",
+            message: assistant("", [{ id: "c1", name: "peek", arguments: "{}" }]),
+          },
+        ],
+      ]),
+      1,
+    );
+    try {
+      await expect(failing.runner.run(failing.session, "x")).rejects.toThrow("boom");
+      expect(failing.store.runs(failing.session)[0]).toMatchObject({
+        status: "failed",
+        error: "boom",
+      });
+      const controller = new AbortController();
+      const pending = cancelled.runner.run(cancelled.session, "x", controller.signal);
+      setTimeout(() => controller.abort(new Error("stop")), 20);
+      await expect(pending).rejects.toThrow();
+      expect(cancelled.store.runs(cancelled.session)[0]).toMatchObject({
+        status: "cancelled",
+        error: "stop",
+      });
+      const result = await capped.runner.run(capped.session, "x");
+      expect(result.status).toBe("turns-exceeded");
+      expect(capped.store.runs(capped.session)[0]?.status).toBe("turns_exceeded");
+    } finally {
+      failing.store.close();
+      cancelled.store.close();
+      capped.store.close();
+    }
+  });
+
+  it("keeps working with a store without the optional run methods", async () => {
+    const fx = await setup(provider([[{ type: "completed", message: assistant("ok") }]]));
+    try {
+      // The same store with the optional run journal methods hidden.
+      const minimal = new Proxy(fx.store, {
+        get(target, key, receiver) {
+          if (key === "beginRun" || key === "endRun") return undefined;
+          const value = Reflect.get(target, key, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const runner = new AgentRunner({
+        provider: provider([[{ type: "completed", message: assistant("ok") }]]),
+        registry: new ToolRegistry(),
+        store: minimal,
+        context: new ProjectContext(fx.store.get(fx.session).workspace),
+        workspace: fx.store.get(fx.session).workspace,
+        policy: { write: false, process: false, external: false },
+      });
+      await expect(runner.run(fx.session, "hi")).resolves.toMatchObject({ status: "completed" });
+      expect(fx.store.runs(fx.session)).toEqual([]);
+    } finally {
+      fx.store.close();
+    }
+  });
+});
+
+describe("createApplication startup reconciliation (v4)", () => {
+  it("interrupts runs left running by a dead process, next to interruptStale", async () => {
+    const path = await tempDb();
+    const root = join(path, "..");
+    const seed = new SQLiteStore(path);
+    const session = seed.create(root, "p", "m").id;
+    seed.db
+      .prepare("INSERT INTO runs(id,session,status,owner_pid,created_at) VALUES(?,?,?,?,?)")
+      .run("stale", session, "running", deadPid(), Date.now());
+    seed.close();
+    vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config-home"));
+    vi.stubEnv("ALISIO_STATE_HOME", join(root, "state-home"));
+    const app = await createApplication({ cwd: root, db: path, noHerdr: true });
+    try {
+      expect(app.store.runs(session)[0]).toMatchObject({ id: "stale", status: "interrupted" });
+    } finally {
+      await app.close();
+      vi.unstubAllEnvs();
     }
   });
 });
