@@ -3,6 +3,7 @@ import type {
   AppOptions,
   ApprovalDecision,
   ApprovalRequest,
+  ExternalDirectoryRequest,
   SettableSettingKey,
 } from "@alisio/core";
 import type {
@@ -240,6 +241,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const { BUILTIN_PROMPTS } = await import("../prompts/index.ts");
   let dispatch: (event: RunEvent) => void = () => {};
   let approve: (request: ApprovalRequest) => Promise<ApprovalDecision> = async () => "deny";
+  let approveExternalDirectory: (request: ExternalDirectoryRequest) => Promise<ApprovalDecision> =
+    async () => "deny";
   const app = await createApplication({
     builtins: BUILTIN_PLUGINS,
     builtinPrompts: BUILTIN_PROMPTS,
@@ -247,6 +250,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     ...options,
     onEvent: (event) => dispatch(event),
     approve: (request) => approve(request),
+    approveExternalDirectory: (request) => approveExternalDirectory(request),
   });
   let activeProvider = app.providerInfo;
   let session =
@@ -677,6 +681,45 @@ export async function runTui(options: TuiOptions): Promise<void> {
               [
                 { value: "once", label: "Allow once" },
                 { value: "session", label: `Always allow ${request.effect} in this session` },
+                { value: "deny", label: "Deny" },
+              ],
+              (item) => finish(item.value as ApprovalDecision),
+              () => finish("deny"),
+            ),
+          );
+        }),
+    });
+
+  /**
+   * External-directory approval: a tool path outside the workspace and every declared extra root
+   * asks here before the call runs, scoped to the containing directory (not the individual file),
+   * so one approval covers that directory's subtree for the session. Same queue and the same
+   * allow-once / allow-session / deny choices as the capability approval above.
+   */
+  approveExternalDirectory = (request) =>
+    interactiveQueue.submit<ApprovalDecision>({
+      sessionId: request.session,
+      label: request.label,
+      signal: request.signal,
+      onWithdrawn: () => "deny",
+      run: () =>
+        new Promise<ApprovalDecision>((resolve) => {
+          let settled = false;
+          const finish = (decision: ApprovalDecision) => {
+            if (settled) return;
+            settled = true;
+            request.signal.removeEventListener("abort", onAbort);
+            closePicker();
+            resolve(decision);
+          };
+          const onAbort = () => finish("deny");
+          request.signal.addEventListener("abort", onAbort, { once: true });
+          showPicker(
+            new Picker(
+              `${request.label ? `[${request.label}] ` : ""}Allow access outside the workspace to ${shortenPath(request.directory, homedir(), 72)}?`,
+              [
+                { value: "once", label: "Allow once" },
+                { value: "session", label: "Always allow this directory in this session" },
                 { value: "deny", label: "Deny" },
               ],
               (item) => finish(item.value as ApprovalDecision),
@@ -1659,7 +1702,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         return `| \`${t.name}\` | ${effect} | ${state} |`;
       })
       .join("\n");
-    return `**Tools**\n\n| Tool | Effect | State |\n| --- | --- | --- |\n${rows}\n\n\`ask\` prompts before running (allow once / session / deny). Use --allow-write / --allow-process to pre-allow; --read-only disables them. \`internal\` tools (built-in plugins) only write Alisio's own state.`;
+    return `**Tools**\n\n| Tool | Effect | State |\n| --- | --- | --- |\n${rows}\n\n\`ask\` prompts before running (allow once / session / deny). Use --allow-write / --allow-process to pre-allow; --read-only disables them. Paths outside the workspace ask per directory; pre-allow with --add-dir or the \`additionalDirectories\` config key. \`internal\` tools (built-in plugins) only write Alisio's own state.`;
   };
   const statsReport = () => {
     const s = view.stats;

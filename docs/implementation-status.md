@@ -990,6 +990,24 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `/effort` (sí su lógica pura y las piezas de estado), ni el envío efectivo del effort contra la
   API real de DeepSeek (sí el cuerpo de la petición contra el servidor de pruebas).
 
+## Rutas externas y aprobación de directorios: alcance de la verificación
+
+- Vitest: `tests/external-paths.test.ts` (unidad de `PathAccess`: dentro del workspace, raíz extra
+  declarada, aprobación por directorio contenedor con cobertura de subárbol en modo sesión,
+  `once` acotado al archivo, denegación con ruta y remedios, modo no interactivo sin aviso,
+  `--read-only` sin raíces extra ni aviso, endurecimiento de symlinks y mensaje con la ruta;
+  integración con `createApplication` y un proveedor simulado: lectura externa aprobada, lectura vía
+  `--add-dir`, lectura vía `additionalDirectories`, denegación headless con `--add-dir` y
+  `additionalDirectories`, `--read-only` bloqueado con `--add-dir`, y la escritura externa que sigue
+  exigiendo su política de escritura); `tests/config-layers.test.ts` (fusión aditiva de
+  `additionalDirectories`, incluido que un array vacío en una capa inferior no borra la global, y
+  canonización/orden).
+- La mediación reutiliza `safePath` (sin symlinks, `lstat` por segmento) y es mediación, no un
+  sandbox del sistema operativo; no es a prueba de carreras frente a procesos hostiles concurrentes.
+- No verificado en pseudo-terminal: la interacción visual del aviso de directorio externo (sí su
+  lógica con un decisor inyectado). Las llamadas anidadas de `execute` nunca abren un aviso nuevo:
+  solo alcanzan directorios ya aprobados para la sesión.
+
 ## Límites conocidos
 
 ### Runtime y empaquetado

@@ -194,6 +194,12 @@ export interface ToolContext {
   session?: string;
   /** Who is asking, e.g. an agent path such as "general › explore" (child sessions only). */
   label?: string;
+  /**
+   * Resolves a tool path under the session's mediated path policy (workspace plus declared extra
+   * directories). Out-of-root paths ask for directory approval when the host allows it; hosts that
+   * do not inject this fall back to the workspace-only `safePath` policy.
+   */
+  resolvePath?: (path: string) => Promise<string>;
 }
 export interface ToolDefinition {
   name: string;

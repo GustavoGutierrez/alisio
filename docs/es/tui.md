@@ -537,7 +537,9 @@ correspondientes se ofrecen igualmente al modelo, y Alisio pregunta antes de eje
 - **Permitir siempre `<effect>` en esta sesión** (*Always allow*; dura mientras vive el proceso)
 - **Denegar** (*Deny*)
 
-Con `--read-only` no se pregunta y esas herramientas siguen desactivadas. Los modos headless nunca
+Una ruta de herramienta fuera del workspace y de toda raíz extra declarada pregunta igual, acotada al
+directorio contenedor (una aprobación de sesión cubre el subárbol de ese directorio). Con
+`--read-only` no se pregunta y esas herramientas siguen desactivadas. Los modos headless nunca
 preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeoutMs`. Las
 aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
 que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte

@@ -1,4 +1,4 @@
-import { chmod, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, realpath, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
@@ -86,6 +86,12 @@ const configObjectSchema = z
     provider: providerSchema.default(() => providerSchema.parse({})),
     plugins: z.array(z.string()).default([]),
     skills: z.array(z.string()).default([]),
+    /**
+     * Extra directories the mediated path policy may touch outside the workspace. Resolved
+     * relative to the defining configuration file and canonicalized on load. Additive across
+     * layers like `plugins`/`skills`: a lower layer can only ADD, never clear the global list.
+     */
+    additionalDirectories: z.array(z.string().trim().min(1)).default([]),
     /** Project-local enable/disable overrides for effective non-plugin skills. */
     skillOverrides: z.record(z.string(), z.object({ enabled: z.boolean() }).strict()).default({}),
     mcp: z
@@ -279,6 +285,11 @@ function mergeUnique(global: string[], selected: string[]): string[] {
   return merged;
 }
 
+/** Absolute, canonical directory when it exists; a missing path keeps its resolved absolute form. */
+async function canonicalDirectory(path: string): Promise<string> {
+  return realpath(path).catch(() => resolve(path));
+}
+
 /**
  * Whether legacy provider selection should take priority over a saved plugin profile for this
  * run: an explicit endpoint override, or a trusted project/explicit layer whose parsed root
@@ -328,6 +339,11 @@ export async function loadConfigWithProvenance(
     const raw = (await readJson(file)) ?? {};
     const config = configSchema.parse(raw);
     config.skills = config.skills.map((p) => resolve(file, "..", p));
+    // Extra tool roots are paths relative to the config file; canonicalize so containment checks
+    // compare real directories (a symlinked root never escapes its declared location).
+    config.additionalDirectories = await Promise.all(
+      config.additionalDirectories.map((p) => canonicalDirectory(resolve(file, "..", p))),
+    );
     // Plugin entries are paths (relative to the config file) or npm package names.
     config.plugins = config.plugins.map((p) => (isPathSpec(p) ? resolve(file, "..", p) : p));
     for (const server of Object.values(config.mcp.servers))
@@ -382,6 +398,13 @@ export async function loadConfigWithProvenance(
       }
       if (key === "skills") {
         overlaid.skills = mergeUnique(overlaid.skills, selected.config.skills);
+        continue;
+      }
+      if (key === "additionalDirectories") {
+        overlaid.additionalDirectories = mergeUnique(
+          overlaid.additionalDirectories,
+          selected.config.additionalDirectories,
+        );
         continue;
       }
       // Additive records: merge by key, the selected layer wins per key.

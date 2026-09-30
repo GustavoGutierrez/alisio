@@ -37,8 +37,8 @@ estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 
 Las ediciones exigen una huella SHA-256 del archivo y una coincidencia exacta y única. Las escrituras
 usan un archivo temporal más un reemplazo atómico en el mismo filesystem. Las operaciones mediadas
-rechazan rutas fuera del workspace y symlinks; esto no protege frente a procesos hostiles que cambien
-rutas concurrentemente, ni confina una shell libre.
+rechazan symlinks; esto no protege frente a procesos hostiles que cambien rutas concurrentemente, ni
+confina una shell libre.
 
 Los archivos editables y el escaneo inicial de lectura están limitados a 1 MiB; las salidas de
 herramientas se acotan y un resultado truncado se indica explícitamente. Las lecturas independientes
@@ -194,6 +194,35 @@ entrada de configuración, la ruta de instalación y la nota de confianza del pr
 [Escribir plugins](/es/plugins#installing-plugins-from-npm) para la historia completa, incluida la
 regla de confirmación `--yes` en headless.
 
+## Rutas fuera del workspace {#external-directories}
+
+Las herramientas de lectura, escritura y edición se mediatizan contra el workspace más los
+directorios que declare. Una ruta fuera de toda raíz permitida ya no es un callejón sin salida:
+pregunta por aprobación acotada al **directorio contenedor**, no al archivo individual.
+
+- **Interactivo (TUI):** Alisio pregunta **Permitir una vez**, **Permitir siempre este directorio en
+  esta sesión** o **Denegar**. Una aprobación de sesión cubre ese directorio y todo su subárbol, así
+  que una respuesta cubre todos los archivos bajo él. El mismo aviso, la misma cola y las mismas
+  opciones que las aprobaciones de capacidad anteriores.
+- **Las escrituras siguen condicionadas:** una aprobación de directorio externo es un
+  **prerrequisito, no un sustituto**. Una escritura o edición fuera del workspace sigue necesitando
+  `--allow-write` (o su propia aprobación); primero corre la comprobación de directorio y después la
+  del efecto.
+- **Headless / no interactivo (`run`, `resume <id> "prompt"`, `--json`):** el aviso nunca se cuelga.
+  La llamada se deniega con la ruta resuelta y los remedios exactos.
+- **Llamadas anidadas de `execute`** nunca abren un aviso nuevo: solo pueden usar directorios ya
+  aprobados para la sesión.
+
+Declare raíces extra de dos formas (se combinan):
+
+| Mecanismo | Alcance | Notas |
+| --- | --- | --- |
+| `--add-dir <paths...>` | Una ejecución | Repetible; las rutas se resuelven contra el directorio actual |
+| `additionalDirectories` en la [configuración](/es/configuration#additionaldirectories) | Persistente | Se resuelve respecto al archivo de configuración que lo define, se canoniza al cargar y es aditivo entre capas |
+
+`--read-only` permanece totalmente bloqueado: no concede **ningún** acceso externo mediante el aviso,
+`--add-dir` ni `additionalDirectories`. Véase [Flags de permisos](#permission-flags).
+
 ## Flags de permisos {#permission-flags}
 
 | Flag | Efecto |
@@ -204,7 +233,8 @@ regla de confirmación `--yes` en headless.
 | `--allow-external` | Activa `webfetch` y `websearch` directamente, sin preguntar |
 | `--allow-mcp` | Inicia/conecta los servidores MCP configurados y expone sus capacidades |
 | `--allow-agents` | Activa las herramientas de mensajería de Herdr |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y plugins ejecutables (externos) — nunca se ofrecen, ni en la TUI ni en headless |
+| `--add-dir <paths...>` | Declara directorios extra que las herramientas pueden tocar fuera del workspace (repetible, solo esta ejecución) |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y plugins ejecutables (externos) — nunca se ofrecen, ni en la TUI ni en headless; también desactiva toda ruta externa |
 
 `--read-only` prevalece sobre cualquier flag `--allow-*`. Los plugins integrados (por ejemplo
 `memory`) siguen activos con `--read-only` porque sus herramientas solo usan el efecto `internal`;
@@ -239,7 +269,8 @@ de seguridad.
 
 En la TUI, las herramientas `write`, `process` y `external` no permitidas mediante flags se ofrecen
 al modelo y Alisio pregunta antes de ejecutar cada llamada: permitir una vez, permitir ese efecto
-durante la sesión o denegar. Los modos headless (`run`, `resume <id> "prompt"`, `--json`) nunca
+durante la sesión o denegar. Una ruta fuera del workspace y de toda raíz extra declarada usa las
+mismas tres opciones, acotadas al directorio contenedor. Los modos headless (`run`, `resume <id> "prompt"`, `--json`) nunca
 preguntan. Consulte [Interfaz de terminal](/es/tui#interactive-approvals).
 
 ## Confianza del proyecto {#project-trust}

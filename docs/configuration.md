@@ -78,12 +78,12 @@ trusted `--config <file>` overlays global configuration and replaces the project
 project trust is enabled. An untrusted project file is never read. Unknown keys are rejected.
 
 Top-level settings in the selected project/explicit layer replace their global counterpart, with
-additive exceptions: MCP servers merge by name, and `plugins`, `skills`, `pluginOverrides`,
-`skillOverrides` and `builtinPlugins` ADD to the global layer instead of replacing it. Additive
-lists keep the global entries first (exact duplicates dropped) and append the selected layer's new
-entries, so an empty array in a lower layer never clears the global collection. Additive records
-merge by key, with the selected layer winning per key. Relative paths are resolved against the file
-that defined the value.
+additive exceptions: MCP servers merge by name, and `plugins`, `skills`, `additionalDirectories`,
+`pluginOverrides`, `skillOverrides` and `builtinPlugins` ADD to the global layer instead of replacing
+it. Additive lists keep the global entries first (exact duplicates dropped) and append the selected
+layer's new entries, so an empty array in a lower layer never clears the global collection. Additive
+records merge by key, with the selected layer winning per key. Relative paths are resolved against
+the file that defined the value.
 
 ```json
 {
@@ -103,6 +103,7 @@ that defined the value.
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
   "plugins": [],
   "skills": [],
+  "additionalDirectories": [],
   "mcp": { "servers": {} }
 }
 ```
@@ -268,6 +269,23 @@ roots and plugin skills are also searched. See [Context: AGENTS.md and skills](/
 
 Overrides apply to the effective skill in the current project. Plugin-owned skills are locked and
 follow their plugin lifecycle instead.
+
+## `additionalDirectories`
+
+Extra directories the mediated path policy may touch outside the workspace, for reads and for writes
+(writes still need `--allow-write` or their own approval). Project/explicit entries ADD to the global
+list with the same global-first, deduplicated merge; an empty `additionalDirectories` array in a
+project never clears the global roots. Each entry is resolved relative to the configuration file that
+defined it and canonicalized on load.
+
+```json
+{ "additionalDirectories": ["/data/videos", "./shared"] }
+```
+
+In an interactive session an undeclared external path asks for approval scoped to its containing
+directory instead of failing; in headless runs it is denied with the resolved path and the exact
+remedies (`--add-dir` or this key). `--read-only` ignores both this key and `--add-dir`, so a locked
+session never gains external access. See [Paths outside the workspace](/tools#external-directories).
 
 ## `agents`
 
@@ -436,8 +454,9 @@ Global flags (valid for every command):
 | `--allow-external` | Allow network tools: `webfetch`, `websearch` and provider-native search |
 | `--allow-mcp` | Allow configured MCP servers and remote tool calls |
 | `--allow-agents` | Allow messaging neighboring agents through Herdr |
+| `--add-dir <paths...>` | Additional directories tools may touch outside the workspace (repeatable, this run only) |
 | `--no-herdr` | Disable automatic Herdr lifecycle reports |
-| `--read-only` | Disable writes, arbitrary processes, network tools, executable plugins and MCP |
+| `--read-only` | Disable writes, arbitrary processes, network tools, executable plugins, MCP and every external path |
 | `--db <path>` | Session database |
 | `--json` | Emit versioned JSONL events |
 | `--no-tui` | Use the plain readline interactive mode instead of the TUI |

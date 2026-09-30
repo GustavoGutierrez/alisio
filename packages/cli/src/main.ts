@@ -41,6 +41,10 @@ program
   .option("--allow-external", "Allow network tools: webfetch, websearch and provider-native search")
   .option("--allow-mcp", "Allow configured MCP servers and remote tool calls")
   .option("--allow-agents", "Allow messaging neighboring agents through Herdr")
+  .option(
+    "--add-dir <paths...>",
+    "Additional directories tools may read/write outside the workspace (repeatable)",
+  )
   .option("--no-herdr", "Disable automatic Herdr lifecycle reports")
   .option(
     "--read-only",
@@ -63,6 +67,7 @@ const options = (cmd: Command) => {
     baseURL: o.baseUrl,
     noHerdr: o.herdr === false,
     disablePlugins: o.disablePlugin,
+    addDirs: o.addDir,
     ...(o.agents
       ? { pluginOptions: { subagents: { agents: parseAgents(String(o.agents)) } } }
       : {}),

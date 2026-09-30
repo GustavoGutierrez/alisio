@@ -98,6 +98,7 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
   "plugins": [],
   "skills": [],
+  "additionalDirectories": [],
   "mcp": { "servers": {} }
 }
 ```
@@ -275,6 +276,25 @@ en proyectos de confianza), las raíces de usuario y las skills de plugins. Cons
 Las anulaciones se aplican a la skill efectiva del proyecto actual. Las skills propiedad de plugins
 están bloqueadas y siguen el ciclo de vida de su plugin.
 
+## `additionalDirectories`
+
+Directorios extra que la política de rutas mediada puede tocar fuera del workspace, tanto para
+lecturas como para escrituras (las escrituras siguen necesitando `--allow-write` o su propia
+aprobación). Las entradas del proyecto o del archivo explícito SE SUMAN a la lista global con la
+misma combinación global-primero y sin duplicados; un array `additionalDirectories` vacío en un
+proyecto nunca vacía las raíces globales. Cada entrada se resuelve respecto al archivo de
+configuración que la definió y se canoniza al cargar.
+
+```json
+{ "additionalDirectories": ["/data/videos", "./shared"] }
+```
+
+En una sesión interactiva, una ruta externa no declarada pide aprobación acotada a su directorio
+contenedor en lugar de fallar; en ejecuciones headless se deniega con la ruta resuelta y los remedios
+exactos (`--add-dir` o esta clave). `--read-only` ignora tanto esta clave como `--add-dir`, así que
+una sesión bloqueada nunca gana acceso externo. Véase
+[Rutas fuera del workspace](/es/tools#external-directories).
+
 ## `agents`
 
 El agente activo y el effort de razonamiento de la sesión principal. Lo escriben `/agents` y
@@ -308,11 +328,12 @@ Alisio siempre lee `<ALISIO_CONFIG_HOME>/config.json` (por defecto
 configuración global y reemplaza la capa del proyecto. Un archivo de proyecto sin confianza nunca se
 lee. Los ajustes superiores de la capa seleccionada reemplazan los globales, con excepciones
 aditivas: los servidores MCP se combinan por nombre, y las claves `plugins`, `skills`,
-`pluginOverrides`, `skillOverrides` y `builtinPlugins` SE SUMAN a la capa global en lugar de
-reemplazarla. Las listas aditivas conservan las entradas globales primero (sin duplicados exactos)
-y añaden después las entradas nuevas de la capa seleccionada, de modo que un array vacío en una capa
-inferior nunca vacía la colección global. Los registros aditivos se combinan por clave y gana la
-capa seleccionada por clave. Las rutas relativas se resuelven respecto al archivo que las definió.
+`additionalDirectories`, `pluginOverrides`, `skillOverrides` y `builtinPlugins` SE SUMAN a la capa
+global en lugar de reemplazarla. Las listas aditivas conservan las entradas globales primero (sin
+duplicados exactos) y añaden después las entradas nuevas de la capa seleccionada, de modo que un array
+vacío en una capa inferior nunca vacía la colección global. Los registros aditivos se combinan por
+clave y gana la capa seleccionada por clave. Las rutas relativas se resuelven respecto al archivo que
+las definió.
 
 La forma canónica es `mcp.servers`, indexada por nombre. `transport` puede ser explícito o inferirse
 de `command`/`url`.
@@ -454,8 +475,9 @@ Flags globales (válidos para todos los comandos):
 | `--allow-external` | Permite herramientas de red: `webfetch`, `websearch` y la búsqueda nativa del proveedor |
 | `--allow-mcp` | Permite los servidores MCP configurados y las llamadas a herramientas remotas |
 | `--allow-agents` | Permite enviar mensajes a agentes vecinos mediante Herdr |
+| `--add-dir <paths...>` | Directorios adicionales que las herramientas pueden tocar fuera del workspace (repetible, solo esta ejecución) |
 | `--no-herdr` | Desactiva los reportes automáticos de ciclo de vida a Herdr |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, plugins ejecutables y MCP |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, plugins ejecutables, MCP y toda ruta externa |
 | `--db <path>` | Base de datos de sesiones |
 | `--json` | Emite eventos JSONL versionados |
 | `--no-tui` | Usa el modo interactivo readline sencillo en lugar de la TUI |

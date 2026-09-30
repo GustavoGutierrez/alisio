@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type {
@@ -39,6 +40,7 @@ import { ProviderSettingsStore } from "./providers/settings.ts";
 import { ProjectContext } from "./resources/context.ts";
 import { expandSlashPrompt, loadPromptTemplates, promptSources } from "./resources/prompts.ts";
 import { Skills, skillRoots } from "./resources/skills.ts";
+import { type ExternalDirectoryHandler, PathAccess } from "./runtime/access.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
@@ -63,6 +65,8 @@ export interface AppOptions {
   allowMcp?: boolean;
   readOnly?: boolean;
   allowAgents?: boolean;
+  /** Extra directories the tools may touch outside the workspace (per-run `--add-dir`). */
+  addDirs?: string[];
   noHerdr?: boolean;
   model?: string;
   baseURL?: string;
@@ -82,6 +86,11 @@ export interface AppOptions {
   disablePlugins?: string[];
   /** Interactive approval for write/process tools; ignored in read-only mode. */
   approve?: ApprovalHandler;
+  /**
+   * Interactive approval for a tool path outside the workspace and every declared extra root,
+   * scoped to the containing directory (allow once / session / deny); ignored in read-only mode.
+   */
+  approveExternalDirectory?: ExternalDirectoryHandler;
 }
 export interface BuiltinContext {
   workspace: string;
@@ -166,6 +175,24 @@ export async function createApplication(options: AppOptions = {}) {
   // a project value (see loadConfigWithProvenance), so a project cannot grant itself MCP consent.
   const mcpAllow = config.mcp.allow === true;
   let persistedMcpAllow = mcpAllow;
+  // Extra tool roots: config `additionalDirectories` (already canonicalized on load) plus per-run
+  // `--add-dir` (resolved against the current directory). Ignored entirely under --read-only, so
+  // the flag and the config key can never widen a locked session.
+  const addDirs = options.readOnly
+    ? []
+    : await Promise.all(
+        (options.addDirs ?? []).map((dir) =>
+          realpath(resolve(cwd, dir)).catch(() => resolve(cwd, dir)),
+        ),
+      );
+  const pathAccess = new PathAccess({
+    workspace,
+    extraRoots: [...config.additionalDirectories, ...addDirs],
+    ...(options.approveExternalDirectory && !options.readOnly
+      ? { approve: options.approveExternalDirectory }
+      : {}),
+    readOnly: !!options.readOnly,
+  });
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
   const registry = new ToolRegistry(),
     skills = new Skills({ overrides: config.skillOverrides }),
@@ -380,6 +407,7 @@ export async function createApplication(options: AppOptions = {}) {
         config: config.websearch,
         resolveExtension: () => plugins.extensions.resolve("websearch"),
       },
+      pathAccess,
     );
     const { registerPluginInstallTool } = await import("./plugins/install.ts");
     registerPluginInstallTool(registry, { readOnly: !!options.readOnly });
@@ -653,6 +681,7 @@ export async function createApplication(options: AppOptions = {}) {
       extensions: plugins,
       contextWindow,
       ...(options.approve && !options.readOnly ? { approve: options.approve } : {}),
+      pathAccess,
       ...(config.websearch.provider === "native"
         ? { nativeTools: [{ type: config.websearch.nativeToolType }] }
         : {}),
@@ -738,6 +767,7 @@ export async function createApplication(options: AppOptions = {}) {
     }
     return {
       workspace,
+      pathAccess,
       config,
       prompts,
       expandPrompt,

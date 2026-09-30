@@ -34,6 +34,11 @@ export interface ExecuteDeps {
   emit: (data: unknown) => void;
   session?: string;
   label?: string;
+  /**
+   * Non-interactive path resolver for nested calls: the snippet can only use directories this
+   * session already has; it never triggers a new external-directory approval prompt.
+   */
+  resolvePath?: (path: string) => Promise<string>;
   /** Overrides `EXECUTE_TIMEOUT_MS`, mainly for tests. */
   timeoutMs?: number;
 }
@@ -70,6 +75,7 @@ export async function runExecute(code: string, deps: ExecuteDeps): Promise<unkno
       emit: deps.emit,
       ...(deps.session ? { session: deps.session } : {}),
       ...(deps.label ? { label: deps.label } : {}),
+      ...(deps.resolvePath ? { resolvePath: deps.resolvePath } : {}),
     });
     const text = result.content
       .filter((p) => p.type === "text")

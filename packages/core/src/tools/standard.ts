@@ -7,6 +7,7 @@ import {
   type JsonSchema,
   type Question,
   type SearchProvider,
+  type ToolContext,
   type ToolDefinition,
   textResult,
 } from "@alisio/sdk";
@@ -14,6 +15,7 @@ import type { Policy } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import type { ProjectContext } from "../resources/context.ts";
 import type { Skills } from "../resources/skills.ts";
+import type { PathAccess } from "../runtime/access.ts";
 import { fileSize, readHead, readText } from "../runtime/fs.ts";
 import { safePath } from "../runtime/paths.ts";
 import { isMissingCommand, RIPGREP_INSTALL_HINT, runProcess } from "../runtime/process.ts";
@@ -53,12 +55,12 @@ async function existing(path: string): Promise<string | undefined> {
   return readText(path);
 }
 async function atomicWrite(
-  root: string,
+  resolve: (path: string) => Promise<string>,
   path: string,
   content: string,
   expected: string | null,
 ): Promise<void> {
-  path = await safePath(root, path);
+  path = await resolve(path);
   await mkdir(dirname(path), { recursive: true });
   const before = await existing(path);
   if (before === undefined ? expected !== null : hash(before) !== expected)
@@ -67,7 +69,7 @@ async function atomicWrite(
   try {
     const mode = before === undefined ? 0o644 : (await stat(path)).mode & 0o777;
     await writeFile(temporary, content, { mode });
-    await safePath(root, path);
+    await resolve(path);
     const now = await existing(path);
     if (now !== before) throw new Error("File changed while preparing write");
     await rename(temporary, path);
@@ -90,8 +92,25 @@ export function registerStandard(
     config?: WebsearchConfig;
     resolveExtension?: () => { provider: SearchProvider; plugin: string } | undefined;
   },
+  /** Mediated path policy (workspace plus declared extra directories and external approval). */
+  pathAccess?: PathAccess,
 ): void {
   const register = (tool: ToolDefinition) => registry.register(tool);
+  /**
+   * Resolves one tool path through the host-injected policy when present, then the captured
+   * `PathAccess`, and finally the workspace-only `safePath` (standalone fixtures/embedders).
+   */
+  const resolvePath = (context: ToolContext, path: string): Promise<string> =>
+    context.resolvePath
+      ? context.resolvePath(path)
+      : pathAccess
+        ? pathAccess.resolve(path, {
+            workspace: context.workspace,
+            ...(context.session ? { session: context.session } : {}),
+            ...(context.label ? { label: context.label } : {}),
+            signal: context.signal,
+          })
+        : safePath(context.workspace, path);
   const filePaths = (input: Record<string, unknown>) =>
     typeof input.path === "string" ? [input.path] : [];
   register({
@@ -108,7 +127,7 @@ export function registerStandard(
     ),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(c.workspace, String(i.path));
+      const path = await resolvePath(c, String(i.path));
       const size = await fileSize(path);
       if (size === undefined) throw new Error(`File not found: ${String(i.path)}`);
       const raw = await readHead(path, 1_048_576);
@@ -145,7 +164,12 @@ export function registerStandard(
     async execute(i, c) {
       const content = String(i.content);
       if (Buffer.byteLength(content) > 1_048_576) throw new Error("Write exceeds 1 MiB");
-      await atomicWrite(c.workspace, String(i.path), content, i.expectedHash as string | null);
+      await atomicWrite(
+        (path) => resolvePath(c, path),
+        String(i.path),
+        content,
+        i.expectedHash as string | null,
+      );
       return textResult(JSON.stringify({ path: i.path, sha256: hash(content) }));
     },
   });
@@ -160,7 +184,7 @@ export function registerStandard(
     ),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(c.workspace, String(i.path)),
+      const path = await resolvePath(c, String(i.path)),
         before = await existing(path);
       if (before === undefined) throw new Error("File not found");
       const needle = String(i.oldText),
@@ -169,7 +193,7 @@ export function registerStandard(
         throw new Error("Edit must match exactly one occurrence");
       const after =
         before.slice(0, index) + String(i.newText) + before.slice(index + needle.length);
-      await atomicWrite(c.workspace, path, after, String(i.expectedHash));
+      await atomicWrite((p) => resolvePath(c, p), path, after, String(i.expectedHash));
       return textResult(JSON.stringify({ path: i.path, sha256: hash(after) }));
     },
   });
@@ -184,7 +208,7 @@ export function registerStandard(
     }),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(c.workspace, String(i.path ?? "."));
+      const path = await resolvePath(c, String(i.path ?? "."));
       const result = await runRipgrep(
         ["--files", "--glob", "!.git", "--glob", "!node_modules", "--", path],
         { cwd: c.workspace, signal: c.signal, maxBytes: 200_000 },
@@ -217,7 +241,7 @@ export function registerStandard(
     ]),
     paths: filePaths,
     async execute(i, c) {
-      const path = await safePath(c.workspace, String(i.path ?? "."));
+      const path = await resolvePath(c, String(i.path ?? "."));
       const r = await runRipgrep(
         [
           "--json",
@@ -529,6 +553,22 @@ export function registerStandard(
         emit: c.emit,
         ...(c.session ? { session: c.session } : {}),
         ...(c.label ? { label: c.label } : {}),
+        // Nested calls must never open a new external-directory prompt; only directories already
+        // approved for this session (or inside the workspace) are reachable.
+        ...(pathAccess
+          ? {
+              resolvePath: (path: string) =>
+                pathAccess.resolve(path, {
+                  workspace: c.workspace,
+                  ...(c.session ? { session: c.session } : {}),
+                  ...(c.label ? { label: c.label } : {}),
+                  signal: c.signal,
+                  interactive: false,
+                }),
+            }
+          : c.resolvePath
+            ? { resolvePath: c.resolvePath }
+            : {}),
       });
       return textResult(JSON.stringify({ result: result ?? null }));
     },

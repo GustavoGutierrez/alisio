@@ -133,6 +133,14 @@ export {
   Skills,
   skillRoots,
 } from "./resources/skills.ts";
+export {
+  type ExternalDirectoryDecision,
+  type ExternalDirectoryHandler,
+  type ExternalDirectoryRequest,
+  PathAccess,
+  type PathAccessOptions,
+  type ResolvePathOptions,
+} from "./runtime/access.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {
   defaultGlobalRoots,
@@ -140,7 +148,7 @@ export {
   PLUGIN_KEYWORD,
   resolvePluginSpec,
 } from "./runtime/modules.ts";
-export { findWorkspace, safePath } from "./runtime/paths.ts";
+export { findWorkspace, outsideRootsMessage, safePath } from "./runtime/paths.ts";
 export {
   isMissingCommand,
   type ProcessResult,

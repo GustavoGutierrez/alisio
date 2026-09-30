@@ -36,9 +36,9 @@ each tool (`enabled`, `ask`, `disabled`).
 | `plugin_install` | `process` | Install an npm plugin package into the global plugins directory (see [below](#plugin-install)) |
 
 Edits require a SHA-256 fingerprint of the file and an exact, unique match. Writes use a temporary
-file plus an atomic replace on the same filesystem. Mediated operations reject paths outside the
-workspace and symlinks; this does not protect against hostile processes changing paths concurrently,
-and it does not confine a free shell.
+file plus an atomic replace on the same filesystem. Mediated operations reject symlinks; this does
+not protect against hostile processes changing paths concurrently, and it does not confine a free
+shell.
 
 Editable files and the initial read scan are limited to 1 MiB; tool outputs are bounded and a
 truncated result is marked explicitly. Independent reads run in batches of up to four; operations
@@ -178,6 +178,33 @@ returns the package name, installed version, config entry, install path and the 
 remark. See [Writing plugins](/plugins#installing-plugins-from-npm) for the full story, including
 the headless `--yes` confirmation rules.
 
+## Paths outside the workspace {#external-directories}
+
+Read, write and edit tools are mediated against the workspace plus any directories you declare. A
+path outside every allowed root is no longer a dead end: it asks for approval scoped to the
+**containing directory**, not the individual file.
+
+- **Interactive (TUI):** Alisio asks **Allow once**, **Always allow this directory in this session**
+  or **Deny**. A session approval covers that directory and its whole subtree, so one answer covers
+  every file under it. The same prompt, queue and choices as the capability approvals above.
+- **Writes stay gated:** an external-directory approval is a **prerequisite, not a substitute**. A
+  write or edit outside the workspace still needs `--allow-write` (or its own approval); the
+  directory check runs first, then the effect check.
+- **Headless / non-interactive (`run`, `resume <id> "prompt"`, `--json`):** the prompt never hangs.
+  The call is denied with the resolved path and the exact remedies.
+- **Nested `execute` calls** never open a new prompt: they can only use directories already approved
+  for the session.
+
+Declare extra roots two ways (they combine):
+
+| Mechanism | Scope | Notes |
+| --- | --- | --- |
+| `--add-dir <paths...>` | One run | Repeatable; paths resolve against the current directory |
+| `additionalDirectories` in [configuration](/configuration#additionaldirectories) | Persistent | Resolved relative to the defining config file, canonicalized on load, and additive across layers |
+
+`--read-only` stays fully locked: it grants **no** external access through the prompt, `--add-dir`
+or `additionalDirectories`. See [Permission flags](#permission-flags).
+
 ## Permission flags {#permission-flags}
 
 | Flag | Effect |
@@ -188,7 +215,8 @@ the headless `--yes` confirmation rules.
 | `--allow-external` | Enables `webfetch` and `websearch` outright, no asking |
 | `--allow-mcp` | Starts/connects configured MCP servers and exposes their capabilities |
 | `--allow-agents` | Enables Herdr messaging tools |
-| `--read-only` | Disables writes, arbitrary processes, network tools, MCP, agent messaging and executable (external) plugins — never even offered, in the TUI or headless |
+| `--add-dir <paths...>` | Declares extra directories tools may touch outside the workspace (repeatable, this run only) |
+| `--read-only` | Disables writes, arbitrary processes, network tools, MCP, agent messaging and executable (external) plugins — never even offered, in the TUI or headless; also disables every external path |
 
 `--read-only` wins over every `--allow-*` flag. Built-in plugins (for example `memory`) remain
 active under `--read-only` because their tools only use the `internal` effect; use
@@ -221,8 +249,9 @@ denied. It is an illustration of the flow in this section, not a security bounda
 
 In the TUI, `write`, `process` and `external` tools that were not allowed by flags are offered to
 the model and Alisio asks before running each call: allow once, allow that effect for the session,
-or deny. Headless modes (`run`, `resume <id> "prompt"`, `--json`) never ask. See
-[Terminal UI](/tui#interactive-approvals).
+or deny. A path outside the workspace and every declared extra root uses the same three choices,
+scoped to the containing directory. Headless modes (`run`, `resume <id> "prompt"`, `--json`) never
+ask. See [Terminal UI](/tui#interactive-approvals).
 
 ## Project trust {#project-trust}
 

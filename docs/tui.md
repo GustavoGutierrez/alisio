@@ -509,7 +509,9 @@ offered to the model, and Alisio asks before running them:
 - **Always allow `<effect>` in this session** (lasts while the process lives)
 - **Deny**
 
-With `--read-only` nothing is asked and those tools stay disabled. Headless modes never ask. The time
+A tool path outside the workspace and every declared extra root asks the same way, scoped to the
+containing directory (one session approval covers that directory's subtree). With `--read-only`
+nothing is asked and those tools stay disabled. Headless modes never ask. The time
 spent waiting for an approval counts toward `limits.timeoutMs`. Approvals share the same
 [interactive queue](#ask-user-question) as `ask_user_question`, so a subagent's approval prompt and a
 subagent's question never race each other for the screen. See [Tools & permissions](/tools).

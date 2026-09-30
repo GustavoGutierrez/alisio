@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -159,6 +159,25 @@ describe("additive plugin and skill layers", () => {
       memory: { enabled: false },
       notes: { customOption: "global" },
     });
+  });
+
+  it("adds additionalDirectories additively and never lets an empty project list clear the global one", async () => {
+    const { global, workspace } = await fixture();
+    await mkdir(join(global, "data"), { recursive: true });
+    await mkdir(join(workspace, ".alisio", "extra"), { recursive: true });
+    const globalData = await realpath(join(global, "data"));
+    const projectExtra = await realpath(join(workspace, ".alisio", "extra"));
+    await json(join(global, "config.json"), { additionalDirectories: ["./data"] });
+    await json(join(workspace, ".alisio", "config.json"), { additionalDirectories: [] });
+    const kept = await loadConfig(workspace, { trustProject: true });
+    expect(kept.additionalDirectories).toEqual([globalData]);
+
+    await json(join(workspace, ".alisio", "config.json"), {
+      additionalDirectories: ["./extra", globalData],
+    });
+    const merged = await loadConfig(workspace, { trustProject: true });
+    // Global first, project addition appended, the already-present global entry deduplicated.
+    expect(merged.additionalDirectories).toEqual([globalData, projectExtra]);
   });
 
   it("appends project plugin and skill entries after the global ones, dropping exact duplicates", async () => {

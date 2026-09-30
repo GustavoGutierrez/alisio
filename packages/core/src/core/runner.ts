@@ -8,6 +8,7 @@ import {
   textProjection,
   textResult,
 } from "@alisio/sdk";
+import type { PathAccess } from "../runtime/access.ts";
 import {
   checkpointInstructions,
   estimateTokens,
@@ -61,6 +62,11 @@ export interface RunnerOptions {
   compaction?: CompactionSettings;
   /** When set, write/process tools not allowed by the policy are offered and ask first. */
   approve?: ApprovalHandler;
+  /**
+   * Mediated path policy (workspace plus declared extra directories and external approval).
+   * When set, declared tool paths outside the allowed roots ask before the effect gate runs.
+   */
+  pathAccess?: PathAccess;
   /** Generic hooks (implemented by the plugin host) for compaction and session start. */
   extensions?: RunnerExtensions;
   /**
@@ -435,6 +441,7 @@ export class AgentRunner {
     const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
     const context = options.context ?? o.context;
     const workspace = options.workspace ?? o.workspace;
+    const pathAccess = o.pathAccess;
     const policy = options.policy ?? o.policy;
     const approvals = !!o.approve && options.approvals !== false;
     const withPersona = async () => {
@@ -670,6 +677,27 @@ export class AgentRunner {
             if (p.error) throw new Error(p.error);
             if (!p.tool || !p.input) throw new Error("Invalid tool");
             const effect = p.tool.effect ?? "external";
+            // External-directory prerequisite: declared paths are resolved (and, outside every
+            // allowed root, approved for the containing directory) BEFORE the effect gate, so a
+            // write still needs its own write policy and a read never hard-throws first. The
+            // resolved map keeps "allow once" scoped to this one call, with no shared mutable
+            // state that parallel read batches could race on.
+            const resolved = new Map<string, string>();
+            if (pathAccess)
+              for (const declared of p.tool.paths?.(p.input) ?? [])
+                if (!resolved.has(declared)) {
+                  const target = await pathAccess.resolve(declared, {
+                    workspace,
+                    session: sessionId,
+                    ...(options.label ? { label: options.label } : {}),
+                    signal: combined,
+                  });
+                  // Key both the declared input and its resolved form: a write resolves the
+                  // input once, then re-checks the already-absolute path, and neither lookup may
+                  // ask a second time for an "allow once" decision.
+                  resolved.set(declared, target);
+                  resolved.set(target, target);
+                }
             if (contextUpdate && effect !== "read")
               throw new Error(
                 `Context changed; reconsider this call before retrying.\n${contextUpdate}`,
@@ -711,6 +739,21 @@ export class AgentRunner {
               session: sessionId,
               emit: (data) => emit("tool_progress", { id: call.id, data }),
               ...(options.label ? { label: options.label } : {}),
+              ...(pathAccess
+                ? {
+                    resolvePath: (path: string) => {
+                      const known = resolved.get(path);
+                      return known !== undefined
+                        ? Promise.resolve(known)
+                        : pathAccess.resolve(path, {
+                            workspace,
+                            session: sessionId,
+                            ...(options.label ? { label: options.label } : {}),
+                            signal: combined,
+                          });
+                    },
+                  }
+                : {}),
             });
             if (JSON.stringify(result).length > 48_000)
               result = textResult(

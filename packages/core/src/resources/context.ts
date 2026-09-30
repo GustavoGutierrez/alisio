@@ -13,7 +13,7 @@ import { stat } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type { ContextSource } from "../core/contracts.ts";
 import { fileSize, readText } from "../runtime/fs.ts";
-import { safePath } from "../runtime/paths.ts";
+import { inside, safePath } from "../runtime/paths.ts";
 
 export type InstructionKind = "override" | "agents" | "legacy" | "claude";
 export interface InstructionFile {
@@ -80,6 +80,10 @@ export class ProjectContext implements ContextSource {
   }
   /** Directories from the workspace root down to the directory containing `path`. */
   private async chain(path: string): Promise<string[]> {
+    // Paths outside the workspace have no workspace instruction scope: external reads are
+    // mediated by the path policy, never by AGENTS.md. Returning no directories here (instead of
+    // throwing) lets the tool's own policy authorize or deny the call.
+    if (!inside(this.workspace, resolve(this.workspace, path))) return [];
     const target = await safePath(this.workspace, path);
     let dir = target === this.workspace ? target : dirname(target);
     try {
