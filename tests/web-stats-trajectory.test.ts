@@ -91,6 +91,8 @@ describe("stats line (RF-16)", () => {
   it("formats seconds and token counts compactly", () => {
     expect(formatSeconds(11_940)).toBe("11.9s");
     expect(formatSeconds(600)).toBe("0.6s");
+    expect(formatSeconds(16)).toBe("16ms");
+    expect(formatSeconds(0)).toBe("0ms");
     expect(formatSeconds(125_000)).toBe("2m 5s");
     expect(compactNumber(12_345)).toBe("12.3k");
     expect(compactNumber(999)).toBe("999");

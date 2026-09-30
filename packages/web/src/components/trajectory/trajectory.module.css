@@ -57,6 +57,7 @@
 
 .table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   border-top: 1px solid var(--border);
   font-size: 13px;
@@ -89,8 +90,23 @@
   white-space: nowrap;
 }
 
+.colTime {
+  width: 84px;
+}
+
+.colTurn {
+  width: 52px;
+}
+
+.colType {
+  width: 170px;
+}
+
+.colDuration {
+  width: 80px;
+}
+
 .summary {
-  max-width: 460px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

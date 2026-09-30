@@ -30,11 +30,17 @@ function Run({ run, open }: { run: TrajectoryRun; open: boolean }) {
       <table class={styles.table}>
         <thead>
           <tr>
-            <th scope="col">{t("trajectory.time")}</th>
-            <th scope="col">{t("trajectory.turn")}</th>
-            <th scope="col">{t("trajectory.type")}</th>
+            <th scope="col" class={styles.colTime}>
+              {t("trajectory.time")}
+            </th>
+            <th scope="col" class={styles.colTurn}>
+              {t("trajectory.turn")}
+            </th>
+            <th scope="col" class={styles.colType}>
+              {t("trajectory.type")}
+            </th>
             <th scope="col">{t("trajectory.summary")}</th>
-            <th scope="col" class={styles.num}>
+            <th scope="col" class={`${styles.num} ${styles.colDuration}`}>
               {t("trajectory.duration")}
             </th>
           </tr>
@@ -44,7 +50,9 @@ function Run({ run, open }: { run: TrajectoryRun; open: boolean }) {
             <tr key={row.eventId} data-error={row.error ? "true" : undefined}>
               <td class={styles.mono}>{time(row.at)}</td>
               <td class={styles.num}>{row.turn ?? ""}</td>
-              <td class={styles.mono}>{row.type}</td>
+              <td class={`${styles.mono} ${styles.summary}`} title={row.type}>
+                {row.type}
+              </td>
               <td class={styles.summary} title={row.summary}>
                 {row.summary}
               </td>

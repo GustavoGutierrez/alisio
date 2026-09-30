@@ -85,8 +85,9 @@ export function sessionStats(events: RunEvent[]): { last?: Stats; session: Stats
   };
 }
 
-/** `11.9s`, `0.6s`, `2m 5s`. */
+/** `16ms`, `0.6s`, `11.9s`, `2m 5s` (under 100 ms, tenths of a second would read as 0). */
 export function formatSeconds(ms: number): string {
+  if (ms < 100) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   const total = Math.round(ms / 1000);
   return `${Math.floor(total / 60)}m ${total % 60}s`;
