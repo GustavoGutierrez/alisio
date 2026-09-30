@@ -61,6 +61,11 @@
 }
 
 .path {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  text-align: left;
   min-width: 0;
   overflow: hidden;
   color: var(--text);

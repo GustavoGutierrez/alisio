@@ -844,6 +844,29 @@ export interface BlobRef {
   width?: number;
   height?: number;
 }
+/** One entry of `GET /api/workspaces/:wid/tree` (paths are workspace-relative, `/`-separated). */
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir" | "symlink" | "other";
+  /** Bytes, for files. */
+  size?: number;
+  /** Last modification, ms epoch. */
+  mtime?: number;
+}
+/** A page of a directory listing; `next` is an opaque cursor for the following page. */
+export interface FileTreePage {
+  entries: FileEntry[];
+  next?: string;
+}
+/** A file the session changed (write-effect tool calls), for the Changes dock. */
+export interface SessionChange {
+  path: string;
+  lastRunId?: string;
+  effect: "write";
+  /** `git status --porcelain` code when the workspace is a git repository (`M`, `A`, `D`, `??`…). */
+  gitStatus?: string;
+}
 /** Session metadata carried by snapshot frames. */
 export interface SessionDetailWire {
   id: string;

@@ -7,6 +7,9 @@ import type { Token, Tokens } from "marked";
 import { Component, type ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
 import { RendererHost } from "../renderers/RendererHost.tsx";
+import { detail } from "../store/app.ts";
+import { openInDock } from "../store/dock.ts";
+import { workspaceRelative } from "../util/files.ts";
 import { fenceBlock, mathBlock } from "./fences.ts";
 import {
   emptyMarkdown,
@@ -74,7 +77,18 @@ function Inline({ token }: { token: Token }): ComponentChildren {
             {inline(link.tokens)}
           </a>
         );
-      // Workspace paths become file links in phase 4 (dock); unsafe schemes stay plain text.
+      // Workspace paths open in the dock; unsafe schemes stay plain text.
+      if (workspaceRelative(detail.value?.workspace, link.href) !== undefined)
+        return (
+          <button
+            type="button"
+            class={styles.fileLink}
+            title={link.href}
+            onClick={() => void openInDock(link.href)}
+          >
+            {inline(link.tokens)}
+          </button>
+        );
       return (
         <span class={styles.path} title={link.href}>
           {inline(link.tokens)}

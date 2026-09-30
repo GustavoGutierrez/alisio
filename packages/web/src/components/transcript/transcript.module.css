@@ -327,3 +327,23 @@ button.processHead:hover,
   cursor: pointer;
   font-size: 12.5px;
 }
+
+.headRow {
+  display: flex;
+  align-items: center;
+}
+
+.headRow > .processHead {
+  flex: 1;
+  min-width: 0;
+}
+
+.openFile {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.headRow:hover .openFile,
+.openFile:focus-visible {
+  opacity: 1;
+}

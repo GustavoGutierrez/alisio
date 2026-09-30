@@ -174,6 +174,7 @@ export {
   type ResolvePathOptions,
 } from "./runtime/access.ts";
 export { BlobStore, type BlobStoreOptions } from "./runtime/blobs.ts";
+export { clipLines, unifiedPatch } from "./runtime/diff.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {
   defaultGlobalRoots,
@@ -181,7 +182,7 @@ export {
   PLUGIN_KEYWORD,
   resolvePluginSpec,
 } from "./runtime/modules.ts";
-export { findWorkspace, outsideRootsMessage, safePath } from "./runtime/paths.ts";
+export { findWorkspace, inside, outsideRootsMessage, safePath } from "./runtime/paths.ts";
 export {
   isMissingCommand,
   type ProcessResult,

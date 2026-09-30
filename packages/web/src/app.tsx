@@ -3,6 +3,7 @@ import styles from "./app.module.css";
 import { ApprovalPanel } from "./components/approval/ApprovalPanel.tsx";
 import { InteractionPanel } from "./components/approval/InteractionPanel.tsx";
 import { Composer } from "./components/composer/Composer.tsx";
+import { Dock } from "./components/dock/Dock.tsx";
 import { Header } from "./components/header/Header.tsx";
 import { Icon } from "./components/icons.tsx";
 import { SettingsModal } from "./components/settings/SettingsModal.tsx";
@@ -23,6 +24,7 @@ import {
   toast,
   visible,
 } from "./store/app.ts";
+import { dockOpen } from "./store/dock.ts";
 
 function Centered(props: { title: string; body: string; action?: preact.ComponentChildren }) {
   return (
@@ -112,6 +114,7 @@ export function App() {
           </div>
         )}
       </main>
+      {dockOpen.value && id ? <Dock /> : null}
       {settingsOpen.value ? <SettingsModal /> : null}
       {toast.value ? (
         <div class={styles.toast} role="status">

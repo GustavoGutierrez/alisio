@@ -114,3 +114,16 @@ h6.heading {
   color: var(--muted);
   white-space: pre-wrap;
 }
+
+.fileLink {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

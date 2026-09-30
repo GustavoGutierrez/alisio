@@ -2,6 +2,7 @@ import type { ToolResult } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
+import { openInDock } from "../../store/dock.ts";
 import { density } from "../../store/prefs.ts";
 import type { ToolState } from "../../store/transcript.ts";
 import { liveCommand, prettyArgs, toolLabel, toolPath, toolSummary } from "../../util/tools.ts";
@@ -70,38 +71,51 @@ export function ToolRow({ tool }: { tool: ToolState }) {
   const id = `tool-${tool.id}`;
   return (
     <div class={styles.process} data-status={tool.status}>
-      <button
-        type="button"
-        class={styles.processHead}
-        aria-expanded={expanded}
-        aria-controls={id}
-        aria-label={`${t("tool.expand", { name: label })}${summary ? `: ${summary}` : ""}`}
-        onClick={() => setOpen(!expanded)}
-      >
-        <span class={styles.processIcon}>
-          <Icon name={expanded ? "chevronDown" : (ICONS[tool.name] ?? "tool")} size={15} />
-        </span>
-        <span class={styles.processName}>{label}</span>
-        {summary ? (
-          <>
-            <span class={styles.dot} aria-hidden="true">
-              ·
-            </span>
-            <span class={path ? `${styles.summary} ${styles.fileRef}` : styles.summary}>
-              {summary}
-            </span>
-          </>
-        ) : null}
-        <span class={styles.processState}>
-          {tool.status === "running" ? (
-            <span class={`${styles.spinner} spin`} title={t("tool.running")} />
-          ) : tool.status === "failed" ? (
-            <span class={styles.failed}>{t("tool.failed")}</span>
-          ) : tool.durationMs !== undefined ? (
-            <span class={styles.duration}>{t("tool.duration", { ms: tool.durationMs })}</span>
+      <div class={styles.headRow}>
+        <button
+          type="button"
+          class={styles.processHead}
+          aria-expanded={expanded}
+          aria-controls={id}
+          aria-label={`${t("tool.expand", { name: label })}${summary ? `: ${summary}` : ""}`}
+          onClick={() => setOpen(!expanded)}
+        >
+          <span class={styles.processIcon}>
+            <Icon name={expanded ? "chevronDown" : (ICONS[tool.name] ?? "tool")} size={15} />
+          </span>
+          <span class={styles.processName}>{label}</span>
+          {summary ? (
+            <>
+              <span class={styles.dot} aria-hidden="true">
+                ·
+              </span>
+              <span class={path ? `${styles.summary} ${styles.fileRef}` : styles.summary}>
+                {summary}
+              </span>
+            </>
           ) : null}
-        </span>
-      </button>
+          <span class={styles.processState}>
+            {tool.status === "running" ? (
+              <span class={`${styles.spinner} spin`} title={t("tool.running")} />
+            ) : tool.status === "failed" ? (
+              <span class={styles.failed}>{t("tool.failed")}</span>
+            ) : tool.durationMs !== undefined ? (
+              <span class={styles.duration}>{t("tool.duration", { ms: tool.durationMs })}</span>
+            ) : null}
+          </span>
+        </button>
+        {path ? (
+          <button
+            type="button"
+            class={`icon-btn ${styles.openFile}`}
+            aria-label={t("tool.openFile", { path })}
+            title={t("tool.openFile", { path })}
+            onClick={() => void openInDock(path)}
+          >
+            <Icon name="panel" size={14} />
+          </button>
+        ) : null}
+      </div>
       {expanded ? (
         <div id={id} class={styles.processBody}>
           <p class={styles.sectionLabel}>{t("tool.input")}</p>

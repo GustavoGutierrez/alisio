@@ -2,6 +2,7 @@ import type { UiBlock } from "@alisio/sdk";
 import { useMemo, useState } from "preact/hooks";
 import { CopyButton } from "../../components/CopyButton.tsx";
 import { t } from "../../i18n/index.ts";
+import { openInDock } from "../../store/dock.ts";
 import styles from "./diff.module.css";
 import { type DiffFile, type DiffHunk, type DiffLine, filesOf, splitRows } from "./model.ts";
 
@@ -61,7 +62,18 @@ function FileDiff(props: { file: DiffFile; split: boolean; index: number }) {
         <span class={styles.status} data-status={file.status}>
           {t(`diff.status.${file.status}`)}
         </span>
-        <span class={styles.path}>{file.path || t("diff.untitled")}</span>
+        {file.path ? (
+          <button
+            type="button"
+            class={styles.path}
+            title={t("diff.open")}
+            onClick={() => void openInDock(file.path)}
+          >
+            {file.path}
+          </button>
+        ) : (
+          <span class={styles.path}>{t("diff.untitled")}</span>
+        )}
         <span class={styles.stat}>
           <span class={styles.plus}>+{file.added}</span>
           <span class={styles.minus}>−{file.removed}</span>

@@ -8,15 +8,18 @@ import type {
   ApiErrorCode,
   CommandDescriptor,
   CommandOutcome,
+  FileTreePage,
   HealthInfo,
   Message,
   PendingApproval,
   PermissionPresetId,
   PromptAccepted,
+  SessionChange,
   SessionContextUsage,
   SessionDetail,
   SessionModels,
   SessionSummary,
+  UiBlock,
   WorkspaceInfo,
 } from "@alisio/sdk";
 
@@ -145,6 +148,69 @@ export class ApiClient {
       answer,
     });
   exportUrl = (id: string) => `/api/sessions/${enc(id)}/export`;
+  tree = (workspaceId: string, path: string, cursor?: string) =>
+    this.request<FileTreePage>(
+      "GET",
+      `/api/workspaces/${enc(workspaceId)}/tree?path=${enc(path)}${cursor ? `&cursor=${enc(cursor)}` : ""}`,
+    );
+  diff = (workspaceId: string, path: string) =>
+    this.request<UiBlock>("GET", `/api/workspaces/${enc(workspaceId)}/diff?path=${enc(path)}`);
+  changes = (sessionId: string) =>
+    this.request<{ files: SessionChange[] }>("GET", `/api/sessions/${enc(sessionId)}/changes`);
+  fileUrl = (workspaceId: string, path: string, download = false) =>
+    `/api/workspaces/${enc(workspaceId)}/file?path=${enc(path)}${download ? "&download=1" : ""}`;
+
+  /** A workspace file for preview: its sniffed type, size, truncation and bytes. */
+  async file(
+    workspaceId: string,
+    path: string,
+  ): Promise<{ contentType: string; truncated: boolean; size: number; blob: Blob }> {
+    const res = await this.raw(this.fileUrl(workspaceId, path));
+    return {
+      contentType: res.headers.get("Content-Type") ?? "application/octet-stream",
+      truncated: res.headers.get("X-Truncated") === "true",
+      size: Number(res.headers.get("X-File-Size") ?? 0),
+      blob: await res.blob(),
+    };
+  }
+
+  /** A GET or binary POST whose successful body the caller reads itself. */
+  async raw(path: string, init: { method?: string; body?: Blob; contentType?: string } = {}) {
+    const headers: Record<string, string> = {
+      "X-Request-Id": (this.options.requestId ?? newId)().replace(/[^A-Za-z0-9_-]/g, ""),
+    };
+    if (init.contentType) headers["Content-Type"] = init.contentType;
+    let res: Response;
+    try {
+      res = await this.fetcher(path, {
+        method: init.method ?? "GET",
+        headers,
+        credentials: "same-origin",
+        ...(init.body ? { body: init.body } : {}),
+      });
+    } catch (error) {
+      throw new ApiRequestError(
+        0,
+        "network",
+        error instanceof Error ? error.message : "Network error",
+      );
+    }
+    if (res.status === 401) this.options.onUnauthorized?.();
+    if (!res.ok) {
+      let parsed: Partial<ApiError> | undefined;
+      try {
+        parsed = JSON.parse(await res.text()) as ApiError;
+      } catch {
+        /* not JSON */
+      }
+      throw new ApiRequestError(
+        res.status,
+        parsed?.error?.code ?? "internal",
+        parsed?.error?.message ?? `HTTP ${res.status}`,
+      );
+    }
+    return res;
+  }
 }
 
 const enc = encodeURIComponent;

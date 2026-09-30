@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, detail, mobileSidebar, patchCurrent, transcript } from "../../store/app.ts";
+import { dockOpen, setDockOpen } from "../../store/dock.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./header.module.css";
 
@@ -83,6 +84,18 @@ export function Header() {
             {t("header.sessionLog")}
             <Icon name="download" size={15} />
           </a>
+        ) : null}
+        {session ? (
+          <button
+            type="button"
+            class="icon-btn"
+            aria-pressed={dockOpen.value}
+            aria-label={t("header.toggleDock")}
+            title={t("header.toggleDock")}
+            onClick={() => setDockOpen(!dockOpen.value)}
+          >
+            <Icon name="panel" size={17} />
+          </button>
         ) : null}
       </div>
       {session ? (

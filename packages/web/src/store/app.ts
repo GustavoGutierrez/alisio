@@ -57,6 +57,10 @@ export const mobileSidebar = signal(false);
 /** Asks the composer to take focus (e.g. after an approval is answered). */
 export const focusComposer = signal(0);
 export const toast = signal<string | undefined>(undefined);
+/** Text the composer should insert at its cursor (e.g. an `@path` mention from the dock). */
+export const composerInsert = signal<{ text: string; n: number } | undefined>(undefined);
+/** Bumped when a run of the open session ends (the dock refreshes its tree and changes). */
+export const runEnded = signal(0);
 
 export const visible = computed(() => visiblePending(pending.value, transcript.value.session));
 export const sessionStatus = computed(
@@ -84,7 +88,12 @@ let reloadingSidebar: Promise<void> | undefined;
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-function showToast(message: string): void {
+export function insertIntoComposer(text: string): void {
+  composerInsert.value = { text, n: (composerInsert.value?.n ?? 0) + 1 };
+  focusComposer.value++;
+}
+
+export function showToast(message: string): void {
   toast.value = message;
   setTimeout(() => {
     if (toast.value === message) toast.value = undefined;
@@ -181,7 +190,10 @@ function onFrames(frames: ServerFrame[]): void {
     sidebar.value = nextSidebar;
   });
   if (sidebar.value.stale) void reloadSidebar();
-  if (ended) void refreshContext();
+  if (ended) {
+    runEnded.value++;
+    void refreshContext();
+  }
   if (catalog) void refreshCommands();
   // A compaction replaced older messages: take a fresh snapshot of the history.
   if (rewritten) {

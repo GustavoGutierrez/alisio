@@ -5,6 +5,7 @@ import {
   busy,
   cancelRun,
   commands,
+  composerInsert,
   context,
   currentId,
   detail,
@@ -122,6 +123,17 @@ export function Composer() {
   useEffect(() => {
     if (focusComposer.value) area.current?.focus();
   }, [focusComposer.value]);
+
+  // `@path` mentions and other insertions requested by the dock.
+  useEffect(() => {
+    const request = composerInsert.value;
+    if (!request) return;
+    const el = area.current;
+    const at = el ? el.selectionStart : text.length;
+    const before = text.slice(0, at);
+    const glue = before && !/\s$/.test(before) ? " " : "";
+    update(`${before}${glue}${request.text}${text.slice(at)}`);
+  }, [composerInsert.value?.n]);
 
   useEffect(() => {
     const el = area.current;

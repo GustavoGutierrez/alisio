@@ -323,6 +323,31 @@ export class SQLiteStore implements SessionStore {
       )
       .run(id, call.id, JSON.stringify(result), call.name, Date.now());
   }
+  /**
+   * Calls of a session with one effect (for example `write`), oldest first. Needs the v4
+   * `effect`/`run_id`/`started_at` columns; rows written by older versions have no effect.
+   */
+  effectCalls(
+    session: string,
+    effect: string,
+  ): Array<{ callId: string; name: string; runId?: string; startedAt?: number }> {
+    const rows = this.db
+      .prepare(
+        "SELECT call_id,name,run_id,started_at FROM tool_calls WHERE session=? AND effect=? ORDER BY started_at, rowid",
+      )
+      .all(session, effect) as Array<{
+      call_id: string;
+      name: string | null;
+      run_id: string | null;
+      started_at: number | null;
+    }>;
+    return rows.map((row) => ({
+      callId: row.call_id,
+      name: row.name ?? "",
+      ...(row.run_id ? { runId: row.run_id } : {}),
+      ...(row.started_at != null ? { startedAt: Number(row.started_at) } : {}),
+    }));
+  }
   /** Rich (ui/image) parts persist as part of the serialized result and replay verbatim. */
   callResult(id: string, callId: string): ToolResult | undefined {
     const row = this.db
