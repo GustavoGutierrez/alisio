@@ -2,9 +2,16 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ToolResult, textProjection, type UiBlock } from "@alisio/sdk";
-import { describe, expect, it } from "vitest";
+import {
+  type Message,
+  type ModelProvider,
+  type ToolResult,
+  textProjection,
+  type UiBlock,
+} from "@alisio/sdk";
+import { describe, expect, it, vi } from "vitest";
 import { richPartsOf } from "../packages/cli/src/tui/state.ts";
+import { createApplication } from "../packages/core/src/application.ts";
 import { ToolRegistry } from "../packages/core/src/core/registry.ts";
 import { ProjectContext } from "../packages/core/src/resources/context.ts";
 import { Skills } from "../packages/core/src/resources/skills.ts";
@@ -135,5 +142,57 @@ describe("standard tools add web ui parts after the unchanged text", () => {
     expect(richPartsOf(write, "write_file")).toEqual({});
     // Other tools (plugins, MCP) keep their rich parts in the TUI.
     expect(richPartsOf(shell, "plugin_tool").ui?.kind).toBe("terminal");
+  });
+});
+
+describe("runner result bound with ui parts", () => {
+  it("measures the 48 KB bound on the text the model sees, not on display blocks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-std-bound-"));
+    vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
+    vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
+    const seen: Message[][] = [];
+    // ~27 KB of output: under the bound as text, over it once the terminal block doubles it.
+    const command = "seq 1 3000 | sed 's/^/row /'";
+    const provider: ModelProvider = {
+      id: "fake",
+      model: "fake",
+      async *stream(request) {
+        seen.push(request.messages);
+        if (request.messages.at(-1)?.role === "tool") {
+          yield { type: "completed", message: { role: "assistant", text: "ok", calls: [] } };
+          return;
+        }
+        yield {
+          type: "completed",
+          message: {
+            role: "assistant",
+            text: "",
+            calls: [{ id: "s1", name: "shell", arguments: JSON.stringify({ command }) }],
+          },
+        };
+      },
+    };
+    const app = await createApplication({
+      cwd: root,
+      db: join(root, "state", "sessions.sqlite"),
+      noHerdr: true,
+      provider,
+      allowProcess: true,
+    });
+    try {
+      const session = app.store.create(root, "fake", "fake");
+      await app.runner.run(session.id, "go");
+      const tool = seen[1]?.find((m) => m.role === "tool");
+      const text = tool?.role === "tool" ? tool.result.content : [];
+      expect(text).toHaveLength(1);
+      expect(JSON.stringify(text)).not.toContain("[tool output truncated]");
+      expect(JSON.stringify(text)).toContain("row 3000");
+      expect(richPartsOf(app.store.callResult(session.id, "s1"), "plugin").ui?.kind).toBe(
+        "terminal",
+      );
+    } finally {
+      await app.close();
+      vi.unstubAllEnvs();
+    }
   });
 });

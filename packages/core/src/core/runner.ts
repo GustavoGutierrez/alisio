@@ -794,9 +794,12 @@ export class AgentRunner {
                   }
                 : {}),
             });
-            if (JSON.stringify(result).length > 48_000)
+            // The bound applies to what the model sees (the text projection): display-only
+            // ui/image parts are bounded by their producers and must not push text over it.
+            const projected = textProjection(result);
+            if (JSON.stringify(projected).length > 48_000)
               result = textResult(
-                `${JSON.stringify(result).slice(0, 40_000)}\n[tool output truncated]`,
+                `${JSON.stringify(projected).slice(0, 40_000)}\n[tool output truncated]`,
                 result.isError,
               );
             if (pendingUpdate && effect === "read") {
