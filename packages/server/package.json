@@ -40,11 +40,14 @@
     "node": ">=22.16"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-web.mjs"
   },
   "dependencies": {
     "@alisio/core": "workspace:*",
     "@alisio/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@alisio/web": "workspace:*"
   },
   "publishConfig": {
     "access": "public",

@@ -9,6 +9,13 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+// The web UI ships inside @alisio/server: enforce its size budgets first (spec §10.7).
+execFileSync(
+  process.execPath,
+  ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", "scripts/web-size.ts"],
+  { stdio: "inherit" },
+);
+
 const keepIndex = process.argv.indexOf("--keep");
 const out =
   keepIndex > 0

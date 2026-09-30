@@ -12,5 +12,6 @@
     "examples/**/*.ts",
     "vitest.config.ts",
     "docs/.vitepress/**/*.ts"
-  ]
+  ],
+  "exclude": ["packages/web/**"]
 }
