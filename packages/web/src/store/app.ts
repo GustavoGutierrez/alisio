@@ -18,6 +18,14 @@ import { batch, computed, signal } from "@preact/signals";
 import { t } from "../i18n/index.ts";
 import { ApiClient, ApiRequestError, newId } from "../net/api.ts";
 import { type EventSourceLike, EventStream, type StreamStatus } from "../net/events.ts";
+import {
+  answeredSideQuestion,
+  type BtwState,
+  browseSideQuestions,
+  failedSideQuestion,
+  pendingSideQuestion,
+  sideQuestionOf,
+} from "./btw.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
 import { errorText } from "./errors.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
@@ -73,6 +81,8 @@ export const eventsTick = signal(0);
 export const catalogTick = signal<Record<string, number>>({});
 /** Plugin display names by their tool prefix (`p_<hash>`), to label plugin tool calls. */
 export const pluginNames = signal<Record<string, string>>({});
+/** The `/btw` side panel (not part of the transcript); undefined when closed. */
+export const btw = signal<BtwState | undefined>(undefined);
 /** The session view tab (RF-10). */
 export const sessionTab = signal<"conversation" | "trajectory">("conversation");
 
@@ -259,6 +269,7 @@ export async function openSession(id: string | undefined): Promise<void> {
     models.value = undefined;
     context.value = undefined;
     mobileSidebar.value = false;
+    btw.value = undefined;
   });
   const hash = id ? `#/s/${encodeURIComponent(id)}` : "#/";
   if (location.hash !== hash) history_replace(hash);
@@ -515,6 +526,8 @@ export async function submit(
       )
     : undefined;
   if (!slash || !known) return sendPrompt(text);
+  const side = sideQuestionOf(text, commands.value);
+  if (side) return openSideQuestion(id, side.question);
   try {
     const outcome = await api.command(id, {
       requestId: newId(),
@@ -535,6 +548,56 @@ export async function submit(
   } catch (error) {
     transcript.value = addLocalNote(transcript.value, `**/${known.name}**: ${errorText(error)}`);
   }
+}
+
+let sideController: AbortController | undefined;
+
+/**
+ * `/btw [question]`: opens the side panel. With a question it asks it (one at a time; the
+ * conversation is untouched), without one it shows the newest earlier answer or the usage line.
+ */
+export async function openSideQuestion(sessionId: string, question: string): Promise<void> {
+  let entries = btw.value?.sessionId === sessionId ? btw.value.entries : [];
+  if (!question) {
+    btw.value = browseSideQuestions(sessionId, entries);
+    try {
+      entries = await api.sideQuestions(sessionId);
+    } catch (error) {
+      showToast(errorText(error));
+      return;
+    }
+    if (btw.value?.sessionId === sessionId && !btw.value.pending)
+      btw.value = browseSideQuestions(sessionId, entries);
+    return;
+  }
+  sideController?.abort();
+  const controller = new AbortController();
+  sideController = controller;
+  btw.value = pendingSideQuestion(sessionId, entries, question);
+  try {
+    await api.askSideQuestion(sessionId, question, controller.signal);
+    const updated = await api.sideQuestions(sessionId);
+    if (btw.value?.sessionId === sessionId && btw.value.pending?.question === question)
+      btw.value = answeredSideQuestion(btw.value, updated);
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    if (btw.value?.sessionId === sessionId && btw.value.pending)
+      btw.value = failedSideQuestion(btw.value, errorText(error));
+  } finally {
+    if (sideController === controller) sideController = undefined;
+  }
+}
+
+/** Closes the side panel; a pending side question is cancelled on the server too. */
+export function closeSideQuestion(): void {
+  const state = btw.value;
+  if (state?.pending) {
+    sideController?.abort();
+    sideController = undefined;
+    void api.cancelSideQuestions(state.sessionId).catch(() => {});
+  }
+  btw.value = undefined;
+  focusComposer.value++;
 }
 
 export async function cancelRun(): Promise<void> {

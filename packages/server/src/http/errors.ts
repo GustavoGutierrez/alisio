@@ -29,6 +29,7 @@ export const STATUS: Record<ApiErrorCode, number> = {
   picker_busy: 409,
   picker_unavailable: 503,
   permission_denied: 403,
+  cancelled: 409,
   internal: 500,
 };
 

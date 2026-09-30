@@ -16,6 +16,7 @@ import {
   announceAssertive,
   announcePolite,
   auth,
+  btw,
   currentId,
   focusComposer,
   mobileSidebar,
@@ -52,6 +53,21 @@ function LazySettings() {
     let alive = true;
     void import("./components/settings/SettingsModal.tsx").then((m) => {
       if (alive) setView(() => m.SettingsModal);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View /> : null;
+}
+
+/** The `/btw` side panel is its own chunk, loaded the first time a side question opens. */
+function LazyBtw() {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("./components/btw/BtwPanel.tsx").then((m) => {
+      if (alive) setView(() => m.BtwPanel);
     });
     return () => {
       alive = false;
@@ -134,6 +150,7 @@ export function App() {
         )}
       </main>
       {dockOpen.value && id ? <Dock /> : null}
+      {btw.value && id ? <LazyBtw /> : null}
       {settingsOpen.value ? <LazySettings /> : null}
       {toast.value ? (
         <div class={styles.toast} role="status">

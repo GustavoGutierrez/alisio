@@ -115,7 +115,8 @@ export function registerCommandRoutes(
       if (error instanceof HttpError) throw error;
       return fail(error);
     }
-    sessions.notify(session.id);
+    // A `/btw` side question changes nothing the session summary shows.
+    if (descriptor.name !== "btw") sessions.notify(session.id);
     return { body: outcome };
 
     async function run(): Promise<CommandOutcome> {

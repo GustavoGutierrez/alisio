@@ -33,6 +33,7 @@ import type {
   SessionModels,
   SessionSummary,
   SettingsOverview,
+  SideQuestionEntry,
   SkillInfo,
   UiBlock,
   WorkspaceInfo,
@@ -75,7 +76,12 @@ export class ApiClient {
     this.fetcher = options.fetch ?? ((url, init) => fetch(url, init));
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    init: { signal?: AbortSignal } = {},
+  ): Promise<T> {
     const headers: Record<string, string> = {
       "X-Request-Id": (this.options.requestId ?? newId)().replace(/[^A-Za-z0-9_-]/g, ""),
       Accept: "application/json",
@@ -88,6 +94,7 @@ export class ApiClient {
         headers,
         credentials: "same-origin",
         ...(method !== "GET" ? { body: JSON.stringify(body ?? {}) } : {}),
+        ...(init.signal ? { signal: init.signal } : {}),
       });
     } catch (error) {
       throw new ApiRequestError(
@@ -170,6 +177,19 @@ export class ApiClient {
     );
   command = (id: string, body: { requestId: string; name: string; args?: string }) =>
     this.request<CommandOutcome>("POST", `/api/sessions/${enc(id)}/commands`, body);
+  /** `/btw` side questions of a session, oldest first. */
+  sideQuestions = (id: string) =>
+    this.request<SideQuestionEntry[]>("GET", `/api/sessions/${enc(id)}/btw`);
+  /** Asks a side question (never added to the conversation); abort `signal` to drop it. */
+  askSideQuestion = (id: string, question: string, signal?: AbortSignal) =>
+    this.request<SideQuestionEntry>(
+      "POST",
+      `/api/sessions/${enc(id)}/btw`,
+      { question },
+      signal ? { signal } : {},
+    );
+  cancelSideQuestions = (id: string) =>
+    this.request<{ cancelled: boolean }>("POST", `/api/sessions/${enc(id)}/btw/cancel`, {});
   models = (id: string) => this.request<SessionModels>("GET", `/api/sessions/${enc(id)}/models`);
   context = (id: string) =>
     this.request<SessionContextUsage>("GET", `/api/sessions/${enc(id)}/context`);

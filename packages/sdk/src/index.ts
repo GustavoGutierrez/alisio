@@ -1035,6 +1035,8 @@ export type ApiErrorCode =
   | "picker_unavailable"
   /** The server user may not read that directory (403). */
   | "permission_denied"
+  /** The request was cancelled before it finished, e.g. a `/btw` side question (409). */
+  | "cancelled"
   | "internal";
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {

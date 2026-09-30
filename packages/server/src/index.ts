@@ -31,6 +31,7 @@ import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
+import { registerSideQuestionRoutes } from "./routes/side-questions.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 import { SseHub } from "./sse/hub.ts";
 import { InflightTracker } from "./sse/inflight.ts";
@@ -284,6 +285,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerBlobRoutes(router, { blobs });
   registerPromptRoutes(router, { sessions, scheduler });
   registerCommandRoutes(router, { sessions, scheduler, workspaces });
+  registerSideQuestionRoutes(router, { sessions });
   registerApprovalRoutes(router, { approvals, interactions });
   const management = {
     workspaces,
