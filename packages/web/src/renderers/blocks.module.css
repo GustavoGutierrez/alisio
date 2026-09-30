@@ -1,0 +1,94 @@
+.plain {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.fallback summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.note {
+  margin: 6px 0;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.caption {
+  margin: 8px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.table th,
+.table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.scroll {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.tree {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+}
+
+.meta {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.add {
+  color: var(--ok);
+}
+
+.del {
+  color: var(--danger);
+}
+
+.hunk {
+  color: var(--accent);
+}
+
+.passed {
+  color: var(--ok);
+}
+
+.failed {
+  color: var(--danger);
+}
+
+.status {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 4px 0;
+}
