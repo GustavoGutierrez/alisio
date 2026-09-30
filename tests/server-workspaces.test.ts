@@ -9,7 +9,13 @@ import {
   WorkspaceHost,
   workspaceId,
 } from "../packages/server/src/host/workspace-host.ts";
-import { startTestServer, type TestServer } from "./server-helpers.ts";
+import {
+  gatedProvider,
+  newSession,
+  settled,
+  startTestServer,
+  type TestServer,
+} from "./server-helpers.ts";
 
 let t: TestServer | undefined;
 afterEach(async () => {
@@ -227,5 +233,86 @@ describe("workspace routes (T-18)", () => {
     expect(tree.json()).toMatchObject({ error: { code: "workspace_missing" } });
     // The session itself stays readable.
     expect((await t.api.get(`/api/sessions/${sid}`)).status).toBe(200);
+  });
+});
+
+describe("archived workspaces", () => {
+  it("archives a workspace: hidden from the default list, listed with ?archived=true|all", async () => {
+    t = await startTestServer();
+    const [info] = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(info).toMatchObject({ archived: false });
+    const patched = await t.api.patch(`/api/workspaces/${info?.id}`, { archived: true });
+    expect(patched.status).toBe(200);
+    expect(patched.json()).toMatchObject({ id: info?.id, archived: true });
+    expect((await t.api.get("/api/workspaces")).json()).toEqual([]);
+    expect((await t.api.get("/api/workspaces?archived=true")).json()).toEqual([
+      expect.objectContaining({ id: info?.id, archived: true }),
+    ]);
+    expect((await t.api.get("/api/workspaces?archived=all")).json()).toHaveLength(1);
+    expect((await t.api.get("/api/workspaces?archived=maybe")).status).toBe(400);
+    const restored = await t.api.patch(`/api/workspaces/${info?.id}`, { archived: false });
+    expect(restored.json()).toMatchObject({ archived: false });
+    expect((await t.api.get("/api/workspaces")).json()).toHaveLength(1);
+  });
+
+  it("closes the idle app, keeps sessions readable and rejects new sessions with 409", async () => {
+    t = await startTestServer();
+    const created = await t.api.post("/api/sessions", { workspace: t.workspace });
+    const session = created.json<{ id: string; workspaceId: string }>();
+    expect((await t.api.get("/api/metrics")).json()).toMatchObject({ openWorkspaces: 1 });
+    const archived = await t.api.patch(`/api/workspaces/${session.workspaceId}`, {
+      archived: true,
+    });
+    expect(archived.json()).toMatchObject({ archived: true, open: false });
+    expect((await t.api.get("/api/metrics")).json()).toMatchObject({ openWorkspaces: 0 });
+    expect((await t.api.get(`/api/sessions/${session.id}`)).status).toBe(200);
+    const listed = (await t.api.get("/api/sessions?archived=all")).json<{
+      items: Array<{ id: string }>;
+    }>();
+    expect(listed.items.map((s) => s.id)).toContain(session.id);
+    for (const workspace of [session.workspaceId, t.workspace]) {
+      const again = await t.api.post("/api/sessions", { workspace });
+      expect(again.status).toBe(409);
+      expect(again.json()).toMatchObject({ error: { code: "workspace_archived" } });
+    }
+  });
+
+  it("refuses to archive a workspace with an active run (409 runs_active)", async () => {
+    const gate = gatedProvider();
+    t = await startTestServer({ provider: gate.provider });
+    const session = await newSession(t);
+    await t.api.post(`/api/sessions/${session.id}/prompts`, { requestId: "r-1", text: "go" });
+    await gate.started;
+    const busy = await t.api.patch(`/api/workspaces/${session.workspaceId}`, { archived: true });
+    expect(busy.status).toBe(409);
+    expect(busy.json()).toMatchObject({ error: { code: "runs_active" } });
+    gate.release();
+    await settled(t, session.id);
+    const done = await t.api.patch(`/api/workspaces/${session.workspaceId}`, { archived: true });
+    expect(done.status).toBe(200);
+  });
+
+  it("archives a missing folder known only from sessions, and reopening it unarchives", async () => {
+    t = await startTestServer();
+    const other = join(t.root, "gone");
+    await mkdir(other);
+    const opened = (await t.api.post("/api/workspaces", { path: other })).json<WorkspaceInfo>();
+    await t.api.post("/api/sessions", { workspace: opened.id });
+    // Forget the workspaces row: the workspace is now known only from its sessions.
+    const store = new SQLiteStore(t.db);
+    store.db.prepare("DELETE FROM workspaces WHERE path=?").run(opened.path);
+    store.close();
+    await rm(other, { recursive: true });
+    const archived = await t.api.patch(`/api/workspaces/${opened.id}`, { archived: true });
+    expect(archived.status).toBe(200);
+    expect(archived.json()).toMatchObject({ exists: false, archived: true });
+    expect(
+      (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>().map((w) => w.id),
+    ).not.toContain(opened.id);
+    // Explicitly opening an archived (existing) folder again brings it back.
+    const [main] = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    await t.api.patch(`/api/workspaces/${main?.id}`, { archived: true });
+    const reopened = await t.api.post("/api/workspaces", { path: t.workspace });
+    expect(reopened.json()).toMatchObject({ id: main?.id, archived: false });
   });
 });

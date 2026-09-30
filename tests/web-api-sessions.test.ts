@@ -10,7 +10,9 @@ import {
   loadSidebar,
   newSessionTarget,
   upsertSession,
+  upsertWorkspace,
   workspaceHints,
+  workspaceOpenMode,
 } from "../packages/web/src/store/sessions.ts";
 import { relativeTime } from "../packages/web/src/util/time.ts";
 
@@ -37,6 +39,7 @@ const workspace = (
   exists: true,
   trusted: true,
   untrustedResources: false,
+  archived: false,
   ...extra,
 });
 
@@ -57,7 +60,7 @@ describe("api client", () => {
             }),
             { status: 409 },
           );
-        if (url === "/api/workspaces") return new Response("{}", { status: 401 });
+        if (url.startsWith("/api/workspaces?")) return new Response("{}", { status: 401 });
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       },
     });
@@ -71,6 +74,16 @@ describe("api client", () => {
     expect(error).toMatchObject({ status: 409, code: "session_busy", message: "Busy" });
     await api.workspaces().catch(() => {});
     expect(unauthorized).toBe(1);
+    expect(calls.at(-1)?.url).toBe("/api/workspaces?archived=false");
+    await api.patchWorkspace("w/1", { archived: true });
+    expect(calls.at(-1)).toMatchObject({
+      url: "/api/workspaces/w%2F1",
+      init: { method: "PATCH", body: '{"archived":true}' },
+    });
+    await api.pickFolder();
+    expect(calls.at(-1)).toMatchObject({ url: "/api/workspaces/pick", init: { body: "{}" } });
+    await api.listDirs("C:\\Users", true);
+    expect(calls.at(-1)?.url).toBe("/api/fs/dirs?path=C%3A%5CUsers&hidden=true");
   });
 
   it("explains a deleted workspace folder with its path instead of a raw error", async () => {
@@ -99,6 +112,23 @@ describe("api client", () => {
       setLocale("es");
       expect(errorText(error)).toContain("/gone/app");
       expect(errorText(new Error("boom"))).toBe("boom");
+    } finally {
+      setLocale("en");
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("explains archived workspaces and a busy folder dialog", () => {
+    vi.stubGlobal("document", { documentElement: {} });
+    try {
+      setLocale("en");
+      const archived = new ApiRequestError(409, "workspace_archived", "raw", { path: "/w/app" });
+      expect(errorText(archived)).toBe(
+        "The workspace /w/app is archived. Unarchive it to start new sessions.",
+      );
+      expect(errorText(new ApiRequestError(409, "picker_busy", "raw"))).toContain("dialog");
+      setLocale("es");
+      expect(errorText(archived)).toContain("archivado");
     } finally {
       setLocale("en");
       vi.unstubAllGlobals();
@@ -241,6 +271,68 @@ describe("sidebar store", () => {
       [summary("a", { updatedAt: 10 }), summary("b", { workspaceId: "w2", updatedAt: 20 })],
     );
     expect(newSessionTarget(state)).toBe("w2");
+  });
+});
+
+describe("archived workspaces in the sidebar", () => {
+  const state = () =>
+    loadSidebar(
+      emptySidebar(),
+      [
+        workspace("w1", "/ws/one"),
+        workspace("old", "/ws/archived", { archived: true, lastOpenedAt: 999 }),
+      ],
+      [
+        summary("a", { updatedAt: 1 }),
+        summary("b", { workspaceId: "old", workspace: "/ws/archived", updatedAt: 50 }),
+      ],
+    );
+
+  it("hides archived workspaces and their sessions unless archived items are shown", () => {
+    expect(groupSessions(state(), "").map((g) => g.workspace.id)).toEqual(["w1"]);
+    const shown = groupSessions(state(), "", true);
+    // Archived workspaces go last, with their sessions.
+    expect(shown.map((g) => [g.workspace.id, g.sessions.map((s) => s.id)])).toEqual([
+      ["w1", ["a"]],
+      ["old", ["b"]],
+    ]);
+  });
+
+  it("disambiguates names only among the workspaces on screen", () => {
+    const twins = loadSidebar(
+      emptySidebar(),
+      [
+        workspace("gone", "/a/Descargas/app", { archived: true }),
+        workspace("here", "/b/Proyectos/app"),
+      ],
+      [],
+    );
+    expect(groupSessions(twins, "").map((g) => [g.name, g.hint])).toEqual([["app", undefined]]);
+    expect(groupSessions(twins, "", true).map((g) => g.hint)).toEqual([
+      "b/Proyectos",
+      "a/Descargas",
+    ]);
+  });
+
+  it("never starts a new session in an archived workspace", () => {
+    expect(newSessionTarget(state(), "old")).toBe("w1");
+    expect(newSessionTarget(state())).toBe("w1");
+  });
+
+  it("replaces a workspace in place after archiving or unarchiving it", () => {
+    const next = upsertWorkspace(state(), workspace("old", "/ws/archived", { archived: false }));
+    expect(groupSessions(next, "").map((g) => g.workspace.id)).toEqual(["old", "w1"]);
+  });
+});
+
+describe("open-a-workspace mode", () => {
+  it("prefers the native dialog, then the in-app browser, then a typed path", () => {
+    const caps = (extra: Record<string, boolean>) => ({ nativePicker: false, ...extra });
+    expect(workspaceOpenMode(caps({ nativePicker: true, folderBrowser: true }))).toBe("native");
+    expect(workspaceOpenMode(caps({ folderBrowser: true }))).toBe("browser");
+    expect(workspaceOpenMode(caps({ folderBrowser: false }))).toBe("manual");
+    // An older server (no capability flags) or an unknown health: type a path.
+    expect(workspaceOpenMode(undefined)).toBe("manual");
   });
 });
 

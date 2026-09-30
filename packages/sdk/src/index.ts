@@ -1027,6 +1027,14 @@ export type ApiErrorCode =
   | "shutting_down"
   /** Too many concurrent event streams (SSE) for this server. */
   | "stream_limit"
+  /** The workspace is archived: unarchive it before starting new sessions (409). */
+  | "workspace_archived"
+  /** A native folder dialog is already open on the server machine (409). */
+  | "picker_busy"
+  /** No native folder dialog / folder browser on this server (remote bind, no desktop) (503). */
+  | "picker_unavailable"
+  /** The server user may not read that directory (403). */
+  | "permission_denied"
   | "internal";
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {
@@ -1043,7 +1051,33 @@ export interface HealthInfo {
     automation: boolean;
     /** The server listens on a non-loopback address (`--allow-remote`). */
     remote: boolean;
+    /**
+     * `POST /api/workspaces/pick` can open a native folder dialog on this machine (loopback only,
+     * with a desktop session and a dialog tool). Absent on older servers.
+     */
+    nativePicker?: boolean;
+    /** `GET /api/fs/dirs` lists directory names for the in-app folder browser (loopback only). */
+    folderBrowser?: boolean;
   };
+}
+/** `POST /api/workspaces/pick`: the folder chosen in the native dialog, or a cancellation. */
+export type FolderPickResult = { path: string } | { cancelled: true };
+/** One page of the in-app folder browser (`GET /api/fs/dirs`): subdirectory names only. */
+export interface DirectoryListing {
+  /** Absolute path listed (the server's own separators; `""` for the drive list on Windows). */
+  path: string;
+  /** Parent directory, absent at a filesystem root (and at the drive list). */
+  parent?: string;
+  /** Breadcrumbs from the root to `path`, built by the server (no separator assumptions). */
+  segments: Array<{ name: string; path: string }>;
+  /** Subdirectories (names and absolute paths; never files, never contents). */
+  entries: Array<{ name: string; path: string; hidden: boolean }>;
+  /** The server user's home directory (where browsing starts). */
+  home: string;
+  /** Path separator of the server platform. */
+  separator: "/" | "\\";
+  /** More than the listing cap: the rest is not shown. */
+  truncated?: boolean;
 }
 /** A workspace known to the server (`GET /api/workspaces`). */
 export interface WorkspaceInfo {
@@ -1064,6 +1098,8 @@ export interface WorkspaceInfo {
   trusted: boolean;
   /** The directory has project resources that are not trusted (shown as "untrusted"). */
   untrustedResources: boolean;
+  /** Archived: hidden from the default list; its sessions stay readable, new ones are refused. */
+  archived: boolean;
   lastOpenedAt?: number;
 }
 /** Permission presets of the web composer (RF-08). */

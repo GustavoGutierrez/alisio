@@ -1,5 +1,4 @@
 import type { SessionSummary } from "@alisio/sdk";
-import { useComputed } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { locale, t } from "../../i18n/index.ts";
 import {
@@ -8,9 +7,13 @@ import {
   mobileSidebar,
   newSession,
   now,
+  openMode,
   openSession,
   openWorkspaceRequest,
   patchCurrent,
+  patchWorkspace,
+  picking,
+  pickWorkspace,
   settingsOpen,
   sidebar,
 } from "../../store/app.ts";
@@ -19,6 +22,7 @@ import { groupSessions } from "../../store/sessions.ts";
 import { relativeTime } from "../../util/time.ts";
 import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
+import { FolderBrowser } from "./FolderBrowser.tsx";
 import styles from "./sidebar.module.css";
 
 export const searchRequest = { focus: () => {} };
@@ -52,6 +56,7 @@ function SessionRow({ session }: { session: SessionSummary }) {
       <Menu
         label={t("session.actions", { title })}
         align="end"
+        fixed
         class={`icon-btn ${styles.rowMenu}`}
         groups={[
           {
@@ -81,19 +86,31 @@ export function Sidebar() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [adding, setAdding] = useState(false);
+  /** How the open-a-workspace UI is shown: nothing, the typed-path form or the folder browser. */
+  const [adding, setAdding] = useState<"none" | "manual" | "browser">("none");
   const [path, setPath] = useState("");
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const search = useRef<HTMLInputElement>(null);
-  const groups = useComputed(() => groupSessions(sidebar.value, query, archived));
+  // Plain render-time derivation: it depends on local state (query, archived) as well as the
+  // sidebar signal, which a `useComputed` would only track for the signal.
+  const groups = { value: groupSessions(sidebar.value, query, archived) };
   const collapsed = sidebarCollapsed.value && !mobileSidebar.value;
   const workspaceRequest = openWorkspaceRequest.value;
 
-  // "New session" found no existing workspace: show the open-a-workspace form.
+  /** Native dialog on the server's desktop, else the in-app browser, else a typed path. */
+  const openWorkspace = async () => {
+    if (openMode.value === "native") {
+      setAdding("none");
+      if ((await pickWorkspace()) !== "unavailable") return;
+    }
+    setAdding(openMode.value === "browser" ? "browser" : "manual");
+  };
+
+  // "New session" found no existing workspace: open a workspace first.
   useEffect(() => {
     if (!workspaceRequest) return;
     if (sidebarCollapsed.value) setSidebarCollapsed(false);
-    setAdding(true);
+    void openWorkspace();
   }, [workspaceRequest]);
 
   useEffect(() => {
@@ -198,10 +215,11 @@ export function Sidebar() {
         <button
           type="button"
           class="icon-btn"
-          aria-pressed={adding}
+          aria-pressed={adding !== "none" || picking.value}
           aria-label={t("sidebar.addWorkspace")}
           title={t("sidebar.addWorkspace")}
-          onClick={() => setAdding(!adding)}
+          disabled={picking.value}
+          onClick={() => (adding !== "none" ? setAdding("none") : void openWorkspace())}
         >
           <Icon name="folderPlus" />
         </button>
@@ -223,40 +241,72 @@ export function Sidebar() {
           }}
         />
       ) : null}
-      {adding ? (
-        <form
-          class={styles.addForm}
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (path.trim() && (await addWorkspace(path))) {
-              setPath("");
-              setAdding(false);
-            }
-          }}
-        >
-          <input
-            class={styles.field}
-            placeholder="/home/me/project"
-            aria-label={t("sidebar.addWorkspacePrompt")}
-            value={path}
-            onInput={(event) => setPath((event.target as HTMLInputElement).value)}
-          />
-          <button type="submit" class={styles.addButton}>
-            {t("sidebar.addWorkspaceAction")}
-          </button>
-        </form>
+      {picking.value ? (
+        <div class={styles.picking} role="status">
+          <span class={styles.pickingDot} aria-hidden="true" />
+          <span class={styles.pickingText}>
+            {t("sidebar.pickWaiting")}
+            {adding === "manual" ? null : (
+              <button type="button" class={styles.addLink} onClick={() => setAdding("manual")}>
+                {t("sidebar.typePath")}
+              </button>
+            )}
+          </span>
+        </div>
+      ) : null}
+      {adding === "manual" ? (
+        <div class={styles.addBox}>
+          <form
+            class={styles.addForm}
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (path.trim() && (await addWorkspace(path))) {
+                setPath("");
+                setAdding("none");
+              }
+            }}
+          >
+            <input
+              class={styles.field}
+              placeholder="/home/me/project"
+              aria-label={t("sidebar.addWorkspacePrompt")}
+              value={path}
+              onInput={(event) => setPath((event.target as HTMLInputElement).value)}
+            />
+            <button type="submit" class={styles.addButton}>
+              {t("sidebar.addWorkspaceAction")}
+            </button>
+          </form>
+          {openMode.value === "manual" ? null : (
+            <button
+              type="button"
+              class={styles.addLink}
+              onClick={() =>
+                openMode.value === "native" ? void openWorkspace() : setAdding("browser")
+              }
+            >
+              {t("sidebar.browseFolders")}
+            </button>
+          )}
+        </div>
+      ) : null}
+      {adding === "browser" ? (
+        <FolderBrowser onClose={() => setAdding("none")} onTypePath={() => setAdding("manual")} />
       ) : null}
       <div class={styles.tree}>
         {groups.value.map((group) => {
           const open = !closed[group.workspace.id] || !!query;
           const listId = `ws-${group.workspace.id}`;
           const missing = group.workspace.exists === false;
+          const archivedWs = group.workspace.archived;
+          const blocked = missing || archivedWs;
           const label = group.hint ? `${group.name} · ${group.hint}` : group.name;
           return (
             <section
               key={group.workspace.id}
               class={styles.folder}
               data-missing={missing ? "true" : undefined}
+              data-archived={archivedWs ? "true" : undefined}
             >
               <div class={styles.folderHead}>
                 <button
@@ -270,12 +320,17 @@ export function Sidebar() {
                   <Icon name="folder" size={16} class={open ? styles.folderOpen : undefined} />
                   <span class={styles.folderLabel}>
                     <span class={styles.folderName}>{group.name}</span>
-                    {group.hint || missing ? (
+                    {group.hint || missing || archivedWs ? (
                       <span class={styles.folderMeta}>
                         {group.hint ? <span class={styles.folderHint}>{group.hint}</span> : null}
                         {missing ? (
                           <span class={styles.missing} title={t("sidebar.missingHint")}>
                             {t("sidebar.missing")}
+                          </span>
+                        ) : null}
+                        {archivedWs ? (
+                          <span class={styles.archivedTag} title={t("workspace.archivedHint")}>
+                            {t("sidebar.archived")}
                           </span>
                         ) : null}
                       </span>
@@ -288,12 +343,47 @@ export function Sidebar() {
                     {t("sidebar.untrusted")}
                   </span>
                 ) : null}
+                <Menu
+                  label={t("workspace.actions", { name: label })}
+                  align="end"
+                  fixed
+                  class={`icon-btn ${styles.folderMenu}`}
+                  groups={[
+                    {
+                      items: [
+                        {
+                          id: "pin",
+                          label: group.workspace.pinned ? t("workspace.unpin") : t("workspace.pin"),
+                        },
+                        {
+                          id: "archive",
+                          label: archivedWs ? t("workspace.unarchive") : t("workspace.archive"),
+                        },
+                      ],
+                      onSelect: (action) =>
+                        void patchWorkspace(
+                          group.workspace.id,
+                          action === "pin"
+                            ? { pinned: !group.workspace.pinned }
+                            : { archived: !archivedWs },
+                        ),
+                    },
+                  ]}
+                >
+                  <Icon name="more" size={16} />
+                </Menu>
                 <button
                   type="button"
                   class={`icon-btn ${styles.folderAdd}`}
                   aria-label={t("sidebar.newIn", { name: label })}
-                  title={missing ? t("sidebar.missingHint") : t("sidebar.newIn", { name: label })}
-                  disabled={missing}
+                  title={
+                    missing
+                      ? t("sidebar.missingHint")
+                      : archivedWs
+                        ? t("workspace.archivedHint")
+                        : t("sidebar.newIn", { name: label })
+                  }
+                  disabled={blocked}
                   onClick={() => void newSession(group.workspace.id)}
                 >
                   <Icon name="plus" size={15} />

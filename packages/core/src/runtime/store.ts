@@ -129,6 +129,16 @@ export class SQLiteStore implements SessionStore {
           CREATE INDEX IF NOT EXISTS messages_session ON messages(session, seq);
           INSERT OR IGNORE INTO schema_migrations VALUES(4);`);
       });
+    if (!has(5))
+      this.db.transaction(() => {
+        // v5 (additive): archived workspaces (hidden from the default web list).
+        const columns = this.db.prepare("PRAGMA table_info(workspaces)").all() as {
+          name: string;
+        }[];
+        if (!columns.some((c) => c.name === "archived_at"))
+          this.db.exec("ALTER TABLE workspaces ADD COLUMN archived_at INTEGER");
+        this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(5)");
+      });
   }
   create(workspace: string, provider: string, model: string): Session {
     const id = crypto.randomUUID();
@@ -562,18 +572,20 @@ export class SQLiteStore implements SessionStore {
   }
   /**
    * Known workspaces for web clients: the workspaces of root sessions plus the ones recorded with
-   * `recordWorkspace` (v4 `workspaces` table), with their UI metadata and root-session count.
+   * `recordWorkspace` (v4 `workspaces` table), with their UI metadata (v5: `archivedAt`) and
+   * root-session count.
    */
   workspaces(): Array<{
     path: string;
     label?: string;
     pinned: boolean;
     lastOpenedAt?: number;
+    archivedAt?: number;
     sessions: number;
   }> {
     const rows = this.db
       .prepare(
-        `SELECT p.path, w.label, COALESCE(w.pinned, 0) AS pinned, w.last_opened_at,
+        `SELECT p.path, w.label, COALESCE(w.pinned, 0) AS pinned, w.last_opened_at, w.archived_at,
            (SELECT count(*) FROM sessions s WHERE s.workspace=p.path AND s.parent_id IS NULL) AS sessions
          FROM (SELECT workspace AS path FROM sessions WHERE parent_id IS NULL AND workspace IS NOT NULL
                UNION SELECT path FROM workspaces) p
@@ -586,13 +598,22 @@ export class SQLiteStore implements SessionStore {
       ...(r.label != null ? { label: String(r.label) } : {}),
       pinned: !!r.pinned,
       ...(r.last_opened_at != null ? { lastOpenedAt: Number(r.last_opened_at) } : {}),
+      ...(r.archived_at != null ? { archivedAt: Number(r.archived_at) } : {}),
       sessions: Number(r.sessions ?? 0),
     }));
   }
-  /** Records a workspace and patches its UI metadata (`label: null` clears the label). */
+  /**
+   * Records (upserts) a workspace and patches its UI metadata (`label: null` clears the label;
+   * `archived` stamps or clears `archived_at` and never touches its sessions).
+   */
   recordWorkspace(
     path: string,
-    patch: { label?: string | null; pinned?: boolean; lastOpenedAt?: number } = {},
+    patch: {
+      label?: string | null;
+      pinned?: boolean;
+      lastOpenedAt?: number;
+      archived?: boolean;
+    } = {},
   ): void {
     this.db.transaction(() => {
       this.db.prepare("INSERT OR IGNORE INTO workspaces(path) VALUES(?)").run(path);
@@ -606,6 +627,10 @@ export class SQLiteStore implements SessionStore {
         this.db
           .prepare("UPDATE workspaces SET last_opened_at=? WHERE path=?")
           .run(patch.lastOpenedAt, path);
+      if (patch.archived !== undefined)
+        this.db
+          .prepare("UPDATE workspaces SET archived_at=? WHERE path=?")
+          .run(patch.archived ? Date.now() : null, path);
     });
   }
   /**

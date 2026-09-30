@@ -27,8 +27,14 @@ export function Menu(props: {
   class?: string;
   disabled?: boolean;
   align?: "start" | "end";
+  /**
+   * Positions the popover against the viewport (below the button, or above when there is no room)
+   * so a scrolling container such as the sidebar cannot clip it; closes on scroll.
+   */
+  fixed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -45,7 +51,29 @@ export function Menu(props: {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", outside);
-    return () => document.removeEventListener("mousedown", outside);
+    const scrolled = (event: Event) => {
+      if (!list.current?.contains(event.target as Node)) setOpen(false);
+    };
+    if (props.fixed) {
+      const trigger = button.current?.getBoundingClientRect();
+      const popover = list.current?.getBoundingClientRect();
+      if (trigger && popover) {
+        const below = trigger.bottom + 4;
+        const top =
+          below + popover.height <= window.innerHeight - 8
+            ? below
+            : Math.max(8, trigger.top - 4 - popover.height);
+        const preferred = props.align === "end" ? trigger.right - popover.width : trigger.left;
+        const left = Math.min(Math.max(8, preferred), window.innerWidth - popover.width - 8);
+        setPosition({ top, left });
+      }
+      window.addEventListener("scroll", scrolled, true);
+    }
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      window.removeEventListener("scroll", scrolled, true);
+      setPosition(undefined);
+    };
   }, [open]);
 
   const close = (refocus = true) => {
@@ -102,6 +130,14 @@ export function Menu(props: {
           ref={list}
           class={styles.popover}
           data-align={props.align ?? "start"}
+          data-fixed={props.fixed ? "true" : undefined}
+          style={
+            props.fixed
+              ? position
+                ? { top: `${position.top}px`, left: `${position.left}px` }
+                : { visibility: "hidden" }
+              : undefined
+          }
           role="menu"
           aria-label={props.label}
           onKeyDown={onKeyDown}

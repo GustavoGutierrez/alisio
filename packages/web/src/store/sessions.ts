@@ -3,7 +3,7 @@
  * frames update rows in place, and a frame for an unknown session marks the index stale so the
  * app reloads the list.
  */
-import type { ServerFrame, SessionSummary, WorkspaceInfo } from "@alisio/sdk";
+import type { HealthInfo, ServerFrame, SessionSummary, WorkspaceInfo } from "@alisio/sdk";
 
 export interface SidebarState {
   workspaces: WorkspaceInfo[];
@@ -109,22 +109,25 @@ export function newSessionTarget(
   state: SidebarState,
   currentWorkspaceId?: string,
 ): string | undefined {
-  const exists = (id: string) => state.workspaces.find((w) => w.id === id)?.exists !== false;
+  const usable = (w: WorkspaceInfo | undefined) => w?.exists !== false && !w?.archived;
+  const exists = (id: string) => usable(state.workspaces.find((w) => w.id === id));
   if (currentWorkspaceId && exists(currentWorkspaceId)) return currentWorkspaceId;
   const latest = new Map<string, number>();
   for (const s of Object.values(state.sessions))
     latest.set(s.workspaceId, Math.max(latest.get(s.workspaceId) ?? 0, s.updatedAt ?? 0));
   const recency = (w: WorkspaceInfo) => Math.max(w.lastOpenedAt ?? 0, latest.get(w.id) ?? 0);
-  return state.workspaces
-    .filter((w) => w.exists !== false)
-    .sort((a, b) => recency(b) - recency(a))[0]?.id;
+  return state.workspaces.filter(usable).sort((a, b) => recency(b) - recency(a))[0]?.id;
 }
 
 /** Pinned first, then most recently updated; sessions without `updatedAt` last. */
 const bySidebarOrder = (a: SessionSummary, b: SessionSummary): number =>
   a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : (b.updatedAt ?? -1) - (a.updatedAt ?? -1);
 
-/** Workspace folders with their visible sessions, filtered by a search query. */
+/**
+ * Workspace folders with their visible sessions, filtered by a search query. `showArchived` also
+ * reveals archived workspaces (listed last, with all their sessions); otherwise an archived
+ * workspace and its sessions are hidden.
+ */
 export function groupSessions(
   state: SidebarState,
   query: string,
@@ -144,10 +147,13 @@ export function groupSessions(
         exists: true,
         trusted: false,
         untrustedResources: false,
+        archived: false,
       });
   const groups: WorkspaceGroup[] = [];
-  const hints = workspaceHints([...known.values()]);
-  for (const workspace of known.values()) {
+  const shown = [...known.values()].filter((w) => showArchived || !w.archived);
+  // Hints only need to tell apart the workspaces actually on screen.
+  const hints = workspaceHints(shown);
+  for (const workspace of shown) {
     const name = workspaceName(workspace);
     const hint = hints.get(workspace.id);
     const sessions = all
@@ -165,7 +171,20 @@ export function groupSessions(
   }
   return groups.sort(
     (a, b) =>
+      Number(a.workspace.archived) - Number(b.workspace.archived) ||
       Number(b.workspace.pinned) - Number(a.workspace.pinned) ||
       a.workspace.path.localeCompare(b.workspace.path),
   );
+}
+
+/**
+ * How "Open a workspace" asks for a folder: the server's native dialog, the in-app folder
+ * browser, or a typed absolute path (older or remote servers).
+ */
+export function workspaceOpenMode(
+  capabilities: Partial<HealthInfo["capabilities"]> | undefined,
+): "native" | "browser" | "manual" {
+  if (capabilities?.nativePicker) return "native";
+  if (capabilities?.folderBrowser) return "browser";
+  return "manual";
 }

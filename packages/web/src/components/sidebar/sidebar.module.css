@@ -373,3 +373,79 @@
     display: none;
   }
 }
+
+.folderMenu {
+  width: 26px !important;
+  height: 26px !important;
+  opacity: 0;
+}
+
+.folderHead:hover .folderMenu,
+.folderMenu:focus-visible,
+.folderMenu[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.archivedTag {
+  flex: none;
+  color: var(--muted);
+}
+
+.folder[data-archived="true"] .folderName {
+  color: var(--muted);
+}
+
+.addBox {
+  display: grid;
+  gap: 4px;
+}
+
+.addLink {
+  justify-self: start;
+  margin: 0 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.picking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 2px 2px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.pickingDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: picking-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes picking-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pickingDot {
+    animation: none;
+  }
+}
+
+.pickingText {
+  display: grid;
+  gap: 4px;
+}

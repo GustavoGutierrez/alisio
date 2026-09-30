@@ -85,6 +85,12 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
       ? await ctx.workspaces.canonical(input.workspace)
       : await ctx.workspaces.pathOf(input.workspace);
     if (!path) throw new HttpError("not_found", "Workspace not found");
+    if (ctx.workspaces.archived(path))
+      throw new HttpError(
+        "workspace_archived",
+        `Workspace ${path} is archived; unarchive it to start new sessions`,
+        { path },
+      );
     const opened = await ctx.workspaces.openPath(path);
     let created: Awaited<ReturnType<typeof opened.app.createSession>>;
     try {

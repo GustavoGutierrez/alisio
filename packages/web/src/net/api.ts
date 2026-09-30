@@ -11,7 +11,9 @@ import type {
   CommandDescriptor,
   CommandOutcome,
   CredentialStatus,
+  DirectoryListing,
   FileTreePage,
+  FolderPickResult,
   HealthInfo,
   McpOverview,
   McpServerWire,
@@ -114,8 +116,22 @@ export class ApiClient {
   }
 
   health = () => this.request<HealthInfo>("GET", "/api/health");
-  workspaces = () => this.request<WorkspaceInfo[]>("GET", "/api/workspaces");
+  workspaces = (archived: "true" | "false" | "all" = "false") =>
+    this.request<WorkspaceInfo[]>("GET", `/api/workspaces?archived=${archived}`);
   addWorkspace = (path: string) => this.request<WorkspaceInfo>("POST", "/api/workspaces", { path });
+  patchWorkspace = (
+    id: string,
+    patch: Partial<{ label: string | null; pinned: boolean; archived: boolean }>,
+  ) => this.request<WorkspaceInfo>("PATCH", `/api/workspaces/${enc(id)}`, patch);
+  /** Opens the native folder dialog on the server's desktop and waits for the user. */
+  pickFolder = (start?: string) =>
+    this.request<FolderPickResult>("POST", "/api/workspaces/pick", start ? { start } : {});
+  /** Subdirectory names of `path` (home when omitted) for the in-app folder browser. */
+  listDirs = (path?: string, hidden = false) =>
+    this.request<DirectoryListing>(
+      "GET",
+      `/api/fs/dirs?${path !== undefined ? `path=${encodeURIComponent(path)}&` : ""}hidden=${hidden}`,
+    );
   sessions = (query: { archived?: "true" | "false" | "all"; limit?: number } = {}) =>
     this.request<{ items: SessionSummary[]; next?: string }>(
       "GET",

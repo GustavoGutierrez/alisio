@@ -11,6 +11,7 @@ import type { ServerFrame } from "@alisio/sdk";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
+import { createNativePicker, type FolderPicker } from "./host/folder-picker.ts";
 import { RunScheduler } from "./host/run-scheduler.ts";
 import { SessionService } from "./host/sessions.ts";
 import { type ServerAppOptions, WorkspaceHost, workspaceId } from "./host/workspace-host.ts";
@@ -23,6 +24,7 @@ import { registerBlobRoutes } from "./routes/blobs.ts";
 import { registerCommandRoutes } from "./routes/commands.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerFileRoutes } from "./routes/files.ts";
+import { registerFolderRoutes } from "./routes/folders.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
@@ -36,6 +38,12 @@ import { InflightTracker } from "./sse/inflight.ts";
 export { isLoopbackHost } from "./auth/guard.ts";
 export { ApprovalBridge } from "./bridges/approval-bridge.ts";
 export { InteractionBridge } from "./bridges/interaction-bridge.ts";
+export {
+  createNativePicker,
+  type FolderPicker,
+  type PickerStrategy,
+  selectPicker,
+} from "./host/folder-picker.ts";
 export {
   type Application,
   type OpenWorkspace,
@@ -85,6 +93,11 @@ export interface ServerOptions {
   approvalGraceMs?: number;
   /** Deny an approval after this long even when watched (default 10 min; 0 = no limit). */
   approvalTimeoutMs?: number;
+  /**
+   * Native folder dialog for "Open a workspace" (default: detected for this OS). Injectable for
+   * tests. Always off when the server is bound for remote access.
+   */
+  folderPicker?: FolderPicker;
 }
 
 export interface RunningServer {
@@ -251,12 +264,20 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     pendingApprovals: approvals?.size ?? 0,
     sseDropped: hub.dropped,
   });
+  // The dialog and the directory browser act on the server machine as the server user: only for
+  // loopback, where the viewer is that user at that machine.
+  const loopback = isLoopbackHost(host);
+  const picker = loopback ? (options.folderPicker ?? createNativePicker()) : undefined;
+  const pickerAbort = new AbortController();
   registerHealthRoutes(router, {
     version: options.version ?? "dev",
-    remote: !isLoopbackHost(host),
+    remote: !loopback,
     stats,
+    nativePicker: async () => !!picker && (await picker.available()),
+    folderBrowser: loopback,
   });
-  registerWorkspaceRoutes(router, { workspaces, catalog });
+  registerFolderRoutes(router, { picker, browser: loopback, signal: pickerAbort.signal });
+  registerWorkspaceRoutes(router, { workspaces, catalog, scheduler });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerSessionViewRoutes(router, { catalog, sessions });
   registerFileRoutes(router, { workspaces, catalog, sessions });
@@ -379,6 +400,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         const began = Date.now();
         closing = true;
         clearInterval(sweeper);
+        pickerAbort.abort();
         const settling = scheduler.shutdown(2_000);
         approvals?.denyAll();
         interactions?.cancelAll();

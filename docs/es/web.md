@@ -54,9 +54,10 @@ La página tiene una barra lateral a la izquierda y la sesión abierta a la dere
 **Workspaces**, cada carpeta lista sus sesiones, primero las fijadas y luego las usadas más
 recientemente, con un tiempo relativo ("4 min"). Un punto antes del título indica una sesión en
 ejecución, que espera su respuesta, en uso por otro proceso o cuya última ejecución falló. Los
-iconos junto al encabezado buscan sesiones (también `Ctrl+K` / `Cmd+K`), muestran las sesiones
-archivadas y abren otro workspace por su ruta absoluta. Al pasar sobre una sesión aparecen **Fijar**
-y **Archivar**, y sobre una carpeta, una nueva sesión dentro de ella. **Ajustes** está abajo; el
+iconos junto al encabezado buscan sesiones (también `Ctrl+K` / `Cmd+K`), muestran las sesiones y
+los workspaces archivados y abren otro workspace (vea [Abrir un workspace](#abrir-un-workspace)).
+Al pasar sobre una sesión aparecen **Fijar** y **Archivar**, y sobre una carpeta, una nueva sesión
+dentro de ella y su menú de acciones (**Fijar**, **Archivar** / **Desarchivar**). **Ajustes** está abajo; el
 icono de panel contrae la barra a un riel estrecho. Por debajo de 900 px la barra lateral pasa a ser
 un cajón que se abre desde la cabecera.
 
@@ -190,6 +191,10 @@ El servidor está pensado para un usuario en una máquina:
 - Los plugins no están aislados: los plugins de un proyecto de confianza se ejecutan dentro del
   proceso del servidor con sus permisos del sistema operativo, exactamente igual que en la
   terminal.
+- El diálogo nativo de carpetas y el explorador de carpetas integrado solo existen en loopback. El
+  explorador lista nombres de directorios (nunca archivos ni contenidos) que el usuario del servidor
+  puede leer, la misma confianza que la terminal de ese usuario; con `--allow-remote` ambos se
+  desactivan y solo se acepta una ruta escrita.
 
 ## Workspaces y confianza
 
@@ -205,6 +210,35 @@ prompts en él (el servidor responde `404 workspace_missing`). **Nueva sesión**
 la sesión actual o el usado más recientemente que todavía exista; si no hay ninguno, pide abrir un
 workspace. Las carpetas con el mismo nombre muestran junto a él una ruta padre corta, y la ruta
 completa al pasar el ratón.
+
+Archive un workspace desde su menú de acciones para ocultarlo, junto con sus sesiones, de la barra
+lateral; **Mostrar archivados** vuelve a mostrar ambos (los workspaces archivados van al final).
+Archivar conserva todas las sesiones, que siguen visibles, cierra la aplicación inactiva del
+workspace y se rechaza con `409 runs_active` mientras haya una ejecución activa. Las sesiones nuevas
+en un workspace archivado se rechazan con `409 workspace_archived`; **Desarchívelo**, o vuelva a
+abrir la misma carpeta, para usarlo. Así se oculta también un workspace cuya carpeta ya no existe.
+
+### Abrir un workspace
+
+El botón de carpeta junto a **Workspaces** (y **Nueva sesión** cuando aún no hay ningún workspace)
+pide una carpeta de la mejor forma que admita el servidor:
+
+1. **Diálogo nativo de carpetas.** Los navegadores nunca dan a una página la ruta absoluta de una
+   carpeta, así que el servidor abre el diálogo del propio sistema operativo en su escritorio y usa
+   la carpeta elegida (una nota en la barra lateral lo indica mientras está abierto; solo un diálogo
+   a la vez).
+   - **Linux** (y BSD): `zenity`, si no `kdialog`, si no `yad`, buscados en `PATH`; necesita una
+     sesión de escritorio (`DISPLAY` o `WAYLAND_DISPLAY`).
+   - **macOS**: `osascript` con `choose folder` de AppleScript.
+   - **Windows**: Windows PowerShell (o `pwsh`) con el diálogo de carpetas de WinForms y, como
+     alternativa, el explorador de carpetas de Shell.
+2. **Explorador de carpetas integrado** cuando no hay herramienta de diálogo (máquina sin escritorio,
+   sesión SSH, `ALISIO_NATIVE_PICKER=0`): una ventana que solo lista nombres de carpetas, empieza en
+   su carpeta personal y tiene migas de pan, un botón de carpeta superior y **Mostrar carpetas
+   ocultas**. En Windows, el nivel superior lista las unidades.
+3. **Escribir una ruta** está siempre disponible como enlace y es la única opción cuando el servidor
+   escucha para acceso remoto (`--allow-remote`), porque un diálogo o un listado de carpetas
+   mostraría la máquina del servidor y no la suya.
 
 La web nunca concede confianza de proyecto. Un directorio cuya configuración `.alisio` no haya
 aceptado desde la terminal se abre sin sus recursos de proyecto (plugins, skills, prompts,
@@ -242,7 +276,10 @@ pestaña:
 
 ```text
 GET  /api/health                       unauthenticated: name, version, protocolVersion, capabilities
-GET  /api/workspaces                   POST /api/workspaces {path}   PATCH /api/workspaces/:wid
+GET  /api/workspaces?archived=false|true|all   POST /api/workspaces {path}
+PATCH /api/workspaces/:wid {label?, pinned?, archived?}
+POST /api/workspaces/pick {start?}     diálogo nativo de carpetas → {path} | {cancelled: true} (loopback)
+GET  /api/fs/dirs?path=&hidden=        nombres de carpetas para el explorador integrado (loopback)
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact

@@ -225,8 +225,11 @@ export class WorkspaceHost {
     await Promise.allSettled(this.entries().map((w) => this.close(w.id)));
   }
 
-  /** Every known workspace: recorded or with root sessions, the default one and the open ones. */
-  async list(): Promise<WorkspaceInfo[]> {
+  /**
+   * Every known workspace: recorded or with root sessions, the default one and the open ones.
+   * `archived` filters like `GET /api/sessions` (`all` by default).
+   */
+  async list(archived: "true" | "false" | "all" = "all"): Promise<WorkspaceInfo[]> {
     const known = new Map(this.options.catalog.workspaces().map((w) => [w.path, w]));
     const paths = new Set(known.keys());
     for (const w of this.open.values()) paths.add(w.path);
@@ -234,7 +237,15 @@ export class WorkspaceHost {
       ? await this.canonical(this.options.defaultWorkspace).catch(() => undefined)
       : undefined;
     if (fallback) paths.add(fallback);
-    return Promise.all([...paths].sort().map((path) => this.info(path, known.get(path))));
+    const infos = await Promise.all(
+      [...paths].sort().map((path) => this.info(path, known.get(path))),
+    );
+    return archived === "all" ? infos : infos.filter((w) => w.archived === (archived === "true"));
+  }
+
+  /** Whether a canonical workspace path is archived. */
+  archived(path: string): boolean {
+    return this.options.catalog.workspaces().some((w) => w.path === path && !!w.archivedAt);
   }
 
   /** The `WorkspaceInfo` of one canonical path. */
@@ -265,6 +276,7 @@ export class WorkspaceHost {
       exists,
       trusted,
       untrustedResources: untrusted,
+      archived: !!meta?.archivedAt,
       ...(meta?.lastOpenedAt !== undefined ? { lastOpenedAt: meta.lastOpenedAt } : {}),
     };
   }

@@ -18,9 +18,16 @@ export interface ServerStats {
 /** `/api/health` (unauthenticated), `/api/ready` and `/api/metrics`. */
 export function registerHealthRoutes(
   router: Router,
-  options: { version: string; remote: boolean; stats: () => ServerStats },
+  options: {
+    version: string;
+    remote: boolean;
+    stats: () => ServerStats;
+    /** A native folder dialog can be opened (detected once, lazily). */
+    nativePicker?: () => Promise<boolean>;
+    folderBrowser?: boolean;
+  },
 ): void {
-  router.get("/api/health", () => {
+  router.get("/api/health", async () => {
     const body: HealthInfo = {
       name: "alisio",
       version: options.version,
@@ -34,6 +41,8 @@ export function registerHealthRoutes(
         mcpApps: false,
         automation: false,
         remote: options.remote,
+        nativePicker: (await options.nativePicker?.()) ?? false,
+        folderBrowser: options.folderBrowser ?? false,
       },
     };
     return { body };

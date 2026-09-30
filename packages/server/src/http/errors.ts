@@ -25,6 +25,10 @@ export const STATUS: Record<ApiErrorCode, number> = {
   protocol_mismatch: 426,
   shutting_down: 503,
   stream_limit: 503,
+  workspace_archived: 409,
+  picker_busy: 409,
+  picker_unavailable: 503,
+  permission_denied: 403,
   internal: 500,
 };
 

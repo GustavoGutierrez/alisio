@@ -48,6 +48,16 @@
   right: 0;
 }
 
+/* Viewport-positioned (top/left set inline from the trigger): escapes scrolling containers. */
+.popover[data-fixed="true"] {
+  position: fixed;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  z-index: 60;
+}
+
 .group + .group {
   margin-top: 4px;
   padding-top: 4px;

@@ -7,6 +7,7 @@
 import type {
   BlobRef,
   CommandDescriptor,
+  HealthInfo,
   PermissionPresetId,
   ServerFrame,
   SessionContextUsage,
@@ -27,6 +28,7 @@ import {
   newSessionTarget,
   upsertSession,
   upsertWorkspace,
+  workspaceOpenMode,
 } from "./sessions.ts";
 import { readJson, readPref, writePref } from "./storage.ts";
 import {
@@ -99,6 +101,12 @@ let reloadingSidebar: Promise<void> | undefined;
 
 /** Asks the sidebar to show its "open a workspace" form (no existing workspace to use). */
 export const openWorkspaceRequest = signal(0);
+/** Server capabilities from `/api/health` (native folder dialog, folder browser). */
+export const health = signal<HealthInfo | undefined>(undefined);
+/** How "Open a workspace" asks for a folder on this server. */
+export const openMode = computed(() => workspaceOpenMode(health.value?.capabilities));
+/** The native folder dialog is open on the server's desktop. */
+export const picking = signal(false);
 
 export function insertIntoComposer(text: string): void {
   composerInsert.value = { text, n: (composerInsert.value?.n ?? 0) + 1 };
@@ -116,7 +124,8 @@ export async function reloadSidebar(): Promise<void> {
   reloadingSidebar ??= (async () => {
     try {
       const [workspaces, sessions] = await Promise.all([
-        api.workspaces(),
+        // Archived workspaces too: the sidebar hides them (and their sessions) unless asked.
+        api.workspaces("all"),
         api.sessions({ archived: "all" }),
       ]);
       sidebar.value = loadSidebar(sidebar.value, workspaces, sessions.items);
@@ -312,6 +321,12 @@ export async function init(): Promise<void> {
   setInterval(() => {
     now.value = Date.now();
   }, 30_000);
+  void api
+    .health()
+    .then((info) => {
+      health.value = info;
+    })
+    .catch(() => {});
   await reloadSidebar();
   if (auth.value !== "ok") return;
   const fromHash = sessionFromHash();
@@ -359,10 +374,52 @@ export async function addWorkspace(path: string): Promise<boolean> {
   try {
     const info = await api.addWorkspace(path.trim());
     sidebar.value = upsertWorkspace(sidebar.value, info);
+    // The web never grants trust: say why project resources are off (the badge stays too).
+    if (info.untrustedResources) showToast(t("sidebar.untrustedHint"));
     return true;
   } catch (error) {
     showToast(errorText(error));
     return false;
+  }
+}
+
+/**
+ * Asks the server to open its native folder dialog and adds the chosen folder. Resolves to
+ * `"added"`, `"cancelled"` or `"unavailable"` (the caller falls back to the in-app browser).
+ */
+export async function pickWorkspace(): Promise<"added" | "cancelled" | "unavailable"> {
+  if (picking.value) return "cancelled";
+  picking.value = true;
+  try {
+    const outcome = await api.pickFolder();
+    if ("cancelled" in outcome) return "cancelled";
+    return (await addWorkspace(outcome.path)) ? "added" : "cancelled";
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.code === "picker_unavailable") {
+      if (health.value)
+        health.value = {
+          ...health.value,
+          capabilities: { ...health.value.capabilities, nativePicker: false },
+        };
+      return "unavailable";
+    }
+    showToast(errorText(error));
+    return "cancelled";
+  } finally {
+    picking.value = false;
+  }
+}
+
+/** Pins, renames, archives or unarchives a workspace (sessions are never touched). */
+export async function patchWorkspace(
+  id: string,
+  patch: Parameters<ApiClient["patchWorkspace"]>[1],
+): Promise<void> {
+  try {
+    const info = await api.patchWorkspace(id, patch);
+    sidebar.value = upsertWorkspace(sidebar.value, info);
+  } catch (error) {
+    showToast(errorText(error));
   }
 }
 

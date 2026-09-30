@@ -547,6 +547,33 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `GET /api/workspaces` lo marca con `exists: false`; la web lo atenúa y desactiva sus sesiones
   nuevas. Verificado con tests de `WorkspaceHost` y de rutas; no se vigila el disco en vivo (el
   estado se refresca al recargar la lista o al fallar una apertura).
+- Workspaces archivados (migración v5 aditiva: `workspaces.archived_at` nullable).
+  `PATCH /api/workspaces/:wid {archived}` inserta la fila si el workspace solo se conocía por sus
+  sesiones (también si su carpeta ya no existe), cierra la aplicación inactiva y responde
+  `409 runs_active` con ejecuciones activas; `GET /api/workspaces` los oculta salvo con
+  `?archived=true|all` (misma semántica que `GET /api/sessions`); `POST /api/sessions` responde
+  `409 workspace_archived`; `POST /api/workspaces` con la misma carpeta lo desarchiva. Las sesiones
+  no se tocan y siguen legibles. La web tiene un menú de acciones por workspace (Fijar, Archivar /
+  Desarchivar) y **Mostrar archivados** también muestra los workspaces archivados, al final.
+- "Abrir un workspace" con diálogo nativo: `POST /api/workspaces/pick` abre en el escritorio del
+  servidor zenity/kdialog/yad (Linux/BSD, con `DISPLAY` o `WAYLAND_DISPLAY`), `osascript
+  choose folder` (macOS) o PowerShell `-STA` con `FolderBrowserDialog` y, como alternativa,
+  `Shell.Application.BrowseForFolder` (Windows), con `execFile` sin shell y argumentos fijos (título
+  y carpeta inicial validada como argumentos o variables de entorno). Un diálogo a la vez
+  (`409 picker_busy`), 5 minutos de límite (cuenta como cancelado), cancelación por código de salida
+  1/5/252, `-128` de osascript o salida vacía de PowerShell. `capabilities.nativePicker` y
+  `capabilities.folderBrowser` en `/api/health`; `ALISIO_NATIVE_PICKER=0` lo desactiva. Alternativa
+  garantizada en todos los sistemas: `GET /api/fs/dirs` (solo nombres de subdirectorios, migas de
+  pan construidas por el servidor, unidades `A:\`–`Z:\` en la raíz de Windows, `404`/`403` en
+  lugar de 500). Ambos solo con enlace loopback; con `--allow-remote` solo queda escribir la ruta.
+- Barra lateral: el botón de archivados y la búsqueda recalculan la lista en cada render (antes un
+  `useComputed` solo se actualizaba al cambiar la señal de la barra, no el estado local), y los
+  menús de acciones de sesión y de workspace se posicionan respecto a la ventana para que el
+  contenedor con scroll no los recorte. El explorador de carpetas muestra como máximo 2 000
+  subcarpetas por directorio (aviso de truncado); para directorios mayores queda "Escribir una ruta".
+- Control de parada del compositor rediseñado: cuadrado relleno con esquinas redondeadas y un arco
+  de progreso que gira alrededor del botón mientras la ejecución está activa (estático con
+  `prefers-reduced-motion`).
 - Sesiones (crear, listar, leer, modificar; sin borrado: se archivan), mensajes, eventos y
   ejecuciones paginados; prompts idempotentes por `requestId` (índice único de `runs`), texto
   encolado durante una ejecución, `session_busy`, `session_locked`, cancelación y compactación
@@ -1230,6 +1257,23 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   un socket que no drena), `tests/server-approvals.test.ts` (T-10) y `tests/server-shutdown.test.ts`
   (T-13, apagado llamado en proceso). `tests/store-web-metadata.test.ts` cubre los métodos nuevos
   de `SQLiteStore`.
+- Workspaces archivados: `tests/store-migration-v5.test.ts` (bases v4 y v3 migradas a v5,
+  idempotencia, workspace conocido solo por sesiones) y el bloque "archived workspaces" de
+  `tests/server-workspaces.test.ts` (filtro `archived`, cierre de la aplicación, `409 runs_active`
+  con un proveedor retenido, `409 workspace_archived`, carpeta desaparecida, desarchivado al
+  reabrir); la agrupación de la barra lateral en `tests/web-api-sessions.test.ts`.
+- Selector de carpetas: `tests/folder-picker.test.ts` prueba, en cualquier sistema anfitrión, la
+  búsqueda en `PATH` (delimitadores y `PATHEXT`), la elección de herramienta por plataforma, los
+  argumentos exactos de zenity/kdialog/yad/osascript/PowerShell, el análisis de la salida de los
+  tres sistemas (barra final de macOS, barras invertidas y raíces de unidad de Windows, CRLF) y la
+  detección de cancelación, además de migas de pan y carpeta superior con `path.win32` y
+  `path.posix`. `tests/server-folder-picker.test.ts` usa un selector falso inyectado (nunca abre un
+  diálogo real): ruta elegida, cancelado, `409 picker_busy`, `503 picker_unavailable`, desactivado
+  con `--allow-remote`, y el explorador (`404`, `403` con un directorio sin permisos, sin archivos,
+  cookie obligatoria). **El diálogo nativo no se abre en ninguna prueba automatizada**: en
+  Linux/GNOME solo se comprobó la detección (`zenity --version`) y el diálogo real queda pendiente de
+  verificación manual; macOS y Windows quedan cubiertos únicamente por los tests de construcción de
+  comandos y análisis de salida. El listado de unidades de Windows no se ha ejecutado en Windows.
 - T-12 (`tests/startup-no-server.test.ts`): ejecuta el código fuente de la CLI en Node con un hook
   `module.registerHooks` que registra cada módulo resuelto y comprueba que `--help`, `run`, el modo
   sin argumentos y `serve --help` no cargan `packages/server` ni `node:http`. Bun no tiene un hook

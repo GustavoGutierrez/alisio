@@ -506,6 +506,9 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 - **Criterios**:
   - Given sesiones legadas sin `updated_at`, When se listan, Then aparecen al final con tiempo "—".
   - Given una sesión en ejecución en otra pestaña, When cambia de estado, Then el indicador de la fila se actualiza por `session_status` sin recargar.
+  - Given un workspace sin ejecuciones, When se archiva desde su menú de acciones, Then desaparece con sus sesiones salvo con "Mostrar archivados", y "Nueva sesión" no lo elige.
+  - Given un servidor loopback con herramienta de diálogo, When se pulsa "Abrir un workspace", Then se abre el diálogo nativo del sistema y la carpeta elegida se añade (sin conceder confianza: un directorio no confiable muestra el aviso existente); sin diálogo, se abre el explorador de carpetas integrado; en remoto, solo la ruta escrita.
+- **Añadido después de la fase 3**: workspaces archivados (v5), menú de acciones por workspace (Fijar, Archivar/Desarchivar), selector nativo de carpetas con explorador integrado de respaldo, y control de parada rediseñado en el compositor (cuadrado relleno con arco de progreso animado, estático con `prefers-reduced-motion`).
 - **Fase**: 3.
 
 ### RF-12 — Explorador de archivos y cambios (artifacts)
@@ -609,14 +612,16 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 | GET | `/api/health` | — | `{name, version, protocolVersion, capabilities}` | — |
 | GET | `/api/ready` | — | `{ready, workspaces, activeRuns}` | 503 `shutting_down` |
 | GET | `/api/metrics` | — | `{activeRuns, queuedRuns, openWorkspaces, subscribers, pendingApprovals, sseDropped}` | — |
-| GET | `/api/workspaces` | — | `WorkspaceInfo[]` | — |
+| GET | `/api/workspaces` | `?archived=false\|true\|all` | `WorkspaceInfo[]` | 400 |
 | POST | `/api/workspaces` | `{path}` | `WorkspaceInfo` | 400, 404 `not_found`, 503 `workspace_limit` |
-| PATCH | `/api/workspaces/:wid` | `{label?, pinned?}` | `WorkspaceInfo` | 404 |
+| PATCH | `/api/workspaces/:wid` | `{label?, pinned?, archived?}` | `WorkspaceInfo` | 404, 409 `runs_active` |
+| POST | `/api/workspaces/pick` | `{start?}` | `{path}` · `{cancelled: true}` | 400, 409 `picker_busy`, 503 `picker_unavailable` |
+| GET | `/api/fs/dirs` | `?path=&hidden=` | `DirectoryListing` | 400, 403 `permission_denied`, 404, 503 `picker_unavailable` |
 | GET | `/api/workspaces/:wid/tree` | `?path=&cursor=` | `{entries: FileEntry[], next?}` | 403 `path_outside_workspace`, 404 |
 | GET | `/api/workspaces/:wid/file` | `?path=&maxBytes=` | contenido (`text/plain`/imagen) + `X-Truncated` | 403, 404, 413 |
 | GET | `/api/workspaces/:wid/diff` | `?path=` | `UiBlock` `{kind:"diff"}` | 403, 404, 409 `not_a_git_repo` |
 | GET | `/api/sessions` | `?workspace=&q=&archived=&limit=&cursor=` | `{items: SessionSummary[], next?}` | — |
-| POST | `/api/sessions` | `{workspace, model?, agent?, preset?, title?}` | `SessionDetail` | 404 (`not_found`, `workspace_missing`), 503 |
+| POST | `/api/sessions` | `{workspace, model?, agent?, preset?, title?}` | `SessionDetail` | 404 (`not_found`, `workspace_missing`), 409 `workspace_archived`, 503 |
 | GET | `/api/sessions/:sid` | — | `SessionDetail` (incluye `presets[]`, `status`, `children[]`) | 404 |
 | PATCH | `/api/sessions/:sid` | `{title?, model?, effort?, preset?, agent?, pinned?, archived?}` | `SessionDetail` | 400, 403 `capability_ceiling`, 409 `session_busy` (modelo durante run) |
 | GET | `/api/sessions/:sid/messages` | `?before=<seq>&limit=50&includeCompacted=` | `{items: {seq, message, compacted}[], hasMore}` | 404 |
@@ -654,6 +659,9 @@ Notas:
 
 - **Implementado en fase 2**: `health`, `ready`, `metrics`, `workspaces` (GET/POST/PATCH), `sessions` (GET lista, POST → **201**, GET, PATCH), `messages` (`before`/`after`/`limit`/`includeCompacted`), `events` (`after`/`limit`/`types`), `runs`, `prompts`, `cancel`, `compact`, `approvals` (GET/POST), `interactions/:iid` y `GET /api/events` (§8.5). El resto de rutas llega en las fases 3–5 (`commands`, `context`, `export` y `changes` no estaban asignadas a ninguna unidad de la fase 2).
 - `POST /api/workspaces` exige una ruta absoluta (400 si es relativa, 404 si no existe); `POST /api/sessions` acepta en `workspace` un `:wid` o una ruta absoluta. `PATCH /api/workspaces/:wid` acepta `label: null` para borrar la etiqueta.
+- **Workspaces archivados (v5)**: `GET /api/workspaces` acepta `archived` = `false` (por defecto) | `true` | `all`, igual que `GET /api/sessions`; `WorkspaceInfo.archived` es obligatorio. `PATCH {archived: true}` inserta la fila de `workspaces` si el workspace solo se conocía por `DISTINCT sessions.workspace` (también con la carpeta desaparecida), cierra su `Application` si está abierta y responde 409 `runs_active` si el `RunScheduler` tiene ejecuciones o trabajo exclusivo del workspace. Las sesiones no se tocan y siguen legibles. `POST /api/sessions` en un workspace archivado responde 409 `workspace_archived` (`details: {path}`); `POST /api/workspaces` con esa carpeta lo desarchiva (abrirla es una petición explícita del usuario). La web pide `?archived=all` y oculta los archivados (y sus sesiones) salvo con "Mostrar archivados".
+- **Selector de carpetas**: `POST /api/workspaces/pick` abre el diálogo nativo del sistema en el escritorio del servidor (§11) y devuelve la ruta absoluta elegida (normalizada con `node:path` de la plataforma) o `{cancelled: true}`; `start` opcional debe ser un directorio absoluto existente (400 si no). Estrategia por plataforma, elegida por una función pura: Linux/BSD → `zenity --file-selection --directory`, si no `kdialog --getexistingdirectory`, si no `yad --file --directory` (primero encontrado en `PATH`, recorrido con `path.delimiter`; exige `DISPLAY` o `WAYLAND_DISPLAY`); macOS → `osascript` con `choose folder` (título y carpeta inicial como `argv`, nunca interpolados); Windows → `powershell.exe` (o `pwsh`, o `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`) `-NoProfile -STA -Command <script fijo>` con `FolderBrowserDialog` y `Shell.Application.BrowseForFolder` como alternativa, salida UTF-8, título/carpeta por variables de entorno. Cancelado = código de salida 1 (zenity, kdialog, yad, osascript), 5 (tiempo de zenity), 252 (yad), `-128` en stderr de osascript, o salida vacía (PowerShell), y también el límite de 5 min (se mata el proceso). Un diálogo a la vez (409 `picker_busy`); un fallo al lanzarlo es 503 `picker_unavailable`. `ALISIO_NATIVE_PICKER=0` lo desactiva. El proceso se aborta al apagar el servidor.
+- **Explorador de carpetas** (alternativa garantizada en todo sistema): `GET /api/fs/dirs` lista solo nombres de subdirectorios (y symlinks a directorios) de `path` (por defecto `os.homedir()`), ordenados, sin los que empiezan por `.` salvo `hidden=true`, máximo 2 000 (`truncated`). `DirectoryListing = {path, parent?, segments: {name, path}[], entries: {name, path, hidden}[], home, separator, truncated?}`: las migas de pan y el padre los construye el servidor con `path.win32`/`path.posix`, así la web no asume separadores. En Windows, `path=""` es la lista de unidades (`A:\`–`Z:\` que existen) y es el padre de cada raíz de unidad. `ENOENT`/`ENOTDIR` → 404 `not_found`, `EACCES`/`EPERM` → 403 `permission_denied`, nunca 500.
 - `GET /api/sessions`: `archived` = `false` (por defecto) | `true` | `all`; orden: fijadas primero y luego `updatedAt` descendente (sin `updatedAt` al final); `cursor`/`next` son desplazamientos opacos. La lista no abre ninguna aplicación de workspace.
 - `POST /api/sessions/:sid/prompts` también responde 409 `session_busy` cuando la sesión tiene un run en cola del `RunScheduler` o una compactación en curso (el texto solo se encola con un run **en ejecución**) y para sesiones hijas (las conduce su sesión padre).
 - En `GET /api/sessions/:sid/events`, cada `RunEvent` lleva `seq` = `events.seq` global (el contador por emisor no se persiste), `eventId` igual, y `timestamp` = `created_at`.
@@ -674,8 +682,11 @@ type ApiErrorCode =
   | "workspace_limit" | "workspace_missing" | "payload_too_large" | "unsupported_media_type"
   | "path_outside_workspace" | "not_a_git_repo" | "approval_resolved"
   | "capability_ceiling" | "not_manageable" | "mcp_not_permitted" | "runs_active"
-  | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "stream_limit" | "internal";
+  | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "stream_limit"
+  | "workspace_archived" | "picker_busy" | "picker_unavailable" | "permission_denied" | "internal";
 ```
+
+`workspace_archived` (409, `details: {path}`), `picker_busy` (409), `picker_unavailable` (503: sin diálogo nativo, fallo al lanzarlo, o selector/explorador desactivados por enlace no loopback) y `permission_denied` (403, `details: {path}`: el usuario del servidor no puede leer ese directorio) se **añadieron con los workspaces archivados y el selector de carpetas**.
 
 `stream_limit` (503, **añadido en fase 2**): más de `maxStreams` (16) streams SSE a la vez.
 
@@ -876,10 +887,13 @@ Reglas:
   "capabilities": {
     "sse": true, "websocket": false, "multiWorkspace": true, "attachments": true,
     "uiBlocks": ["table","key-value","tree","code","markdown","diff","terminal","json","test-results","progress","mermaid","math"],
-    "mcpApps": false, "automation": false, "remote": false
+    "mcpApps": false, "automation": false, "remote": false,
+    "nativePicker": true, "folderBrowser": true
   }
 }
 ```
+
+`nativePicker` y `folderBrowser` son opcionales en `HealthInfo` (aditivos): `false` con `remote: true`; `nativePicker` también es `false` sin herramienta de diálogo (se detecta una vez, sin lanzar procesos). La web elige: diálogo nativo → explorador → ruta escrita.
 
 - La web compara `protocolVersion` en `hello`; si difiere, muestra "Reload required" (los assets los sirve el mismo servidor, por lo que solo ocurre tras actualizar con una pestaña abierta).
 - Frames `t` desconocidos se ignoran en el cliente; kinds `UiBlock` desconocidos usan el fallback.
@@ -943,6 +957,15 @@ CREATE INDEX IF NOT EXISTS events_session ON events(session, seq);
 CREATE INDEX IF NOT EXISTS messages_session ON messages(session, seq);
 INSERT OR IGNORE INTO schema_migrations VALUES(4);
 ```
+
+### 9.1b Migración v5 (aditiva): workspaces archivados
+
+```sql
+ALTER TABLE workspaces ADD COLUMN archived_at INTEGER;   -- guarded by PRAGMA table_info
+INSERT OR IGNORE INTO schema_migrations VALUES(5);
+```
+
+Mismo patrón (`if (!has(5))` en una transacción). `SQLiteStore.workspaces()` devuelve `archivedAt?` y `recordWorkspace(path, {archived})` hace upsert y escribe `Date.now()` o `NULL`. Una base v3 pasa por v4 y v5 al abrirse; un binario v4 ignora la columna. Verificado en `tests/store-migration-v5.test.ts`.
 
 ### 9.2 Reglas de compatibilidad
 
@@ -1153,6 +1176,8 @@ export function loaderFor(kind: string): Loader { return registry[kind] ?? (() =
 | Subidas maliciosas | `POST /api/blobs` | Límite 10 MB, lista blanca PNG/JPEG/GIF/WebP con bytes mágicos, `X-Content-Type-Options: nosniff`, servido con el mime almacenado y `Content-Disposition: inline` solo para imágenes. |
 | Plugins maliciosos | código de plugin | **Los plugins no están aislados** (`AGENTS.md`); la web lo indica en Settings → Plugins. Los plugins de proyecto solo cargan en workspaces confiables (`trust.ts`). |
 | MCP Apps (fase 6) | HTML de terceros | iframe `sandbox="allow-scripts"` sin `allow-same-origin`, servido desde ruta dedicada con CSP propia, puente `postMessage` con lista blanca, llamadas a tools con aprobación por defecto. |
+| Selector nativo de carpetas | `POST /api/workspaces/pick` | El diálogo se abre en el escritorio de la máquina del servidor, así que solo existe con enlace loopback (con `--allow-remote` responde 503 y `nativePicker: false`). `execFile` sin shell con ejecutable resuelto por ruta absoluta y argumentos fijos; las únicas entradas son el título (constante) y una carpeta inicial validada (absoluta y existente) pasada como argumento separado (`--filename=`, `argv` de AppleScript) o variable de entorno (PowerShell), nunca interpolada en un script. Un diálogo a la vez y límite de 5 min. Requiere cookie y `Origin`, como toda escritura. |
+| Listado de directorios | `GET /api/fs/dirs` | Expone nombres de directorios que puede leer el usuario del servidor (fuera de cualquier workspace): la misma confianza que la CLI en loopback de ese usuario. Solo nombres, nunca archivos, tamaños ni contenidos; autenticado; solo en loopback (503 remoto); errores del sistema de archivos como 403/404, nunca 500 ni eco de detalles del sistema. |
 | DoS local | muchos streams/prompts | Máximo 16 streams SSE, 8 sesiones por stream, cuerpos JSON ≤ 1 MB, colas acotadas, `maxConcurrentRuns`. |
 
 ### 11.2 Cabeceras por defecto

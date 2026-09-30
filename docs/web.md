@@ -52,8 +52,9 @@ The page has a sidebar on the left and the open session on the right.
 **Workspaces**, each folder lists its sessions, pinned first and then the most recently used, with a
 relative time ("4 min"). A dot before a title shows a session that is running, waiting for you, in
 use by another process or whose last run failed. The icons next to the heading search sessions
-(also `Ctrl+K` / `Cmd+K`), show archived sessions and open another workspace by its absolute path.
-Hover a session for **Pin** and **Archive**, or a folder for a new session inside it. **Settings**
+(also `Ctrl+K` / `Cmd+K`), show archived sessions and workspaces, and open another workspace
+(see [Opening a workspace](#opening-a-workspace)). Hover a session for **Pin** and **Archive**, or a
+folder for a new session inside it and its actions menu (**Pin**, **Archive** / **Unarchive**). **Settings**
 sits at the bottom; the panel icon collapses the sidebar to a narrow rail. Below 900 px the sidebar
 becomes a drawer opened from the header.
 
@@ -176,6 +177,9 @@ The server is designed for one user on one machine:
   cancelled or after 10 minutes, the answer is **deny**.
 - Plugins are not sandboxed: a trusted project's plugins run inside the server process with its
   operating-system permissions, exactly as in the terminal.
+- The native folder dialog and the in-app folder browser exist only on loopback. The browser lists
+  directory names (never files or contents) that the server's user can read, the same trust as
+  that user's terminal; with `--allow-remote` both are off and only a typed path is accepted.
 
 ## Workspaces and trust
 
@@ -190,6 +194,34 @@ found": its sessions remain readable, but you cannot start new sessions or send 
 server answers `404 workspace_missing`). **New session** uses the current session's workspace, or
 the most recently used one that still exists; with none, it asks you to open a workspace. Folders
 with the same name show a short parent path next to it, and the full path on hover.
+
+Archive a workspace from its actions menu to hide it and its sessions from the sidebar; **Show
+archived** brings both back (archived workspaces are listed last). Archiving keeps every session,
+which stays readable, closes the workspace's idle application and is refused with
+`409 runs_active` while a run is active. New sessions in an archived workspace are refused with
+`409 workspace_archived`; **Unarchive** it, or open the same folder again, to use it. This is also
+the way to hide a workspace whose folder no longer exists.
+
+### Opening a workspace
+
+The folder button next to **Workspaces** (and **New session** when no workspace exists yet) asks
+for a folder in the best way the server supports:
+
+1. **Native folder dialog.** Browsers never give a page the absolute path of a folder, so the
+   server opens the operating system's own dialog on its desktop and uses the folder you pick
+   (a note in the sidebar says so while it is open; only one dialog at a time).
+   - **Linux** (and BSD): `zenity`, else `kdialog`, else `yad`, found on `PATH`; it needs a
+     desktop session (`DISPLAY` or `WAYLAND_DISPLAY`).
+   - **macOS**: `osascript` with AppleScript `choose folder`.
+   - **Windows**: Windows PowerShell (or `pwsh`) with the WinForms folder dialog, and the Shell
+     folder browser as a fallback.
+2. **In-app folder browser** when there is no dialog tool (headless machine, SSH session,
+   `ALISIO_NATIVE_PICKER=0`): a window that lists folder names only, starting at your home folder,
+   with breadcrumbs, a parent-folder button and **Show hidden folders**. On Windows its top level
+   lists the drives.
+3. **Type a path** is always available as a link, and is the only option when the server is bound
+   for remote access (`--allow-remote`), because a dialog or folder listing would show the server
+   machine rather than yours.
 
 The web never grants project trust. A directory whose `.alisio` configuration you have not trusted
 from the terminal opens without its project resources (plugins, skills, prompts, configuration) and
@@ -224,7 +256,10 @@ The browser talks to JSON routes under `/api` and to one Server-Sent Events stre
 
 ```text
 GET  /api/health                       unauthenticated: name, version, protocolVersion, capabilities
-GET  /api/workspaces                   POST /api/workspaces {path}   PATCH /api/workspaces/:wid
+GET  /api/workspaces?archived=false|true|all   POST /api/workspaces {path}
+PATCH /api/workspaces/:wid {label?, pinned?, archived?}
+POST /api/workspaces/pick {start?}     native folder dialog → {path} | {cancelled: true} (loopback)
+GET  /api/fs/dirs?path=&hidden=        folder names for the in-app browser (loopback)
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact

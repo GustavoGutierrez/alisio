@@ -76,7 +76,7 @@ describe("SQLiteStore v4 migration", () => {
       const versions = store.db
         .prepare("SELECT version FROM schema_migrations ORDER BY version")
         .all() as { version: number }[];
-      expect(versions.map((v) => v.version)).toEqual([1, 2, 3, 4]);
+      expect(versions.map((v) => v.version)).toEqual([1, 2, 3, 4, 5]);
       expect(columns(store, "runs")).toEqual(
         expect.arrayContaining(["id", "session", "status", "request_id", "owner_pid", "usage"]),
       );
