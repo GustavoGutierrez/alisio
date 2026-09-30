@@ -29,6 +29,9 @@ importers:
       '@alisio/sdk':
         specifier: workspace:*
         version: link:packages/sdk
+      '@alisio/server':
+        specifier: workspace:*
+        version: link:packages/server
       '@biomejs/biome':
         specifier: 2.5.14
         version: 2.5.14
@@ -143,6 +146,15 @@ importers:
         version: link:../sdk
 
   packages/sdk: {}
+
+  packages/server:
+    dependencies:
+      '@alisio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@alisio/sdk':
+        specifier: workspace:*
+        version: link:../sdk
 
 packages:
 

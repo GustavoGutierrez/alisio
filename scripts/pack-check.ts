@@ -21,6 +21,7 @@ const packages = [
   "plugin-memory",
   "plugin-openai-compatible",
   "plugin-subagents",
+  "server",
   "cli",
 ];
 const rows: string[] = [];
@@ -36,12 +37,12 @@ try {
     const manifest = JSON.parse(
       execFileSync("tar", ["-xzOf", path, "package/package.json"]).toString(),
     );
-    for (const file of files)
-      assert.match(
-        file,
-        /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts))$/,
-        `${name}: unexpected file ${file}`,
-      );
+    // The server also ships the web UI build under dist/web (copied there by the web build).
+    const allowed =
+      name === "server"
+        ? /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts)|dist\/web\/.+)$/
+        : /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts))$/;
+    for (const file of files) assert.match(file, allowed, `${name}: unexpected file ${file}`);
     for (const required of ["package/package.json", "package/README.md", "package/LICENSE"])
       assert.ok(files.includes(required), `${name}: missing ${required}`);
     const text = JSON.stringify(manifest);

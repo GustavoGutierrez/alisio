@@ -31,6 +31,7 @@
     "@alisio/plugin-openai-compatible": "workspace:*",
     "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
+    "@alisio/server": "workspace:*",
     "@alisio/alisio-code": "workspace:*",
     "@biomejs/biome": "2.5.14",
     "@changesets/cli": "3.0.3",

@@ -1000,6 +1000,8 @@ export type ApiErrorCode =
   | "provider_unavailable"
   | "protocol_mismatch"
   | "shutting_down"
+  /** Too many concurrent event streams (SSE) for this server. */
+  | "stream_limit"
   | "internal";
 /** Body of every non-2xx web API response. */
 export interface ApiError {
