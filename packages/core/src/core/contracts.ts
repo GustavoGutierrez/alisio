@@ -15,6 +15,10 @@ export interface Session {
   options?: Record<string, unknown>;
   createdAt?: number;
   updatedAt?: number;
+  /** Root sessions pinned in web clients (v4). */
+  pinned?: boolean;
+  /** When a root session was archived in web clients (v4); absent when not archived. */
+  archivedAt?: number;
 }
 export interface ChildSessionRecord {
   id?: string;

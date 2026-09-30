@@ -155,6 +155,8 @@ export class SQLiteStore implements SessionStore {
       ...(r.options ? { options: JSON.parse(String(r.options)) } : {}),
       ...(r.created_at ? { createdAt: Number(r.created_at) } : {}),
       ...(r.updated_at ? { updatedAt: Number(r.updated_at) } : {}),
+      ...(r.pinned ? { pinned: true } : {}),
+      ...(r.archived_at ? { archivedAt: Number(r.archived_at) } : {}),
     };
   }
   get(id: string): Session {
@@ -532,6 +534,98 @@ export class SQLiteStore implements SessionStore {
       ),
       hasMore: rows.length > limit,
     };
+  }
+  /**
+   * Known workspaces for web clients: the workspaces of root sessions plus the ones recorded with
+   * `recordWorkspace` (v4 `workspaces` table), with their UI metadata and root-session count.
+   */
+  workspaces(): Array<{
+    path: string;
+    label?: string;
+    pinned: boolean;
+    lastOpenedAt?: number;
+    sessions: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT p.path, w.label, COALESCE(w.pinned, 0) AS pinned, w.last_opened_at,
+           (SELECT count(*) FROM sessions s WHERE s.workspace=p.path AND s.parent_id IS NULL) AS sessions
+         FROM (SELECT workspace AS path FROM sessions WHERE parent_id IS NULL AND workspace IS NOT NULL
+               UNION SELECT path FROM workspaces) p
+         LEFT JOIN workspaces w ON w.path=p.path
+         ORDER BY p.path`,
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map((r) => ({
+      path: String(r.path),
+      ...(r.label != null ? { label: String(r.label) } : {}),
+      pinned: !!r.pinned,
+      ...(r.last_opened_at != null ? { lastOpenedAt: Number(r.last_opened_at) } : {}),
+      sessions: Number(r.sessions ?? 0),
+    }));
+  }
+  /** Records a workspace and patches its UI metadata (`label: null` clears the label). */
+  recordWorkspace(
+    path: string,
+    patch: { label?: string | null; pinned?: boolean; lastOpenedAt?: number } = {},
+  ): void {
+    this.db.transaction(() => {
+      this.db.prepare("INSERT OR IGNORE INTO workspaces(path) VALUES(?)").run(path);
+      if (patch.label !== undefined)
+        this.db.prepare("UPDATE workspaces SET label=? WHERE path=?").run(patch.label, path);
+      if (patch.pinned !== undefined)
+        this.db
+          .prepare("UPDATE workspaces SET pinned=? WHERE path=?")
+          .run(patch.pinned ? 1 : 0, path);
+      if (patch.lastOpenedAt !== undefined)
+        this.db
+          .prepare("UPDATE workspaces SET last_opened_at=? WHERE path=?")
+          .run(patch.lastOpenedAt, path);
+    });
+  }
+  /**
+   * Patches web-facing session metadata: title, pin, archive flag and `options` (shallow-merged
+   * into the stored options object). Does not touch the run-relevant columns.
+   */
+  updateSessionMeta(
+    id: string,
+    patch: {
+      title?: string | null;
+      pinned?: boolean;
+      archived?: boolean;
+      options?: Record<string, unknown>;
+    },
+  ): void {
+    this.db.transaction(() => {
+      const current = this.get(id);
+      if (patch.title !== undefined)
+        this.db.prepare("UPDATE sessions SET title=? WHERE id=?").run(patch.title, id);
+      if (patch.pinned !== undefined)
+        this.db.prepare("UPDATE sessions SET pinned=? WHERE id=?").run(patch.pinned ? 1 : 0, id);
+      if (patch.archived !== undefined)
+        this.db
+          .prepare("UPDATE sessions SET archived_at=? WHERE id=?")
+          .run(patch.archived ? Date.now() : null, id);
+      if (patch.options)
+        this.db
+          .prepare("UPDATE sessions SET options=? WHERE id=?")
+          .run(JSON.stringify({ ...(current.options ?? {}), ...patch.options }), id);
+    });
+  }
+  /** `MAX(events.seq)` of a session (0 without events): the web snapshot cursor. */
+  lastEventId(session: string): number {
+    const row = this.db
+      .prepare("SELECT MAX(seq) AS seq FROM events WHERE session=?")
+      .get(session) as { seq: number | null } | undefined;
+    return Number(row?.seq ?? 0);
+  }
+  /** The pid of another live process holding the session lock, if any. */
+  lockedBy(id: string): number | undefined {
+    const row = this.db.prepare("SELECT locked_pid FROM sessions WHERE id=?").get(id) as
+      | { locked_pid: number | null }
+      | undefined;
+    const pid = row?.locked_pid;
+    return pid && pid !== process.pid && alive(pid) ? pid : undefined;
   }
   getState(plugin: string, key: string): unknown {
     const row = this.db
