@@ -64,31 +64,3 @@
   color: var(--muted);
   margin-left: 6px;
 }
-
-.add {
-  color: var(--ok);
-}
-
-.del {
-  color: var(--danger);
-}
-
-.hunk {
-  color: var(--accent);
-}
-
-.passed {
-  color: var(--ok);
-}
-
-.failed {
-  color: var(--danger);
-}
-
-.status {
-  display: flex;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 12.5px;
-  margin: 4px 0;
-}

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { prettyArgs, toolLabel, toolPath, toolSummary } from "../packages/web/src/util/tools.ts";
+import {
+  liveCommand,
+  prettyArgs,
+  toolLabel,
+  toolPath,
+  toolSummary,
+} from "../packages/web/src/util/tools.ts";
 
 describe("tool rows", () => {
   it("names tools like the reference (Read, Shell) and humanizes unknown ones", () => {
@@ -23,5 +29,14 @@ describe("tool rows", () => {
     expect(toolPath('{"command":"ls"}')).toBeUndefined();
     expect(prettyArgs('{"a":1}')).toBe('{\n  "a": 1\n}');
     expect(prettyArgs("raw")).toBe("raw");
+  });
+
+  it("builds the live terminal command line of shell-like calls only", () => {
+    expect(liveCommand({ name: "shell", arguments: '{"command":"ls -la"}' })).toBe("ls -la");
+    expect(
+      liveCommand({ name: "run_process", arguments: '{"command":"git","args":["log","-1"]}' }),
+    ).toBe("git log -1");
+    expect(liveCommand({ name: "read_file", arguments: '{"path":"a"}' })).toBeUndefined();
+    expect(liveCommand({ name: "shell", arguments: "{not json" })).toBe("");
   });
 });

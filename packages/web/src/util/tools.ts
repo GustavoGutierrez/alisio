@@ -85,3 +85,17 @@ export function prettyArgs(args: string): string {
     return args;
   }
 }
+
+/** The command line of a shell-like call (`shell`, `run_process`) for its live terminal view. */
+export function liveCommand(tool: { name: string; arguments: string }): string | undefined {
+  if (tool.name !== "shell" && tool.name !== "run_process" && tool.name !== "bash")
+    return undefined;
+  try {
+    const record = JSON.parse(tool.arguments) as Record<string, unknown>;
+    const command = typeof record.command === "string" ? record.command : "";
+    const args = Array.isArray(record.args) ? record.args.filter((a) => typeof a === "string") : [];
+    return [command, ...args].filter(Boolean).join(" ");
+  } catch {
+    return "";
+  }
+}

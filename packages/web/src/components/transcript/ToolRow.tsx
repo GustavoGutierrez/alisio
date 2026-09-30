@@ -4,7 +4,7 @@ import { t } from "../../i18n/index.ts";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
 import { density } from "../../store/prefs.ts";
 import type { ToolState } from "../../store/transcript.ts";
-import { prettyArgs, toolLabel, toolPath, toolSummary } from "../../util/tools.ts";
+import { liveCommand, prettyArgs, toolLabel, toolPath, toolSummary } from "../../util/tools.ts";
 import { Icon, type IconName } from "../icons.tsx";
 import styles from "./transcript.module.css";
 
@@ -22,25 +22,40 @@ const ICONS: Record<string, IconName> = {
   ask_user_question: "question",
 };
 
+function Part({ part }: { part: ToolResult["content"][number] }) {
+  if (part.type === "text") return <pre class={styles.output}>{part.text}</pre>;
+  if (part.type === "ui") return <RendererHost block={part.block} />;
+  return <img class={styles.image} src={`data:${part.mimeType};base64,${part.data}`} alt="" />;
+}
+
+/**
+ * A tool result: rich parts (ui blocks, images) first; when there are any, the text parts (what
+ * the model saw) fold under "Raw output".
+ */
 function ResultView({ result }: { result: ToolResult }) {
+  const rich = result.content.filter((part) => part.type !== "text");
+  const text = result.content.filter((part) => part.type === "text");
+  if (!rich.length)
+    return (
+      <>
+        {text.map((part, i) => (
+          <Part key={i} part={part} />
+        ))}
+      </>
+    );
   return (
     <>
-      {result.content.map((part, i) =>
-        part.type === "text" ? (
-          <pre key={i} class={styles.output}>
-            {part.text}
-          </pre>
-        ) : part.type === "ui" ? (
-          <RendererHost key={i} block={part.block} />
-        ) : (
-          <img
-            key={i}
-            class={styles.image}
-            src={`data:${part.mimeType};base64,${part.data}`}
-            alt=""
-          />
-        ),
-      )}
+      {rich.map((part, i) => (
+        <Part key={i} part={part} />
+      ))}
+      {text.length ? (
+        <details class={styles.raw}>
+          <summary>{t("tool.rawOutput")}</summary>
+          {text.map((part, i) => (
+            <Part key={i} part={part} />
+          ))}
+        </details>
+      ) : null}
     </>
   );
 }
@@ -97,6 +112,11 @@ export function ToolRow({ tool }: { tool: ToolState }) {
               <ResultView result={tool.result} />
               {tool.truncated ? <p class={styles.hint}>{t("tool.truncated")}</p> : null}
             </>
+          ) : tool.tail && liveCommand(tool) !== undefined ? (
+            <RendererHost
+              block={{ kind: "terminal", command: liveCommand(tool), output: tool.tail }}
+              live={tool.status === "running"}
+            />
           ) : tool.tail ? (
             <pre class={styles.output}>{tool.tail}</pre>
           ) : tool.preview ? (

@@ -1,0 +1,61 @@
+.block {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.count {
+  font-family: var(--mono);
+}
+
+.steps {
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0 3px 2px;
+}
+
+.mark {
+  width: 14px;
+  color: var(--faint);
+  text-align: center;
+}
+
+[data-status="completed"] > .mark {
+  color: var(--ok);
+}
+
+[data-status="failed"] > .mark {
+  color: var(--danger);
+}
+
+[data-status="running"] > .mark {
+  color: var(--accent);
+}
+
+[data-status="pending"] > .label,
+[data-status="cancelled"] > .label {
+  color: var(--muted);
+}
+
+.detail {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 12px;
+}

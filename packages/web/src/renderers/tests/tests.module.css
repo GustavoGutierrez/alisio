@@ -1,0 +1,108 @@
+.block {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.framework {
+  font-weight: 600;
+}
+
+.passed,
+[data-status="passed"] > .mark {
+  color: var(--ok);
+}
+
+.failed,
+[data-status="failed"] > .mark,
+[data-status="failed"] > .name {
+  color: var(--danger);
+}
+
+.filter {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filter[aria-pressed="true"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.body {
+  max-height: 520px;
+  overflow: auto;
+  padding: 4px 10px 8px;
+}
+
+.suiteName {
+  margin: 8px 0 2px;
+  font-weight: 600;
+}
+
+.cases {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cases li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.mark {
+  width: 14px;
+  color: var(--faint);
+}
+
+.file,
+.time {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.file {
+  margin-left: 6px;
+}
+
+.error {
+  flex-basis: 100%;
+  margin-left: 22px;
+}
+
+.error summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.error pre {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

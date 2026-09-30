@@ -317,3 +317,13 @@ button.processHead:hover,
   color: var(--text);
   box-shadow: var(--shadow);
 }
+
+.raw {
+  margin: 4px 0 6px;
+}
+
+.raw summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12.5px;
+}
