@@ -59,7 +59,7 @@ Añadir a Alisio un **modo servidor local** (`alisio serve`) y una **interfaz we
 |---|---|---|---|
 | `@alisio-core` | `@alisio/core` (`packages/core`) | Nombre incorrecto en v3 | Usar `@alisio/core`. |
 | `@alisio/plugin-ui` como backend web | — | Un plugin no puede importar core | Paquetes `@alisio/server` y `@alisio/web` (ADR-02). |
-| `packages/protocol`, `packages/mcp` | Tipos en `packages/sdk/src/index.ts`; MCP en `packages/core/src/mcp/` | Paquetes innecesarios | Tipos de protocolo aditivos en `@alisio/sdk`; validación zod en `@alisio/server`. |
+| `packages/protocol`, `packages/mcp` | Tipos en `packages/sdk/src/index.ts`; MCP en `packages/core/src/mcp/` | Paquetes innecesarios | Tipos de protocolo aditivos en `@alisio/sdk`; validación propia (sin dependencias) en `@alisio/server`. |
 | Host de herramientas MCP | Cliente MCP stdio + Streamable HTTP (`mcp/connector.ts`), resultados ricos (`mcp/rich.ts`) | Alisio no es servidor MCP | Se elimina. MCP Apps (host de UI) en fase 6. |
 | Estado en `~/.config/alisio/state.db` | `$ALISIO_STATE_HOME` o `$XDG_STATE_HOME/alisio` o `~/.local/state/alisio/sessions.sqlite` (`config.ts` `stateHome()`, `application.ts`) | Ruta incorrecta en v3 | Se reutiliza `sessions.sqlite`. |
 | `AlisioDatabaseService` | `SQLiteStore` (`runtime/store.ts`) sobre `openDatabase` (`runtime/sqlite.ts`), WAL, `busy_timeout=5000`, migraciones solo hacia delante hasta v3 | — | Migración v4 aditiva en el mismo `SQLiteStore`. |
@@ -269,11 +269,12 @@ packages/
 │       ├── index.ts                      # startServer(options): Promise<RunningServer>
 │       ├── http/{router,errors,body,static}.ts
 │       ├── auth/{token,guard}.ts
-│       ├── sse/{hub,snapshot,coalesce}.ts
-│       ├── host/{workspace-host,run-scheduler}.ts
+│       ├── sse/{hub,inflight}.ts         # hub: snapshot-then-deltas, coalescencia, backpressure
+│       ├── host/{workspace-host,run-scheduler,sessions,presets}.ts
 │       ├── bridges/{approval-bridge,interaction-bridge}.ts
-│       ├── routes/{health,workspaces,sessions,prompts,approvals,commands,files,blobs,management}.ts
-│       ├── schemas.ts                    # zod de peticiones
+│       ├── routes/{health,workspaces,sessions,prompts,events,approvals}.ts   # fase 2
+│       ├── routes/{commands,files,blobs,management}.ts                      # fases 3–5
+│       ├── schemas.ts                    # validación propia de peticiones (sin zod: cero dependencias)
 │       └── log.ts                        # logs estructurados JSON con correlationId
 ├── web/                                  # (nuevo) @alisio/web, "private": true
 │   ├── package.json · vite.config.ts · tsconfig.json · index.html
@@ -599,7 +600,7 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 - Cabecera opcional `X-Request-Id` (≤ 64 caracteres `[A-Za-z0-9_-]`); si falta, el servidor genera uno. Se devuelve siempre en `X-Request-Id` y se usa como `correlationId`.
 - Todas las rutas exigen cookie de sesión válida salvo `GET /` con `?token=`, `GET /api/health` y assets estáticos.
 - Todas las peticiones con efecto (`POST`, `PATCH`, `PUT`, `DELETE`) exigen `Content-Type: application/json` (salvo `POST /api/blobs`) y `Origin` igual al origen del servidor.
-- Validación con zod en `packages/server/src/schemas.ts`; error 400 `validation_failed` con `details` (rutas de campos, sin eco de valores).
+- Validación en `packages/server/src/schemas.ts` con validadores propios (el servidor no añade dependencias de runtime; **corregido en fase 2**, antes decía zod); claves desconocidas y tipos incorrectos dan 400 `validation_failed` con `details: {fields: [...]}` (nombres de campo, sin eco de valores).
 
 ### 8.2 Rutas REST
 
@@ -651,6 +652,11 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 
 Notas:
 
+- **Implementado en fase 2**: `health`, `ready`, `metrics`, `workspaces` (GET/POST/PATCH), `sessions` (GET lista, POST → **201**, GET, PATCH), `messages` (`before`/`after`/`limit`/`includeCompacted`), `events` (`after`/`limit`/`types`), `runs`, `prompts`, `cancel`, `compact`, `approvals` (GET/POST), `interactions/:iid` y `GET /api/events` (§8.5). El resto de rutas llega en las fases 3–5 (`commands`, `context`, `export` y `changes` no estaban asignadas a ninguna unidad de la fase 2).
+- `POST /api/workspaces` exige una ruta absoluta (400 si es relativa, 404 si no existe); `POST /api/sessions` acepta en `workspace` un `:wid` o una ruta absoluta. `PATCH /api/workspaces/:wid` acepta `label: null` para borrar la etiqueta.
+- `GET /api/sessions`: `archived` = `false` (por defecto) | `true` | `all`; orden: fijadas primero y luego `updatedAt` descendente (sin `updatedAt` al final); `cursor`/`next` son desplazamientos opacos. La lista no abre ninguna aplicación de workspace.
+- `POST /api/sessions/:sid/prompts` también responde 409 `session_busy` cuando la sesión tiene un run en cola del `RunScheduler` o una compactación en curso (el texto solo se encola con un run **en ejecución**) y para sesiones hijas (las conduce su sesión padre).
+- En `GET /api/sessions/:sid/events`, cada `RunEvent` lleva `seq` = `events.seq` global (el contador por emisor no se persiste), `eventId` igual, y `timestamp` = `created_at`.
 - `:wid` es un id opaco estable (sha256 corto de la ruta realpath) para no poner rutas en URLs.
 - No hay `DELETE /api/sessions/:sid` en v1: se archiva con `PATCH {archived:true}` (el store no tiene borrado).
 - No hay "retry" de run: el usuario vuelve a enviar (un run fallido no se reejecuta automáticamente; `reconcile` ya evita repetir tools inciertas).
@@ -668,8 +674,10 @@ type ApiErrorCode =
   | "workspace_limit" | "payload_too_large" | "unsupported_media_type"
   | "path_outside_workspace" | "not_a_git_repo" | "approval_resolved"
   | "capability_ceiling" | "not_manageable" | "mcp_not_permitted" | "runs_active"
-  | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "internal";
+  | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "stream_limit" | "internal";
 ```
+
+`stream_limit` (503, **añadido en fase 2**): más de `maxStreams` (16) streams SSE a la vez.
 
 Mapeo: 400 validación, 401 sin cookie, 403 origen/host/ruta/techo, 404, 409 conflictos de estado, 413, 415, 426 `protocol_mismatch`, 502 proveedor, 503 límites/apagado, 500 `internal` (mensaje genérico; detalle solo en log).
 
@@ -772,11 +780,11 @@ Semántica:
 1. **Snapshot-then-deltas**: al abrir el stream (y en cada reconexión), por cada sesión suscrita el servidor construye el snapshot **de forma síncrona** (las lecturas `node:sqlite` son síncronas) y registra al suscriptor en el mismo tick del event loop. Por eso no hay hueco entre `cursor` y el primer delta.
 2. **Cursor**: `cursor` = `MAX(events.seq)` de la sesión en el momento del snapshot. Los frames `event` llevan `id: <events.seq>` en SSE. Los frames efímeros (`delta`) no llevan `id`.
 3. **Mensajes durables**: el servidor emite `message` cuando detecta una fila nueva (tras `turn_completed`, tras `tool_completed` y tras aceptar un prompt) leyendo `messagesPage(session, {after})` **(nuevo)**; el cliente sustituye el eco local y el buffer `inflight.text` por el mensaje durable.
-4. **Reconexión**: `EventSource` reconecta solo y envía `Last-Event-ID`. v1 **siempre** reenvía snapshot completo (simple y correcto). Optimización opcional posterior: si `Last-Event-ID` está a ≤ 500 eventos, reenviar solo esos eventos + `inflight`.
+4. **Reconexión**: `EventSource` reconecta solo y envía `Last-Event-ID`. v1 **siempre** reenvía snapshot completo (simple y correcto; implementado así: el servidor no usa `Last-Event-ID`, el `cursor` del snapshot le basta al cliente). Antes de construir cada snapshot, el hub vacía los deltas pendientes de esa sesión para que el texto ya incluido en `inflight` no llegue también como `delta` al cliente nuevo. Optimización opcional posterior: si `Last-Event-ID` está a ≤ 500 eventos, reenviar solo esos eventos + `inflight`.
 5. **Cambio de suscripción**: el cliente cierra y reabre el `EventSource` con el nuevo conjunto (operación local barata). No hay endpoint de suscripción.
 6. **Coalescencia**: el hub acumula `text_delta`/`reasoning_delta`/`tool_progress` por sesión y los vacía cada 33 ms (configurable 16–50 ms) en un único frame `delta`. El cliente aplica los frames en el siguiente `requestAnimationFrame`.
 7. **Heartbeat**: comentario `: ping` cada 15 s; el cliente considera muerto el stream tras 45 s sin datos y reconecta.
-8. **Backpressure**: cola acotada por cliente (256 frames o 1 MB). Si se desborda: se descartan los `delta` pendientes, se marca el cliente y se envía `resync`; el cliente pide snapshot reabriendo el stream. Si `res.write()` devuelve `false`, se espera `drain` antes de escribir más.
+8. **Backpressure**: cola acotada por cliente (256 frames o 1 MB). Si se desborda: se descartan los `delta` (y latidos) pendientes; si aún supera el límite, se envía `resync {reason:"overflow"}` y **se cierra el stream** (implementado así: `EventSource` reconecta solo y recibe snapshots nuevos; el contador `sseDropped` de `/api/metrics` lo registra). Si `res.write()` devuelve `false`, se espera `drain` antes de escribir más.
 9. **Orden**: dentro de una sesión el orden de frames es el orden de emisión del runner. Entre sesiones no hay orden garantizado.
 10. **Tamaño**: `tool_result` mayor de 256 KB se envía truncado con `{truncated:true}` y la vista pide el resultado completo por `GET /api/sessions/:sid/messages`.
 
@@ -819,7 +827,13 @@ Reglas: el runner ya conserva una proyección de texto junto a cada parte `ui`; 
 ```ts
 // packages/server/src/bridges/approval-bridge.ts (nuevo)
 export class ApprovalBridge {
-  constructor(opts: { hub: SseHub; graceMs?: number; timeoutMs?: number; rootOf: (sessionId: string) => string });
+  // Implemented (phase 2): the hub is a narrow interface; runOf fills PendingApproval.runId and
+  // onChange refreshes session_status (awaiting_input).
+  constructor(opts: {
+    hub: { toSession(sessionId: string, frame: ServerFrame): void; subscribers(sessionId: string): number };
+    rootOf: (sessionId: string) => string; runOf?: (sessionId: string) => string | undefined;
+    graceMs?: number; timeoutMs?: number; onChange?: (rootSessionId: string) => void;
+  });
   /** Implements core ApprovalHandler; passed as AppOptions.approve for each workspace app. */
   readonly handler: ApprovalHandler;
   /** Implements ExternalDirectoryHandler; passed as AppOptions.approveExternalDirectory. */
@@ -1122,8 +1136,8 @@ export function loaderFor(kind: string): Loader { return registry[kind] ?? (() =
 | Amenaza | Vector | Mitigación |
 |---|---|---|
 | CSRF desde otra web | `fetch`/formulario a `127.0.0.1:<port>` | Cookie `SameSite=Strict`; `Origin` obligatorio e igual al del servidor en métodos con efecto; `Content-Type: application/json` obligatorio (fuerza preflight). |
-| DNS rebinding | Dominio atacante resuelve a 127.0.0.1 | Validar `Host` ∈ {`127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`, host explícito de `--host`}; si no, 403 `forbidden_host`. |
-| Otro usuario local | Conexión al puerto | Token aleatorio de 256 bits por proceso, comparación en tiempo constante; canje por cookie `HttpOnly; SameSite=Strict; Path=/` (y `Secure` si se sirve por HTTPS en el futuro); el token no se guarda en disco. |
+| DNS rebinding | Dominio atacante resuelve a 127.0.0.1 | Validar `Host` ∈ {`127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>`, host explícito de `--host`}; si no, 403 `forbidden_host`. Con enlace comodín (`0.0.0.0`/`::`, solo con `--allow-remote`) se acepta además cualquier `Host` que sea una IP literal con el puerto correcto (el rebinding necesita un nombre DNS). |
+| Otro usuario local | Conexión al puerto | Token aleatorio de 256 bits por proceso, comparación en tiempo constante; canje por cookie `HttpOnly; SameSite=Strict; Path=/` (y `Secure` si se sirve por HTTPS en el futuro); el token no se guarda en disco. Implementado: la cookie se llama `alisio_session_<port>` (los navegadores no aíslan cookies por puerto) y guarda un secreto distinto del token. |
 | Token filtrado por historial/Referer | URL `?token=` | Tras el canje, redirección 303 a `/` sin token; `Referrer-Policy: no-referrer`. |
 | Exposición en red | `--host 0.0.0.0` | Requiere `--allow-remote` + advertencia en consola; sin TLS en v1 (documentado: usar túnel SSH). |
 | XSS por contenido del agente/MCP/workspace | Markdown, SVG de Mermaid, nombres de archivo | Sin HTML crudo en Markdown; DOMPurify para cualquier HTML/SVG; Mermaid `strict`; KaTeX `trust:false`; CSP `default-src 'self'; script-src 'self' 'sha256-<bootstrap>'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`. |
@@ -1165,7 +1179,7 @@ export function loaderFor(kind: string): Loader { return registry[kind] ?? (() =
 
 ## 13. Estrategia de pruebas
 
-Vitest en `tests/*.test.ts` (configuración raíz existente, condición `alisio-source`). Tests de comportamiento en fronteras de módulo. **Sin tests de snapshot.** El servidor se prueba levantándolo en un puerto efímero con `startServer({ port: 0 })` y un proveedor falso inyectado vía `AppOptions.provider`.
+Vitest en `tests/*.test.ts` (configuración raíz existente, condición `alisio-source`). Tests de comportamiento en fronteras de módulo. **Sin tests de snapshot.** El servidor se prueba levantándolo en un puerto efímero con `startServer({ port: 0, app: { provider, db } })` (proveedor falso inyectado vía `AppOptions.provider`, base de datos y `ALISIO_STATE_HOME`/`ALISIO_CONFIG_HOME` temporales; ayudas en `tests/server-helpers.ts`).
 
 | Id | Archivo (nuevo) | Frontera | Comportamiento verificado |
 |---|---|---|---|
@@ -1180,7 +1194,7 @@ Vitest en `tests/*.test.ts` (configuración raíz existente, condición `alisio-
 | T-09 | `tests/server-prompts.test.ts` | prompts | Idempotencia por `requestId` (secuencial y concurrente); `session_busy` con adjuntos; `enqueue` de texto; `session_locked` con lock de otro PID. |
 | T-10 | `tests/server-approvals.test.ts` | `ApprovalBridge` | Fail-closed sin cliente; primera respuesta gana; abort retira; techo de `Policy` respetado; aprobaciones de hijas visibles en raíz. |
 | T-11 | `tests/server-files.test.ts` | files | Traversal y symlinks fuera → 403; paginación; truncado. |
-| T-12 | `tests/startup-no-server.test.ts` (o ampliar `tests/startup.test.ts`) | CLI | Arrancar `main.ts` en modo `run`/`--help` no carga módulos de `packages/server` ni `node:http` (comprobación con hook de carga o `process.moduleLoadList`/lista de imports **(verificar técnica en Bun)**). |
+| T-12 | `tests/startup-no-server.test.ts` (o ampliar `tests/startup.test.ts`) | CLI | Arrancar `main.ts` en modo `run`/`--help` no carga módulos de `packages/server` ni `node:http` **Resuelto en fase 2**: se ejecuta el código fuente de la CLI en Node (`--experimental-transform-types --conditions=alisio-source`) con un hook `module.registerHooks` (Node ≥ 22.15) que registra cada URL resuelta; se comprueban `--help`, `run`, el modo sin argumentos y `serve --help`. Bun no ofrece un hook equivalente: el binario solo verifica `serve --help` en `pnpm test:compiled`. |
 | T-13 | `tests/server-shutdown.test.ts` | ciclo de vida | `SIGTERM` durante run: run `cancelled`, locks liberados, aprobaciones denegadas, salida acotada. |
 | T-14 | `tests/server-secrets.test.ts` | management | Ningún endpoint devuelve el secreto guardado; `PUT` escribe con 0600. |
 | T-15 | `tests/web-transcript-store.test.ts` | reductores web | `applyFrame` para snapshot/delta/message/resync; sustitución del eco local. |
@@ -1236,6 +1250,16 @@ Cada unidad (U) = un PR. Todas terminan con la batería completa de `AGENTS.md` 
 | 2.8 | `packages/server/src/index.ts` | Apagado ordenado, reconciliación al arrancar. | T-13. |
 
 **Docs**: `docs/web.md` + `docs/es/web.md` (nuevo: arranque, seguridad, límites); `docs/configuration.md` + ES (flags de `serve`); `docs/implementation-status.md` (limitaciones: single-host lock, sin TLS, proveedor por workspace).
+
+**Implementado (fase 2)**, con estas precisiones respecto a la tabla:
+
+- Sin dependencias de runtime nuevas (ni zod ni `ws`): `@alisio/server` depende solo de `@alisio/core` y `@alisio/sdk`. `pack-check` admite `dist/web/**` en su tarball y `scripts/publish.ts` lo publica en el mismo rango que los plugins (antes de la CLI).
+- 2.2: sin build web, el servidor sirve una página provisional (`PLACEHOLDER_HTML`); la CSP añade el hash sha256 de cada `<script>` en línea del `index.html` servido (para el bootstrap de tema de la fase 3).
+- 2.3: `serve` vive en `packages/cli/src/serve.ts`, importado dinámicamente desde la acción; el SDK añade tipos REST aditivos (`HealthInfo`, `WorkspaceInfo`, `SessionSummary`, `SessionDetail`, `PermissionPresetInfo`, `PromptAccepted`).
+- 2.4: `SQLiteStore` gana métodos aditivos (`workspaces`, `recordWorkspace`, `updateSessionMeta`, `lastEventId`, `lockedBy`) y `Session` los campos opcionales `pinned`/`archivedAt`; el servidor abre su propia conexión al mismo `sessions.sqlite` para listar sin abrir aplicaciones.
+- 2.5/2.6: el orden de commits fue 2.6 antes que 2.5 (T-08 necesita prompts). El estado `running` de §6.2 se deriva del `RunScheduler` (no de `runner.isRunning`). El agente de sesión se guarda en `sessions.options.agent` pero aún no se aplica a los runs.
+- 2.7: presets en `host/presets.ts`; cada sesión recibe su propio objeto `RunOptions.policy` (resuelve la nota de §8.7 regla 6). `InteractionBridge.open()` devuelve `true` si hay streams del workspace.
+- 2.8: `SIGINT`/`SIGTERM` los gestiona la CLI (`RunningServer.close()` es idempotente); la reconciliación llama a `interruptRuns()` e `interruptStale()` en la conexión del servidor al arrancar.
 
 ### Fase 3 — `@alisio/web` MVP
 

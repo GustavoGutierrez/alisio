@@ -15,7 +15,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
-  de razonamiento.
+  de razonamiento; servidor web (`alisio serve`).
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -23,11 +23,11 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
-  comandos).
+  comandos; servidor web).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
-  Herdr; agente activo y effort.
+  Herdr; agente activo y effort; servidor web.
 
 ## Implementado
 
@@ -526,6 +526,38 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - `alisio doctor` y la pantalla de inicio avisan explícitamente cuando el modelo resuelto está
   vacío o es el marcador `YOUR_MODEL_ID` que escribe `alisio setup`, en vez de dejar que el primer
   turno real falle contra un modelo inexistente.
+
+### Servidor web (`alisio serve`)
+
+- Paquete nuevo `@alisio/server` (solo `node:http`, sin dependencias de runtime nuevas, sin
+  WebSocket), cargado por `alisio serve` con `import()` dinámico: `alisio`, `alisio run` y la TUI no
+  lo cargan (comprobado por traza de resolución de módulos).
+- Seguridad local: enlace a `127.0.0.1` por defecto (`--allow-remote` obligatorio para otra
+  dirección), token de arranque de 256 bits por proceso canjeado una vez por una cookie
+  `HttpOnly; SameSite=Strict` con nombre por puerto (`alisio_session_<port>`) y otro secreto,
+  comprobación de `Host` y `Origin`, `Content-Type: application/json` en peticiones con efecto,
+  cabeceras de seguridad y CSP que incluye el hash de los scripts en línea del build web.
+  `/api/health` (sin autenticación), `/api/ready`, `/api/metrics`; logs JSON por línea en stderr
+  (`ALISIO_LOG_LEVEL`).
+- `WorkspaceHost`: una `Application` por workspace (raíz git del `realpath`), creada al usarse,
+  desalojo LRU al llegar a `--max-workspaces`, `503 workspace_limit` si todos están ocupados, cierre
+  tras 10 minutos de inactividad y confianza leída del almacén de confianza de la terminal (la web
+  nunca la concede).
+- Sesiones (crear, listar, leer, modificar; sin borrado: se archivan), mensajes, eventos y
+  ejecuciones paginados; prompts idempotentes por `requestId` (índice único de `runs`), texto
+  encolado durante una ejecución, `session_busy`, `session_locked`, cancelación y compactación
+  manual. `RunScheduler` con semáforo global `--max-runs` y cola FIFO.
+- Stream SSE multiplexado por pestaña con snapshot por sesión construido y registrado en el mismo
+  tick, frames durables con `id` = `eventId`, deltas agrupados cada 33 ms, latido cada 15 s y cola
+  acotada por cliente que termina el stream con `resync` si se desborda.
+- `ApprovalBridge` e `InteractionBridge` con fallo cerrado (denegar/cancelar sin observadores tras
+  30 s, al abortar o tras 10 min), primera respuesta gana, aprobaciones de sesiones hijas en su
+  sesión raíz. Presets de permisos por sesión con techo en los flags de arranque; cada sesión recibe
+  su propio objeto `RunOptions.policy`, así que "permitir para la sesión" no se filtra a otras
+  sesiones del workspace.
+- Apagado ordenado (`SIGINT`/`SIGTERM`: 503, runs cancelados, aprobaciones denegadas, streams
+  cerrados, apps cerradas con los topes existentes; segundo `SIGINT` fuerza la salida) y
+  reconciliación de runs al arrancar.
 
 ## Validación
 
@@ -1073,9 +1105,37 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Bun: el escenario `store-migration` de `fixtures/scenarios.ts` (ejecutado en Node y Bun por
   `tests/integration.test.ts`) verifica la migración y el índice único parcial en Bun, y
   `pnpm test:compiled` comprueba que el binario Bun escribe filas en `runs` al ejecutar `alisio run`.
-- No verificado: la TUI en pseudo-terminal tras delegar `/tools` y `/sessions` (sí su texto). Nada
-  consume todavía `workspaces`, `sessions.pinned`/`archived_at`, `messagesPage` ni `eventsPage`;
-  los usará `@alisio/server` (fase 2).
+- No verificado: la TUI en pseudo-terminal tras delegar `/tools` y `/sessions` (sí su texto).
+  `workspaces`, `sessions.pinned`/`archived_at`, `messagesPage` y `eventsPage` los consume
+  `@alisio/server` (ver la sección del servidor web).
+
+## Servidor web (`alisio serve`): alcance de la verificación
+
+- Vitest, con el servidor real en un puerto efímero, base de datos temporal y proveedor falso
+  inyectado por `AppOptions.provider`: `tests/server-auth.test.ts` (T-07: cookie ausente, canje del
+  token con 303, token erróneo, `Host` y `Origin` ajenos, `Content-Type`, `--allow-remote`, salud,
+  cabeceras, assets estáticos, fallback SPA y confinamiento de rutas), `tests/server-workspaces.test.ts`
+  (T-18), `tests/server-prompts.test.ts` (T-09: idempotencia secuencial y concurrente, `enqueue`,
+  `session_busy`, `session_locked` con un PID vivo ajeno, cola FIFO con `--max-runs 1`,
+  cancelación en cola y en curso, compactación), `tests/server-sse.test.ts` (T-08: snapshot y
+  deltas sin huecos, reconexión a mitad de ejecución sin duplicar texto, `tool_result`, estado de
+  sesión para el sidebar, latido, límites; el desbordamiento con `resync` se prueba sobre el hub con
+  un socket que no drena), `tests/server-approvals.test.ts` (T-10) y `tests/server-shutdown.test.ts`
+  (T-13, apagado llamado en proceso). `tests/store-web-metadata.test.ts` cubre los métodos nuevos
+  de `SQLiteStore`.
+- T-12 (`tests/startup-no-server.test.ts`): ejecuta el código fuente de la CLI en Node con un hook
+  `module.registerHooks` que registra cada módulo resuelto y comprueba que `--help`, `run`, el modo
+  sin argumentos y `serve --help` no cargan `packages/server` ni `node:http`. Bun no tiene un hook
+  equivalente: en el binario solo se comprueba `serve --help`.
+- `pnpm test:cli` (Node) y `pnpm test:compiled` (binario Bun): `serve --help`, rechazo de
+  `--host 0.0.0.0` sin `--allow-remote`, arranque con `--no-open --port 0`, `/api/health` sin
+  cookie, `401` sin cookie, canje del token y parada con `SIGTERM` (código 0).
+- No verificado: la interfaz del navegador (fase 3), un navegador real (`EventSource`, cookies
+  `SameSite`), la apertura automática del navegador, el apagado por señal con ejecuciones activas
+  fuera de las pruebas en proceso, Windows/macOS y la contención de SQLite con varias apps y runs
+  concurrentes reales (P-03).
+
+## Límites conocidos
 
 ## Límites conocidos
 
@@ -1296,3 +1356,26 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   plugin de subagentes: los verbos de gestión de tareas (con argumento) siguen enrutándose al
   plugin, pero el autocompletado del editor y `/help` muestran solo el comando de la TUI; la
   gestión de tareas sigue siempre disponible como `/agents <verbo>` y `/command agents <verbo>`.
+
+### Servidor web
+
+- Bloqueo de un solo host (PID en `sessions.locked_pid`); la web no recibe en vivo los cambios que
+  hace una TUI en una sesión: se ven al reabrirla. Una sesión usada por otro proceso responde
+  `409 session_locked`.
+- Sin TLS; `--allow-remote` es opcional y pensado para túneles SSH. Con enlace a una dirección
+  comodín (`0.0.0.0`, `::`) se aceptan cabeceras `Host` con IP literal además de las de loopback.
+- El proveedor es por workspace (una `Application`): el cambio de perfil de proveedor afecta a todas
+  sus sesiones; por sesión solo cambia el modelo (`runner.setModel`), y el evento `model_changed` no
+  lleva `correlationId` (tampoco la compactación manual).
+- La idempotencia de los prompts encolados es en memoria (100 ids por sesión, 10 min) y la cola de
+  `enqueue` del runner se pierde si el proceso cae; un prompt con adjuntos durante una ejecución, o
+  cualquier prompt mientras la sesión espera en cola o compacta, responde `409 session_busy`.
+- El agente elegido para una sesión web se guarda (`sessions.options.agent`) pero aún no se aplica a
+  sus ejecuciones; las rutas de comandos (`/api/commands`), contexto, exportación, archivos, blobs y
+  gestión llegan en fases posteriores.
+- Cada reconexión SSE recibe un snapshot completo (no se reenvían solo los eventos desde
+  `Last-Event-ID`); la trayectoria en `GET /api/sessions/:sid/events` usa `events.seq` global como
+  `seq`. Tras una compactación el cliente debe recargar los mensajes (el evento
+  `compaction_completed` se lo indica).
+- El binario independiente sirve solo la API y una página provisional: los assets web van con el
+  paquete npm.

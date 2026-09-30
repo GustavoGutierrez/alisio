@@ -152,6 +152,13 @@ it is not a statement that all of its release criteria are met.
 - Text reading/editing is limited to 1 MiB. Large searches/outputs are truncated explicitly.
 - The Herdr integration allows exchanges through terminals; it does not promise full multi-agent
   autonomy or distributed planning.
+- **Web server (`alisio serve`)**: single-host session locks (a session another process uses answers
+  `409 session_locked`, and the web does not see a TUI's changes live); no TLS (`--allow-remote` is
+  meant for SSH tunnels; a wildcard bind also accepts IP-literal `Host` headers); the provider is per
+  workspace, so only the model changes per session; idempotency of prompts queued while a run is
+  active is in memory; the agent chosen for a web session is stored but not applied yet; every SSE
+  reconnection receives a full snapshot; the standalone binary serves only the API and a placeholder
+  page.
 
 Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
@@ -177,6 +184,9 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
 - **v4 persistence, blobs and command catalog** — v3 → v4 migration, run journal, blob store, TUI
   command parity.
+- **Web server (`alisio serve`)** — auth, workspaces, prompts, SSE, approvals and shutdown against a
+  real server on an ephemeral port; zero-overhead startup traced under Node; serve smoke in the Node
+  CLI and the Bun binary. No browser verified yet.
 
 The full detail (in Spanish) is in the source file linked at the top of this page, which the
 [Spanish version of this page](/es/limitations) includes verbatim.

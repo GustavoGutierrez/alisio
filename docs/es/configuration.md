@@ -448,6 +448,7 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
 | `ALISIO_API_MODE` | Reemplaza `provider.apiMode` |
 | `ALISIO_CONFIG_HOME` | Directorio de configuración global (por defecto `$XDG_CONFIG_HOME/alisio` o `~/.config/alisio`) |
 | `ALISIO_STATE_HOME` | Directorio de estado para `sessions.sqlite`, `memory.sqlite` y `trust.json` (por defecto `$XDG_STATE_HOME/alisio` o `~/.local/state/alisio`) |
+| `ALISIO_LOG_LEVEL` | Nivel de las líneas de log JSON de `alisio serve` en stderr: `debug`, `info` (por defecto), `warn`, `error`, `silent` |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Directorios base XDG estándar, usados cuando las variables `ALISIO_*` no están definidas |
 | `CI` | Si está definida (y no vale `false` ni `0`), no se muestra la pantalla de inicio |
 | `NO_COLOR` | Desactiva el color en la pantalla de inicio |
@@ -508,6 +509,18 @@ Comandos:
 | `alisio plugins doctor` | Carga los plugins y muestra sus herramientas y comandos |
 | `alisio mcp list` | Lista los servidores MCP configurados |
 | `alisio mcp doctor <server>` | Se conecta a un servidor (requiere `--allow-mcp`) |
+| `alisio serve` | Arranca el [servidor de la interfaz web](/es/web) local |
+
+Flags de `alisio serve` (los flags globales de permisos son el techo de toda sesión web):
+
+| Flag | Descripción |
+| --- | --- |
+| `--port <port>` | Puerto de escucha (por defecto `4317`; `0` elige uno libre) |
+| `--host <address>` | Dirección de enlace (por defecto `127.0.0.1`); si no es loopback exige `--allow-remote` |
+| `--allow-remote` | Permite un `--host` que no sea loopback (sin TLS; mejor un túnel SSH) |
+| `--no-open` | No abre el navegador |
+| `--max-workspaces <n>` | Workspaces con una aplicación abierta a la vez (por defecto `4`) |
+| `--max-runs <n>` | Ejecuciones simultáneas entre todas las sesiones (por defecto `4`) |
 
 ## `AGENTS.md`
 

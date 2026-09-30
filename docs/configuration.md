@@ -428,6 +428,7 @@ prompt on every restart.
 | `ALISIO_API_MODE` | Overrides `provider.apiMode` |
 | `ALISIO_CONFIG_HOME` | Global configuration directory (default `$XDG_CONFIG_HOME/alisio` or `~/.config/alisio`) |
 | `ALISIO_STATE_HOME` | State directory for `sessions.sqlite`, `memory.sqlite` and `trust.json` (default `$XDG_STATE_HOME/alisio` or `~/.local/state/alisio`) |
+| `ALISIO_LOG_LEVEL` | Log level of `alisio serve` JSON log lines on stderr: `debug`, `info` (default), `warn`, `error`, `silent` |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Standard XDG base directories used when the `ALISIO_*` variables are unset |
 | `CI` | When set (and not `false` or `0`), the startup screen is not shown |
 | `NO_COLOR` | Disables color in the startup screen |
@@ -487,6 +488,18 @@ Commands:
 | `alisio plugins doctor` | Load plugins and show their tools and commands |
 | `alisio mcp list` | List configured MCP servers |
 | `alisio mcp doctor <server>` | Connect to a server (requires `--allow-mcp`) |
+| `alisio serve` | Start the local [web UI server](/web) |
+
+`alisio serve` flags (the global permission flags are the ceiling of every web session):
+
+| Flag | Description |
+| --- | --- |
+| `--port <port>` | Port to listen on (default `4317`; `0` picks a free one) |
+| `--host <address>` | Address to bind (default `127.0.0.1`); non-loopback requires `--allow-remote` |
+| `--allow-remote` | Allow a non-loopback `--host` (no TLS; prefer an SSH tunnel) |
+| `--no-open` | Do not open the browser |
+| `--max-workspaces <n>` | Workspaces with an open application at once (default `4`) |
+| `--max-runs <n>` | Concurrent runs across all sessions (default `4`) |
 
 ## `AGENTS.md`
 
