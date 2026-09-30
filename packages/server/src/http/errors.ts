@@ -11,6 +11,7 @@ export const STATUS: Record<ApiErrorCode, number> = {
   session_busy: 409,
   session_locked: 409,
   workspace_limit: 503,
+  workspace_missing: 404,
   payload_too_large: 413,
   unsupported_media_type: 415,
   path_outside_workspace: 403,

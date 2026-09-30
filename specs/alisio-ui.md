@@ -616,7 +616,7 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 | GET | `/api/workspaces/:wid/file` | `?path=&maxBytes=` | contenido (`text/plain`/imagen) + `X-Truncated` | 403, 404, 413 |
 | GET | `/api/workspaces/:wid/diff` | `?path=` | `UiBlock` `{kind:"diff"}` | 403, 404, 409 `not_a_git_repo` |
 | GET | `/api/sessions` | `?workspace=&q=&archived=&limit=&cursor=` | `{items: SessionSummary[], next?}` | — |
-| POST | `/api/sessions` | `{workspace, model?, agent?, preset?, title?}` | `SessionDetail` | 404, 503 |
+| POST | `/api/sessions` | `{workspace, model?, agent?, preset?, title?}` | `SessionDetail` | 404 (`not_found`, `workspace_missing`), 503 |
 | GET | `/api/sessions/:sid` | — | `SessionDetail` (incluye `presets[]`, `status`, `children[]`) | 404 |
 | PATCH | `/api/sessions/:sid` | `{title?, model?, effort?, preset?, agent?, pinned?, archived?}` | `SessionDetail` | 400, 403 `capability_ceiling`, 409 `session_busy` (modelo durante run) |
 | GET | `/api/sessions/:sid/messages` | `?before=<seq>&limit=50&includeCompacted=` | `{items: {seq, message, compacted}[], hasMore}` | 404 |
@@ -671,13 +671,17 @@ interface ApiError {
 type ApiErrorCode =
   | "unauthorized" | "forbidden_origin" | "forbidden_host" | "validation_failed"
   | "not_found" | "unknown_command" | "session_busy" | "session_locked"
-  | "workspace_limit" | "payload_too_large" | "unsupported_media_type"
+  | "workspace_limit" | "workspace_missing" | "payload_too_large" | "unsupported_media_type"
   | "path_outside_workspace" | "not_a_git_repo" | "approval_resolved"
   | "capability_ceiling" | "not_manageable" | "mcp_not_permitted" | "runs_active"
   | "provider_unavailable" | "protocol_mismatch" | "shutting_down" | "stream_limit" | "internal";
 ```
 
 `stream_limit` (503, **añadido en fase 2**): más de `maxStreams` (16) streams SSE a la vez.
+
+`workspace_missing` (404, `details: {path}`): un workspace conocido (por sesiones antiguas) cuya
+carpeta se eliminó, se movió o no es accesible; lo devuelve cualquier ruta que abra el workspace
+(sesiones, prompts, archivos, gestión). `WorkspaceInfo.exists` lo anticipa en `GET /api/workspaces`.
 
 Mapeo: 400 validación, 401 sin cookie, 403 origen/host/ruta/techo, 404, 409 conflictos de estado, 413, 415, 426 `protocol_mismatch`, 502 proveedor, 503 límites/apagado, 500 `internal` (mensaje genérico; detalle solo en log).
 

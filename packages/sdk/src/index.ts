@@ -1011,6 +1011,8 @@ export type ApiErrorCode =
   | "session_busy"
   | "session_locked"
   | "workspace_limit"
+  /** A known workspace whose folder was deleted, moved or is no longer accessible (404). */
+  | "workspace_missing"
   | "payload_too_large"
   | "unsupported_media_type"
   | "path_outside_workspace"
@@ -1053,6 +1055,11 @@ export interface WorkspaceInfo {
   pinned: boolean;
   /** An `Application` is open for it in the server right now. */
   open: boolean;
+  /**
+   * The folder is still an accessible directory. A workspace known from old sessions may have been
+   * deleted or moved: its sessions stay readable, but it cannot be opened (`workspace_missing`).
+   */
+  exists: boolean;
   /** Project resources load (trusted from the terminal or by a launch flag). */
   trusted: boolean;
   /** The directory has project resources that are not trusted (shown as "untrusted"). */

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceInfo } from "@alisio/sdk";
@@ -111,6 +111,38 @@ describe("WorkspaceHost (T-18)", () => {
     await host.openPath(await dir("a"));
     expect(created[0]?.trustProject).toBe(true);
   });
+
+  it("rejects opening a workspace whose folder no longer exists with workspace_missing", async () => {
+    const { host, created } = fakeHost();
+    const gone = await dir("gone");
+    await rm(gone, { recursive: true });
+    await expect(host.openPath(gone)).rejects.toMatchObject({
+      code: "workspace_missing",
+      status: 404,
+      message: expect.stringContaining(gone),
+    });
+    expect(created).toHaveLength(0);
+  });
+
+  it("rejects reusing an open workspace after its folder was deleted", async () => {
+    const { host } = fakeHost();
+    const a = await dir("a");
+    await host.openPath(a);
+    await rm(a, { recursive: true });
+    await expect(host.openPath(a)).rejects.toMatchObject({ code: "workspace_missing" });
+  });
+
+  it("reports whether each known workspace folder exists", async () => {
+    const { host } = fakeHost();
+    const [a, gone] = await Promise.all([dir("a"), dir("gone")]);
+    await host.openPath(a);
+    await host.openPath(gone);
+    await host.close(workspaceId(gone));
+    await rm(gone, { recursive: true });
+    const list = await host.list();
+    expect(list.find((w) => w.path === a)).toMatchObject({ exists: true });
+    expect(list.find((w) => w.path === gone)).toMatchObject({ exists: false, open: false });
+  });
 });
 
 describe("workspace routes (T-18)", () => {
@@ -165,5 +197,35 @@ describe("workspace routes (T-18)", () => {
     await t.api.post("/api/workspaces", { path: other });
     const list = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
     expect(list.filter((w) => w.open).map((w) => w.path)).toEqual([await realpath(other)]);
+  });
+  it("never answers 500 for a known workspace whose folder was deleted", async () => {
+    t = await startTestServer();
+    const other = join(t.root, "other");
+    await mkdir(other);
+    const opened = (await t.api.post("/api/workspaces", { path: other })).json<WorkspaceInfo>();
+    const created = await t.api.post("/api/sessions", { workspace: opened.id });
+    expect(created.status).toBe(201);
+    const { id: sid } = created.json<{ id: string }>();
+    await rm(other, { recursive: true });
+
+    const list = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(list.find((w) => w.id === opened.id)).toMatchObject({ exists: false });
+    expect(list.find((w) => w.id !== opened.id)).toMatchObject({ exists: true });
+
+    const again = await t.api.post("/api/sessions", { workspace: opened.id });
+    expect(again.status).toBe(404);
+    expect(again.json()).toMatchObject({
+      error: { code: "workspace_missing", message: expect.stringContaining(opened.path) },
+    });
+    const prompt = await t.api.post(`/api/sessions/${sid}/prompts`, {
+      requestId: "r-1",
+      text: "hi",
+    });
+    expect(prompt.status).toBe(404);
+    expect(prompt.json()).toMatchObject({ error: { code: "workspace_missing" } });
+    const tree = await t.api.get(`/api/workspaces/${opened.id}/tree`);
+    expect(tree.json()).toMatchObject({ error: { code: "workspace_missing" } });
+    // The session itself stays readable.
+    expect((await t.api.get(`/api/sessions/${sid}`)).status).toBe(200);
   });
 });

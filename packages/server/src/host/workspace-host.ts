@@ -51,6 +51,19 @@ export interface WorkspaceHostOptions {
   now?: () => number;
 }
 
+const MISSING_ERRNO = new Set(["ENOENT", "ENOTDIR", "EACCES", "EPERM", "ELOOP"]);
+const missing = (path: string) =>
+  new HttpError("workspace_missing", `Workspace folder not found: ${path}`, { path });
+
+/** Whether a workspace folder is still an accessible directory (a known one may be deleted). */
+export async function workspaceExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Opaque, stable workspace id: a short sha256 of the canonical path (never a path in URLs). */
 export const workspaceId = (path: string): string =>
   createHash("sha256").update(path).digest("hex").slice(0, 16);
@@ -100,6 +113,8 @@ export class WorkspaceHost {
   /** Opens (or reuses) the app of a canonical workspace path, evicting an idle one if needed. */
   async openPath(path: string): Promise<OpenWorkspace> {
     if (this.closed) throw new HttpError("shutting_down", "Server is shutting down");
+    // A known workspace (from old sessions) may have been deleted or moved: 404, never a 500.
+    if (!(await workspaceExists(path))) throw missing(path);
     const id = workspaceId(path);
     const existing = this.open.get(id);
     if (existing) {
@@ -121,12 +136,20 @@ export class WorkspaceHost {
     const explicit = !!base.trustProject || !!base.config;
     const trust = explicit ? undefined : await resolveTrust(path);
     const trusted = explicit || !!trust?.trusted;
-    const app = await (this.options.create ?? createApplication)({
-      ...base,
-      trustProject: explicit ? base.trustProject : trusted,
-      cwd: path,
-      ...(this.options.wire?.(id, path) ?? {}),
-    });
+    let app: Application;
+    try {
+      app = await (this.options.create ?? createApplication)({
+        ...base,
+        trustProject: explicit ? base.trustProject : trusted,
+        cwd: path,
+        ...(this.options.wire?.(id, path) ?? {}),
+      });
+    } catch (error) {
+      // The folder vanished between the check and the open (the core canonicalizes it).
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code && MISSING_ERRNO.has(code) && !(await workspaceExists(path))) throw missing(path);
+      throw error;
+    }
     const entry: OpenWorkspace = {
       id,
       path,
@@ -223,7 +246,8 @@ export class WorkspaceHost {
     const entry = this.open.get(id);
     let trusted = entry?.trusted ?? false;
     let untrusted = entry?.untrustedResources ?? false;
-    if (!entry) {
+    const exists = await workspaceExists(path);
+    if (!entry && exists) {
       const base = this.options.base;
       if (base.trustProject || base.config) trusted = true;
       else {
@@ -238,6 +262,7 @@ export class WorkspaceHost {
       ...(meta?.label ? { label: meta.label } : {}),
       pinned: meta?.pinned ?? false,
       open: !!entry,
+      exists,
       trusted,
       untrustedResources: untrusted,
       ...(meta?.lastOpenedAt !== undefined ? { lastOpenedAt: meta.lastOpenedAt } : {}),

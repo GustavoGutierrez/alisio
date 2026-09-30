@@ -542,7 +542,11 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - `WorkspaceHost`: una `Application` por workspace (raíz git del `realpath`), creada al usarse,
   desalojo LRU al llegar a `--max-workspaces`, `503 workspace_limit` si todos están ocupados, cierre
   tras 10 minutos de inactividad y confianza leída del almacén de confianza de la terminal (la web
-  nunca la concede).
+  nunca la concede). Un workspace conocido cuya carpeta ya no existe (o no es accesible) responde
+  `404 workspace_missing` al abrirse (crear sesión, prompts, archivos) en lugar de un 500, y
+  `GET /api/workspaces` lo marca con `exists: false`; la web lo atenúa y desactiva sus sesiones
+  nuevas. Verificado con tests de `WorkspaceHost` y de rutas; no se vigila el disco en vivo (el
+  estado se refresca al recargar la lista o al fallar una apertura).
 - Sesiones (crear, listar, leer, modificar; sin borrado: se archivan), mensajes, eventos y
   ejecuciones paginados; prompts idempotentes por `requestId` (índice único de `runs`), texto
   encolado durante una ejecución, `session_busy`, `session_locked`, cancelación y compactación

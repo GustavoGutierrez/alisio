@@ -39,7 +39,10 @@ export async function confine(
     canonical = await realpath(root);
     target = await safePath(canonical, path || ".");
   } catch (error) {
-    if (errno(error) === "ENOENT") throw new HttpError("not_found", "Workspace not found");
+    if (errno(error) === "ENOENT")
+      throw new HttpError("workspace_missing", `Workspace folder not found: ${root}`, {
+        path: root,
+      });
     throw new HttpError("path_outside_workspace", "The path is outside the workspace");
   }
   let real = target;
