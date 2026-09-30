@@ -1,0 +1,142 @@
+.header {
+  padding: 10px 24px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.menu {
+  display: none !important;
+}
+
+.title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.titleButton {
+  display: block;
+  max-width: 100%;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: inherit;
+}
+
+.titleButton:hover {
+  background: var(--hover);
+}
+
+.titleInput {
+  min-width: 0;
+  width: min(420px, 60%);
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.log {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+.log:hover {
+  background: var(--hover);
+}
+
+.tabs {
+  display: flex;
+  gap: 20px;
+  margin-top: 6px;
+}
+
+.tab {
+  position: relative;
+  padding: 8px 0 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.tab[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 900px) {
+  .menu {
+    display: inline-grid !important;
+  }
+
+  .header {
+    padding: 8px 12px 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .badge {
+    display: none;
+  }
+}
