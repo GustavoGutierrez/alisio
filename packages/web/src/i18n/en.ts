@@ -260,7 +260,7 @@ export const en = {
   "settings.agentSettingsLead": "Saved for this user in",
   "settings.readOnly": "alisio serve runs with --read-only: settings cannot be changed.",
   "setting.compaction.auto": "Compact the context automatically",
-  "setting.compaction.threshold": "Compaction threshold (% of the window)",
+  "setting.compaction.threshold": "Compaction threshold (fraction of the window)",
   "setting.compaction.keepTurns": "Recent turns kept verbatim",
   "setting.compaction.maxOutputTokens": "Summary length (tokens)",
   "setting.context.claudeMdFallback": "Read CLAUDE.md when there is no AGENTS.md",

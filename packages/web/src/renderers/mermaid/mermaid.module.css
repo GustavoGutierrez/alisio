@@ -85,9 +85,12 @@
 }
 
 .error {
-  margin: 8px 12px 0;
+  margin: 0;
+  padding: 8px 12px 0;
   color: var(--warn);
   font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .overlay {

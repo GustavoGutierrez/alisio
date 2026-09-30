@@ -266,7 +266,7 @@ export const es: Record<MessageKey, string> = {
   "settings.agentSettingsLead": "Se guardan para este usuario en",
   "settings.readOnly": "alisio serve se ejecuta con --read-only: no se pueden cambiar los ajustes.",
   "setting.compaction.auto": "Compactar el contexto automáticamente",
-  "setting.compaction.threshold": "Umbral de compactación (% de la ventana)",
+  "setting.compaction.threshold": "Umbral de compactación (fracción de la ventana)",
   "setting.compaction.keepTurns": "Turnos recientes conservados literalmente",
   "setting.compaction.maxOutputTokens": "Longitud del resumen (tokens)",
   "setting.context.claudeMdFallback": "Leer CLAUDE.md si no hay AGENTS.md",

@@ -17,5 +17,8 @@ export default defineConfig({
     sourcemap: false,
     modulePreload: { polyfill: false },
     reportCompressedSize: false,
+    // Fonts (KaTeX) stay files: the CSP has no `data:` in font-src (default-src 'self').
+    assetsInlineLimit: (file: string) =>
+      /\.(woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined,
   },
 });

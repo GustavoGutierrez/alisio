@@ -43,6 +43,7 @@ export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
   const [showSource, setShowSource] = useState(false);
   const [zoom, setZoom] = useState(2);
   const [full, setFull] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const theme = resolvedTheme.value;
   useEffect(() => {
     setResult(undefined);
@@ -65,6 +66,7 @@ export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
   }, [source, theme, props.live]);
   useEffect(() => {
     if (!full) return;
+    closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setFull(false);
     };
@@ -163,10 +165,10 @@ export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
         >
           <button
             type="button"
+            ref={closeRef}
             class={`icon-btn ${styles.overlayClose}`}
             aria-label={t("common.close")}
             onClick={() => setFull(false)}
-            autoFocus
           >
             <Icon name="x" size={18} />
           </button>
