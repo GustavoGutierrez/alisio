@@ -167,8 +167,11 @@ try {
       .trim()
       .split("\n")
       .map((line) => {
-        const { runId: _r, sessionId: _s, timestamp: _t, ...event } = JSON.parse(line);
-        if (event.data && typeof event.data === "object") delete event.data.durationMs;
+        const { runId: _r, sessionId: _s, timestamp: _t, eventId: _e, ...event } = JSON.parse(line);
+        if (event.data && typeof event.data === "object") {
+          delete event.data.durationMs;
+          delete event.data.ttftMs;
+        }
         return event;
       });
   const baseArgs = [

@@ -276,10 +276,12 @@ export class SQLiteStore implements SessionStore {
       }
     });
   }
-  event(id: string, runId: string, type: string, data: unknown): void {
-    this.db
+  /** Persists a durable event and returns its global `events.seq`. */
+  event(id: string, runId: string, type: string, data: unknown): number {
+    const { lastInsertRowid } = this.db
       .prepare("INSERT INTO events(session,run_id,type,body) VALUES(?,?,?,?)")
       .run(id, runId, type, JSON.stringify(data));
+    return Number(lastInsertRowid);
   }
   getState(plugin: string, key: string): unknown {
     const row = this.db

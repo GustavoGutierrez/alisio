@@ -1,8 +1,11 @@
 import {
   type Attachment,
+  isEphemeralRunEventType,
   type Message,
   type ModelProvider,
   type RunEvent,
+  type RunEventDataMap,
+  type RunEventType,
   type ToolDefinition,
   type ToolResult,
   textProjection,
@@ -120,6 +123,10 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Reasoning effort level for this run; beats the runner-level default when set. */
   reasoningEffort?: string;
+  /** Run id to use for this run's events (e.g. preassigned by an embedder); a UUID otherwise. */
+  runId?: string;
+  /** Copied to every event of this run as `RunEvent.correlationId` (e.g. an HTTP request id). */
+  correlationId?: string;
 }
 /**
  * Default cumulative token budget for one run: several context windows (each turn re-sends the
@@ -145,7 +152,8 @@ export interface CompactionResult {
   after: number;
   summary: Extract<Message, { role: "user" }>;
 }
-type Emit = (type: string, data: unknown) => void;
+/** Typed emitter: payloads are checked against the SDK `RunEventDataMap` contract. */
+type Emit = <T extends RunEventType>(type: T, data: RunEventDataMap[T]) => void;
 export class AgentRunner {
   /** Sessions with an active run or compaction (one at a time per session). */
   private active = new Map<string, AbortController>();
@@ -174,8 +182,9 @@ export class AgentRunner {
       ...(compaction ? { compaction: { ...this.options.compaction, ...compaction } } : {}),
     };
   }
-  private emitter(sessionId: string): Emit {
-    const runId = crypto.randomUUID();
+  private emitter(sessionId: string, run: { runId?: string; correlationId?: string } = {}): Emit {
+    const runId = run.runId ?? crypto.randomUUID();
+    const correlationId = run.correlationId;
     let seq = 0;
     return (type, data) => {
       const event: RunEvent = {
@@ -187,8 +196,11 @@ export class AgentRunner {
         timestamp: new Date().toISOString(),
         data,
       };
-      if (type !== "text_delta" && type !== "tool_progress" && type !== "reasoning_delta")
-        this.options.store.event(sessionId, runId, type, data);
+      if (!isEphemeralRunEventType(type)) {
+        const persisted = this.options.store.event(sessionId, runId, type, data);
+        if (typeof persisted === "number") event.eventId = String(persisted);
+      }
+      if (correlationId !== undefined) event.correlationId = correlationId;
       try {
         this.options.onEvent?.(event);
       } catch {
@@ -431,7 +443,7 @@ export class AgentRunner {
   }> {
     const controller = this.claim(sessionId);
     const o = this.options,
-      emit = this.emitter(sessionId);
+      emit = this.emitter(sessionId, options);
     const limit = o.maxContextChars ?? 800_000;
     let tokens = 0,
       lastText = "",
@@ -579,6 +591,8 @@ export class AgentRunner {
         const providerMessages = messages.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
+        const requested = Date.now();
+        let firstDelta: number | undefined;
         for await (const e of provider.stream({
           instructions,
           messages: providerMessages,
@@ -593,6 +607,7 @@ export class AgentRunner {
             : {}),
         })) {
           combined.throwIfAborted();
+          if (e.type !== "completed") firstDelta ??= Date.now();
           if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
           else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
           else {
@@ -606,6 +621,7 @@ export class AgentRunner {
           }
         }
         if (!completion) throw new Error("Provider stream ended without a completed response");
+        const durationMs = Date.now() - requested;
         const ids = completion.calls.map((c) => c.id);
         const previousIds = new Set(
           messages.flatMap((m) => (m.role === "assistant" ? m.calls.map((c) => c.id) : [])),
@@ -628,6 +644,8 @@ export class AgentRunner {
           calls: completion.calls.length,
           model,
           ...(usage ? { usage } : {}),
+          durationMs,
+          ...(firstDelta !== undefined ? { ttftMs: firstDelta - requested } : {}),
         });
         if (!completion.calls.length) {
           const final: { tokens: number; text: string; truncated?: boolean } = {

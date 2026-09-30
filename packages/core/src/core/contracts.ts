@@ -66,7 +66,11 @@ export interface SessionStore {
   /** The persisted result of a completed tool call, for replay of rich (ui/image) parts. */
   callResult(session: string, callId: string): ToolResult | undefined;
   reconcile(id: string, acknowledge?: boolean): void;
-  event(id: string, runId: string, type: string, data: unknown): void;
+  /**
+   * Persist a durable run event. Stores that assign a global, monotonic sequence return it; the
+   * runner exposes it as `RunEvent.eventId`. Returning nothing is allowed (no `eventId`).
+   */
+  event(id: string, runId: string, type: string, data: unknown): number | void;
 }
 export interface ContextSource {
   /** System instructions; `sessionId` scopes lazily attached nested instructions. */
