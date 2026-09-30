@@ -197,3 +197,63 @@ export async function startTestServer(
     },
   };
 }
+
+/** Resolves with `promise`, or rejects with the signal's reason once it aborts. */
+export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    promise.then(resolve, reject);
+  });
+}
+
+/**
+ * A provider whose turns stream "wor", then wait for `release()` (or abort) before finishing
+ * with "working done". `started` resolves on each call.
+ */
+export function gatedProvider() {
+  let gate = deferred();
+  let started = deferred();
+  const provider = fakeProvider(async function* (request) {
+    const mine = gate;
+    started.resolve();
+    yield { type: "text_delta", delta: "wor" };
+    await abortable(mine.promise, request.signal);
+    yield { type: "text_delta", delta: "king done" };
+    yield {
+      type: "completed",
+      message: { role: "assistant", text: "working done", calls: [] },
+    };
+  });
+  return {
+    provider,
+    get started() {
+      return started.promise;
+    },
+    /** Lets the waiting turn(s) finish; later turns wait again. */
+    release() {
+      const current = gate;
+      gate = deferred();
+      started = deferred();
+      current.resolve();
+    },
+  };
+}
+
+/** Creates a session in the test server's default workspace; returns its id. */
+export async function newSession(t: TestServer, body: Record<string, unknown> = {}) {
+  const res = await t.api.post("/api/sessions", { workspace: t.workspace, ...body });
+  if (res.status !== 201) throw new Error(`newSession: ${res.status} ${res.text}`);
+  return res.json<import("@alisio/sdk").SessionDetail>();
+}
+
+/** Waits until the latest run of a session reaches a terminal status; returns it. */
+export async function settled(t: TestServer, sessionId: string, runId?: string) {
+  return until(async () => {
+    const runs = (await t.api.get(`/api/sessions/${sessionId}/runs`)).json<
+      Array<{ id: string; status: string }>
+    >();
+    const run = runId ? runs.find((r) => r.id === runId) : runs[0];
+    return run && run.status !== "queued" && run.status !== "running" ? run : undefined;
+  });
+}

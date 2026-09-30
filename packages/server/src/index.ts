@@ -8,12 +8,16 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { SQLiteStore, stateHome } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
+import { RunScheduler } from "./host/run-scheduler.ts";
+import { SessionService } from "./host/sessions.ts";
 import { type ServerAppOptions, WorkspaceHost } from "./host/workspace-host.ts";
 import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
+import { registerPromptRoutes } from "./routes/prompts.ts";
+import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 
 export { isLoopbackHost } from "./auth/guard.ts";
@@ -100,9 +104,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const base = options.app ?? {};
   // Server-level connection to the shared session database (lists, metadata, snapshots).
   const catalog = new SQLiteStore(base.db ?? join(stateHome(), "sessions.sqlite"));
+  let sessions: SessionService | undefined;
+  const scheduler = new RunScheduler({
+    ...(options.maxConcurrentRuns ? { maxConcurrent: options.maxConcurrentRuns } : {}),
+    onChange: (job) => sessions?.notify(job.sessionId),
+  });
   const workspaces = new WorkspaceHost({
     base,
     catalog,
+    busy: (id) => scheduler.busyWorkspace(id),
     ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
     ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
     ...(options.defaultWorkspace ? { defaultWorkspace: options.defaultWorkspace } : {}),
@@ -112,10 +122,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     Math.min(60_000, options.idleEvictMs ?? 60_000),
   );
   sweeper.unref();
+  sessions = new SessionService({ catalog, workspaces, scheduler, base });
   const stats = (): ServerStats => ({
     shuttingDown: closing,
-    activeRuns: 0,
-    queuedRuns: 0,
+    activeRuns: scheduler.counts().active,
+    queuedRuns: scheduler.counts().queued,
     openWorkspaces: workspaces.openCount,
     subscribers: 0,
     pendingApprovals: 0,
@@ -127,6 +138,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     stats,
   });
   registerWorkspaceRoutes(router, { workspaces, catalog });
+  registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
+  registerPromptRoutes(router, { sessions, scheduler });
   const server = createServer((req, res) => void handle(req, res));
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -220,6 +233,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     async close() {
       closing = true;
       clearInterval(sweeper);
+      await scheduler.shutdown();
       await workspaces.closeAll();
       await new Promise<void>((resolve) => {
         server.closeAllConnections();
