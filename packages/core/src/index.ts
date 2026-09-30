@@ -23,6 +23,15 @@ export {
   type PluginCatalogStatus,
 } from "./application.ts";
 export {
+  BUILTIN_COMMANDS,
+  type BuiltinCommand,
+  CommandCatalog,
+  type CommandExecutionContext,
+  type CommandHost,
+  type CommandResult,
+  type CommandSurface,
+} from "./commands/catalog.ts";
+export {
   type Config,
   type ConfigLoadResult,
   type ConfigProvenance,
