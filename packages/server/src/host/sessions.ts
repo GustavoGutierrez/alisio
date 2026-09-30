@@ -1,4 +1,11 @@
-import type { Policy, Session, SQLiteStore } from "@alisio/core";
+import {
+  agentCatalogFromState,
+  agentRunOptions,
+  type Policy,
+  resolveActiveAgent,
+  type Session,
+  type SQLiteStore,
+} from "@alisio/core";
 import type {
   ServerFrame,
   SessionDetail,
@@ -142,20 +149,49 @@ export class SessionService {
     this.policies.delete(sessionId);
   }
 
-  /** Run options for the session's next run: its own policy object, approvals and effort. */
+  /**
+   * Run options for the session's next run: its own policy object, approvals, effort and the
+   * session's agent (stored id, else the app's active agent, as in the TUI). A read-only agent
+   * narrows the run to reads without approvals; its instructions are appended per run.
+   */
   runOptions(sessionId: string): {
     policy: Policy;
     approvals: boolean;
     reasoningEffort?: string;
+    instructions?: string;
   } {
     const session = this.get(sessionId);
     const { policy, approvals } = this.policy(session);
     const effort = session.options?.effort;
+    const agent = this.agentOptions(session);
     return {
-      policy,
-      approvals,
+      policy: agent.policy ? { ...agent.policy } : policy,
+      approvals: agent.approvals ?? approvals,
       ...(typeof effort === "string" ? { reasoningEffort: effort } : {}),
+      ...(agent.instructions ? { instructions: agent.instructions } : {}),
     };
+  }
+
+  private agentOptions(session: Session): ReturnType<typeof agentRunOptions> {
+    const app = this.openApp(session)?.app;
+    if (!app) return {};
+    let state: unknown;
+    try {
+      state = app.plugins.pluginState("subagents", "mainAgents");
+    } catch {
+      /* agent contributions are best-effort */
+    }
+    const stored = session.options?.agent;
+    const agent = resolveActiveAgent(
+      agentCatalogFromState(state),
+      typeof stored === "string" ? stored : app.config.agents.active,
+    );
+    return agentRunOptions(agent);
+  }
+
+  /** Merges keys into the session's stored options (undefined removes a key). */
+  setOptions(sessionId: string, options: Record<string, unknown>): void {
+    this.options.catalog.updateSessionMeta(sessionId, { options });
   }
 
   runByRequest(sessionId: string, requestId: string) {

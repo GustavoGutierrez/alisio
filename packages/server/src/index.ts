@@ -18,9 +18,11 @@ import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
+import { registerCommandRoutes } from "./routes/commands.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
+import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 import { SseHub } from "./sse/hub.ts";
@@ -241,7 +243,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   });
   registerWorkspaceRoutes(router, { workspaces, catalog });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
+  registerSessionViewRoutes(router, { catalog, sessions });
   registerPromptRoutes(router, { sessions, scheduler });
+  registerCommandRoutes(router, { sessions, scheduler, workspaces });
   registerApprovalRoutes(router, { approvals, interactions });
   registerEventRoutes(router, {
     hub,

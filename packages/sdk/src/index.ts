@@ -1067,6 +1067,41 @@ export type PromptAccepted =
   | { runId: string; status: "queued" | "running"; duplicate?: false }
   | { runId: string; status: string; duplicate: true }
   | { status: "enqueued"; duplicate?: boolean };
+/**
+ * Answer of `POST /api/sessions/:sid/commands`. A command either reports (`output`, Markdown),
+ * points the client at another session (`/clear`, `/resume`) or expands into a prompt the client
+ * sends through `POST .../prompts` (prompt templates, skills, `/ask`). A repeated `requestId`
+ * answers `{duplicate: true}` without running the command again.
+ */
+export interface CommandOutcome {
+  output?: string;
+  /** `notice` is a short status line; `info` (default) a report. */
+  tone?: "info" | "notice";
+  sessionId?: string;
+  prompt?: { text: string; display: string };
+  /** What changed, e.g. `"model"` or `"effort"`, so clients refresh the session. */
+  effects?: string[];
+  duplicate?: boolean;
+}
+/** `GET /api/sessions/:sid/models`: models of the session's provider (credential-free). */
+export interface SessionModels {
+  provider: string;
+  model: string;
+  /** Session reasoning effort, when set. */
+  effort?: string;
+  models: ModelInfo[];
+  /** The provider could not list its models (the current model still works). */
+  unavailable: boolean;
+}
+/** `GET /api/sessions/:sid/context`: estimated tokens of the next request and the budget. */
+export interface SessionContextUsage {
+  estimated: number;
+  /** Model context window, when known. */
+  total?: number;
+  basis: "window" | "unknown";
+  /** Percentage of `total` at which auto-compaction triggers. */
+  compactionAt: number;
+}
 /** Body of every non-2xx web API response. */
 export interface ApiError {
   error: { code: ApiErrorCode; message: string; details?: unknown };
