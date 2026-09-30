@@ -217,7 +217,8 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       process.stderr.write(`${banner.lines.join("\n")}\n`);
       for (const d of banner.diagnostics) process.stderr.write(`[startup] ${JSON.stringify(d)}\n`);
     }
-    if (!opts.quiet) console.log("Alisio · /exit /new /skill:name /command plugin.id:name args");
+    if (!opts.quiet)
+      console.log("Alisio · /exit /new /btw question /skill:name /command plugin.id:name args");
     process.stdout.write("\nalisio › ");
     try {
       for await (const rawLine of rl) {
@@ -228,6 +229,21 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         if (line === "/new") {
           session = app.store.create(app.workspace, app.provider.id, app.provider.model).id;
           await app.herdr.report("idle", session);
+          process.stdout.write("\nalisio › ");
+          continue;
+        }
+        if (line === "/btw" || line.startsWith("/btw ")) {
+          // Side question: printed here only, never added to the conversation.
+          try {
+            const { CommandCatalog } = await import("@alisio/core");
+            const result = await new CommandCatalog(app).execute("btw", line.slice(4), {
+              sessionId: session,
+              signal: controller.signal,
+            });
+            console.log(result.text ?? "");
+          } catch (e) {
+            console.error(e instanceof Error ? e.message : String(e));
+          }
           process.stdout.write("\nalisio › ");
           continue;
         }

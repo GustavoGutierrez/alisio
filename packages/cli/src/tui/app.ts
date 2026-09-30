@@ -51,10 +51,12 @@ import {
   removeLastAttachment,
   toApiAttachment,
 } from "./attachments.ts";
+import { BTW_DESCRIPTION, BTW_USAGE, btwBrowser, btwPending } from "./btw.ts";
 import { copyText, nodeSpawn } from "./clipboard.ts";
 import {
   AttachmentsBar,
   BannerBlock,
+  BtwPanel,
   ContentInset,
   clock,
   componentFor,
@@ -1780,6 +1782,48 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
+  // `/btw` side questions: answered in the picker slot, never appended to the transcript. One
+  // question is in flight at a time; Esc cancels it (independent of the run's controller, so a
+  // side question also works, and is cancelled on its own, while a turn is running).
+  let btwController: AbortController | undefined;
+  let btwPanel: BtwPanel | undefined;
+  const btwHeight = () => Math.max(4, Math.floor((process.stdout.rows ?? 30) / 2) - 6);
+  const closeBtw = () => {
+    btwController?.abort(new Error("Cancelled"));
+    btwController = undefined;
+    if (btwPanel && picker === btwPanel) closePicker();
+    btwPanel = undefined;
+  };
+  const sideQuestion = async (question: string) => {
+    const asked = session;
+    const entries = app.sideQuestions.history(asked);
+    if (!question) {
+      const state = btwBrowser(entries);
+      if (!state) return notice(`${BTW_USAGE}\n${BTW_DESCRIPTION}`);
+      btwPanel = new BtwPanel(state, closeBtw, btwHeight);
+      return showPicker(btwPanel);
+    }
+    btwController?.abort(new Error("Cancelled"));
+    const controller = new AbortController();
+    btwController = controller;
+    const panel = new BtwPanel(btwPending(entries, question), closeBtw, btwHeight);
+    btwPanel = panel;
+    showPicker(panel);
+    try {
+      await app.sideQuestions.ask(asked, question, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      panel.dispatch({ type: "answered", entries: app.sideQuestions.history(asked) });
+      // An approval may have taken the slot meanwhile: the answer is in the history anyway.
+      if (picker !== panel) flashHint("Side answer ready: /btw to view it", 4000);
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      panel.dispatch({ type: "failed", message: e instanceof Error ? e.message : String(e) });
+      if (picker !== panel) error(e);
+    } finally {
+      if (btwController === controller) btwController = undefined;
+      tui.requestRender();
+    }
+  };
   const commandCatalog = new CommandCatalog(app);
   const mutating = new Set([
     "connect",
@@ -1860,6 +1904,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
           tui.flash(message);
           return result.ok ? undefined : notice(message);
         }
+        case "btw":
+          return await sideQuestion(parsed.args);
         case "ask": {
           if (!parsed.args) return notice("Usage: /ask <question>");
           return await runPrompt(
@@ -2200,6 +2246,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     clock.now = Date.now();
     if (
       busy ||
+      btwPanel?.pending ||
       view.items.some((i) => i.kind === "tool" && i.status === "running") ||
       panelNodes().some((n) => n.status === "running")
     ) {

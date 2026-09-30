@@ -18,6 +18,16 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   type PendingAttachment,
 } from "./attachments.ts";
+import {
+  type BtwAction,
+  type BtwState,
+  btwCurrent,
+  btwHints,
+  btwPosition,
+  btwUsageLine,
+  btwWindow,
+  reduceBtw,
+} from "./btw.ts";
 import { branchDisplay } from "./git-branch.ts";
 import {
   initialQuestionState,
@@ -1312,6 +1322,81 @@ export class QuestionPanel implements Component {
       "Esc skip",
     ];
     lines.push(style.dim(`  ${hints.join(" · ")}`));
+    return fit(lines, width);
+  }
+}
+
+/**
+ * The `/btw` side-question panel (picker slot, never the transcript): a pending question with a
+ * spinner, then the answer rendered as Markdown like assistant text, scrollable, with ←/→ through
+ * the session's earlier side answers. `onClose` runs on Esc (the app cancels a pending question).
+ */
+export class BtwPanel implements Component {
+  private markdown?: { id: string; width: number; lines: string[] };
+  constructor(
+    private state: BtwState,
+    private readonly onClose: () => void,
+    private readonly height: () => number,
+  ) {}
+  get pending(): boolean {
+    return !!this.state.pending;
+  }
+  dispatch(action: BtwAction): void {
+    this.state = reduceBtw(this.state, action);
+  }
+  invalidate(): void {
+    this.markdown = undefined;
+  }
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.escape)) return this.onClose();
+    if (matchesKey(data, Key.left)) return this.dispatch({ type: "prev" });
+    if (matchesKey(data, Key.right)) return this.dispatch({ type: "next" });
+    if (matchesKey(data, Key.up)) return this.dispatch({ type: "scroll", lines: -1 });
+    if (matchesKey(data, Key.down)) return this.dispatch({ type: "scroll", lines: 1 });
+    if (matchesKey(data, Key.pageUp))
+      return this.dispatch({ type: "scroll", lines: -this.height() });
+    if (matchesKey(data, Key.pageDown))
+      return this.dispatch({ type: "scroll", lines: this.height() });
+  }
+  private answerLines(id: string, text: string, width: number): string[] {
+    if (this.markdown?.id === id && this.markdown.width === width) return this.markdown.lines;
+    const lines = new Markdown(text, 0, 0, markdownTheme, markdownDefaultTextStyle, {
+      transform: markdownTransform,
+    }).render(Math.max(1, width));
+    this.markdown = { id, width, lines };
+    return lines;
+  }
+  render(width: number): string[] {
+    const s = this.state;
+    const inner = Math.max(1, width - 2);
+    const bar = style.gray("│");
+    const current = btwCurrent(s);
+    const position = btwPosition(s);
+    const lines: string[] = [
+      "",
+      `${style.bold(style.yellow("btw"))}${position ? ` ${style.dim(position)}` : ""}${style.dim(" · side question, not added to the conversation")}`,
+    ];
+    const question = s.pending?.question ?? s.error?.question ?? current?.question ?? "";
+    lines.push(...wrap(question, inner).map((l) => `${bar} ${style.bold(l)}`));
+    let overflow = false;
+    if (s.pending) {
+      const spinner = SPINNER[clock.frame % SPINNER.length] ?? "…";
+      lines.push(
+        `${bar} ${style.cyan(spinner)} Thinking… ${style.dim(formatDuration(clock.now - s.pending.startedAt))}`,
+      );
+    } else if (s.error) {
+      lines.push(...wrap(s.error.message, inner).map((l) => `${bar} ${style.red(l)}`));
+    } else if (current) {
+      const body = this.answerLines(current.id, current.answer, inner);
+      const view = btwWindow(body, s.scroll, Math.max(3, this.height()));
+      if (view.scroll !== s.scroll) this.state = { ...s, scroll: view.scroll };
+      overflow = view.above || view.below;
+      if (view.above) lines.push(`${bar} ${style.dim("↑ more")}`);
+      lines.push(...view.lines.map((l) => `${bar} ${l}`));
+      if (view.below) lines.push(`${bar} ${style.dim("↓ more")}`);
+      lines.push(`${bar} ${style.dim(btwUsageLine(current))}`);
+    }
+    lines.push(style.dim(`  ${btwHints(this.state, overflow)}`));
     return fit(lines, width);
   }
 }
