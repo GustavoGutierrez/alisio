@@ -48,7 +48,7 @@ describe("SettingsMenu", () => {
     expect(text).toContain("Auto-compact");
     expect(text).toContain("true"); // default compaction.auto
     expect(text).toContain("85%"); // default compaction.threshold
-    expect(text).toContain("(1/17)");
+    expect(text).toContain("(1/18)");
     // Footer: description of the highlighted row is shown.
     expect(text).toContain("Summarize older history automatically");
     expect(text).toContain("Type to search · Enter/Space to change · Esc to cancel");
@@ -153,9 +153,11 @@ describe("SettingsMenu", () => {
 
   it("keeps the filter and re-selects the changed row after refresh", () => {
     const { component, onChange } = menu();
+    component.handleInput("i");
+    component.handleInput("n");
     component.handleInput("p");
-    component.handleInput("a");
-    component.handleInput("d"); // filter "pad" -> only "Editor padding"
+    component.handleInput("u");
+    component.handleInput("t"); // filter "input" -> only "Editor padding"
     component.handleInput("\r");
     expect(onChange).toHaveBeenCalledOnce();
     const [row, value] = onChange.mock.calls[0] as [SettingRow, unknown];
@@ -165,13 +167,16 @@ describe("SettingsMenu", () => {
     const refreshed = settingsMenuRows(
       {
         ...input(),
-        config: { ...defaultConfig, tui: { paddingX: 2, skillSlashCommands: true } },
+        config: {
+          ...defaultConfig,
+          tui: { paddingX: 2, contentPaddingX: 2, skillSlashCommands: true },
+        },
       },
       NAVIGATION,
     );
     component.refresh(refreshed);
     const text = rendered(component);
-    expect(text).toContain("filter: pad");
+    expect(text).toContain("filter: input");
     expect(text).toContain("(1/1)");
     expect(text).toContain("Editor padding");
   });

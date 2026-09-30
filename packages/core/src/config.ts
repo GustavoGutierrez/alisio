@@ -189,8 +189,15 @@ const configObjectSchema = z
       })),
     tui: z
       .object({
-        /** Horizontal padding (columns) around the editor input box. */
+        /** Horizontal padding (columns) around the editor input box. Editor-only. */
         paddingX: z.number().int().min(0).max(4).default(1),
+        /**
+         * Horizontal inset (columns) applied to each side of the transcript content, so
+         * agent-written rows keep breathing room from the window borders. Independent of
+         * `paddingX` (which styles only the editor input box). Clamped on narrow terminals so the
+         * content column never collapses below a usable width.
+         */
+        contentPaddingX: z.number().int().min(0).max(12).default(2),
         /**
          * Offer effective skills as first-class `skill:<id>` editor slash-autocomplete entries.
          * Off hides those entries; the `/skills` manager and its argument completion stay available.
@@ -198,7 +205,7 @@ const configObjectSchema = z
         skillSlashCommands: z.boolean().default(true),
       })
       .strict()
-      .default(() => ({ paddingX: 1, skillSlashCommands: true })),
+      .default(() => ({ paddingX: 1, contentPaddingX: 2, skillSlashCommands: true })),
     /**
      * The ACTIVE agent drives the main session: its system prompt is appended to every prompt and
      * its optional model selector is offered when the agent is chosen (`/agents`). `build` is the
@@ -603,6 +610,7 @@ const SETTABLE_KEYS = {
   "limits.timeoutMs": SETTABLE_SECTIONS.limits.shape.timeoutMs,
   "pluginHooks.timeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.timeoutMs,
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
+  "tui.contentPaddingX": SETTABLE_SECTIONS.tui.shape.contentPaddingX,
   "tui.skillSlashCommands": SETTABLE_SECTIONS.tui.shape.skillSlashCommands,
   "websearch.provider": SETTABLE_SECTIONS.websearch.shape.provider,
   "agents.active": SETTABLE_SECTIONS.agents.shape.active,

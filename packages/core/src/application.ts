@@ -981,6 +981,9 @@ export async function createApplication(options: AppOptions = {}) {
           case "tui.paddingX":
             config.tui = { ...config.tui, paddingX: Number(value) };
             break;
+          case "tui.contentPaddingX":
+            config.tui = { ...config.tui, contentPaddingX: Number(value) };
+            break;
           case "tui.skillSlashCommands":
             config.tui = { ...config.tui, skillSlashCommands: value === true };
             break;

@@ -285,7 +285,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - Comando `/settings` (`/prefs`): menú de ajustes estilo OpenCode — filas de dos columnas
   (preferencia + valor actual), filtro escribiendo (nombre/clave/categoría/descripción), contador
   `(n/total)` y pie con la descripción de la fila resaltada; Enter/Espacio cambia el valor, Esc
-  sale. Quince ajustes REALES y conectados, persistidos de forma atómica en la configuración global
+  sale. Dieciséis ajustes REALES y conectados, persistidos de forma atómica en la configuración global
   de usuario (`setConfigValue`, puerta de entrada acotada a un conjunto de claves validado con el
   propio esquema) y aplicados en caliente: `compaction.auto/threshold/keepTurns/maxOutputTokens` y
   `limits.maxTurns/maxOutputTokens/maxContextChars/timeoutMs` (vía `AgentRunner.applySettings`,
@@ -294,6 +294,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   turno), `websearch.provider` (enum, muta el objeto compartido que la cadena de búsqueda lee en
   cada llamada; `native` requiere un proveedor que lo soporte), `pluginHooks.timeoutMs` (vía
   `PluginHost.applyTimeoutSettings`, siguiente hook), `tui.paddingX` (padding del editor, inmediato),
+  `tui.contentPaddingX` (inset horizontal de cada lado del contenido del transcript, inmediato;
+  acotado en terminales estrechas para no colapsar la columna de contenido),
   `tui.skillSlashCommands` (alterna las entradas `skill:<id>` del autocompletado, inmediato) y el
   consentimiento `mcp.allow` por el camino
   `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent`. Bajo

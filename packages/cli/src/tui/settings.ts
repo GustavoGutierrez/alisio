@@ -53,7 +53,7 @@ export interface SettingsConfigView {
   compaction: { auto: boolean; threshold: number; keepTurns: number; maxOutputTokens: number };
   context: { claudeMdFallback: boolean; maxBytes: number };
   limits: { maxTurns: number; maxOutputTokens: number; maxContextChars: number; timeoutMs: number };
-  tui: { paddingX: number; skillSlashCommands: boolean };
+  tui: { paddingX: number; contentPaddingX: number; skillSlashCommands: boolean };
   mcp: { allow?: boolean };
   websearch: { provider?: (typeof WEBSEARCH_PROVIDERS)[number] };
   pluginHooks: { timeoutMs: number };
@@ -72,7 +72,7 @@ export const defaultConfig: SettingsConfigView = {
   compaction: { auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 },
   context: { claudeMdFallback: false, maxBytes: 32 * 1024 },
   limits: { maxTurns: 100, maxOutputTokens: 16_384, maxContextChars: 800_000, timeoutMs: 300_000 },
-  tui: { paddingX: 1, skillSlashCommands: true },
+  tui: { paddingX: 1, contentPaddingX: 2, skillSlashCommands: true },
   mcp: { allow: false },
   websearch: { provider: undefined },
   pluginHooks: { timeoutMs: 15_000 },
@@ -244,6 +244,16 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.tui.paddingX,
     description:
       "Horizontal padding (columns) around the editor input box. Applied immediately to the current editor.",
+  },
+  {
+    id: "tui.contentPaddingX",
+    label: "Content inset",
+    category: "TUI",
+    valueType: "number",
+    values: [0, 1, 2, 3, 4, 6, 8, 12],
+    read: (config) => config.tui.contentPaddingX,
+    description:
+      "Horizontal inset (columns) on each side of the transcript content, keeping agent-written rows clear of the window borders. Clamped on narrow terminals so the content column stays usable. Applied immediately.",
   },
   {
     id: "tui.skillSlashCommands",

@@ -748,6 +748,52 @@ export class InfoBlock implements Component {
   }
 }
 
+/**
+ * Minimum usable inner width (cells) the transcript keeps no matter how narrow the terminal is or
+ * how large the configured inset grows. The effective inset is clamped so this floor is honored,
+ * which also keeps the inner width positive.
+ */
+export const MIN_CONTENT_WIDTH = 20;
+
+/**
+ * Inset actually applied on each side: the configured value capped so the inner column stays at
+ * least `MIN_CONTENT_WIDTH` wide. On terminals narrower than that floor the inset degrades to 0
+ * rather than overflowing (the inner width then simply equals the terminal width).
+ */
+export function effectiveContentInset(width: number, inset: number): number {
+  const requested = Math.max(0, Math.floor(inset));
+  const max = Math.max(0, Math.floor((Math.floor(width) - MIN_CONTENT_WIDTH) / 2));
+  return Math.min(requested, max);
+}
+
+/** Inner width handed to transcript children after the effective inset is applied. Always >= 1. */
+export function contentInnerWidth(width: number, inset: number): number {
+  return Math.max(1, Math.floor(width) - effectiveContentInset(width, inset) * 2);
+}
+
+/**
+ * Applies the transcript's horizontal inset in ONE place: it hands children a reduced width and
+ * prefixes every produced line with the inset, so all transcript chrome (text, copy hint, tool
+ * sub-lines, reasoning lines, group headers) shares the same visual column. The reduced width is a
+ * deterministic function of the terminal width, so per-row caches keyed by width stay effective.
+ */
+export class ContentInset implements Component {
+  constructor(
+    private readonly inner: Component,
+    private readonly inset: () => number,
+  ) {}
+  invalidate(): void {
+    this.inner.invalidate();
+  }
+  render(width: number): string[] {
+    const inset = effectiveContentInset(width, this.inset());
+    const lines = this.inner.render(contentInnerWidth(width, inset));
+    if (!inset) return lines;
+    const pad = " ".repeat(inset);
+    return lines.map((line) => `${pad}${line}`);
+  }
+}
+
 export function componentFor(entry: TranscriptEntry): Component {
   if (entry.kind === "group") return new ToolGroupBlock(entry.group);
   switch (entry.kind) {

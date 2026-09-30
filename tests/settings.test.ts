@@ -62,7 +62,7 @@ describe("settings menu rows", () => {
         },
         mcp: { allow: true },
         pluginHooks: { timeoutMs: 30_000 },
-        tui: { paddingX: 2, skillSlashCommands: false },
+        tui: { paddingX: 2, contentPaddingX: 4, skillSlashCommands: false },
         websearch: { provider: "tavily" },
       }),
       mcpAllowPersisted: true,
@@ -83,6 +83,7 @@ describe("settings menu rows", () => {
     expect(byId("limits.maxContextChars").current).toBe(240_000);
     expect(byId("pluginHooks.timeoutMs").current).toBe(30_000);
     expect(byId("tui.paddingX").current).toBe(2);
+    expect(byId("tui.contentPaddingX").current).toBe(4);
     expect(byId("tui.skillSlashCommands").current).toBe(false);
     expect(byId("websearch.provider").current).toBe("tavily");
   });
@@ -248,13 +249,13 @@ describe("value display and cycling", () => {
 
 describe("counter", () => {
   it("renders OpenCode-style (n/total)", () => {
-    expect(settingsCounter(rows(), 0)).toBe("(1/17)");
-    expect(settingsCounter(rows(), 16)).toBe("(17/17)");
+    expect(settingsCounter(rows(), 0)).toBe("(1/18)");
+    expect(settingsCounter(rows(), 17)).toBe("(18/18)");
   });
   it("is empty for an empty list and clamps out-of-range selections", () => {
     expect(settingsCounter([], 0)).toBe("");
-    expect(settingsCounter(rows(), 99)).toBe("(17/17)");
-    expect(settingsCounter(rows(), -3)).toBe("(1/17)");
+    expect(settingsCounter(rows(), 99)).toBe("(18/18)");
+    expect(settingsCounter(rows(), -3)).toBe("(1/18)");
   });
 });
 

@@ -55,8 +55,10 @@ import { copyText, nodeSpawn } from "./clipboard.ts";
 import {
   AttachmentsBar,
   BannerBlock,
+  ContentInset,
   clock,
   componentFor,
+  contentInnerWidth,
   Footer,
   Header,
   type HeaderInfo,
@@ -515,14 +517,27 @@ export async function runTui(options: TuiOptions): Promise<void> {
   // working (copyOnSelect must never be disturbed). The region sits between the ScrollView and
   // the content switch; content rows = visible rows + the scroll offset.
   let transcriptScroll: ScrollView | undefined;
+  // Transcript content is inset from both borders in ONE place: the wrapper hands children a
+  // reduced width and prefixes every row, so agent text, copy hints, tool sub-lines, reasoning
+  // lines and group headers all share the same visual column. The config is read live, so a
+  // `/settings` change applies on the next render without rebuilding the view.
+  const contentInsetX = () => app.config.tui.contentPaddingX;
   const transcriptRegion = new MouseRegion(
-    new Switch(() => (viewedState() ? childView.container : transcript)),
+    new ContentInset(
+      new Switch(() => (viewedState() ? childView.container : transcript)),
+      contentInsetX,
+    ),
     (event: TuiMouseEvent): TuiMouseEventResult | undefined => {
       if (picker || event.type !== "click" || event.button !== "left") return undefined;
       const scroll = transcriptScroll;
       if (!scroll) return undefined;
       const visible = visibleTranscript();
-      const candidate = visible.sync.entryAt(event.y + scroll.scrollTop, event.width);
+      // entryAt re-renders each row to measure its height, so it must use the same reduced width
+      // the wrapper hands the rows during render.
+      const candidate = visible.sync.entryAt(
+        event.y + scroll.scrollTop,
+        contentInnerWidth(event.width, contentInsetX()),
+      );
       if (!candidate) return undefined;
       toggleFold(candidate);
       return { handled: true };
@@ -1608,6 +1623,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
         .updateSetting(row.id as SettableSettingKey, stored)
         .then(() => {
           if (row.id === "tui.paddingX") editor.setPaddingX(Number(value));
+          // The inset wrapper reads the live config; repaint so the new value shows immediately.
+          if (row.id === "tui.contentPaddingX") tui.requestRender();
           // Rebuild the slash provider: the toggle gates the skill:<id> entries immediately.
           if (row.id === "tui.skillSlashCommands")
             editor.setAutocompleteProvider(buildSlashCompletionProvider());

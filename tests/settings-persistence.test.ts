@@ -80,6 +80,9 @@ describe("setConfigValue", () => {
     await expect(setConfigValue({ key: "tui.paddingX", value: 9 })).rejects.toThrow(
       /Invalid value for tui\.paddingX/,
     );
+    await expect(setConfigValue({ key: "tui.contentPaddingX", value: 13 })).rejects.toThrow(
+      /Invalid value for tui\.contentPaddingX/,
+    );
     // Nothing was written to any file.
     expect((await loadConfig(root)).compaction.auto).toBe(true);
   });
@@ -101,6 +104,7 @@ describe("setConfigValue", () => {
       "context.maxBytes",
       "limits.timeoutMs",
       "pluginHooks.timeoutMs",
+      "tui.contentPaddingX",
       "tui.skillSlashCommands",
       "websearch.provider",
     ])
@@ -118,12 +122,14 @@ describe("setConfigValue", () => {
     await setConfigValue({ key: "limits.timeoutMs", value: 60_000 });
     await setConfigValue({ key: "pluginHooks.timeoutMs", value: 30_000 });
     await setConfigValue({ key: "tui.skillSlashCommands", value: false });
+    await setConfigValue({ key: "tui.contentPaddingX", value: 6 });
     const loaded = await loadConfig(root);
     expect(loaded.websearch.provider).toBe("tavily");
     expect(loaded.context.maxBytes).toBe(65_536);
     expect(loaded.limits.timeoutMs).toBe(60_000);
     expect(loaded.pluginHooks.timeoutMs).toBe(30_000);
     expect(loaded.tui.skillSlashCommands).toBe(false);
+    expect(loaded.tui.contentPaddingX).toBe(6);
     // Untouched leaves keep their defaults.
     expect(loaded.context.claudeMdFallback).toBe(false);
     expect(loaded.tui.paddingX).toBe(1);
@@ -205,8 +211,10 @@ describe("application.updateSetting", () => {
     // Limits and TUI padding apply the same way.
     await app.updateSetting("limits.maxTurns", 10);
     await app.updateSetting("tui.paddingX", 3);
+    await app.updateSetting("tui.contentPaddingX", 4);
     expect(app.config.limits.maxTurns).toBe(10);
     expect(app.config.tui.paddingX).toBe(3);
+    expect(app.config.tui.contentPaddingX).toBe(4);
   });
 
   it("applies the new web/context/limits/plugin-hook/TUI keys to the process and the file", async () => {
