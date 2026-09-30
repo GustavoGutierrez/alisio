@@ -257,3 +257,107 @@ export async function settled(t: TestServer, sessionId: string, runId?: string) 
     return run && run.status !== "queued" && run.status !== "running" ? run : undefined;
   });
 }
+
+export interface SseEvent {
+  id?: string;
+  frame: import("@alisio/sdk").ServerFrame;
+}
+
+/** An SSE connection that parses frames; `next(pred)` waits for a matching frame. */
+export function openStream(
+  port: number,
+  cookie: string,
+  sessions: string[] = [],
+  headers: Record<string, string> = {},
+) {
+  const events: SseEvent[] = [];
+  const comments: string[] = [];
+  let status = 0;
+  let ended = false;
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const l of listeners) l();
+  };
+  const query = sessions.map((s) => `session=${encodeURIComponent(s)}`).join("&");
+  let buffer = "";
+  const req = httpRequest(
+    {
+      host: "127.0.0.1",
+      port,
+      path: `/api/events${query ? `?${query}` : ""}`,
+      headers: { Cookie: cookie, Accept: "text/event-stream", ...headers },
+    },
+    (res) => {
+      status = res.statusCode ?? 0;
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => {
+        buffer += chunk;
+        let index = buffer.indexOf("\n\n");
+        while (index >= 0) {
+          const block = buffer.slice(0, index);
+          buffer = buffer.slice(index + 2);
+          let id: string | undefined;
+          let data = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith(":")) comments.push(line);
+            else if (line.startsWith("id: ")) id = line.slice(4);
+            else if (line.startsWith("data: ")) data += line.slice(6);
+          }
+          if (data) events.push({ ...(id ? { id } : {}), frame: JSON.parse(data) });
+          index = buffer.indexOf("\n\n");
+        }
+        notify();
+      });
+      res.on("end", () => {
+        ended = true;
+        notify();
+      });
+    },
+  );
+  req.on("error", () => {
+    ended = true;
+    notify();
+  });
+  req.end();
+  return {
+    events,
+    comments,
+    get status() {
+      return status;
+    },
+    get ended() {
+      return ended;
+    },
+    frames: () => events.map((e) => e.frame),
+    /** Resolves with the first event (from `from` on) matching `pred`. */
+    next(pred: (e: SseEvent) => boolean, from = 0, ms = 5_000): Promise<SseEvent> {
+      return new Promise((resolve, reject) => {
+        const check = () => {
+          const found = events.slice(from).find(pred);
+          if (found) {
+            listeners.delete(check);
+            clearTimeout(timer);
+            resolve(found);
+          } else if (ended) {
+            listeners.delete(check);
+            clearTimeout(timer);
+            reject(
+              new Error(`stream ended; frames: ${JSON.stringify(events.map((e) => e.frame.t))}`),
+            );
+          }
+        };
+        const timer = setTimeout(() => {
+          listeners.delete(check);
+          reject(
+            new Error(`next: timed out; frames: ${JSON.stringify(events.map((e) => e.frame.t))}`),
+          );
+        }, ms);
+        listeners.add(check);
+        check();
+      });
+    },
+    close() {
+      req.destroy();
+    },
+  };
+}

@@ -10,15 +10,18 @@ import { SQLiteStore, stateHome } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { RunScheduler } from "./host/run-scheduler.ts";
 import { SessionService } from "./host/sessions.ts";
-import { type ServerAppOptions, WorkspaceHost } from "./host/workspace-host.ts";
+import { type ServerAppOptions, WorkspaceHost, workspaceId } from "./host/workspace-host.ts";
 import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
+import { registerEventRoutes } from "./routes/events.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
+import { SseHub } from "./sse/hub.ts";
+import { InflightTracker } from "./sse/inflight.ts";
 
 export { isLoopbackHost } from "./auth/guard.ts";
 export {
@@ -60,6 +63,12 @@ export interface ServerOptions {
   maxConcurrentRuns?: number;
   /** Close a workspace app after this long without activity (default 10 min). */
   idleEvictMs?: number;
+  /** SSE heartbeat interval (default 15 s). */
+  heartbeatMs?: number;
+  /** Delta coalescing window, clamped to 16–50 ms (default 33 ms). */
+  coalesceMs?: number;
+  /** Maximum concurrent event streams (default 16). */
+  maxStreams?: number;
 }
 
 export interface RunningServer {
@@ -105,14 +114,53 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   // Server-level connection to the shared session database (lists, metadata, snapshots).
   const catalog = new SQLiteStore(base.db ?? join(stateHome(), "sessions.sqlite"));
   let sessions: SessionService | undefined;
+  const inflight = new InflightTracker();
   const scheduler = new RunScheduler({
     ...(options.maxConcurrentRuns ? { maxConcurrent: options.maxConcurrentRuns } : {}),
-    onChange: (job) => sessions?.notify(job.sessionId),
+    onChange: (job, status) => {
+      if (status === "finished") inflight.clear(job.sessionId, job.runId);
+      else inflight.mark(job.sessionId, job.runId, status);
+      sessions?.notify(job.sessionId);
+    },
+  });
+  const workspaceOf = (sessionId: string) => {
+    try {
+      return workspaceId(catalog.get(sessionId).workspace);
+    } catch {
+      return undefined;
+    }
+  };
+  const hub = new SseHub({
+    snapshot: (sessionId) => {
+      const service = sessions as SessionService;
+      const session = service.get(sessionId);
+      const current = inflight.get(sessionId);
+      return {
+        t: "snapshot",
+        sessionId,
+        cursor: catalog.lastEventId(sessionId),
+        session: service.wire(session),
+        messages: catalog.messagesPage(sessionId, { limit: 50 }),
+        ...(current ? { inflight: current } : {}),
+        pending: { approvals: [], interactions: [] },
+      };
+    },
+    messagesAfter: (sessionId, after) => catalog.messagesPage(sessionId, { after, limit: 200 }),
+    toolResult: (sessionId, callId) => catalog.callResult(sessionId, callId),
+    workspaceOf,
+    ...(options.heartbeatMs ? { heartbeatMs: options.heartbeatMs } : {}),
+    ...(options.coalesceMs ? { coalesceMs: options.coalesceMs } : {}),
   });
   const workspaces = new WorkspaceHost({
     base,
     catalog,
-    busy: (id) => scheduler.busyWorkspace(id),
+    wire: () => ({
+      onEvent: (event) => {
+        inflight.apply(event);
+        hub.publish(event);
+      },
+    }),
+    busy: (id) => scheduler.busyWorkspace(id) || hub.watchesWorkspace(id),
     ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
     ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
     ...(options.defaultWorkspace ? { defaultWorkspace: options.defaultWorkspace } : {}),
@@ -122,15 +170,21 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     Math.min(60_000, options.idleEvictMs ?? 60_000),
   );
   sweeper.unref();
-  sessions = new SessionService({ catalog, workspaces, scheduler, base });
+  sessions = new SessionService({
+    catalog,
+    workspaces,
+    scheduler,
+    base,
+    broadcast: (frame) => hub.broadcast(frame),
+  });
   const stats = (): ServerStats => ({
     shuttingDown: closing,
     activeRuns: scheduler.counts().active,
     queuedRuns: scheduler.counts().queued,
     openWorkspaces: workspaces.openCount,
-    subscribers: 0,
+    subscribers: hub.size,
     pendingApprovals: 0,
-    sseDropped: 0,
+    sseDropped: hub.dropped,
   });
   registerHealthRoutes(router, {
     version: options.version ?? "dev",
@@ -140,6 +194,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerWorkspaceRoutes(router, { workspaces, catalog });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerPromptRoutes(router, { sessions, scheduler });
+  registerEventRoutes(router, {
+    hub,
+    sessions,
+    ...(options.maxStreams ? { maxStreams: options.maxStreams } : {}),
+  });
   const server = createServer((req, res) => void handle(req, res));
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -234,6 +293,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       closing = true;
       clearInterval(sweeper);
       await scheduler.shutdown();
+      hub.closeAll();
       await workspaces.closeAll();
       await new Promise<void>((resolve) => {
         server.closeAllConnections();
