@@ -1,6 +1,19 @@
 /** @alisio/core public API: embed the Alisio agent programmatically. */
 export * from "@alisio/sdk";
 export {
+  type ActiveAgent,
+  type AgentPickerItem,
+  activeAgentCatalog,
+  agentCatalogFromState,
+  agentPickerItems,
+  agentRunOptions,
+  BUILTIN_AGENTS,
+  DEFAULT_AGENT_ID,
+  type MainCapableAgentRecord,
+  mainAgentFromRecord,
+  resolveActiveAgent,
+} from "./agents/active.ts";
+export {
   type AppOptions,
   type BuiltinContext,
   type BuiltinPlugin,
