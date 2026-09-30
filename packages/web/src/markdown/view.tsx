@@ -10,7 +10,7 @@ import { RendererHost } from "../renderers/RendererHost.tsx";
 import { detail } from "../store/app.ts";
 import { openInDock } from "../store/dock.ts";
 import { workspaceRelative } from "../util/files.ts";
-import { fenceBlock, mathBlock } from "./fences.ts";
+import { fenceBlock, type InlineMathToken, mathBlock } from "./fences.ts";
 import {
   emptyMarkdown,
   type MarkdownBlock,
@@ -116,6 +116,16 @@ function Inline({ token }: { token: Token }): ComponentChildren {
       );
     case "html":
       return (token as Tokens.HTML).text;
+    case "inlineMath":
+      return (
+        <RendererHost
+          block={{
+            kind: "math",
+            latex: (token as unknown as InlineMathToken).text,
+            display: false,
+          }}
+        />
+      );
     default: {
       const generic = token as { tokens?: Token[]; text?: string; raw: string };
       return generic.tokens ? inline(generic.tokens) : (generic.text ?? generic.raw);

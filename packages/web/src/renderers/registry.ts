@@ -1,7 +1,7 @@
 /**
  * Renderer registry (spec §10.4): `kind → view`. `code` and the fallback ship in the initial
  * bundle (Markdown fences use them constantly); every other kind is a dynamic import with its
- * own chunk. Phase 5 swaps the `mermaid`/`math` loaders for the real renderers.
+ * own chunk.
  */
 import type { UiBlock } from "@alisio/sdk";
 import type { ComponentType } from "preact";
@@ -34,9 +34,9 @@ const LOADERS: Record<LazyKind, Loader> = {
   json: view(() => import("./json/view.tsx")),
   "test-results": view(() => import("./tests/view.tsx")),
   progress: view(() => import("./progress/view.tsx")),
-  // Phase 5 brings Mermaid and KaTeX; until then their source shows as code.
-  mermaid: view(() => import("./source/view.tsx")),
-  math: view(() => import("./source/view.tsx")),
+  // Mermaid itself loads from the view once the block is visible; KaTeX ships with its view.
+  mermaid: view(() => import("./mermaid/view.tsx")),
+  math: view(() => import("./math/view.tsx")),
 };
 
 /** The view of a block kind: sync when bundled, else a cached dynamic import. */

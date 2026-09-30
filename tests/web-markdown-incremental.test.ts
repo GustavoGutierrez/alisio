@@ -106,4 +106,40 @@ describe("incremental markdown", () => {
     });
     expect(mathBlock("It costs $5 and $6.")).toBeUndefined();
   });
+
+  const inlineTokens = (text: string) => {
+    const [block] = updateMarkdown(emptyMarkdown(), text).blocks;
+    const tokens = (block?.token as { tokens?: Array<{ type: string; text?: string }> }).tokens;
+    return (tokens ?? []).map((t) => ({ type: t.type, text: t.text }));
+  };
+
+  it("routes \\( … \\) to inline math, never $ amounts", () => {
+    expect(inlineTokens("Area \\(\\pi r^2\\) here")).toEqual([
+      { type: "text", text: "Area " },
+      { type: "inlineMath", text: "\\pi r^2" },
+      { type: "text", text: " here" },
+    ]);
+    expect(inlineTokens("It costs $5 and $6.").map((t) => t.type)).not.toContain("inlineMath");
+    expect(inlineTokens("open \\(x^2 never closed").map((t) => t.type)).not.toContain("inlineMath");
+    expect(inlineTokens("`\\(code\\)`").map((t) => t.type)).toEqual(["codespan"]);
+  });
+
+  it("routes ```math and $$ blocks to display math while streaming", () => {
+    let state = updateMarkdown(emptyMarkdown(), "Intro\n\n```math\nE = m");
+    expect(state.blocks.at(-1)?.token.type).toBe("code");
+    state = updateMarkdown(state, "Intro\n\n```math\nE = mc^2\n```\n\n$$a+b$$\n\nend");
+    const code = state.blocks.find((b) => b.token.type === "code")?.token as {
+      lang: string;
+      text: string;
+    };
+    expect(fenceBlock(code.lang, code.text)).toEqual({
+      kind: "math",
+      latex: "E = mc^2",
+      display: true,
+    });
+    const para = state.blocks.find((b) => b.token.raw.startsWith("$$"))?.token as {
+      text: string;
+    };
+    expect(mathBlock(para.text)).toEqual({ kind: "math", latex: "a+b", display: true });
+  });
 });

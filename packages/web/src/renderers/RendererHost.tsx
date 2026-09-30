@@ -42,7 +42,12 @@ export function RendererHost(props: { block: UiBlock; live?: boolean }) {
       active = false;
     };
   }, [props.block.kind]);
-  if (!View) return <FallbackView block={props.block} loading />;
+  if (!View)
+    return props.block.kind === "math" && props.block.display === false ? (
+      <code>{props.block.latex}</code>
+    ) : (
+      <FallbackView block={props.block} loading />
+    );
   return (
     <Guard block={props.block}>
       <View block={props.block} live={props.live} />

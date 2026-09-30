@@ -6,7 +6,8 @@
  * memoized views skip them. An unclosed fence always runs to the end of the text, so it stays
  * among the open blocks until it closes.
  */
-import { Lexer, type Token } from "marked";
+import { Marked, type Token } from "marked";
+import { inlineMathExtension } from "./fences.ts";
 
 export interface MarkdownBlock {
   /** Stable key: the block's offset in the source. */
@@ -24,6 +25,8 @@ export interface MarkdownState {
   frozenEnd: number;
 }
 
+const markdown = new Marked({ gfm: true, extensions: [inlineMathExtension] });
+
 /** Blocks kept open (re-lexed on every update). */
 const OPEN_BLOCKS = 2;
 
@@ -37,7 +40,7 @@ interface Lexed {
 function lexFrom(text: string, base: number): Lexed[] {
   const out: Lexed[] = [];
   let offset = base;
-  for (const token of Lexer.lex(text, { gfm: true })) {
+  for (const token of markdown.lexer(text)) {
     const start = offset;
     offset += token.raw.length;
     out.push({

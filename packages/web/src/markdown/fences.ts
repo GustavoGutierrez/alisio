@@ -28,3 +28,27 @@ export function mathBlock(paragraph: string): UiBlock | undefined {
   const latex = match?.[1]?.trim();
   return latex ? { kind: "math", latex, display: true } : undefined;
 }
+
+/** An inline `\( … \)` span, lexed as its own token (`$…$` stays text: prices). */
+export interface InlineMathToken {
+  type: "inlineMath";
+  raw: string;
+  text: string;
+}
+
+const INLINE_MATH = /^\\\(((?:[^\\\n]|\\(?!\))){1,2000}?)\\\)/;
+
+/** `marked` extension: `\(x^2\)` becomes an `inlineMath` token instead of escaped parens. */
+export const inlineMathExtension = {
+  name: "inlineMath",
+  level: "inline" as const,
+  start(src: string): number | undefined {
+    const index = src.indexOf("\\(");
+    return index >= 0 ? index : undefined;
+  },
+  tokenizer(src: string): InlineMathToken | undefined {
+    const match = INLINE_MATH.exec(src);
+    const text = match?.[1]?.trim();
+    return match && text ? { type: "inlineMath", raw: match[0], text } : undefined;
+  },
+};

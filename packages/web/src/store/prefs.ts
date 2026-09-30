@@ -12,6 +12,8 @@ export const theme = signal<ThemePref>(
 export const density = signal<Density>(
   readPref("alisio.density") === "detailed" ? "detailed" : "compact",
 );
+/** The theme actually shown (`system` resolved); heavy renderers such as Mermaid follow it. */
+export const resolvedTheme = signal<"dark" | "light">("dark");
 export const sidebarCollapsed = signal(readPref("alisio.sidebar") === "collapsed");
 
 const media = () =>
@@ -22,6 +24,7 @@ export function applyTheme(pref: ThemePref = theme.value): void {
   const resolved =
     pref === "system" ? (media()?.matches ? "light" : "dark") : pref === "light" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", resolved);
+  resolvedTheme.value = resolved;
 }
 
 export function setTheme(pref: ThemePref): void {
