@@ -181,6 +181,27 @@ describe("POST /api/sessions/:sid/commands", () => {
   });
 });
 
+describe("session titles", () => {
+  it("derives an untitled session's title from its first prompt (60 chars), until renamed", async () => {
+    t = await startTestServer();
+    const session = await newSession(t);
+    const text = `Explain   the build\n${"x".repeat(80)}`;
+    const accepted = await t.api.post(`/api/sessions/${session.id}/prompts`, {
+      requestId: "t1",
+      text,
+    });
+    await settled(t, session.id, accepted.json<{ runId: string }>().runId);
+    const derived = (await t.api.get(`/api/sessions/${session.id}`)).json<{ title?: string }>();
+    expect(derived.title).toBe(`Explain the build ${"x".repeat(80)}`.slice(0, 60));
+    const listed = (await t.api.get("/api/sessions")).json<{ items: Array<{ title?: string }> }>();
+    expect(listed.items[0]?.title).toBe(derived.title);
+    await t.api.patch(`/api/sessions/${session.id}`, { title: "Named" });
+    expect((await t.api.get(`/api/sessions/${session.id}`)).json<{ title?: string }>().title).toBe(
+      "Named",
+    );
+  });
+});
+
 describe("session models, context and export", () => {
   it("lists the models of the session's provider with effort levels", async () => {
     t = await startTestServer({ provider: withModels(fakeProvider(() => reply("ok"))) });

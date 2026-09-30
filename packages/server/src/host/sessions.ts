@@ -95,7 +95,22 @@ export class SessionService {
     return last && (last.status === "failed" || last.status === "interrupted") ? "error" : "idle";
   }
 
+  /**
+   * The stored title, else the first user prompt collapsed to one line and cut at 60
+   * characters (RF-10). Derived on read, never persisted, so a rename always wins.
+   */
+  title(session: Session): string | undefined {
+    if (session.title) return session.title;
+    const first = this.options.catalog
+      .messagesPage(session.id, { after: -1, limit: 4, compacted: true })
+      .items.find((i) => i.message.role === "user" && !i.message.summary)?.message;
+    if (first?.role !== "user") return undefined;
+    const text = (first.display ?? first.text).replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 60) : undefined;
+  }
+
   wire(session: Session): SessionDetailWire {
+    const title = this.title(session);
     return {
       id: session.id,
       workspaceId: workspaceId(session.workspace),
@@ -103,7 +118,7 @@ export class SessionService {
       provider: session.provider,
       model: session.model,
       status: session.parentId ? "idle" : this.status(session),
-      ...(session.title ? { title: session.title } : {}),
+      ...(title ? { title } : {}),
       ...(session.parentId ? { parentId: session.parentId } : {}),
       ...(session.parentId && session.status ? { childStatus: session.status } : {}),
       ...(session.createdAt ? { createdAt: session.createdAt } : {}),
@@ -233,7 +248,7 @@ export class SessionService {
       sessionId,
       workspaceId: workspaceId(session.workspace),
       status: this.status(session),
-      ...(session.title ? { title: session.title } : {}),
+      ...(this.title(session) ? { title: this.title(session) } : {}),
       ...(session.updatedAt ? { updatedAt: session.updatedAt } : {}),
     });
   }
