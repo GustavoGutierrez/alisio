@@ -310,6 +310,27 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
   assert.equal(sessions.length, 5);
+  // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
+  // and the partial unique index on (session, request_id) exists.
+  {
+    const { DatabaseSync } = process.getBuiltinModule(
+      "node:sqlite",
+    ) as typeof import("node:sqlite");
+    const journal = new DatabaseSync(join(directory, "state", "sessions.sqlite"));
+    try {
+      const runs = journal
+        .prepare("SELECT status, count(*) AS n FROM runs GROUP BY status")
+        .all() as { status: string; n: number }[];
+      assert.ok(
+        runs.some((r) => r.status === "completed" && r.n > 0),
+        JSON.stringify(runs),
+      );
+      assert.ok(!runs.some((r) => r.status === "running" || r.status === "queued"));
+      assert.ok(journal.prepare("SELECT 1 FROM sqlite_master WHERE name='runs_request'").get());
+    } finally {
+      journal.close();
+    }
+  }
   // `alisio setup` (renamed from `alisio init`, which now behaves like any unknown command).
   const setupDirectory = await mkdtemp(join(tmpdir(), `alisio-${mode}-setup-`));
   try {
@@ -376,6 +397,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
         "built-in memory plugin loaded",
         "session persistence",
+        "v4 run journal (runs table, partial unique index)",
         "no node:sqlite ExperimentalWarning",
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
         "headless prompt template /init; --read-only refusal",
