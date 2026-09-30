@@ -39,6 +39,7 @@ describe("docs-check parseMarkdown", () => {
       "# Title",
       "",
       "Text with [a link](/tools#mcp) and ![shot](/assets/x.png).",
+      '<img src="/assets/product.webp" alt="Product preview" />',
       "",
       "```md",
       "# Not a heading",
@@ -64,6 +65,7 @@ describe("docs-check parseMarkdown", () => {
     expect(page.links).toEqual([
       { raw: "/tools#mcp", line: 3, image: false },
       { raw: "/assets/x.png", line: 3, image: true },
+      { raw: "/assets/product.webp", line: 4, image: true },
     ]);
   });
 

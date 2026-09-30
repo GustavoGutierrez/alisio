@@ -38,6 +38,9 @@ const HEADING = /^(#{1,6})\s+(.*)$/;
 const EXPLICIT = /\{#([^}\s]+)\}\s*$/;
 const LINK = /(!?)\[([^\]]*)\]\((<[^>]*>|[^)\s]+)/g;
 const FENCE = /^\s*(`{3,}|~{3,})/;
+const HTML_IMAGE = /<img\b([^>]*)>/gi;
+const HTML_ATTRIBUTE = /\b(src|alt)=(?:"([^"]*)"|'([^']*)')/gi;
+const HOME_COMPONENTS = ["brand-banner", "web-ui-preview", "video"] as const;
 
 /** VitePress/@mdit-vue heading slug; an explicit `{#id}` in the heading always wins. */
 export function slugify(text: string): string {
@@ -113,6 +116,14 @@ export function parseMarkdown(file: string, text: string): Page {
         line: i + 1,
         image: match[1] === "!",
       });
+    }
+    for (const match of line.matchAll(HTML_IMAGE)) {
+      const attributes = new Map<string, string>();
+      for (const attribute of (match[1] ?? "").matchAll(HTML_ATTRIBUTE)) {
+        attributes.set(attribute[1] ?? "", attribute[2] ?? attribute[3] ?? "");
+      }
+      const src = attributes.get("src");
+      if (src) links.push({ raw: src, line: i + 1, image: true });
     }
   }
   return { file, headings, links, fences };
@@ -192,6 +203,35 @@ function main(): void {
           message: `anchor not found: ${raw} (${target.replace(`${DOCS}/`, "docs/")} has no such heading)`,
         });
       }
+    }
+  }
+
+  for (const file of [join(DOCS, "index.md"), join(DOCS, "es", "index.md")]) {
+    const text = readFileSync(file, "utf8");
+    for (const component of HOME_COMPONENTS) {
+      const matches = text.match(new RegExp(`data-component=["']${component}["']`, "g")) ?? [];
+      if (matches.length !== 1) {
+        problems.push({
+          file,
+          line: 1,
+          message: `home structure: expected one ${component} component, found ${matches.length}`,
+        });
+      }
+    }
+    const preview = text.match(/<section data-component="web-ui-preview"[\s\S]*?<\/section>/);
+    if (!preview?.[0].includes('src="/assets/alisio-harness-web-ui.webp"')) {
+      problems.push({ file, line: 1, message: "home structure: Web UI preview image is missing" });
+    }
+    if (!preview?.[0].match(/<img\b[^>]*\balt="[^"]+"/)) {
+      problems.push({ file, line: 1, message: "home structure: Web UI preview needs alt text" });
+    }
+    const headingId = preview?.[0].match(/aria-labelledby="([^"]+)"/)?.[1];
+    if (!headingId || !preview?.[0].includes(`id="${headingId}"`)) {
+      problems.push({
+        file,
+        line: 1,
+        message: "home structure: Web UI preview heading is not labelled",
+      });
     }
   }
 

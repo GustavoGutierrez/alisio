@@ -71,15 +71,6 @@
     rgba(2, 14, 28, 0.62) 78%,
     rgba(2, 14, 28, 0.36) 100%
   );
-  --alisio-footer-overlay: linear-gradient(
-    180deg,
-    rgba(2, 14, 28, 0.5) 0%,
-    rgba(2, 14, 28, 0.78) 30%,
-    rgba(2, 14, 28, 0.88) 50%,
-    rgba(2, 14, 28, 0.78) 70%,
-    rgba(2, 14, 28, 0.46) 100%
-  );
-
   --vp-c-brand-1: var(--alisio-link);
   --vp-c-brand-2: var(--alisio-link-hover);
   --vp-c-brand-3: var(--alisio-solid);

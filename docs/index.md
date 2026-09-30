@@ -42,11 +42,22 @@ features:
 
 ## What is Alisio?
 
-![Alisio banner](</assets/banner.png>)
+<img data-component="brand-banner" src="/assets/banner.png" alt="Alisio — coding-agent harness" width="1447" height="680" />
 
 Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
 endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
 headless for scripts and CI.
+
+<section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading">
+  <div data-component="preview-copy">
+    <h2 id="alisio-web-ui-heading">Work across sessions in the Web UI</h2>
+    <p>Run <code>alisio serve</code> for a local browser workspace with streaming conversations, approvals and file context.</p>
+  </div>
+  <figure>
+    <img src="/assets/alisio-harness-web-ui.webp" alt="Alisio Harness Web UI showing workspace navigation, an active coding conversation and the file explorer" width="1833" height="990" loading="lazy" decoding="async" />
+    <figcaption>The same agent core, available in a focused multi-workspace browser interface.</figcaption>
+  </figure>
+</section>
 
 <section data-component="video" aria-labelledby="alisio-cli-demo-heading">
   <div data-component="video-copy">

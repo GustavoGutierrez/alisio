@@ -42,11 +42,22 @@ features:
 
 ## ¿Qué es Alisio?
 
-![Banner de Alisio](</assets/banner.png>)
+<img data-component="brand-banner" src="/assets/banner.png" alt="Alisio — arnés de agentes de programación" width="1447" height="680" />
 
 Alisio es un arnés de agentes de programación con núcleo propio en TypeScript. Se conecta a cualquier
 endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en su terminal,
 como TUI interactiva o en modo headless para scripts y CI.
+
+<section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading">
+  <div data-component="preview-copy">
+    <h2 id="alisio-web-ui-heading">Trabaje entre sesiones desde la interfaz web</h2>
+    <p>Ejecute <code>alisio serve</code> para usar un espacio de trabajo local en el navegador con conversaciones en streaming, aprobaciones y contexto de archivos.</p>
+  </div>
+  <figure>
+    <img src="/assets/alisio-harness-web-ui.webp" alt="Interfaz web de Alisio Harness con navegación de espacios de trabajo, una conversación de programación activa y el explorador de archivos" width="1833" height="990" loading="lazy" decoding="async" />
+    <figcaption>El mismo núcleo de agente, disponible en una interfaz de navegador enfocada en múltiples espacios de trabajo.</figcaption>
+  </figure>
+</section>
 
 <section data-component="video" aria-labelledby="alisio-cli-demo-heading">
   <div data-component="video-copy">
