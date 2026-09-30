@@ -5,9 +5,10 @@ y sesiones a la vez. Conduce el mismo núcleo de agente que la terminal: sesione
 aprobaciones y la base de datos de sesiones se comparten con la TUI y con `alisio run`.
 
 ::: warning Estado
-El servidor y su API ya están disponibles. La interfaz del navegador (`@alisio/web`) aún está en
-construcción: hasta que se publique, `alisio serve` sirve una página provisional junto a la API.
-Consulte [Limitaciones conocidas](/es/limitations).
+El servidor, su API y la interfaz del navegador están disponibles. El explorador de archivos, los
+adjuntos de imagen, los renderizadores ricos (diff, terminal, Mermaid, fórmulas), la vista de
+trayectoria y la gestión de plugins y modelos llegan en versiones posteriores. Consulte
+[Limitaciones conocidas](/es/limitations).
 :::
 
 ## Arrancar el servidor
@@ -43,6 +44,62 @@ puede estrecharlos por sesión, pero nunca superarlos. `--trust-project` y `--co
 cada workspace que abre el servidor, igual que en la terminal. `--db` elige la base de datos de
 sesiones compartida. Defina `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) para
 controlar las líneas de log JSON que el servidor escribe en stderr.
+
+## Usar la interfaz web
+
+La página tiene una barra lateral a la izquierda y la sesión abierta a la derecha.
+
+**Barra lateral.** **Nueva sesión** empieza una sesión en el workspace que está viendo. Bajo
+**Workspaces**, cada carpeta lista sus sesiones, primero las fijadas y luego las usadas más
+recientemente, con un tiempo relativo ("4 min"). Un punto antes del título indica una sesión en
+ejecución, que espera su respuesta, en uso por otro proceso o cuya última ejecución falló. Los
+iconos junto al encabezado buscan sesiones (también `Ctrl+K` / `Cmd+K`), muestran las sesiones
+archivadas y abren otro workspace por su ruta absoluta. Al pasar sobre una sesión aparecen **Fijar**
+y **Archivar**, y sobre una carpeta, una nueva sesión dentro de ella. **Ajustes** está abajo; el
+icono de panel contrae la barra a un riel estrecho. Por debajo de 900 px la barra lateral pasa a ser
+un cajón que se abre desde la cabecera.
+
+**Cabecera.** Haga clic en el título para renombrar la sesión (las sesiones sin título muestran su
+primer prompt). La insignia muestra el agente y el preset de permisos. **Log de sesión** descarga la
+sesión como JSON Lines: cada evento durable en el formato de `alisio run --json` y después una línea
+`{"type":"message"}` por cada mensaje guardado.
+
+**Conversación.** Sus mensajes aparecen a la derecha con un botón de copiar. El trabajo del agente
+aparece como filas de una línea: `Razonamiento · …`, `Inyección de contexto · AGENTS.md` y una fila
+por llamada a herramienta, como `Read · README.md` o `Shell · npm test`. Haga clic en una fila para
+ver su entrada y su salida. La respuesta llega en streaming como Markdown; los bloques de código
+tienen etiqueta de lenguaje, **Ajustar líneas** y **Copiar**, y se resaltan cuando entran en
+pantalla. El razonamiento es solo de visualización: tras recargar, las filas de razonamiento
+anteriores desaparecen porque nunca se guarda. Al desplazarse hacia arriba, un botón vuelve al
+último mensaje; las sesiones largas muestran los últimos 30 turnos y cargan los mensajes anteriores
+a demanda.
+
+**Compositor.** `Enter` envía, `Shift+Enter` inserta un salto de línea, y `↑`/`↓` en la primera línea
+recorren los prompts enviados. Escribir `/` abre la paleta de comandos (flechas para moverse,
+`Enter` o `Tab` para elegir, `Esc` para cerrar): los comandos se ejecutan en el servidor y su salida
+aparece en la conversación; las plantillas de prompt, las skills y `/ask` se convierten en un
+prompt. `/` fuera de un campo de texto lleva el foco al compositor. Debajo del cuadro de texto:
+
+| Control | Qué hace |
+| --- | --- |
+| `+` | Adjuntar imágenes (desactivado hasta una versión posterior) |
+| Preset de permisos | `Solo lectura`, `Preguntar`, `Escritura en workspace` o `Acceso total` para esta sesión |
+| Modelo y esfuerzo | Modelo del proveedor del workspace y el esfuerzo de razonamiento que admite |
+| Anillo de contexto | Contexto estimado de la próxima petición frente a la ventana del modelo |
+| Enviar / Detener | Detener sustituye a Enviar mientras hay una ejecución activa y el cuadro está vacío |
+
+Mientras hay una ejecución activa puede seguir escribiendo: el texto se encola para el siguiente
+turno de la sesión.
+
+**Aprobaciones y preguntas.** Cuando una herramienta necesita aprobación, un panel ocupa el lugar del
+compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Responda con **Denegar**
+(`D`), **Permitir una vez** (`O`) o **Permitir en la sesión** (`S`); las teclas pulsadas en los
+primeros 300 ms se ignoran para que un `Enter` accidental no apruebe. Las preguntas de plugins (por
+ejemplo `ask_user_question`) aparecen del mismo modo.
+
+**Ajustes.** Elija el idioma (inglés o español; por defecto el del navegador), el tema (oscuro, claro
+o sistema) y si las filas de herramientas empiezan plegadas o desplegadas. Estas preferencias se
+guardan solo en este navegador.
 
 ## Modelo de seguridad
 
@@ -112,6 +169,8 @@ GET  /api/workspaces                   POST /api/workspaces {path}   PATCH /api/
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
+GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 ```
@@ -130,3 +189,5 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
   activo; la web cambia el modelo dentro de él.
 - El binario independiente sirve solo la API; los assets de la interfaz web se distribuyen con el
   paquete npm.
+- La interfaz web conserva la salida de comandos, los avisos y el razonamiento solo mientras la
+  página está abierta; al recargar, la conversación se reconstruye desde los mensajes guardados.

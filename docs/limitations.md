@@ -156,9 +156,14 @@ it is not a statement that all of its release criteria are met.
   `409 session_locked`, and the web does not see a TUI's changes live); no TLS (`--allow-remote` is
   meant for SSH tunnels; a wildcard bind also accepts IP-literal `Host` headers); the provider is per
   workspace, so only the model changes per session; idempotency of prompts queued while a run is
-  active is in memory; the agent chosen for a web session is stored but not applied yet; every SSE
-  reconnection receives a full snapshot; the standalone binary serves only the API and a placeholder
-  page.
+  active is in memory; every SSE reconnection receives a full snapshot; the standalone binary serves
+  only the API and a placeholder page. File, blob and management routes come in later phases, so the
+  web UI has no attachments, file explorer, trajectory, per-session metrics or rich renderers yet
+  (developer blocks show in a simple form or as code). The UI does not watch the stream with a 45 s
+  timer (the server heartbeat is an SSE comment that `EventSource` does not expose); command output,
+  notices and reasoning exist only while the page is open. `Ctrl+K` focuses the sidebar search
+  (there is no separate session palette) and finished turns are not folded into an "N steps"
+  summary.
 
 Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
@@ -184,9 +189,13 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
 - **v4 persistence, blobs and command catalog** — v3 → v4 migration, run journal, blob store, TUI
   command parity.
-- **Web server (`alisio serve`)** — auth, workspaces, prompts, SSE, approvals and shutdown against a
-  real server on an ephemeral port; zero-overhead startup traced under Node; serve smoke in the Node
-  CLI and the Bun binary. No browser verified yet.
+- **Web server (`alisio serve`)** — auth, workspaces, prompts, SSE, approvals, commands, models,
+  context, export and shutdown against a real server on an ephemeral port; zero-overhead startup
+  traced under Node; serve smoke in the Node CLI and the Bun binary. The web UI's reducers, SSE
+  client, incremental Markdown and EN/ES key parity are unit-tested without a DOM, and the UI was
+  exercised manually in Chromium (Playwright) with a simulated provider: streaming, tool rows,
+  approvals by keyboard, the `/` palette, light and dark themes and a 390 px width. Screen readers,
+  Firefox/Safari and real network drops were not verified.
 
 The full detail (in Spanish) is in the source file linked at the top of this page, which the
 [Spanish version of this page](/es/limitations) includes verbatim.

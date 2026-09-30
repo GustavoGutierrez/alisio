@@ -558,6 +558,35 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - Apagado ordenado (`SIGINT`/`SIGTERM`: 503, runs cancelados, aprobaciones denegadas, streams
   cerrados, apps cerradas con los topes existentes; segundo `SIGINT` fuerza la salida) y
   reconciliación de runs al arrancar.
+- Rutas de la fase 3 en `@alisio/server`: `GET /api/commands?session=|workspace=` (el
+  `CommandCatalog` compartido filtrado a la superficie `web`) y `POST /api/sessions/:sid/commands`
+  (`{requestId, name, args?}` → `CommandOutcome`: los comandos `core` se ejecutan en el servidor; las
+  plantillas de prompt, las skills y `/ask` devuelven un prompt expandido que el cliente envía;
+  `/help` lista los comandos web; `/effort` se guarda por sesión en vez de cambiar el ajuste
+  global; `/model` y `/compact` responden `409 session_busy` durante una ejecución; `requestId`
+  repetido → `{duplicate:true}`), `GET /api/sessions/:sid/models` (`SessionModels`: catálogo del
+  proveedor de la sesión con niveles de esfuerzo, `unavailable` si no se puede listar),
+  `GET /api/sessions/:sid/context` (`SessionContextUsage`: `runner.estimateContext` y
+  `contextBudget`) y `GET /api/sessions/:sid/export` (JSONL: eventos durables en orden de
+  `events.seq` y después una línea `{"type":"message"}` por mensaje, incluidos los compactados).
+  Las ejecuciones web aplican ahora el agente de la sesión (`sessions.options.agent`, si no el
+  agente activo de la app): instrucciones por ejecución y, si es de solo lectura, política sin
+  efectos y sin aprobaciones. Las sesiones sin título muestran su primer prompt (una línea, 60
+  caracteres), derivado al leer y nunca persistido.
+- Interfaz web `@alisio/web` (paquete privado; su build viaja dentro de `@alisio/server` en
+  `dist/web`, copiado por `scripts/copy-web.mjs` tras `tsc`): Vite 8 + Preact 10 +
+  `@preact/signals`, CSS Modules con tokens en custom properties, sin Tailwind ni librerías de
+  componentes. Reductores puros (`store/transcript.ts`, `sessions.ts`, `pending.ts`,
+  `composer.ts`), cliente SSE con lotes por `requestAnimationFrame`, backoff con jitter 0,5→10 s y
+  reapertura tras `resync`; sidebar de workspaces y sesiones, cabecera con título editable, insignia
+  de agente y preset y descarga del log; transcript con burbuja de usuario, filas compactas de
+  herramientas y razonamiento, Markdown incremental con bloques congelados (tokens de `marked`
+  renderizados como nodos Preact, sin `innerHTML`), código resaltado de forma diferida con shiki
+  (motor JavaScript, 14 gramáticas cargadas bajo demanda); compositor con paleta `/`, historial,
+  preset, modelo + esfuerzo, anillo de contexto y enviar/detener; panel de aprobaciones e
+  interacciones que ocupa el lugar del compositor; temas oscuro/claro/sistema sin parpadeo, EN/ES y
+  `prefers-reduced-motion`. `pnpm web:size` (también dentro de `pnpm pack:check`) exige JS inicial ≤
+  90 KB y CSS inicial ≤ 20 KB gzip.
 
 ## Validación
 
@@ -1130,8 +1159,29 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - `pnpm test:cli` (Node) y `pnpm test:compiled` (binario Bun): `serve --help`, rechazo de
   `--host 0.0.0.0` sin `--allow-remote`, arranque con `--no-open --port 0`, `/api/health` sin
   cookie, `401` sin cookie, canje del token y parada con `SIGTERM` (código 0).
-- No verificado: la interfaz del navegador (fase 3), un navegador real (`EventSource`, cookies
-  `SameSite`), la apertura automática del navegador, el apagado por señal con ejecuciones activas
+- `tests/server-web-routes.test.ts`: catálogo web sin comandos solo de TUI, ejecución de comandos
+  `core`, expansión de plantillas y `/ask`, `/help`, `/clear` con sesión nueva, `/effort` por
+  sesión, `unknown_command`, idempotencia, `session_busy` de `/model` durante una ejecución, modelos
+  (con y sin catálogo), contexto con ventana conocida, exportación JSONL ordenada, título derivado
+  del primer prompt y agente `plan` aplicado (instrucciones y sin `write_file`).
+- Interfaz web: Vitest sin DOM sobre los módulos puros — `tests/web-transcript-store.test.ts` (T-15:
+  snapshot, deltas, `message` que sustituye el eco local y el texto en curso, resultados de
+  herramientas en cualquier orden, avisos, notas locales tras un snapshot, páginas anteriores),
+  `tests/web-events.test.ts` (lotes por frame, reapertura por cambio de sesiones y tras `resync`,
+  backoff, `nudge`, protocolo distinto), `tests/web-markdown-incremental.test.ts` (T-16: mismo
+  resultado que un parseo completo con cualquier tamaño de trozo, identidad de bloques congelados,
+  fence sin cerrar, fences especiales), `tests/web-composer.test.ts` (paleta, historial,
+  aprobaciones pendientes, todos los kinds de `UiBlock` con renderer y paridad de claves y
+  marcadores EN/ES), `tests/web-api-sessions.test.ts` y `tests/web-tools.test.ts`.
+- Prueba manual con Playwright (Chromium) contra `node packages/cli/dist/main.js serve` y un
+  proveedor OpenAI-compatible simulado: canje del token, crear sesión, streaming con razonamiento,
+  dos lecturas y Markdown con tabla y código resaltado, fallo de herramienta visible, panel de
+  aprobación con foco y respuesta por teclado (`O`) que devuelve el foco al compositor, paleta `/` y
+  `/stats`, tema claro tras recargar y ancho de 390 px sin desbordamiento horizontal; consola sin
+  errores. No verificado: lectores de pantalla reales, Firefox/Safari, otros sistemas, la
+  interacción de preguntas de plugins en un navegador (solo sus reductores), la reconexión tras un
+  corte de red real y el rendimiento con sesiones de 10 000 mensajes.
+- No verificado: la apertura automática del navegador, el apagado por señal con ejecuciones activas
   fuera de las pruebas en proceso, Windows/macOS y la contención de SQLite con varias apps y runs
   concurrentes reales (P-03).
 
@@ -1370,9 +1420,16 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - La idempotencia de los prompts encolados es en memoria (100 ids por sesión, 10 min) y la cola de
   `enqueue` del runner se pierde si el proceso cae; un prompt con adjuntos durante una ejecución, o
   cualquier prompt mientras la sesión espera en cola o compacta, responde `409 session_busy`.
-- El agente elegido para una sesión web se guarda (`sessions.options.agent`) pero aún no se aplica a
-  sus ejecuciones; las rutas de comandos (`/api/commands`), contexto, exportación, archivos, blobs y
-  gestión llegan en fases posteriores.
+- Las rutas de archivos, blobs y gestión (plugins, skills, MCP, proveedores, ajustes) llegan en
+  fases posteriores; la web no ofrece aún adjuntos, explorador, trayectoria, métricas por sesión ni
+  renderizadores ricos (los bloques `diff`, `terminal`, `json`, `test-results`, `progress`, `mermaid`
+  y `math` se muestran de forma simple o como código).
+- La interfaz web no vigila el stream con un temporizador de 45 s: el latido del servidor es un
+  comentario SSE que `EventSource` no expone, así que la reconexión depende del propio navegador y
+  de `online`/`visibilitychange`. La salida de comandos, los avisos y el razonamiento solo existen
+  mientras la página está abierta; tras recargar, las filas de herramientas no muestran su duración.
+- `Ctrl+K` lleva el foco a la búsqueda del sidebar (no hay una paleta de sesiones aparte), y los
+  turnos terminados no se pliegan a un resumen "N pasos".
 - Cada reconexión SSE recibe un snapshot completo (no se reenvían solo los eventos desde
   `Last-Event-ID`); la trayectoria en `GET /api/sessions/:sid/events` usa `events.seq` global como
   `seq`. Tras una compactación el cliente debe recargar los mensajes (el evento

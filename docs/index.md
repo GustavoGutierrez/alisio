@@ -24,6 +24,8 @@ features:
     details: Chat Completions or Responses, configurable base URL, model, key variable and token parameter. No bundled model or credentials.
   - title: Terminal UI and headless mode
     details: A full TUI with streaming Markdown, tool blocks, context bar and approvals, plus a headless run mode with versioned JSONL events.
+  - title: Web UI with alisio serve
+    details: A local, token-protected browser interface for several workspaces and sessions at once, with streaming, approvals, the / command palette and the same agent core as the terminal.
   - title: Explicit permissions
     details: Reads are available by default. Writes, processes, MCP and agent messaging require flags or an interactive approval.
   - title: Context compaction

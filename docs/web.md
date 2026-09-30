@@ -5,9 +5,9 @@ sessions at once. It drives the same agent core as the terminal: sessions, runs,
 session database are shared with the TUI and `alisio run`.
 
 ::: warning Status
-The server and its API are available now. The browser interface (`@alisio/web`) is still being
-built: until it ships, `alisio serve` serves a placeholder page next to the API. See
-[Known limitations](/limitations).
+The server, its API and the browser interface are available. File explorer, image attachments,
+rich renderers (diff, terminal, Mermaid, math), the trajectory view and plugin/model management
+arrive in later versions. See [Known limitations](/limitations).
 :::
 
 ## Start the server
@@ -42,6 +42,57 @@ browser can narrow them per session but never go beyond them. `--trust-project` 
 apply to every workspace the server opens, like in the terminal. `--db` selects the shared session
 database. Set `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) to control the JSON
 log lines the server writes to stderr.
+
+## Using the web UI
+
+The page has a sidebar on the left and the open session on the right.
+
+**Sidebar.** **New session** starts a session in the workspace you are looking at. Under
+**Workspaces**, each folder lists its sessions, pinned first and then the most recently used, with a
+relative time ("4 min"). A dot before a title shows a session that is running, waiting for you, in
+use by another process or whose last run failed. The icons next to the heading search sessions
+(also `Ctrl+K` / `Cmd+K`), show archived sessions and open another workspace by its absolute path.
+Hover a session for **Pin** and **Archive**, or a folder for a new session inside it. **Settings**
+sits at the bottom; the panel icon collapses the sidebar to a narrow rail. Below 900 px the sidebar
+becomes a drawer opened from the header.
+
+**Header.** Click the title to rename the session (untitled sessions show their first prompt). The
+badge shows the agent and the permission preset. **Session log** downloads the session as JSON
+Lines: every durable event in the `alisio run --json` format, then one `{"type":"message"}` line per
+stored message.
+
+**Conversation.** Your messages appear on the right with a copy button. The agent's work appears as
+one-line rows: `Think · …` for reasoning, `Context injection · AGENTS.md`, and one row per tool call
+such as `Read · README.md` or `Shell · npm test`. Click a row to see its input and output. The answer
+streams as Markdown; code blocks have a language label, **Wrap lines** and **Copy**, and are
+highlighted once they scroll into view. Reasoning is display-only: after a reload, earlier `Think`
+rows are gone because reasoning is never stored. When you scroll up, a button jumps back to the
+latest message; long sessions show the last 30 turns and load older messages on demand.
+
+**Composer.** `Enter` sends, `Shift+Enter` inserts a new line, and `↑`/`↓` on the first line walk
+through the prompts you sent. Typing `/` opens the command palette (arrows to move, `Enter` or `Tab`
+to pick, `Esc` to close): commands run on the server and their output appears in the conversation;
+prompt templates, skills and `/ask` become a prompt. `/` anywhere outside a text field focuses the
+composer. Below the text box:
+
+| Control | What it does |
+| --- | --- |
+| `+` | Attach images (disabled until a later version) |
+| Permission preset | `Read only`, `Ask`, `Workspace write` or `Full access` for this session |
+| Model and effort | Model of the workspace's provider and the reasoning effort the model supports |
+| Context ring | Estimated context of the next request against the model window |
+| Send / Stop | Stop replaces Send while a run is active and the box is empty |
+
+While a run is active you can keep typing: text is queued for the session's next turn.
+
+**Approvals and questions.** When a tool needs approval, a panel takes the composer's place and
+receives focus: it names the tool, the effect and its input. Answer with **Deny** (`D`), **Allow
+once** (`O`) or **Allow for session** (`S`); keys pressed in the first 300 ms are ignored so a stray
+`Enter` cannot approve. Plugin questions (for example `ask_user_question`) appear the same way.
+
+**Settings.** Choose the language (English or Spanish; the browser language by default), the theme
+(dark, light or system) and whether tool rows start collapsed or expanded. These preferences stay in
+this browser only.
 
 ## Security model
 
@@ -106,6 +157,8 @@ GET  /api/workspaces                   POST /api/workspaces {path}   PATCH /api/
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
+GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 ```
@@ -123,3 +176,5 @@ protocol version is reported by `/api/health` and in the stream's first frame.
 - The provider is per workspace: every session of a workspace uses the workspace's active provider
   profile; the web changes the model within it.
 - The standalone binary serves the API only; the web UI assets ship with the npm package.
+- The web UI keeps command output, notices and reasoning only while the page is open; a reload
+  rebuilds the conversation from stored messages.

@@ -24,6 +24,8 @@ features:
     details: Chat Completions o Responses, con URL base, modelo, variable de la clave y parámetro de tokens configurables. Sin modelo ni credenciales incluidos.
   - title: Interfaz de terminal y modo headless
     details: Una TUI completa con Markdown en streaming, bloques de herramientas, barra de contexto y aprobaciones, además de un modo run headless con eventos JSONL versionados.
+  - title: Interfaz web con alisio serve
+    details: Una interfaz de navegador local, protegida con token, para varios workspaces y sesiones a la vez, con streaming, aprobaciones, la paleta de comandos / y el mismo núcleo de agente que la terminal.
   - title: Permisos explícitos
     details: La lectura está disponible por defecto. Escritura, procesos, MCP y mensajería entre agentes requieren flags o una aprobación interactiva.
   - title: Compactación de contexto
