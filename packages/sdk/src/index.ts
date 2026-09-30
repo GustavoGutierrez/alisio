@@ -1003,6 +1003,70 @@ export type ApiErrorCode =
   /** Too many concurrent event streams (SSE) for this server. */
   | "stream_limit"
   | "internal";
+/** `GET /api/health` (the only unauthenticated API route). */
+export interface HealthInfo {
+  name: "alisio";
+  version: string;
+  protocolVersion: 1;
+  capabilities: {
+    sse: boolean;
+    websocket: boolean;
+    multiWorkspace: boolean;
+    attachments: boolean;
+    uiBlocks: string[];
+    mcpApps: boolean;
+    automation: boolean;
+    /** The server listens on a non-loopback address (`--allow-remote`). */
+    remote: boolean;
+  };
+}
+/** A workspace known to the server (`GET /api/workspaces`). */
+export interface WorkspaceInfo {
+  /** Opaque, stable id: a short sha256 of the canonical path. */
+  id: string;
+  /** Canonical absolute path (display only; URLs use `id`). */
+  path: string;
+  label?: string;
+  pinned: boolean;
+  /** An `Application` is open for it in the server right now. */
+  open: boolean;
+  /** Project resources load (trusted from the terminal or by a launch flag). */
+  trusted: boolean;
+  /** The directory has project resources that are not trusted (shown as "untrusted"). */
+  untrustedResources: boolean;
+  lastOpenedAt?: number;
+}
+/** Permission presets of the web composer (RF-08). */
+export type PermissionPresetId = "read-only" | "ask" | "workspace-write" | "full-access";
+export interface PermissionPresetInfo {
+  id: PermissionPresetId;
+  /** Selectable under the server's launch flags (its capability ceiling). */
+  available: boolean;
+  /** Why it is unavailable, or which effects still ask because of the ceiling. */
+  reason?: string;
+  /** Effects allowed without asking once the ceiling is applied. */
+  policy: { write: boolean; process: boolean; external: boolean };
+  /** Whether non-allowed effects ask for approval (false: they are denied). */
+  approvals: boolean;
+}
+/** A row of the session list (`GET /api/sessions`). */
+export interface SessionSummary extends SessionDetailWire {
+  pinned: boolean;
+  archived: boolean;
+}
+/** `GET /api/sessions/:sid` and the result of creating or patching a session. */
+export interface SessionDetail extends SessionSummary {
+  preset: PermissionPresetId;
+  effort?: string;
+  agent?: string;
+  presets: PermissionPresetInfo[];
+  children: SessionDetailWire[];
+}
+/** Answer of `POST /api/sessions/:sid/prompts`. */
+export type PromptAccepted =
+  | { runId: string; status: "queued" | "running"; duplicate?: false }
+  | { runId: string; status: string; duplicate: true }
+  | { status: "enqueued"; duplicate?: boolean };
 /** Body of every non-2xx web API response. */
 export interface ApiError {
   error: { code: ApiErrorCode; message: string; details?: unknown };
