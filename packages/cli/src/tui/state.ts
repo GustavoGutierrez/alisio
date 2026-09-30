@@ -2,6 +2,7 @@
  * Pure presentation logic for the TUI: formatting, command parsing and the reduction of
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
+import { CommandCatalog } from "@alisio/core";
 import type { Message, ModelInfo, RunEvent, ToolResult, TreeNode, UiBlock } from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
@@ -342,67 +343,33 @@ export function fitSegments<T extends Segment>(
   return kept;
 }
 
+/** Built-ins only: plugin, template and skill commands are resolved against the live app. */
+const BUILTIN_CATALOG = new CommandCatalog();
 export interface CommandSpec {
   name: string;
   description: string;
   argumentHint?: string;
   aliases?: string[];
 }
-export const COMMANDS: CommandSpec[] = [
-  { name: "help", description: "Show commands and keys" },
-  { name: "connect", description: "Configure a provider and choose its active model" },
-  {
-    name: "model",
-    description: "Switch provider and model",
-    aliases: ["models"],
-  },
-  { name: "compact", description: "Summarize older history", argumentHint: "[focus]" },
-  { name: "stats", description: "Session statistics" },
-  { name: "clear", description: "Start a new session", aliases: ["new"] },
-  { name: "sessions", description: "List recent sessions" },
-  { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
-  { name: "tools", description: "List tools and permission state" },
-  {
-    name: "plugins",
-    description: "Browse and manage project plugins",
-    aliases: ["plugin"],
-  },
-  {
-    name: "skills",
-    description: "Browse and manage effective skills",
-    aliases: ["skill"],
-  },
-  { name: "mcp", description: "Browse and manage MCP servers" },
-  {
-    name: "settings",
-    description: "Open the settings menu",
-    aliases: ["prefs"],
-  },
-  { name: "copy", description: "Copy the last assistant response to the clipboard" },
-  {
-    name: "agents",
-    description: "List and switch the active agent (applies from the next prompt)",
-    argumentHint: "[<verb>]",
-  },
-  {
-    name: "effort",
-    description: "Set the reasoning effort level for the active model",
-    argumentHint: "[level]",
-  },
-  {
-    name: "ask",
-    description: "Ask the agent to turn your question into a multiple-choice ask_user_question",
-    argumentHint: "<question>",
-  },
-  { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
-];
+/**
+ * Built-in slash commands the TUI offers, derived from the core `CommandCatalog` (the TUI
+ * surface of `BUILTIN_COMMANDS`). Kept as `COMMANDS` for compatibility.
+ */
+export const COMMANDS: CommandSpec[] = BUILTIN_CATALOG.list("tui")
+  .filter((c) => c.source === "builtin")
+  .map((c) => ({
+    name: c.name,
+    description: c.description,
+    ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
+    ...(c.aliases ? { aliases: c.aliases } : {}),
+  }));
 /** Every TUI slash name (commands, aliases and routing prefixes); templates cannot take them. */
 export function reservedCommandNames(): string[] {
   return [...COMMANDS.flatMap((c) => [c.name, ...(c.aliases ?? [])]), "command"];
 }
 export function resolveCommand(name: string): string | undefined {
-  const lower = name.toLowerCase();
-  return COMMANDS.find((c) => c.name === lower || c.aliases?.includes(lower))?.name;
+  const found = BUILTIN_CATALOG.resolve(name);
+  return found?.source === "builtin" && found.surfaces.includes("tui") ? found.name : undefined;
 }
 export function parseCommand(input: string): { name: string; args: string } | undefined {
   const match = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(input.trim());
