@@ -31,7 +31,7 @@ features:
   - title: Context compaction
     details: Structured checkpoints replace old history without ever separating a tool call from its result.
   - title: Persistent memory
-    details: A built-in, Engram-style memory plugin backed by SQLite and FTS5 that survives sessions and projects.
+    details: A built-in persistent memory plugin backed by SQLite and FTS5 that survives sessions and projects.
   - title: Typed plugin SDK
     details: Tools, commands, events, context, compaction and session hooks, model completions and a SQLite storage port.
   - title: Subagents

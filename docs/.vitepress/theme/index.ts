@@ -2,6 +2,7 @@ import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import "./styles/vars.css";
 import "./styles/home.css";
+import "./styles/docs.css";
 
 /**
  * Extends VitePress' default theme with Alisio's shared visual tokens and

@@ -1,0 +1,32 @@
+.architecture-diagram {
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-block: 24px;
+  overscroll-behavior-inline: contain;
+}
+
+.architecture-diagram:focus-visible {
+  outline: 2px solid var(--alisio-focus-ring);
+  outline-offset: 4px;
+}
+
+.architecture-diagram img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  margin: 0;
+}
+
+@media (max-width: 639px) {
+  .architecture-diagram {
+    direction: rtl;
+  }
+
+  .architecture-diagram img {
+    direction: ltr;
+    min-width: 520px;
+  }
+}

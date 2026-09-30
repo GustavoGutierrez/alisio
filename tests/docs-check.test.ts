@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { anchorKey, countLevels, parseMarkdown, slugify } from "../scripts/docs-check.ts";
+import {
+  anchorKey,
+  containsForbiddenDocTerm,
+  countLevels,
+  footerProblems,
+  parseMarkdown,
+  slugify,
+  svgProblems,
+} from "../scripts/docs-check.ts";
 
 describe("docs-check slugify", () => {
   it("matches VitePress slugs for headings with spaces and punctuation", () => {
@@ -72,5 +80,42 @@ describe("docs-check parseMarkdown", () => {
   it("counts fenced blocks and reports heading levels for parity", () => {
     expect(page.fences).toBe(1);
     expect(countLevels(page)).toBe("h1=1 h2=1 h3=1");
+  });
+});
+
+describe("docs-check generated SVG validation", () => {
+  it("accepts an accessible, self-contained SVG", () => {
+    const svg = '<svg viewBox="0 0 100 200"><title>Diagram</title><desc>Details</desc></svg>';
+    expect(svgProblems(svg)).toEqual([]);
+  });
+
+  it("rejects unsafe or inaccessible generated output", () => {
+    const svg = '<svg><script>alert(1)</script><image href="https://example.com/x.png" /></svg>';
+    expect(svgProblems(svg)).toEqual([
+      "missing viewBox",
+      "missing title",
+      "missing description",
+      "contains a script",
+      "contains external content",
+    ]);
+  });
+});
+
+describe("docs-check published content policy", () => {
+  it("finds the forbidden product reference case-insensitively", () => {
+    expect(containsForbiddenDocTerm("An ENGRAM-style integration")).toBe(true);
+    expect(containsForbiddenDocTerm("Built-in persistent memory")).toBe(false);
+  });
+
+  it("requires the exact semantic footer lines", () => {
+    const footer = [
+      'message: "Released under the MIT License."',
+      'copyright: "Copyright © 2026 Gustavo Gutierrez"',
+    ].join("\n");
+    expect(footerProblems(footer)).toEqual([]);
+    expect(footerProblems('message: "Released under MIT."')).toEqual([
+      "missing exact license message",
+      "missing exact copyright line",
+    ]);
   });
 });

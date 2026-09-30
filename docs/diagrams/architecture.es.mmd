@@ -1,0 +1,53 @@
+---
+config:
+  theme: base
+  htmlLabels: false
+  flowchart:
+    curve: linear
+    nodeSpacing: 20
+    rankSpacing: 80
+  themeVariables:
+    background: transparent
+    fontFamily: ui-sans-serif, system-ui, sans-serif
+    fontSize: 17px
+    primaryColor: '#172033'
+    primaryTextColor: '#f8fafc'
+    primaryBorderColor: '#60a5fa'
+    secondaryColor: '#202b42'
+    secondaryTextColor: '#f8fafc'
+    secondaryBorderColor: '#94a3b8'
+    tertiaryColor: '#111827'
+    tertiaryTextColor: '#f8fafc'
+    tertiaryBorderColor: '#64748b'
+    lineColor: '#94a3b8'
+    edgeLabelBackground: '#172033'
+---
+%% Regenerar desde la raíz del repositorio:
+%% PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome pnpm dlx @mermaid-js/mermaid-cli@11.12.0 -i docs/diagrams/architecture.es.mmd -o docs/public/assets/architecture.es.svg -b transparent
+flowchart TD
+  accTitle: Arquitectura de dependencias entre paquetes de Alisio
+  accDescr: La CLI depende del núcleo, del SDK y de los plugins integrados de memoria y subagentes. El núcleo depende del SDK. Ambos plugins tienen el SDK como peer dependency.
+
+  CLI["alisio CLI<br/>binario · TUI · portapapeles<br/>conexión del registro integrado"]
+  CORE["@alisio/core<br/>runner · compactación · proveedor · herramientas<br/>adaptadores de runtime<br/>(node:sqlite · fs · child_process)<br/>host de plugins · sesiones hijas · configuración<br/>createApplication"]
+  MEMORY["@alisio/plugin-memory<br/>SDK peer + Zod<br/>usa el puerto de almacenamiento"]
+  SUBAGENTS["@alisio/plugin-subagents<br/>SDK peer + YAML + Zod<br/>usa api.sessions"]
+  SDK["@alisio/sdk<br/>contrato de plugins · cero dependencias"]
+
+  CLI ~~~ CORE ~~~ MEMORY ~~~ SUBAGENTS ~~~ SDK
+  CLI -->|depende| CORE
+  CLI -->|conecta| MEMORY
+  CLI -->|conecta| SUBAGENTS
+  CLI -->|depende| SDK
+  CORE -->|depende| SDK
+  MEMORY -.->|SDK peer| SDK
+  SUBAGENTS -.->|SDK peer| SDK
+
+  classDef cli fill:#111827,stroke:#38bdf8,stroke-width:2px,color:#f8fafc
+  classDef core fill:#172033,stroke:#60a5fa,stroke-width:2px,color:#f8fafc
+  classDef plugin fill:#202b42,stroke:#a78bfa,stroke-width:2px,color:#f8fafc
+  classDef sdk fill:#172033,stroke:#34d399,stroke-width:2px,color:#f8fafc
+  class CLI cli
+  class CORE core
+  class MEMORY,SUBAGENTS plugin
+  class SDK sdk

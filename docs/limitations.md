@@ -52,15 +52,15 @@ it is not a statement that all of its release criteria are met.
   Cross-provider selectors only see global profiles created through `/connect`; legacy root
   configuration is not a hidden catalog. Catalog discovery is cached for up to 15 seconds per
   process.
-- Provisional MIT license (holder: Gustavo Gutiérrez), pending confirmation.
+- **License**: MIT.
 - **Memory**: search uses the trigram tokenizer, so terms shorter than 3 characters are ignored. No
   semantic search. The automatic end-of-session summary only runs in the TUI (not in headless `run`)
   and is bounded by `pluginHooks.sessionEndTimeoutMs`; if it expires, exit continues without a
   summary. The end-of-session summary replaces the archived checkpoint of the same session (one
   summary per session). User prompts are copied to the memory database (with `<private>` redacted)
   on compaction and on exit; the database is local with 0600 permissions.
-- **Differences with Engram**: the sessions table is named `memory_sessions` (the database may share a
-  file with Alisio's sessions); there is no FTS over prompts; a `topic_key` in `personal` scope
+- **Memory implementation details**: the sessions table is named `memory_sessions` (the database may
+  share a file with Alisio's sessions); there is no FTS over prompts; a `topic_key` in `personal` scope
   upserts across projects (so preferences are truly personal); context lines include `#id` for
   `memory_get`; the compaction checkpoint is archived as a session summary rather than as a
   `session/compaction-recovery` observation, and recovery is injected deterministically without

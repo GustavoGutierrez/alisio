@@ -371,7 +371,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   relacionados. Los cambios se aplican tras reiniciar (no hay descarga parcial en caliente); los
   externos requieren confianza y confirmación explícita. Protege el proveedor de modelo activo y
   los recursos de sesión vivos.
-- Plugin integrado `memory` (estilo Engram): SQLite + FTS5 trigram, BM25 con recencia y
+- Plugin integrado `memory` con persistencia local: SQLite + FTS5 trigram, BM25 con recencia y
   accesos, upsert por `topic_key`, deduplicación con ventana de 15 minutos, borrado lógico,
   redacción de `<private>`, fijadas, línea temporal, prompts recientes, resúmenes de sesión;
   siete herramientas `memory_*`, protocolo en el prompt, inyección presupuestada al iniciar
@@ -1413,7 +1413,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   TUI (cabecera, barras) sigue usando glifos Unicode. El ancho se cuenta por punto de código,
   así que glifos anchos (CJK, emoji) en mascotas personalizadas pueden desalinear. Los
   proveedores son síncronos: un proveedor lento no puede interrumpirse, solo descartarse.
-- Licencia MIT provisional (titular: Gustavo Gutiérrez), pendiente de confirmación.
+- Licencia MIT.
 
 ### Memoria
 
@@ -1424,7 +1424,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   cierre reemplaza al checkpoint archivado de la misma sesión (un resumen por sesión).
   Los prompts de usuario se copian a la base de memoria (redactando `<private>`) al compactar
   y al cerrar; la base es local con permisos 0600.
-- Diferencias con Engram: la tabla de sesiones se llama `memory_sessions` (la base puede
+- Detalles de implementación de memoria: la tabla de sesiones se llama `memory_sessions` (la base puede
   compartir archivo con las sesiones de Alisio); no hay FTS de prompts; el `topic_key` en
   alcance `personal` hace upsert entre proyectos (para que las preferencias sean realmente
   personales); las líneas de contexto incluyen `#id` para `memory_get`; el checkpoint de

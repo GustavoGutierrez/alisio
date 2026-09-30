@@ -1,8 +1,7 @@
 # Persistent memory
 
-`memory` is a built-in plugin (package `@alisio/plugin-memory`) that gives the model an
-[Engram](https://engram.gentlemanprogramming.com)-style persistent memory. It is enabled by default
-and can be disabled.
+`memory` is a built-in plugin (package `@alisio/plugin-memory`) that gives the model persistent
+memory backed by local SQLite and FTS5. It is enabled by default and can be disabled.
 
 ## Observations
 
@@ -98,4 +97,4 @@ hooks, command, status or database file, and compaction works in its generic mod
 
 Search uses the trigram tokenizer, so terms shorter than 3 characters are ignored, and there is no
 semantic search. The automatic end-of-session summary only runs in the TUI (not in headless `run`).
-See [Known limitations](/limitations) for the differences with Engram.
+See [Known limitations](/limitations) for storage, search and lifecycle constraints.

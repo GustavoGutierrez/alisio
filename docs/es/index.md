@@ -31,7 +31,7 @@ features:
   - title: Compactación de contexto
     details: Checkpoints estructurados reemplazan la historia antigua sin separar nunca una llamada a herramienta de su resultado.
   - title: Memoria persistente
-    details: Un plugin de memoria integrado, estilo Engram, sobre SQLite y FTS5, que sobrevive entre sesiones y proyectos.
+    details: Un plugin integrado de memoria persistente sobre SQLite y FTS5, que sobrevive entre sesiones y proyectos.
   - title: SDK de plugins tipado
     details: Herramientas, comandos, eventos, contexto, hooks de compactación y sesión, completados del modelo y un puerto de almacenamiento SQLite.
   - title: Subagentes

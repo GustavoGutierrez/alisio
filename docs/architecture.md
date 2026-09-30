@@ -4,31 +4,9 @@ Alisio is a pnpm monorepo with nine publishable packages. The OpenAI SDK adapter
 `@alisio/plugin-openai-compatible`; core contains only provider contracts, the additive registry,
 activation and persistence.
 
-```text
-                         ┌──────────────────────────────┐
-                         │ @alisio/sdk                  │
-                         │ plugin contract, zero deps   │
-                         └──────────────▲───────────────┘
-            depends on                  │                peer dependency
-   ┌────────────────────────────────────┼─────────────────────┬──────────────────────┐
-   │                                    │                     │                      │
-┌──┴───────────────────────────┐        │      ┌──────────────┴───────────┐ ┌────────┴─────────────────┐
-│ @alisio/core                 │        │      │ @alisio/plugin-memory    │ │ @alisio/plugin-subagents │
-│ runner, compaction, provider,│        │      │ sdk (peer) + zod         │ │ sdk (peer) + yaml + zod  │
-│ tools, runtime adapters      │        │      │ uses the storage port    │ │ uses api.sessions        │
-│ (node:sqlite, fs,            │        │      └──────────────▲───────────┘ └────────▲─────────────────┘
-│ child_process), plugin host, │        │                     │                      │
-│ child sessions, config,      │        │                     │                      │
-│ createApplication            │        │                     │                      │
-└──▲───────────────────────────┘        │                     │                      │
-   │                     ┌──────────────┴───────────────┐     │                      │
-   └─────────────────────┤ alisio (CLI)                 ├─────┴──────────────────────┘
-                         │ bin, TUI, clipboard,         │
-                         │ built-in registry wiring     │
-                         │ plugin-memory and            │
-                         │ plugin-subagents             │
-                         └──────────────────────────────┘
-```
+<div class="architecture-diagram" role="region" aria-label="Scrollable Alisio package architecture diagram" tabindex="0">
+  <img src="/assets/architecture.en.svg" alt="Alisio package dependencies: the CLI wires core, SDK, memory and subagents; core depends on SDK, while the plugins use SDK as a peer dependency." width="690" height="972" />
+</div>
 
 | Package | Role | Depends on |
 | --- | --- | --- |

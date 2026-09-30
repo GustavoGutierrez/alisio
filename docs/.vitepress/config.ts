@@ -2,6 +2,10 @@ import { type DefaultTheme, defineConfig } from "vitepress";
 import { substituteTokens } from "./version";
 
 const repo = "https://github.com/GustavoGutierrez/alisio";
+const footer = {
+  message: "Released under the MIT License.",
+  copyright: "Copyright © 2026 Gustavo Gutierrez",
+};
 
 function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.SidebarItem[] {
   const item = (page: string) => ({ text: labels[page] ?? page, link: `${prefix}/${page}` });
@@ -127,7 +131,7 @@ export default defineConfig({
   themeConfig: {
     logo: "/assets/logo.png",
     socialLinks: [{ icon: "github", link: repo }],
-    footer: { message: "Released under the MIT License. Maintainer: Gustavo Gutiérrez." },
+    footer,
     search: {
       provider: "local",
       options: {
@@ -198,7 +202,7 @@ export default defineConfig({
         ],
         sidebar: sidebar("/es", es),
         editLink: { pattern: `${repo}/edit/main/docs/:path`, text: "Editar esta página en GitHub" },
-        footer: { message: "Publicado bajo la licencia MIT. Mantenedor: Gustavo Gutiérrez." },
+        footer,
         docFooter: { prev: "Página anterior", next: "Página siguiente" },
         outline: { label: "En esta página" },
         lastUpdated: { text: "Última actualización" },

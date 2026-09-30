@@ -41,6 +41,13 @@ const FENCE = /^\s*(`{3,}|~{3,})/;
 const HTML_IMAGE = /<img\b([^>]*)>/gi;
 const HTML_ATTRIBUTE = /\b(src|alt)=(?:"([^"]*)"|'([^']*)')/gi;
 const HOME_COMPONENTS = ["brand-banner", "web-ui-preview", "video"] as const;
+const ARCHITECTURE_DIAGRAMS = [
+  { page: "architecture.md", source: "architecture.en.mmd", asset: "architecture.en.svg" },
+  { page: "es/architecture.md", source: "architecture.es.mmd", asset: "architecture.es.svg" },
+] as const;
+const FORBIDDEN_DOC_TERM = /\bengram\b/i;
+const FOOTER_MESSAGE = 'message: "Released under the MIT License."';
+const FOOTER_COPYRIGHT = 'copyright: "Copyright © 2026 Gustavo Gutierrez"';
 
 /** VitePress/@mdit-vue heading slug; an explicit `{#id}` in the heading always wins. */
 export function slugify(text: string): string {
@@ -62,6 +69,29 @@ export function slugify(text: string): string {
  */
 export function anchorKey(value: string): string {
   return decodeURIComponent(value).trim().toLowerCase();
+}
+
+/** Security and accessibility invariants for generated, versioned Mermaid SVG assets. */
+export function svgProblems(text: string): string[] {
+  const problems: string[] = [];
+  if (!/<svg\b[^>]*\bviewBox="[^"]+"/i.test(text)) problems.push("missing viewBox");
+  if (!/<title\b[^>]*>[^<]+<\/title>/i.test(text)) problems.push("missing title");
+  if (!/<desc\b[^>]*>[^<]+<\/desc>/i.test(text)) problems.push("missing description");
+  if (/<script\b/i.test(text)) problems.push("contains a script");
+  if (/<foreignObject\b/i.test(text)) problems.push("contains foreignObject content");
+  if (/\b(?:href|src)=["'](?:https?:)?\/\//i.test(text)) problems.push("contains external content");
+  return problems;
+}
+
+export function containsForbiddenDocTerm(text: string): boolean {
+  return FORBIDDEN_DOC_TERM.test(text);
+}
+
+export function footerProblems(text: string): string[] {
+  const problems: string[] = [];
+  if (!text.includes(FOOTER_MESSAGE)) problems.push("missing exact license message");
+  if (!text.includes(FOOTER_COPYRIGHT)) problems.push("missing exact copyright line");
+  return problems;
 }
 
 function markdownFiles(dir: string): string[] {
@@ -167,6 +197,20 @@ function main(): void {
   let anchors = 0;
   let images = 0;
 
+  const configFile = join(DOCS, ".vitepress", "config.ts");
+  for (const file of [...files, configFile]) {
+    if (containsForbiddenDocTerm(readFileSync(file, "utf8"))) {
+      problems.push({
+        file,
+        line: 1,
+        message: "published docs contain a forbidden product reference",
+      });
+    }
+  }
+  for (const message of footerProblems(readFileSync(configFile, "utf8"))) {
+    problems.push({ file: configFile, line: 1, message: `footer: ${message}` });
+  }
+
   for (const file of files) {
     const current = page(file);
     for (const link of current.links) {
@@ -232,6 +276,38 @@ function main(): void {
         line: 1,
         message: "home structure: Web UI preview heading is not labelled",
       });
+    }
+  }
+
+  for (const diagram of ARCHITECTURE_DIAGRAMS) {
+    const pageFile = join(DOCS, diagram.page);
+    const sourceFile = join(DOCS, "diagrams", diagram.source);
+    const assetFile = join(DOCS, "public", "assets", diagram.asset);
+    const expectedSrc = `/assets/${diagram.asset}`;
+    if (!readFileSync(pageFile, "utf8").includes(expectedSrc)) {
+      problems.push({
+        file: pageFile,
+        line: 1,
+        message: `architecture diagram: missing ${expectedSrc}`,
+      });
+    }
+    if (!existsSync(sourceFile)) {
+      problems.push({
+        file: sourceFile,
+        line: 1,
+        message: "architecture diagram: Mermaid source missing",
+      });
+    }
+    if (!existsSync(assetFile)) {
+      problems.push({
+        file: assetFile,
+        line: 1,
+        message: "architecture diagram: generated SVG missing",
+      });
+      continue;
+    }
+    for (const message of svgProblems(readFileSync(assetFile, "utf8"))) {
+      problems.push({ file: assetFile, line: 1, message: `architecture diagram: ${message}` });
     }
   }
 

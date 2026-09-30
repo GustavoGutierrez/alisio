@@ -1,8 +1,7 @@
 # Memoria persistente
 
-`memory` es un plugin integrado (paquete `@alisio/plugin-memory`) que da al modelo una memoria
-persistente de estilo [Engram](https://engram.gentlemanprogramming.com). Está activado por defecto y
-puede desactivarse.
+`memory` es un plugin integrado (paquete `@alisio/plugin-memory`) que da al modelo memoria persistente
+basada en SQLite y FTS5 locales. Está activado por defecto y puede desactivarse.
 
 ## Observaciones
 
@@ -99,4 +98,5 @@ hooks, comando, estado ni archivo de base de datos, y la compactación funciona 
 
 La búsqueda usa el tokenizador trigram, por lo que los términos de menos de 3 caracteres se ignoran, y
 no hay búsqueda semántica. El resumen automático de fin de sesión solo se ejecuta en la TUI (no en
-`run` headless). Consulte [Limitaciones conocidas](/es/limitations) para las diferencias con Engram.
+`run` headless). Consulte [Limitaciones conocidas](/es/limitations) para conocer las restricciones de
+almacenamiento, búsqueda y ciclo de vida.
