@@ -807,8 +807,20 @@ const fixtures: Record<string, () => Promise<void>> = {
         }[];
         assert.deepEqual(
           versions.map((v) => v.version),
-          [1, 2, 3],
+          [1, 2, 3, 4],
         );
+        // v4 partial unique index (session, request_id) behaves the same on Node and Bun.
+        const first = store.beginRun({ id: `run-${i}`, session: "old", requestId: `req-${i}` });
+        const retry = store.beginRun({ id: `dup-${i}`, session: "old", requestId: `req-${i}` });
+        assert.equal(first.created, true);
+        assert.deepEqual([retry.created, retry.run.id], [false, `run-${i}`]);
+        assert.throws(() =>
+          store.db
+            .prepare("INSERT INTO runs(id,session,status,request_id,created_at) VALUES(?,?,?,?,?)")
+            .run(`raw-${i}`, "old", "queued", `req-${i}`, Date.now()),
+        );
+        store.beginRun({ id: `free-${i}-a`, session: "old" });
+        store.beginRun({ id: `free-${i}-b`, session: "old" });
       } finally {
         store.close();
       }
@@ -1070,7 +1082,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         .all() as { version: number }[];
       assert.deepEqual(
         versions.map((v) => v.version),
-        [1, 2, 3, 100],
+        [1, 2, 3, 4, 100],
       );
       mem.close();
     }

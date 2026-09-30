@@ -49,12 +49,22 @@ export type {
   ApprovalDecision,
   ApprovalHandler,
   ApprovalRequest,
+  BeginRunInput,
   ContextSource,
+  EndRunInput,
+  EventPage,
   HookFailure,
+  MessagePage,
+  PageOptions,
   Policy,
   RunnerExtensions,
+  RunRecord,
+  RunStatus,
   Session,
   SessionStore,
+  StoredEvent,
+  TerminalRunStatus,
+  ToolCallMeta,
 } from "./core/contracts.ts";
 export { ToolRegistry } from "./core/registry.ts";
 export {

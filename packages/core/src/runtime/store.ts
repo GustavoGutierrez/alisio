@@ -5,8 +5,31 @@ import {
   type ToolResult,
   textResult,
 } from "@alisio/sdk";
-import type { Session, SessionStore } from "../core/contracts.ts";
+import type {
+  BeginRunInput,
+  EndRunInput,
+  EventPage,
+  MessagePage,
+  PageOptions,
+  RunRecord,
+  RunStatus,
+  Session,
+  SessionStore,
+  StoredEvent,
+  ToolCallMeta,
+} from "../core/contracts.ts";
 import { openDatabase } from "./sqlite.ts";
+
+/** Whether a process id belongs to a live process (EPERM still means alive). */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+const TERMINAL_RUN = "('completed','turns_exceeded','failed','cancelled','interrupted')";
 export class SQLiteStore implements SessionStore {
   readonly db: SqlDatabase;
   constructor(path: string) {
@@ -56,12 +79,65 @@ export class SQLiteStore implements SessionStore {
         this.db.exec("CREATE INDEX IF NOT EXISTS sessions_parent ON sessions(parent_id)");
         this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(3)");
       });
+    if (!has(4))
+      this.db.transaction(() => {
+        // v4 (additive): run journal, workspace UI metadata, blob index and nullable columns.
+        this.db.exec(`CREATE TABLE IF NOT EXISTS runs(
+            id TEXT PRIMARY KEY,
+            session TEXT NOT NULL REFERENCES sessions(id),
+            status TEXT NOT NULL,
+            request_id TEXT,
+            correlation_id TEXT,
+            owner_pid INTEGER,
+            model TEXT,
+            created_at INTEGER NOT NULL,
+            started_at INTEGER,
+            ended_at INTEGER,
+            error TEXT,
+            usage TEXT);
+          CREATE UNIQUE INDEX IF NOT EXISTS runs_request ON runs(session, request_id) WHERE request_id IS NOT NULL;
+          CREATE INDEX IF NOT EXISTS runs_session ON runs(session, created_at);
+          CREATE TABLE IF NOT EXISTS workspaces(
+            path TEXT PRIMARY KEY,
+            label TEXT,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            last_opened_at INTEGER);
+          CREATE TABLE IF NOT EXISTS blobs(
+            hash TEXT PRIMARY KEY,
+            mime TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            created_at INTEGER NOT NULL);`);
+        const add = (table: string, name: string, type: string) => {
+          const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as {
+            name: string;
+          }[];
+          if (!columns.some((c) => c.name === name))
+            this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+        };
+        add("sessions", "pinned", "INTEGER NOT NULL DEFAULT 0");
+        add("sessions", "archived_at", "INTEGER");
+        add("events", "created_at", "INTEGER");
+        add("events", "correlation_id", "TEXT");
+        add("tool_calls", "run_id", "TEXT");
+        add("tool_calls", "name", "TEXT");
+        add("tool_calls", "effect", "TEXT");
+        add("tool_calls", "started_at", "INTEGER");
+        add("tool_calls", "ended_at", "INTEGER");
+        this.db.exec(`CREATE INDEX IF NOT EXISTS events_session ON events(session, seq);
+          CREATE INDEX IF NOT EXISTS messages_session ON messages(session, seq);
+          INSERT OR IGNORE INTO schema_migrations VALUES(4);`);
+      });
   }
   create(workspace: string, provider: string, model: string): Session {
     const id = crypto.randomUUID();
+    const now = Date.now();
     this.db
-      .prepare("INSERT INTO sessions(id,workspace,provider,model) VALUES(?,?,?,?)")
-      .run(id, workspace, provider, model);
+      .prepare(
+        "INSERT INTO sessions(id,workspace,provider,model,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+      )
+      .run(id, workspace, provider, model, now, now);
     return { id, workspace, provider, model };
   }
   private row(r: Record<string, unknown>): Session {
@@ -176,6 +252,10 @@ export class SQLiteStore implements SessionStore {
     this.db
       .prepare("INSERT INTO messages(session,body) VALUES(?,?)")
       .run(id, JSON.stringify(message));
+    this.touch(id);
+  }
+  private touch(id: string): void {
+    this.db.prepare("UPDATE sessions SET updated_at=? WHERE id=?").run(Date.now(), id);
   }
   setModel(id: string, model: string): void {
     if (!model.trim()) throw new Error("Model ID must not be empty");
@@ -227,17 +307,19 @@ export class SQLiteStore implements SessionStore {
       .prepare("UPDATE sessions SET locked_pid=NULL WHERE id=? AND locked_pid=?")
       .run(id, process.pid);
   }
-  beginCall(id: string, call: ToolCall): void {
+  beginCall(id: string, call: ToolCall, meta: ToolCallMeta = {}): void {
     this.db
-      .prepare("INSERT INTO tool_calls(session,call_id,status) VALUES(?,?,'pending')")
-      .run(id, call.id);
+      .prepare(
+        "INSERT INTO tool_calls(session,call_id,status,run_id,name,effect,started_at) VALUES(?,?,'pending',?,?,?,?)",
+      )
+      .run(id, call.id, meta.runId ?? null, call.name, meta.effect ?? null, Date.now());
   }
   endCall(id: string, call: ToolCall, result: ToolResult): void {
     this.db
       .prepare(
-        "INSERT INTO tool_calls(session,call_id,status,result) VALUES(?,?,'completed',?) ON CONFLICT(session,call_id) DO UPDATE SET status='completed',result=excluded.result",
+        "INSERT INTO tool_calls(session,call_id,status,result,name,ended_at) VALUES(?,?,'completed',?,?,?) ON CONFLICT(session,call_id) DO UPDATE SET status='completed',result=excluded.result,ended_at=excluded.ended_at,name=COALESCE(tool_calls.name,excluded.name)",
       )
-      .run(id, call.id, JSON.stringify(result));
+      .run(id, call.id, JSON.stringify(result), call.name, Date.now());
   }
   /** Rich (ui/image) parts persist as part of the serialized result and replay verbatim. */
   callResult(id: string, callId: string): ToolResult | undefined {
@@ -277,11 +359,179 @@ export class SQLiteStore implements SessionStore {
     });
   }
   /** Persists a durable event and returns its global `events.seq`. */
-  event(id: string, runId: string, type: string, data: unknown): number {
+  event(
+    id: string,
+    runId: string,
+    type: string,
+    data: unknown,
+    meta: { correlationId?: string } = {},
+  ): number {
     const { lastInsertRowid } = this.db
-      .prepare("INSERT INTO events(session,run_id,type,body) VALUES(?,?,?,?)")
-      .run(id, runId, type, JSON.stringify(data));
+      .prepare(
+        "INSERT INTO events(session,run_id,type,body,created_at,correlation_id) VALUES(?,?,?,?,?,?)",
+      )
+      .run(id, runId, type, JSON.stringify(data), Date.now(), meta.correlationId ?? null);
     return Number(lastInsertRowid);
+  }
+  private runRow(r: Record<string, unknown>): RunRecord {
+    return {
+      id: String(r.id),
+      session: String(r.session),
+      status: r.status as RunStatus,
+      ...(r.request_id != null ? { requestId: String(r.request_id) } : {}),
+      ...(r.correlation_id != null ? { correlationId: String(r.correlation_id) } : {}),
+      ...(r.owner_pid != null ? { ownerPid: Number(r.owner_pid) } : {}),
+      ...(r.model != null ? { model: String(r.model) } : {}),
+      createdAt: Number(r.created_at),
+      ...(r.started_at != null ? { startedAt: Number(r.started_at) } : {}),
+      ...(r.ended_at != null ? { endedAt: Number(r.ended_at) } : {}),
+      ...(r.error != null ? { error: String(r.error) } : {}),
+      ...(r.usage != null ? { usage: JSON.parse(String(r.usage)) } : {}),
+    };
+  }
+  private runById(id: string): RunRecord | undefined {
+    const row = this.db.prepare("SELECT * FROM runs WHERE id=?").get(id);
+    return row ? this.runRow(row) : undefined;
+  }
+  beginRun(input: BeginRunInput): { run: RunRecord; created: boolean } {
+    return this.db.transaction(() => {
+      const status = input.status ?? "running";
+      const now = Date.now();
+      const existing = this.runById(input.id);
+      if (existing) {
+        if (existing.status === "queued" && status === "running")
+          this.db
+            .prepare(
+              "UPDATE runs SET status='running', started_at=?, owner_pid=?, model=COALESCE(?,model) WHERE id=?",
+            )
+            .run(now, process.pid, input.model ?? null, input.id);
+        return { run: this.runById(input.id) as RunRecord, created: false };
+      }
+      if (input.requestId !== undefined) {
+        const retried = this.runByRequest(input.session, input.requestId);
+        if (retried) return { run: retried, created: false };
+      }
+      this.db
+        .prepare(
+          `INSERT INTO runs(id,session,status,request_id,correlation_id,owner_pid,model,created_at,started_at)
+           VALUES(?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          input.id,
+          input.session,
+          status,
+          input.requestId ?? null,
+          input.correlationId ?? null,
+          process.pid,
+          input.model ?? null,
+          now,
+          status === "running" ? now : null,
+        );
+      return { run: this.runById(input.id) as RunRecord, created: true };
+    });
+  }
+  endRun(id: string, input: EndRunInput): void {
+    const now = Date.now();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `UPDATE runs SET status=?, ended_at=?, error=?, usage=COALESCE(?,usage)
+           WHERE id=? AND status NOT IN ${TERMINAL_RUN}`,
+        )
+        .run(
+          input.status,
+          now,
+          input.error ?? null,
+          input.usage ? JSON.stringify(input.usage) : null,
+          id,
+        );
+      const run = this.runById(id);
+      if (run) this.touch(run.session);
+    });
+  }
+  runByRequest(session: string, requestId: string): RunRecord | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM runs WHERE session=? AND request_id=?")
+      .get(session, requestId);
+    return row ? this.runRow(row) : undefined;
+  }
+  runs(session: string, options: { limit?: number } = {}): RunRecord[] {
+    return this.db
+      .prepare("SELECT * FROM runs WHERE session=? ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(session, options.limit ?? 100)
+      .map((r) => this.runRow(r));
+  }
+  interruptRuns(): number {
+    const rows = this.db
+      .prepare("SELECT id, owner_pid FROM runs WHERE status IN ('queued','running')")
+      .all() as { id: string; owner_pid: number | null }[];
+    let count = 0;
+    for (const row of rows) {
+      // Runs of this process (another Application in it) or of another live process stay.
+      if (row.owner_pid && (row.owner_pid === process.pid || alive(row.owner_pid))) continue;
+      this.endRun(row.id, { status: "interrupted" });
+      count++;
+    }
+    return count;
+  }
+  /**
+   * A page of messages by `seq`. With `after`, the first `limit` rows after it; otherwise the
+   * newest `limit` rows (before `before` when given). Items are always in ascending order.
+   */
+  messagesPage(session: string, options: PageOptions & { compacted?: boolean } = {}): MessagePage {
+    const limit = Math.max(1, Math.min(options.limit ?? 100, 1000));
+    const active = options.compacted ? "" : " AND compacted=0";
+    const rows = (
+      options.after !== undefined
+        ? this.db
+            .prepare(
+              `SELECT seq,body,compacted FROM messages WHERE session=? AND seq>?${active} ORDER BY seq LIMIT ?`,
+            )
+            .all(session, options.after, limit + 1)
+        : this.db
+            .prepare(
+              `SELECT seq,body,compacted FROM messages WHERE session=? AND seq<?${active} ORDER BY seq DESC LIMIT ?`,
+            )
+            .all(session, options.before ?? Number.MAX_SAFE_INTEGER, limit + 1)
+    ) as { seq: number; body: string; compacted: number }[];
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    if (options.after === undefined) page.reverse();
+    return {
+      items: page.map((r) => ({
+        seq: Number(r.seq),
+        message: JSON.parse(r.body) as Message,
+        compacted: !!r.compacted,
+      })),
+      hasMore,
+    };
+  }
+  /** Durable events of a session after `after` (a previous `eventId`), ascending. */
+  eventsPage(session: string, options: PageOptions = {}): EventPage {
+    const limit = Math.max(1, Math.min(options.limit ?? 500, 5000));
+    const rows = this.db
+      .prepare(
+        "SELECT seq,run_id,type,body,created_at,correlation_id FROM events WHERE session=? AND seq>? AND seq<? ORDER BY seq LIMIT ?",
+      )
+      .all(
+        session,
+        options.after ?? 0,
+        options.before ?? Number.MAX_SAFE_INTEGER,
+        limit + 1,
+      ) as Record<string, unknown>[];
+    return {
+      items: rows.slice(0, limit).map(
+        (r): StoredEvent => ({
+          eventId: String(r.seq),
+          runId: String(r.run_id),
+          type: String(r.type),
+          data: r.body == null ? undefined : JSON.parse(String(r.body)),
+          ...(r.created_at != null ? { createdAt: Number(r.created_at) } : {}),
+          ...(r.correlation_id != null ? { correlationId: String(r.correlation_id) } : {}),
+        }),
+      ),
+      hasMore: rows.length > limit,
+    };
   }
   getState(plugin: string, key: string): unknown {
     const row = this.db
