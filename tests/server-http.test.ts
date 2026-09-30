@@ -1,11 +1,21 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type RunningServer, startServer } from "../packages/server/src/index.ts";
 import { createLogger } from "../packages/server/src/log.ts";
 
 let server: RunningServer | undefined;
+beforeEach(() => {
+  // The server opens the shared session database under the state home: keep it temporary.
+  const home = mkdtempSync(join(tmpdir(), "alisio-auth-"));
+  vi.stubEnv("ALISIO_STATE_HOME", join(home, "state"));
+  vi.stubEnv("ALISIO_CONFIG_HOME", join(home, "config"));
+});
 afterEach(async () => {
   await server?.close();
   server = undefined;
+  vi.unstubAllEnvs();
 });
 
 describe("server http foundation", () => {

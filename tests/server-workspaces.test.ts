@@ -1,0 +1,169 @@
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { WorkspaceInfo } from "@alisio/sdk";
+import { afterEach, describe, expect, it } from "vitest";
+import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
+import {
+  type Application,
+  WorkspaceHost,
+  workspaceId,
+} from "../packages/server/src/host/workspace-host.ts";
+import { startTestServer, type TestServer } from "./server-helpers.ts";
+
+let t: TestServer | undefined;
+afterEach(async () => {
+  await t?.close();
+  t = undefined;
+});
+
+const dir = async (name: string) => {
+  const path = join(await realpath(await mkdtemp(join(tmpdir(), "alisio-ws-"))), name);
+  await mkdir(path);
+  return path;
+};
+
+/** A host with a fake `createApplication` that records its options. */
+function fakeHost(options: Partial<ConstructorParameters<typeof WorkspaceHost>[0]> = {}) {
+  const created: Array<Record<string, unknown>> = [];
+  const closed: string[] = [];
+  let clock = 1_000;
+  const catalog = new SQLiteStore(":memory:");
+  const host = new WorkspaceHost({
+    base: {},
+    catalog,
+    now: () => clock,
+    create: (async (opts: Record<string, unknown>) => {
+      created.push(opts);
+      return { close: async () => void closed.push(String(opts.cwd)) } as unknown as Application;
+    }) as never,
+    ...options,
+  });
+  return { host, created, closed, tick: (ms: number) => (clock += ms) };
+}
+
+describe("WorkspaceHost (T-18)", () => {
+  it("creates one application lazily per workspace and reuses it", async () => {
+    const { host, created } = fakeHost();
+    const a = await dir("a");
+    expect(host.openCount).toBe(0);
+    const [first, second] = await Promise.all([host.openPath(a), host.openPath(a)]);
+    expect(first).toBe(second);
+    expect(created).toHaveLength(1);
+    expect(created[0]?.cwd).toBe(a);
+    expect(first.id).toBe(workspaceId(a));
+  });
+
+  it("evicts the least recently used idle workspace at the limit", async () => {
+    const { host, closed, tick } = fakeHost({ maxOpen: 2 });
+    const [a, b, c] = await Promise.all([dir("a"), dir("b"), dir("c")]);
+    await host.openPath(a);
+    tick(10);
+    await host.openPath(b);
+    tick(10);
+    host.touch(workspaceId(a));
+    await host.openPath(c);
+    expect(closed).toEqual([b]);
+    expect(
+      host
+        .entries()
+        .map((w) => w.path)
+        .sort(),
+    ).toEqual([a, c].sort());
+  });
+
+  it("answers 503 workspace_limit when every open workspace is busy", async () => {
+    const { host } = fakeHost({ maxOpen: 1, busy: () => true });
+    await host.openPath(await dir("a"));
+    await expect(host.openPath(await dir("b"))).rejects.toMatchObject({
+      code: "workspace_limit",
+      status: 503,
+    });
+  });
+
+  it("closes idle applications after idleEvictMs but keeps busy ones", async () => {
+    let busy = "";
+    const { host, closed, tick } = fakeHost({ idleEvictMs: 100, busy: (id) => id === busy });
+    const [a, b] = await Promise.all([dir("a"), dir("b")]);
+    await host.openPath(a);
+    await host.openPath(b);
+    busy = workspaceId(b);
+    tick(50);
+    expect(await host.sweep()).toBe(0);
+    tick(100);
+    expect(await host.sweep()).toBe(1);
+    expect(closed).toEqual([a]);
+  });
+
+  it("opens a directory with untrusted project resources without them (the web never grants trust)", async () => {
+    const { host, created } = fakeHost();
+    const a = await dir("a");
+    await mkdir(join(a, ".alisio"));
+    await writeFile(join(a, ".alisio", "config.json"), "{}");
+    const opened = await host.openPath(a);
+    expect(created[0]?.trustProject).toBe(false);
+    expect(opened).toMatchObject({ trusted: false, untrustedResources: true });
+    expect(await host.info(a)).toMatchObject({ trusted: false, untrustedResources: true });
+  });
+
+  it("keeps explicit launch trust (--trust-project) for every workspace", async () => {
+    const { host, created } = fakeHost({ base: { trustProject: true } });
+    await host.openPath(await dir("a"));
+    expect(created[0]?.trustProject).toBe(true);
+  });
+});
+
+describe("workspace routes (T-18)", () => {
+  it("lists the default workspace without opening it, then opens it on POST", async () => {
+    t = await startTestServer();
+    const canonical = await realpath(t.workspace);
+    const list = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(list).toEqual([
+      expect.objectContaining({ path: canonical, open: false, pinned: false }),
+    ]);
+    expect((await t.api.get("/api/metrics")).json()).toMatchObject({ openWorkspaces: 0 });
+    const opened = await t.api.post("/api/workspaces", { path: t.workspace });
+    expect(opened.status).toBe(200);
+    expect(opened.json<WorkspaceInfo>()).toMatchObject({
+      id: workspaceId(canonical),
+      path: canonical,
+      open: true,
+      trusted: false,
+    });
+    expect((await t.api.get("/api/metrics")).json()).toMatchObject({ openWorkspaces: 1 });
+  });
+
+  it("validates the path: relative is 400, missing is 404", async () => {
+    t = await startTestServer();
+    const relative = await t.api.post("/api/workspaces", { path: "some/dir" });
+    expect(relative.status).toBe(400);
+    expect(relative.json()).toMatchObject({
+      error: { code: "validation_failed", details: { fields: ["path"] } },
+    });
+    const missing = await t.api.post("/api/workspaces", { path: join(t.root, "nope") });
+    expect(missing.status).toBe(404);
+    const unknown = await t.api.post("/api/workspaces", { path: t.workspace, extra: 1 });
+    expect(unknown.json()).toMatchObject({ error: { details: { fields: ["extra"] } } });
+  });
+
+  it("patches label and pin of a known workspace and 404s an unknown id", async () => {
+    t = await startTestServer();
+    const [info] = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    const patched = await t.api.patch(`/api/workspaces/${info?.id}`, {
+      label: "Main",
+      pinned: true,
+    });
+    expect(patched.json()).toMatchObject({ label: "Main", pinned: true });
+    expect((await t.api.patch("/api/workspaces/ffff", { pinned: true })).status).toBe(404);
+  });
+
+  it("evicts the least recently used idle workspace when --max-workspaces is reached", async () => {
+    t = await startTestServer({ maxOpenWorkspaces: 1 });
+    const other = join(t.root, "other");
+    await mkdir(other);
+    await t.api.post("/api/workspaces", { path: t.workspace });
+    await t.api.post("/api/workspaces", { path: other });
+    const list = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(list.filter((w) => w.open).map((w) => w.path)).toEqual([await realpath(other)]);
+  });
+});

@@ -1,16 +1,24 @@
+import { mkdtempSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HealthInfo } from "@alisio/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type RunningServer, startServer } from "../packages/server/src/index.ts";
 import { createLogger } from "../packages/server/src/log.ts";
 import { client, login, raw } from "./server-helpers.ts";
 
 let server: RunningServer | undefined;
+beforeEach(() => {
+  // The server opens the shared session database under the state home: keep it temporary.
+  const home = mkdtempSync(join(tmpdir(), "alisio-auth-"));
+  vi.stubEnv("ALISIO_STATE_HOME", join(home, "state"));
+  vi.stubEnv("ALISIO_CONFIG_HOME", join(home, "config"));
+});
 afterEach(async () => {
   await server?.close();
   server = undefined;
+  vi.unstubAllEnvs();
 });
 const start = async (extra: Parameters<typeof startServer>[0] = {}) => {
   server = await startServer({ port: 0, logger: createLogger("silent"), ...extra });
@@ -76,7 +84,7 @@ describe("server auth (T-07)", () => {
   it("requires application/json on effectful requests", async () => {
     const s = await start();
     const cookie = await login(s.port, s.token);
-    const res = await raw(s.port, "/api/metrics", {
+    const res = await raw(s.port, "/api/workspaces", {
       method: "POST",
       body: "x",
       headers: {
@@ -85,7 +93,7 @@ describe("server auth (T-07)", () => {
         "Content-Type": "text/plain",
       },
     });
-    expect([404, 415]).toContain(res.status);
+    expect(res.status).toBe(415);
   });
 
   it("refuses to bind a non-loopback address without allowRemote", async () => {

@@ -5,15 +5,25 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { AppOptions } from "@alisio/core";
+import { join } from "node:path";
+import { SQLiteStore, stateHome } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
+import { type ServerAppOptions, WorkspaceHost } from "./host/workspace-host.ts";
 import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
+import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 
 export { isLoopbackHost } from "./auth/guard.ts";
+export {
+  type Application,
+  type OpenWorkspace,
+  type ServerAppOptions,
+  WorkspaceHost,
+  workspaceId,
+} from "./host/workspace-host.ts";
 export { HttpError } from "./http/errors.ts";
 export { contentSecurityPolicy, PLACEHOLDER_HTML } from "./http/static.ts";
 export { createLogger, type Logger, type LogLevel, logLevel } from "./log.ts";
@@ -44,13 +54,9 @@ export interface ServerOptions {
   maxOpenWorkspaces?: number;
   /** Maximum runs executing at once across all sessions (default 4). */
   maxConcurrentRuns?: number;
+  /** Close a workspace app after this long without activity (default 10 min). */
+  idleEvictMs?: number;
 }
-
-/** `AppOptions` minus what the server owns per workspace (cwd, events, approvals). */
-export type ServerAppOptions = Omit<
-  AppOptions,
-  "cwd" | "onEvent" | "approve" | "approveExternalDirectory"
->;
 
 export interface RunningServer {
   host: string;
@@ -91,11 +97,26 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const router = new Router();
   let guard: AuthGuard | undefined;
   let closing = false;
+  const base = options.app ?? {};
+  // Server-level connection to the shared session database (lists, metadata, snapshots).
+  const catalog = new SQLiteStore(base.db ?? join(stateHome(), "sessions.sqlite"));
+  const workspaces = new WorkspaceHost({
+    base,
+    catalog,
+    ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
+    ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
+    ...(options.defaultWorkspace ? { defaultWorkspace: options.defaultWorkspace } : {}),
+  });
+  const sweeper = setInterval(
+    () => void workspaces.sweep().catch(() => {}),
+    Math.min(60_000, options.idleEvictMs ?? 60_000),
+  );
+  sweeper.unref();
   const stats = (): ServerStats => ({
     shuttingDown: closing,
     activeRuns: 0,
     queuedRuns: 0,
-    openWorkspaces: 0,
+    openWorkspaces: workspaces.openCount,
     subscribers: 0,
     pendingApprovals: 0,
     sseDropped: 0,
@@ -105,6 +126,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     remote: !isLoopbackHost(host),
     stats,
   });
+  registerWorkspaceRoutes(router, { workspaces, catalog });
   const server = createServer((req, res) => void handle(req, res));
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -171,13 +193,19 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     }
   }
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port ?? 4317, host, () => {
-      server.off("error", reject);
-      resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.port ?? 4317, host, () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    clearInterval(sweeper);
+    catalog.close();
+    throw error;
+  }
   const port = (server.address() as AddressInfo).port;
   guard = new AuthGuard({ host, port, ...(options.token ? { token: options.token } : {}) });
   const displayHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
@@ -191,10 +219,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     webInstalled: assets.installed,
     async close() {
       closing = true;
+      clearInterval(sweeper);
+      await workspaces.closeAll();
       await new Promise<void>((resolve) => {
         server.closeAllConnections();
         server.close(() => resolve());
       });
+      catalog.close();
     },
   };
 }

@@ -1,5 +1,16 @@
 /** Test helpers for @alisio/server: raw node:http requests (full header control) and login. */
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ModelProvider, ProviderEvent } from "@alisio/sdk";
+import { vi } from "vitest";
+import {
+  type RunningServer,
+  type ServerOptions,
+  startServer,
+} from "../packages/server/src/index.ts";
+import { createLogger } from "../packages/server/src/log.ts";
 
 export interface RawResponse {
   status: number;
@@ -85,5 +96,104 @@ export function client(port: number, cookie: string) {
       call("POST", path, body, headers),
     patch: (path: string, body: unknown = {}, headers?: Record<string, string>) =>
       call("PATCH", path, body, headers),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// A real server on an ephemeral port with an isolated state/config home and a fake provider.
+// ---------------------------------------------------------------------------------------------
+
+type Turn = Parameters<ModelProvider["stream"]>[0];
+
+/** A provider whose every stream call is answered by `turn` (call index from 0). */
+export function fakeProvider(
+  turn: (request: Turn, call: number) => AsyncGenerator<ProviderEvent>,
+): ModelProvider & { calls: Turn[] } {
+  const calls: Turn[] = [];
+  return {
+    id: "fake",
+    model: "fake-model",
+    calls,
+    stream(request) {
+      calls.push(request);
+      return turn(request, calls.length - 1);
+    },
+  };
+}
+
+/** One assistant turn streaming `text` in two deltas, then completing without tool calls. */
+export async function* reply(text: string): AsyncGenerator<ProviderEvent> {
+  const half = Math.ceil(text.length / 2);
+  yield { type: "text_delta", delta: text.slice(0, half) };
+  yield { type: "text_delta", delta: text.slice(half) };
+  yield { type: "completed", message: { role: "assistant", text, calls: [] } };
+}
+
+/** A promise with its resolver exposed. */
+export function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** Waits until `check` returns a truthy value (polling), or fails after `ms`. */
+export async function until<T>(check: () => T | Promise<T>, ms = 5_000): Promise<T> {
+  const end = Date.now() + ms;
+  while (true) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > end) throw new Error("until: timed out");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+export interface TestServer {
+  server: RunningServer;
+  api: ReturnType<typeof client>;
+  cookie: string;
+  root: string;
+  workspace: string;
+  db: string;
+  close(): Promise<void>;
+}
+
+/** Starts a server with a temp database/state/config and a default workspace directory. */
+export async function startTestServer(
+  options: Partial<ServerOptions> & { provider?: ModelProvider } = {},
+): Promise<TestServer> {
+  const root = await mkdtemp(join(tmpdir(), "alisio-server-"));
+  const workspace = join(root, "ws");
+  await mkdir(workspace);
+  vi.stubEnv("ALISIO_CONFIG_HOME", join(root, "config"));
+  vi.stubEnv("ALISIO_STATE_HOME", join(root, "state"));
+  vi.stubEnv("HERDR_ENV", "0");
+  const db = join(root, "state", "sessions.sqlite");
+  const { provider, app, ...rest } = options;
+  const server = await startServer({
+    port: 0,
+    logger: createLogger("silent"),
+    defaultWorkspace: workspace,
+    ...rest,
+    app: {
+      db,
+      noHerdr: true,
+      ...(provider ? { provider } : { provider: fakeProvider(() => reply("ok")) }),
+      ...app,
+    },
+  });
+  const cookie = await login(server.port, server.token);
+  return {
+    server,
+    api: client(server.port, cookie),
+    cookie,
+    root,
+    workspace,
+    db,
+    close: async () => {
+      await server.close();
+      vi.unstubAllEnvs();
+    },
   };
 }
