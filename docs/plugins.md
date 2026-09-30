@@ -100,7 +100,7 @@ removed automatically when it is unloaded.
 | --- | --- |
 | `tools.register(tool)` | Registers a tool (`ToolDefinition`) |
 | `commands.register(name, handler, options?)` | Registers a command; `handler(args: string, context?: { sessionId? }) => Promise<string>` returns the text shown to the user (`sessionId` is the interactive UI's current session, when known). `options`: `{ description?, argumentHint? }`, shown in `/help` and autocompletion |
-| `events.on(handler)` | Observes versioned run events (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
+| `events.on(handler)` | Observes versioned run events (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`, plus the optional `eventId` and `correlationId`). `KnownRunEvent` types the `data` of every [event the core emits](/architecture#run-events) |
 | `context.register(provider)` | `() => Promise<string>`; adds text to the model context |
 | `resources.skills(path)` | Adds an Agent Skills root (relative to the plugin file) |
 | `resources.agents(path)` | Adds a directory of agent definitions for delegation plugins (see [Subagents](/subagents#discovery-and-precedence)) |
@@ -145,6 +145,47 @@ interface ToolDefinition {
 `session`. Return
 `textResult(text, isError?)`. The effect controls permissions ([Tools & permissions](/tools)):
 unknown or plugin operations default to `external`; only declare `read` for side-effect-free tools.
+
+### Rich results (`ui` blocks) {#ui-blocks}
+
+A tool result may add `{ type: "ui", block }` parts next to its text. A `UiBlock` is plain data;
+plugins never ship rendering code. Always keep a text part too: providers, compaction and headless
+output only see the text projection, and the block is a display hint.
+
+```ts
+return {
+  content: [
+    { type: "text", text: "2 passed, 1 failed" },
+    {
+      type: "ui",
+      block: {
+        kind: "test-results",
+        framework: "vitest",
+        suites: [{ name: "math", cases: [{ name: "adds", status: "passed" }] }],
+      },
+    },
+  ],
+};
+```
+
+| Kind | Fields | TUI rendering |
+| --- | --- | --- |
+| `table` | `columns`, `rows`, `caption?` | Aligned columns |
+| `key-value` | `entries`, `caption?` | Two columns |
+| `tree` | `nodes` (`label`, `children?`, `meta?`) | Branch glyphs |
+| `code` | `code`, `lang?`, `caption?` | Highlighted code |
+| `markdown` | `text` | Markdown |
+| `diff` | `patch?` or `before?`/`after?`, `path?`, `lang?`, `caption?` | Unified patch as `diff` code; otherwise labeled `before`/`after` |
+| `terminal` | `output`, `command?`, `cwd?`, `exitCode?`, `durationMs?`, `truncated?` | Output without ANSI plus `exit <code> · <time>` |
+| `mermaid` | `source`, `title?` | Source as `mermaid` code |
+| `math` | `latex`, `display?` | Literal LaTeX |
+| `json` | `value`, `collapsedDepth?`, `caption?` | Indented JSON, truncated |
+| `test-results` | `suites` (`name`, `file?`, `cases`), `framework?`, `durationMs?` | Table of suite, case, status and time, plus failures |
+| `progress` | `steps` (`label`, `status`, `detail?`), `title?` | One line per step with a status glyph |
+
+`UI_BLOCK_KINDS` lists every kind. Keep payloads bounded (about 200 KB for a diff and 256 KB for
+terminal output or serialized JSON). A kind that the running Alisio does not know, or a malformed
+block, is shown as labeled JSON instead of failing, so older builds can replay newer transcripts.
 
 ### Naming and prefix rules
 

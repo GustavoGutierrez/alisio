@@ -98,6 +98,27 @@ Alisio se ejecuta en Node.js >= 22.16 o Bun >= 1.4.2. Ambos proporcionan `node:s
 sesiones (conversación, eventos, journal de herramientas, estado de plugins, bloqueo de sesión) y la
 memoria. Node.js 22.16 es el mínimo porque las compilaciones 22.x anteriores carecen de FTS5.
 
+## Eventos de ejecución {#run-events}
+
+El runner informa del progreso como `RunEvent`: a los integradores mediante `onEvent`, a los plugins
+(`events.on`) y como JSONL con `alisio run --json`. `schemaVersion` sigue en `1` mientras los cambios
+sean aditivos, por lo que los consumidores deben ignorar campos y tipos de evento desconocidos.
+
+| Campo | Significado |
+| --- | --- |
+| `runId` | Una ejecución del bucle del agente. Los integradores pueden asignarlo de antemano (`RunOptions.runId`); si no, un UUID |
+| `seq` | Contador por ejecución que empieza en 1; se reinicia en cada ejecución |
+| `eventId` | Opcional. El `events.seq` global persistido como texto, único y creciente entre ejecuciones. Ausente en los eventos efímeros |
+| `correlationId` | Opcional. Se copia de `RunOptions.correlationId` (por ejemplo, un id de petición HTTP) a todos los eventos de la ejecución |
+
+`text_delta`, `reasoning_delta` y `tool_progress` son efímeros (`EphemeralRunEventType`): se
+transmiten a los observadores pero nunca se guardan, así que no llevan `eventId`. Todos los demás
+eventos se guardan antes de que los observadores los vean. `turn_completed` añade `durationMs` (de la
+petición al proveedor a la respuesta completa) y `ttftMs` (tiempo hasta el primer delta transmitido,
+ausente si el proveedor no transmitió nada). `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk`
+tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
+runner contra ellos.
+
 ## Resolución de fuentes en desarrollo
 
 Cada paquete exporta sus archivos compilados de `dist`, más una condición de exportación

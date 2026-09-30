@@ -22,7 +22,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
-  agente activo y effort).
+  agente activo y effort; contratos de eventos y bloques UI).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
@@ -84,6 +84,19 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   ausencia de autenticación y diferencias de parámetros de tokens.
 - SQLite: conversación autoritativa, eventos, journal de herramientas, estado de plugins,
   bloqueo de sesión y recuperación conservadora de efectos inciertos.
+- Contratos de la fase 0 de `alisio serve` (aditivos, `schemaVersion` sigue en `1`): el SDK tipa
+  cada evento que emite el runner (`RunEventType`, `RunEventDataMap`, `KnownRunEvent`,
+  `EphemeralRunEventType`/`isEphemeralRunEventType`); `RunEvent` gana `eventId` opcional (el
+  `events.seq` global persistido, ausente en `text_delta`/`reasoning_delta`/`tool_progress`) y
+  `correlationId` opcional; `SessionStore.event` devuelve `number | void`; `RunOptions` acepta
+  `runId` y `correlationId`; `turn_completed` añade `durationMs` y `ttftMs`. `UiBlock` gana los
+  kinds `diff`, `terminal`, `mermaid`, `math`, `json`, `test-results` y `progress` (lista en
+  `UI_BLOCK_KINDS`) con fallback de texto en la TUI y en la proyección de texto del núcleo; un kind
+  desconocido o mal formado se muestra como JSON etiquetado en lugar de fallar. El SDK añade los
+  tipos del protocolo web v1 (`ServerFrame`, `PendingApproval`, `PendingInteraction`,
+  `CommandDescriptor`, `SessionUiStatus`, `BlobRef`, `ApiError`), como borrador sin servidor aún.
+  `Attachment.data` sigue siendo obligatorio: las subidas por hash viajan como `BlobRef` y el host
+  las resolverá a `data` (fase 1).
 
 ### Herramientas, AGENTS.md y skills
 
@@ -1009,6 +1022,23 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - No verificado en pseudo-terminal: la interacción visual del aviso de directorio externo (sí su
   lógica con un decisor inyectado). Las llamadas anidadas de `execute` nunca abren un aviso nuevo:
   solo alcanzan directorios ya aprobados para la sesión.
+
+## Contratos de eventos y bloques UI: alcance de la verificación
+
+- Vitest: `tests/run-events-contract.test.ts` ejecuta el `AgentRunner` real con `SQLiteStore` y un
+  proveedor simulado (razonamiento, texto, llamada con aprobación, progreso, segundo turno, fallo,
+  cancelación, cambio de modelo y compactación omitida) y valida cada evento contra un espejo en
+  tiempo de ejecución de `RunEventDataMap` (exhaustivo por tipo en compilación); comprueba que los
+  eventos durables llevan `eventId` igual a `events.seq`, que los efímeros no, que `seq` sigue siendo
+  por ejecución, que `runId`/`correlationId` se propagan y que un store que no devuelve nada deja los
+  eventos sin `eventId`. `tests/ui-blocks-fallback.test.ts` renderiza cada kind nuevo en la TUI (con
+  y sin Unicode) y en la proyección de texto, y comprueba que un kind desconocido o mal formado no
+  lanza.
+- No verificado en pseudo-terminal: el aspecto visual de los nuevos bloques en la TUI (sí sus
+  líneas). Ningún productor integrado emite todavía los kinds nuevos (las herramientas los añadirán
+  en la fase 4). `ttftMs` mide hasta el primer delta de texto o razonamiento; un proveedor que solo
+  entrega la respuesta completa no lo informa. Los tipos del protocolo web no tienen implementación
+  todavía y pueden cambiar hasta que exista `@alisio/server`.
 
 ## Límites conocidos
 

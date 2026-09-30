@@ -174,6 +174,7 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **`ask_user_question`** — the shared interactive queue and stepped prompts.
 - **Network tools (webfetch, websearch, execute)** — mocked providers and no network sandbox.
 - **Project trust and default permissions** — trust store, approvals and `--read-only`.
+- **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
 
 The full detail (in Spanish) is in the source file linked at the top of this page, which the
 [Spanish version of this page](/es/limitations) includes verbatim.

@@ -94,6 +94,26 @@ Alisio runs on Node.js >= 22.16 or Bun >= 1.4.2. Both provide `node:sqlite`, whi
 (conversation, events, tool journal, plugin state, session lock) and memory. Node.js 22.16 is the
 minimum because earlier 22.x builds lack FTS5.
 
+## Run events {#run-events}
+
+The runner reports progress as `RunEvent`s: to `onEvent` embedders, to plugins (`events.on`) and as
+JSONL with `alisio run --json`. `schemaVersion` stays `1` while changes are additive, so consumers
+must ignore unknown fields and event types.
+
+| Field | Meaning |
+| --- | --- |
+| `runId` | One run of the agent loop. Embedders may preassign it (`RunOptions.runId`); otherwise a UUID |
+| `seq` | Per-run counter starting at 1; it restarts on every run |
+| `eventId` | Optional. The persisted global `events.seq` as a string, unique and increasing across runs. Absent for ephemeral events |
+| `correlationId` | Optional. Copied from `RunOptions.correlationId` (for example an HTTP request id) to every event of the run |
+
+`text_delta`, `reasoning_delta` and `tool_progress` are ephemeral (`EphemeralRunEventType`): they
+stream to observers but are never stored, so they carry no `eventId`. Every other event is stored
+before observers see it. `turn_completed` adds `durationMs` (provider request to completed response)
+and `ttftMs` (time to the first streamed delta, absent when the provider streamed nothing).
+`RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
+emits; `tests/run-events-contract.test.ts` checks the runner against them.
+
 ## Source resolution in development
 
 Each package exports its built `dist` files, plus a development-only `alisio-source` export condition

@@ -102,7 +102,7 @@ plugin se elimina automáticamente cuando se descarga.
 | --- | --- |
 | `tools.register(tool)` | Registra una herramienta (`ToolDefinition`) |
 | `commands.register(name, handler, options?)` | Registra un comando; `handler(args: string, context?: { sessionId? }) => Promise<string>` devuelve el texto que se muestra al usuario (`sessionId` es la sesión actual de la interfaz interactiva, cuando se conoce). `options`: `{ description?, argumentHint? }`, mostrados en `/help` y en el autocompletado |
-| `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`) |
+| `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`, más los opcionales `eventId` y `correlationId`). `KnownRunEvent` tipa el `data` de cada [evento que emite el núcleo](/es/architecture#run-events) |
 | `context.register(provider)` | `() => Promise<string>`; añade texto al contexto del modelo |
 | `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del plugin) |
 | `resources.agents(path)` | Añade un directorio de definiciones de agentes para plugins de delegación (consulte [Subagentes](/es/subagents#discovery-and-precedence)) |
@@ -149,6 +149,49 @@ concurrentes del mismo turno (las herramientas de delegación lo usan). `ToolCon
 `textResult(text, isError?)`. El efecto controla los permisos ([Herramientas y permisos](/es/tools)):
 las operaciones desconocidas o de plugins usan `external` por defecto; declare `read` solo para
 herramientas sin efectos secundarios.
+
+### Resultados enriquecidos (bloques `ui`) {#ui-blocks}
+
+Un resultado de herramienta puede añadir partes `{ type: "ui", block }` junto a su texto. Un
+`UiBlock` son solo datos; los plugins nunca envían código de renderizado. Conserve siempre también
+una parte de texto: los proveedores, la compactación y la salida headless solo ven la proyección de
+texto, y el bloque es una indicación de presentación.
+
+```ts
+return {
+  content: [
+    { type: "text", text: "2 passed, 1 failed" },
+    {
+      type: "ui",
+      block: {
+        kind: "test-results",
+        framework: "vitest",
+        suites: [{ name: "math", cases: [{ name: "adds", status: "passed" }] }],
+      },
+    },
+  ],
+};
+```
+
+| Kind | Campos | Renderizado en la TUI |
+| --- | --- | --- |
+| `table` | `columns`, `rows`, `caption?` | Columnas alineadas |
+| `key-value` | `entries`, `caption?` | Dos columnas |
+| `tree` | `nodes` (`label`, `children?`, `meta?`) | Glifos de rama |
+| `code` | `code`, `lang?`, `caption?` | Código resaltado |
+| `markdown` | `text` | Markdown |
+| `diff` | `patch?` o `before?`/`after?`, `path?`, `lang?`, `caption?` | Parche unificado como código `diff`; si no, `before`/`after` etiquetados |
+| `terminal` | `output`, `command?`, `cwd?`, `exitCode?`, `durationMs?`, `truncated?` | Salida sin ANSI más `exit <código> · <tiempo>` |
+| `mermaid` | `source`, `title?` | Fuente como código `mermaid` |
+| `math` | `latex`, `display?` | LaTeX literal |
+| `json` | `value`, `collapsedDepth?`, `caption?` | JSON indentado, truncado |
+| `test-results` | `suites` (`name`, `file?`, `cases`), `framework?`, `durationMs?` | Tabla de suite, caso, estado y tiempo, más los fallos |
+| `progress` | `steps` (`label`, `status`, `detail?`), `title?` | Una línea por paso con un glifo de estado |
+
+`UI_BLOCK_KINDS` lista todos los kinds. Acote los tamaños (unos 200 KB para un diff y 256 KB para la
+salida de terminal o el JSON serializado). Un kind que la versión de Alisio en ejecución no conoce, o
+un bloque mal formado, se muestra como JSON etiquetado en lugar de fallar, de modo que versiones
+anteriores pueden reproducir transcripciones más nuevas.
 
 ### Reglas de nombres y prefijos
 

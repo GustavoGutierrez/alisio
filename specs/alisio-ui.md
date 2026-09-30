@@ -573,7 +573,7 @@ Formato: **Descripción** · **Reutiliza** · **Nuevo** · **Criterios** (Given/
 - **Descripción**: `select`, `askQuestions` y `open` del `PluginHost` (p. ej. la tool `ask_user_question`) se presentan en la web.
 - **Reutiliza**: `PluginHost.setInteractiveUI({select, askQuestions, open})`, `PluginHost.status`/`onStatusChange`.
 - **Nuevo**: `InteractionBridge` con eventos `interaction_requested`/`interaction_resolved` y `POST /api/interactions/:id`. Sin cliente → `undefined`/cancelado (fail-closed igual que aprobaciones).
-- **Limitación**: `setInteractiveUI` es por `PluginHost` (por app), no por sesión; el bridge enruta por `sessionId` cuando la petición lo trae y, si no, a todos los suscriptores del workspace (verificar los campos de `SelectRequest`/`AskQuestionsRequest`).
+- **Limitación**: `setInteractiveUI` es por `PluginHost` (por app), no por sesión; el bridge enruta por `sessionId` cuando la petición lo trae y, si no, a todos los suscriptores del workspace (verificado: `AskQuestionsRequest` trae `session?`/`label?`; `SelectRequest` no trae sesión, por lo que un `select` siempre va a todo el workspace). `PendingInteraction` (SDK, fase 0) refleja esto: `sessionId` opcional y `workspaceId` obligatorio.
 - **Fase**: 3.
 
 ### RF-19 — MCP Apps (opcional)
@@ -721,7 +721,9 @@ export type KnownRunEvent =
   | (RunEvent & { type: Exclude<RunEventType, "text_delta" | "reasoning_delta" | "tool_started" | "tool_progress" | "tool_completed" | "approval_requested" | "approval_resolved" | "turn_completed" | "run_completed" | "run_failed" | "run_cancelled" | "model_changed">; data: Record<string, unknown> });
 ```
 
-Los payloads anteriores reflejan lo que emite `packages/core/src/core/runner.ts` hoy. El PR de fase 0 debe añadir un test de contrato que ejecute un run con proveedor falso y valide cada evento contra `KnownRunEvent` (T-02). Para `session_context_injected`, `compaction_*`, `context_reduced` y `plugin_hook_failed` los campos exactos se tipan tras leerlos en el runner **(verificar)**.
+Los payloads anteriores reflejan lo que emite `packages/core/src/core/runner.ts` hoy. El PR de fase 0 debe añadir un test de contrato que ejecute un run con proveedor falso y valide cada evento contra `KnownRunEvent` (T-02).
+
+**Implementado (fase 0)**: el SDK define `RunEventDataMap` (payload por tipo), `RunEventType = keyof RunEventDataMap` y `KnownRunEvent` como unión mapeada sobre ese mapa, **sin** variante comodín: todos los tipos quedan tipados. El emisor del runner usa `RunEventDataMap`, así que un payload que se desvíe del contrato no compila. Payloads verificados en el runner: `run_started {model}`, `response_truncated {turn, maxOutputTokens}`, `run_turns_exceeded {turns, maxTurns}`, `compaction_started {reason, before, messages}`, `compaction_completed {reason, before, after, replaced, structured, summarizedTokens, checkpointTokens, plugins, partial?: true}`, `compaction_skipped {reason, before, detail}`, `compaction_failed {reason, error}`, `context_reduced {messages}`, `session_context_injected {tokens, sources: string[]}`, `plugin_hook_failed {source, hook, error, continued: true}`; `approval_resolved.effect` es `"write" | "process" | "external"`. Además se exportan `EPHEMERAL_RUN_EVENT_TYPES` e `isEphemeralRunEventType()`, que el runner usa para decidir qué persiste.
 
 Implementación del `eventId`: `SessionStore.event()` pasa a devolver `number | void` (aditivo); `SQLiteStore.event` devuelve `lastInsertRowid`. El emisor del runner lo copia a `eventId` antes de llamar a `onEvent`.
 
@@ -834,7 +836,7 @@ Reglas:
 3. Fail-closed: `deny` si (a) `signal` aborta, (b) no hay suscriptores de la sesión raíz tras `graceMs` (30 s), (c) vence `timeoutMs` (por defecto 10 min, configurable; `0` = sin límite mientras haya suscriptores).
 4. Primera respuesta gana; las siguientes → `already_resolved` (409).
 5. El runner sigue emitiendo `approval_requested`/`approval_resolved` como hoy; el bridge solo añade los frames `approval`/`approval_withdrawn`.
-6. `session` como decisión la gestiona el runner igual que en la TUI (verificar dónde se memoriza la aprobación "session" en `runner.ts`).
+6. `session` como decisión la gestiona el runner igual que en la TUI. Verificado: `runner.ts` hace `policy[effect] = true` sobre `options.policy ?? runner.options.policy`; en un run raíz sin `RunOptions.policy` ese objeto es la `Policy` **del runner** (una por `Application`), así que "session" amplía el permiso para **todas** las sesiones del workspace durante la vida de la app, no solo para la sesión. El servidor debe pasar una `RunOptions.policy` propia por sesión (copia del techo) si quiere aprobación "session" por sesión.
 
 `InteractionBridge` sigue el mismo patrón para `select`/`askQuestions` (sin respuesta → `undefined`/cancelado) y `open(sessionId)` (→ frame `session_status` + navegación sugerida; devuelve `true` si hay al menos un suscriptor).
 
@@ -1200,7 +1202,7 @@ Cada unidad (U) = un PR. Todas terminan con la batería completa de `AGENTS.md` 
 
 | U | Archivos | Tareas | Salida |
 |---|---|---|---|
-| 0.1 | `packages/sdk/src/index.ts` | `RunEventType`, `EphemeralRunEventType`, `KnownRunEvent`, `RunEvent.eventId?`, `RunEvent.correlationId?`, `Attachment.blob?` (con `data` pasando a opcional solo si el invariante se comprueba en runtime — si no, dejar `data` requerido y añadir variante; decidir en el PR), tipos de protocolo web (`ServerFrame`, `PendingApproval`, `CommandDescriptor`, `SessionUiStatus`, `ApiError`). | `pnpm typecheck` verde; T-02 (parte de tipos). |
+| 0.1 | `packages/sdk/src/index.ts` | `RunEventType`, `EphemeralRunEventType`, `KnownRunEvent`, `RunEvent.eventId?`, `RunEvent.correlationId?`, `Attachment.blob?` (con `data` pasando a opcional solo si el invariante se comprueba en runtime — si no, dejar `data` requerido y añadir variante; decidir en el PR), tipos de protocolo web (`ServerFrame`, `PendingApproval`, `CommandDescriptor`, `SessionUiStatus`, `ApiError`). **Decidido en fase 0**: `Attachment` no cambia (`data` sigue obligatorio, sin `blob`), porque el proveedor OpenAI-compatible y los plugins leen `a.data` directamente y nada comprueba aún el invariante en runtime; se añade `BlobRef` como tipo de transporte y la fase 1.3 resuelve `BlobRef → data` en el host antes de construir el `Attachment` (o introduce entonces la variante con su comprobación). También se añadieron `SessionDetailWire`, `InflightState` y `PendingInteraction`, que `ServerFrame` necesita (borrador hasta que exista `@alisio/server`). | `pnpm typecheck` verde; T-02 (parte de tipos). |
 | 0.2 | `packages/sdk/src/index.ts`, `packages/cli/src/tui/components.ts` | Kinds nuevos de `UiBlock` + fallbacks TUI. | T-03. |
 | 0.3 | `packages/core/src/core/runner.ts`, `core/contracts.ts`, `runtime/store.ts` | `SessionStore.event` devuelve `number \| void`; emisor rellena `eventId`; `RunOptions.runId?`, `correlationId?`; `turn_completed.durationMs/ttftMs`. | T-02. |
 
@@ -1317,7 +1319,7 @@ La iniciativa (fases 0–5) está completa cuando:
 | P-03 | Varias `Application` en un proceso abren varias conexiones al mismo SQLite | Contención de escritura (WAL, `busy_timeout` 5 s). | Aceptable a esta escala; medir con 4 runs concurrentes; si aparece `SQLITE_BUSY`, compartir el `SQLiteStore` entre apps (requiere nueva opción aditiva `AppOptions.store`). |
 | P-04 | Diferencias de `node:sqlite` en Bun (índices parciales, `lastInsertRowid`) | Fallos en binario. | Cubrir en `pnpm test:compiled`. |
 | P-05 | Tamaño de Mermaid (> 500 KB gzip) | Descarga lenta la primera vez. | Chunk diferido por viewport; no cuenta para el presupuesto inicial. |
-| P-06 | `setInteractiveUI` es por `PluginHost`, no por sesión | Preguntas de plugins enrutadas al workspace entero. | Enrutar por `sessionId` si la petición lo trae **(verificar)**; si no, a todos los suscriptores del workspace. |
+| P-06 | `setInteractiveUI` es por `PluginHost`, no por sesión | Preguntas de plugins enrutadas al workspace entero. | Enrutar por `sessionId` si la petición lo trae (verificado: `AskQuestionsRequest` tiene `session?` y `label?`; `SelectRequest` solo `title` y `options`, sin sesión); si no, a todos los suscriptores del workspace. |
 | P-07 | Consentimiento MCP en runtime diseñado para la TUI (`source: "interactive-tui"`) | Web necesita su propia fuente. | Valor aditivo `"interactive-web"` con confirmación explícita. |
 | P-08 | Plugins de proyecto en workspaces confiables se ejecutan en el proceso del servidor | Un plugin tiene los mismos permisos de SO que el proceso (disco, red); la cookie queda fuera de su alcance solo porque vive en el navegador. | Igual que la CLI: los plugins no son sandbox; documentar. |
 | P-09 | Abrir cualquier ruta como workspace desde el navegador | Acceso a directorios arbitrarios del usuario (ya accesibles al mismo usuario). | Aceptado en loopback; opción futura `serve.roots` como lista blanca. |
