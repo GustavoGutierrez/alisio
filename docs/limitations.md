@@ -175,6 +175,8 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **Network tools (webfetch, websearch, execute)** — mocked providers and no network sandbox.
 - **Project trust and default permissions** — trust store, approvals and `--read-only`.
 - **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
+- **v4 persistence, blobs and command catalog** — v3 → v4 migration, run journal, blob store, TUI
+  command parity.
 
 The full detail (in Spanish) is in the source file linked at the top of this page, which the
 [Spanish version of this page](/es/limitations) includes verbatim.

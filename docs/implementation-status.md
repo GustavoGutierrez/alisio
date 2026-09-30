@@ -22,7 +22,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
-  agente activo y effort; contratos de eventos y bloques UI).
+  agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
+  comandos).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
@@ -96,7 +97,20 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   tipos del protocolo web v1 (`ServerFrame`, `PendingApproval`, `PendingInteraction`,
   `CommandDescriptor`, `SessionUiStatus`, `BlobRef`, `ApiError`), como borrador sin servidor aún.
   `Attachment.data` sigue siendo obligatorio: las subidas por hash viajan como `BlobRef` y el host
-  las resolverá a `data` (fase 1).
+  las resuelve a `data` (fase 1).
+- Persistencia v4 y catálogo de comandos (fase 1 de `alisio serve`): migración aditiva v4 de
+  `SQLiteStore` (tablas `runs`, `workspaces` y `blobs`; columnas nulables en `sessions`, `events` y
+  `tool_calls`; índice único parcial `(session, request_id)`); métodos opcionales de `SessionStore`
+  (`beginRun`, `endRun`, `runByRequest`, `runs`, `messagesPage`, `eventsPage`, `interruptRuns`); el
+  runner registra cada ejecución (también TUI y headless) y marca las llamadas a herramientas con
+  `run_id`, nombre, efecto y tiempos; `createApplication` marca como `interrupted` las ejecuciones de
+  procesos muertos al arrancar (junto a `interruptStale()`, que se invoca en el constructor de
+  `ChildSessions`). `BlobStore` (`app.blobs`) guarda adjuntos por SHA-256 en
+  `<state home>/blobs/sha256/<aa>/<hash>` y resuelve un `BlobRef` a un `Attachment` en base64
+  verificado. `CommandCatalog` y `BUILTIN_COMMANDS` en `@alisio/core` describen los comandos de barra
+  (integrados, plugins, plantillas, skills) con superficies y modo de ejecución; la TUI toma de ahí
+  su lista y resolución y delega `/tools` y `/sessions`. La lógica pura del agente activo vive en
+  `@alisio/core` (`agents/active.ts`); la CLI la reexporta.
 
 ### Herramientas, AGENTS.md y skills
 
@@ -1040,6 +1054,29 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   entrega la respuesta completa no lo informa. Los tipos del protocolo web no tienen implementación
   todavía y pueden cambiar hasta que exista `@alisio/server`.
 
+## Persistencia v4, blobs y catálogo de comandos: alcance de la verificación
+
+- Vitest: `tests/store-migration-v4.test.ts` construye una base v3 con el DDL antiguo y datos, la abre
+  con `SQLiteStore` (sin pérdida de filas, versión 4 registrada, migración idempotente al reabrir),
+  comprueba la unicidad de `runs` por `(session, request_id)` (reintento devuelve la ejecución
+  existente; el índice parcial rechaza un duplicado directo), la transición `queued` → `running` →
+  terminal sin sobrescribir un estado terminal, `interruptRuns` (solo dueños muertos o ausentes; se
+  conservan los de este proceso y los de otro proceso vivo), marcas de tiempo de sesiones raíz,
+  columnas nuevas de `tool_calls`, paginación de mensajes y eventos, el registro de ejecuciones del
+  runner (completada, preasignada en cola, fallida, cancelada, `turns_exceeded`, store sin métodos
+  opcionales) y la reconciliación en `createApplication`. `tests/blobs.test.ts` cubre deduplicación,
+  permisos `0600`/`0700`, hashes inválidos, contenido manipulado, la resolución a base64 que llega al
+  proveedor y los adjuntos en línea heredados. `tests/command-catalog.test.ts` cubre fuentes,
+  superficies, alias, colisiones y los manejadores core; `tests/command-catalog-tui-parity.test.ts`
+  compara la lista de comandos, la resolución y la salida de `/tools` y `/sessions` con las
+  implementaciones previas de la TUI.
+- Bun: el escenario `store-migration` de `fixtures/scenarios.ts` (ejecutado en Node y Bun por
+  `tests/integration.test.ts`) verifica la migración y el índice único parcial en Bun, y
+  `pnpm test:compiled` comprueba que el binario Bun escribe filas en `runs` al ejecutar `alisio run`.
+- No verificado: la TUI en pseudo-terminal tras delegar `/tools` y `/sessions` (sí su texto). Nada
+  consume todavía `workspaces`, `sessions.pinned`/`archived_at`, `messagesPage` ni `eventsPage`;
+  los usará `@alisio/server` (fase 2).
+
 ## Límites conocidos
 
 ### Runtime y empaquetado
@@ -1223,7 +1260,18 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - El adaptador chat soporta texto y function tools; bloques privados de razonamiento de
   proveedores de terceros no se normalizan. Para continuation de OpenAI use Responses.
 - La sesión restaura el historial activo (el compactado queda archivado). Hay migraciones
-  hacia adelante e idempotentes (v1 → v2); no hay migraciones hacia atrás.
+  hacia adelante e idempotentes (v1 → v4); no hay migraciones hacia atrás.
+- Los blobs no tienen recolección de basura. Un adjunto resuelto desde un blob se persiste en el
+  mensaje como base64 (igual que un adjunto en línea), porque `Attachment.data` sigue siendo
+  obligatorio; el blob solo evita repetir la subida.
+- `interruptRuns()` conserva las ejecuciones cuyo `owner_pid` es el del proceso actual (otra
+  `Application` del mismo proceso); si el PID de un proceso muerto se reutiliza, esas filas siguen en
+  `running` hasta el siguiente arranque con otro PID.
+- Los manejadores core del catálogo son deliberadamente mínimos: `model` cambia el id de modelo de la
+  sesión sin cambiar de proveedor, `effort` persiste el nivel sin validarlo contra el catálogo del
+  modelo (la TUI sí lo valida) y `stats` resume el registro de ejecuciones, no las estadísticas en
+  memoria de la TUI. La TUI solo delega `/tools` y `/sessions`; el resto de comandos sigue en su
+  `switch`.
 - Lectura/edición de texto limitada a 1 MiB. Búsquedas/salidas extensas se truncan explícitamente.
 - La integración Herdr permite intercambio por terminales; no promete autonomía multiagente
   completa ni planificación distribuida.

@@ -119,6 +119,49 @@ ausente si el proveedor no transmitió nada). `RunEventDataMap` y `KnownRunEvent
 tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
 runner contra ellos.
 
+## Base de datos de sesiones (v4) {#session-database}
+
+`SQLiteStore` migra solo hacia delante y de forma aditiva: una base escrita por un Alisio anterior se
+abre en la versión 4 del esquema sin perder filas, y un binario anterior ignora las tablas y
+columnas nuevas. La versión 4 añade:
+
+| Adición | Propósito |
+| --- | --- |
+| Tabla `runs` | Una fila por `AgentRunner.run` (`id` = `RunEvent.runId`): `queued` → `running` → `completed`, `turns_exceeded`, `failed`, `cancelled` o `interrupted`, con modelo, uso, tiempos, error, proceso dueño y un `request_id` opcional único por sesión |
+| Tabla `workspaces` | Metadatos opcionales de la UI (etiqueta, fijado, última apertura) |
+| Tabla `blobs` | Metadatos de los bytes de adjuntos direccionados por contenido |
+| Columnas nulables nuevas | Fijado/archivado de sesiones, `created_at`/`correlation_id` de eventos, `run_id`/`name`/`effect`/`started_at`/`ended_at` de llamadas a herramientas |
+
+El runner registra cada ejecución cuando el store implementa los métodos opcionales de
+`SessionStore` (`beginRun`, `endRun`, `runByRequest`, `runs`, `messagesPage`, `eventsPage`,
+`interruptRuns`), así que también quedan registradas las ejecuciones de la TUI y del modo headless;
+otras implementaciones de `SessionStore` siguen funcionando sin ellos. Reintentar `beginRun` con el
+mismo `requestId` en una sesión devuelve la ejecución existente en lugar de crear otra. Al arrancar,
+`createApplication` marca como `interrupted` las ejecuciones que un proceso muerto dejó en
+`queued`/`running`, junto a la reconciliación existente de sesiones hijas. Las sesiones raíz ahora
+registran `createdAt`/`updatedAt`.
+
+## Blobs de adjuntos {#blobs}
+
+`BlobStore` (`app.blobs`) guarda los bytes subidos en `<state home>/blobs/sha256/<aa>/<hash>`
+(directorios `0700`, archivos `0600`, escritura atómica y deduplicación por SHA-256) y sus metadatos
+en la tabla `blobs`. `Attachment.data` sigue siendo obligatorio, así que un blob nunca llega al runner
+por referencia: el host convierte un `BlobRef` en un `Attachment` de imagen en base64 verificado con
+`blobs.attachment(ref)` antes de `runner.run`. Por eso los mensajes siguen guardando base64, igual que
+los adjuntos en línea, que siguen funcionando sin cambios.
+
+## Catálogo de comandos {#command-catalog}
+
+`CommandCatalog` lista, resuelve y ejecuta los comandos de barra para todas las superficies. Sus
+fuentes son los comandos integrados (`BUILTIN_COMMANDS`), los comandos de plugins, las plantillas de
+prompt y las skills efectivas (`skill:<id>`); ante una colisión de nombres gana la primera fuente en
+ese orden. Cada `CommandDescriptor` declara sus `surfaces` (`tui`, `web`, `api`) y su `execution`: los
+comandos `core` (`compact`, `model`, `effort`, `clear`/`new`, `sessions`, `resume`, `stats`, `tools`,
+`skills`, `plugins`, `mcp`, `agents` y los comandos de plugins) se ejecutan con
+`execute(name, args, { sessionId })`; los comandos `surface` (`help`, `connect`, `settings`, `copy`,
+`ask`, `exit`, plantillas y skills) los gestiona cada UI. La TUI toma su lista de comandos y la
+resolución de nombres del catálogo y le delega `/tools` y `/sessions`; su salida no cambia.
+
 ## Resolución de fuentes en desarrollo
 
 Cada paquete exporta sus archivos compilados de `dist`, más una condición de exportación
