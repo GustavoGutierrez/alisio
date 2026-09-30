@@ -37,10 +37,8 @@ export function raw(port: number, path: string, init: RequestInit = {}): Promise
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(init.headers ?? {}))
     if (value !== undefined) headers[key] = value;
-  if (
-    payload !== undefined &&
-    !Object.keys(headers).some((k) => k.toLowerCase() === "content-length")
-  )
+  // Node frames bodies of DELETE (unlike POST/PUT/PATCH) only with an explicit length.
+  if (payload !== undefined && method === "DELETE")
     headers["Content-Length"] = String(Buffer.byteLength(payload));
   return new Promise((resolve, reject) => {
     const req = httpRequest(

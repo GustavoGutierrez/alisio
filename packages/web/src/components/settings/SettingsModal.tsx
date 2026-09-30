@@ -12,15 +12,17 @@ import { AgentsPage } from "./AgentsPage.tsx";
 import { AppearancePage } from "./AppearancePage.tsx";
 import { GeneralPage } from "./GeneralPage.tsx";
 import { McpPage } from "./McpPage.tsx";
+import { ModelsPage } from "./ModelsPage.tsx";
 import { PluginsPage } from "./PluginsPage.tsx";
 import { SkillsPage } from "./SkillsPage.tsx";
 import styles from "./settings.module.css";
 import { settingsWorkspace, useLoad } from "./shared.tsx";
 
-type Page = "general" | "plugins" | "skills" | "mcp" | "agents" | "appearance";
+type Page = "general" | "models" | "plugins" | "skills" | "mcp" | "agents" | "appearance";
 
 const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "general", icon: "settings" },
+  { id: "models", icon: "database" },
   { id: "plugins", icon: "sliders" },
   { id: "skills", icon: "book" },
   { id: "mcp", icon: "plug" },
@@ -155,6 +157,8 @@ export function SettingsModal() {
           {files ? <ConfigFiles onClose={() => setFiles(false)} /> : null}
           {page === "general" ? (
             <GeneralPage />
+          ) : page === "models" ? (
+            <ModelsPage />
           ) : page === "plugins" ? (
             <PluginsPage />
           ) : page === "skills" ? (

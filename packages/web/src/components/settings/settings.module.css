@@ -653,6 +653,55 @@
   outline: 0;
 }
 
+.credential {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.credentialForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.meta[data-configured="true"] {
+  color: var(--ok);
+}
+
+.profileForm {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.formRow .input {
+  width: min(320px, 60%);
+}
+
+.addButton {
+  margin-top: 14px;
+}
+
 @media (max-width: 760px) {
   .dialog {
     grid-template-columns: 1fr;

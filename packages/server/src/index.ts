@@ -26,6 +26,7 @@ import { registerFileRoutes } from "./routes/files.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
+import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
@@ -271,6 +272,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   };
   recycler = new WorkspaceRecycler(management);
   registerManagementRoutes(router, management, recycler);
+  registerProviderRoutes(router, management, recycler);
   registerEventRoutes(router, {
     hub,
     sessions,
