@@ -157,8 +157,10 @@ it is not a statement that all of its release criteria are met.
   meant for SSH tunnels; a wildcard bind also accepts IP-literal `Host` headers); the provider is per
   workspace, so only the model changes per session; idempotency of prompts queued while a run is
   active is in memory; every SSE reconnection receives a full snapshot; the standalone binary serves
-  only the API and a placeholder page. Management routes come in a later phase, and Mermaid and
-  math blocks still show as source code. The files panel browses the workspace only (no `--add-dir`
+  only the API and a placeholder page. Activating a provider profile from the web changes one
+  workspace application and is refused while it has runs; a plugin switch applies when the
+  workspace next has no runs (its application is reloaded); plugins cannot be installed from the
+  web. The files panel browses the workspace only (no `--add-dir`
   roots, symbolic links never followed) and uploaded images are not garbage-collected. The UI does not watch the stream with a 45 s
   timer (the server heartbeat is an SSE comment that `EventSource` does not expose); command output,
   notices and reasoning exist only while the page is open. `Ctrl+K` focuses the sidebar search
@@ -194,7 +196,9 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
   traced under Node; serve smoke in the Node CLI and the Bun binary. The web UI's reducers, SSE
   client, incremental Markdown and EN/ES key parity are unit-tested without a DOM, and the UI was
   exercised manually in Chromium (Playwright) with a simulated provider: streaming, tool rows,
-  approvals by keyboard, the `/` palette, light and dark themes and a 390 px width. Screen readers,
+  approvals by keyboard, the `/` palette, light and dark themes and a 390 px width, and in phase 5
+  Mermaid and KaTeX (valid and malformed), every Settings page, a write-only credential, provider
+  activation and plugin/skill switches refreshing the palette. Screen readers,
   Firefox/Safari and real network drops were not verified.
 
 The full detail (in Spanish) is in the source file linked at the top of this page, which the

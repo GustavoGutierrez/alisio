@@ -306,6 +306,23 @@ persisted active agent's system prompt and read-only narrowing to each run (the 
 TUI feature: it is sent only by the interactive TUI, after validation against the active model's
 catalog).
 
+## Changes made from the web UI
+
+The **Settings** pages of [`alisio serve`](/web) write to the same files as the terminal:
+
+| Change | Where it is written |
+| --- | --- |
+| Agent settings (General page) | `<config home>/config.json`, through the same validated writer as `/settings`; only the settable keys are accepted |
+| Provider profiles (Models page) | `<config home>/providers.json` (non-secret values only, `0600`) |
+| Credentials (Models page) | `<config home>/credentials.json` (`0600`, atomic writes); the web can set or delete them but never reads them back |
+| Plugin and skill switches | The project's `.alisio/config.json` (trusted workspaces only) |
+| MCP server switches | The configuration layer that defines the server |
+| MCP consent with **Remember for this user** | `mcp.allow` in `<config home>/config.json` |
+
+**Open configuration file** in Settings shows these paths with copy buttons; the server does not
+open editors. Activating a profile from the web also makes it the default profile (`active` in
+`providers.json`), as `/connect` does in the terminal.
+
 ## Prompt templates
 
 There is no configuration key for templates. They are read from `<config home>/prompts/` and, for
@@ -416,7 +433,8 @@ prompt on every restart.
   unsandboxed with your user privileges, so only enable global consent when you trust every server
   you configure.
 - The TUI `/mcp` manager can set this (Grant and remember) and revoke it; see
-  [Terminal UI](/tui#mcp).
+  [Terminal UI](/tui#mcp). In the web UI, **Settings → MCP servers → Grant MCP access** asks for
+  an explicit confirmation and can remember the grant the same way; see [Web UI](/web).
 
 ## Environment variables
 

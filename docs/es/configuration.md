@@ -315,6 +315,24 @@ prompt de sistema del agente activo persistido y su limitación de solo lectura 
 (el nivel de effort es una función de la TUI: solo la envía la TUI interactiva, tras validarlo
 contra el catálogo del modelo activo).
 
+## Cambios hechos desde la interfaz web
+
+Las páginas de **Ajustes** de [`alisio serve`](/es/web) escriben en los mismos archivos que la
+terminal:
+
+| Cambio | Dónde se escribe |
+| --- | --- |
+| Ajustes del agente (página General) | `<config home>/config.json`, con el mismo escritor validado que `/settings`; solo se aceptan las claves configurables |
+| Perfiles de proveedor (página Modelos) | `<config home>/providers.json` (solo valores no secretos, `0600`) |
+| Credenciales (página Modelos) | `<config home>/credentials.json` (`0600`, escrituras atómicas); la web puede guardarlas o borrarlas pero nunca las vuelve a leer |
+| Interruptores de plugins y skills | El `.alisio/config.json` del proyecto (solo workspaces de confianza) |
+| Interruptores de servidores MCP | La capa de configuración que define el servidor |
+| Consentimiento MCP con **Recordar para este usuario** | `mcp.allow` en `<config home>/config.json` |
+
+**Abrir archivo de configuración** en Ajustes muestra estas rutas con botones de copiar; el servidor
+no abre editores. Activar un perfil desde la web también lo convierte en el perfil predeterminado
+(`active` en `providers.json`), igual que `/connect` en la terminal.
+
 ## Plantillas de prompts
 
 No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en
@@ -436,7 +454,9 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
   se ejecutan sin sandbox con sus privilegios de usuario: active el consentimiento global solo si
   confía en cada servidor que configure.
 - El gestor `/mcp` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulte
-  [Interfaz de terminal](/es/tui#mcp).
+  [Interfaz de terminal](/es/tui#mcp). En la interfaz web, **Ajustes → Servidores MCP → Conceder
+  acceso MCP** pide una confirmación explícita y puede recordar la concesión del mismo modo; consulte
+  [Interfaz web](/es/web).
 
 ## Variables de entorno
 

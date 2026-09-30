@@ -1319,6 +1319,26 @@ Cada unidad (U) = un PR. Todas terminan con la batería completa de `AGENTS.md` 
 
 **Docs**: `docs/web.md` + ES; `docs/configuration.md` + ES.
 
+**Implementado (fase 5), diferencias con lo anterior**:
+
+- Además de `routes/management.ts` hay `routes/providers.ts`. Todas las rutas de gestión reciben el
+  workspace (`?workspace=` o `{workspace}`, id opaco o ruta absoluta; 400 si falta). Añadidos:
+  `POST /api/mcp/consent {workspace, confirmed: true, remember?}` (fuente `interactive-web`) y
+  `PUT /api/providers/:profile {workspace, provider, values, model}` para crear/editar perfiles
+  (solo valores no secretos). `GET /api/providers` devuelve `{active?, profiles, types, current?}`;
+  `PUT .../credentials` responde `{configured: true, tail?}` y `tail` solo existe para secretos de
+  ≥ 16 caracteres. Activar con runs en cola o en curso → 409 `runs_active`; perfil inexistente →
+  404; fallo del proveedor → 502 `provider_unavailable`.
+- Plugins: el cambio se persiste en el proyecto y el servidor recicla la `Application` del
+  workspace en cuanto no tiene runs (inmediato o al terminar el último); mientras tanto la entrada
+  queda `restart-required`. En workspaces no confiables los plugins se marcan no gestionables.
+- `GET /api/mcp` devuelve `{permission, persisted, servers}` sin comando, argumentos ni URL.
+- `GET /api/settings` devuelve `{configPath, settingsPath, providersPath, trusted, readOnly,
+  settings[{key, kind, options?, value?}]}`; `PATCH` acepta `value: null` para borrar.
+- Mermaid 11.17.2, KaTeX 0.18.9 y DOMPurify 3.4.16 (fijados). Inline math con `\( … \)` es un
+  token `inlineMath` de una extensión de `marked`. Las fuentes de KaTeX se emiten como archivos (la
+  CSP no permite `data:`). El modal de Ajustes es un chunk diferido.
+
 ### Fase 6 — Opcional
 
 | U | Tema | Notas |
@@ -1336,24 +1356,28 @@ Cada unidad (U) = un PR. Todas terminan con la batería completa de `AGENTS.md` 
 
 La iniciativa (fases 0–5) está completa cuando:
 
-- [ ] `alisio serve` arranca, imprime URL con token y la web abre sin parpadeo de tema.
-- [ ] Se crean y ejecutan concurrentemente varias sesiones en al menos dos workspaces.
-- [ ] Se cambia modelo y esfuerzo por sesión; el proveedor se cambia por workspace desde Settings.
-- [ ] Se envían texto e imágenes; las imágenes se guardan como blobs.
-- [ ] Se cancela un run y queda `cancelled`.
-- [ ] Un corte de red durante un run se recupera sin pérdida ni duplicados.
-- [ ] Un reintento con el mismo `requestId` no duplica el run.
-- [ ] Se navegan archivos del workspace y se ven los cambios de la sesión con diff.
-- [ ] Se ve la salida de terminal en streaming y los resultados de tests.
-- [ ] Se renderizan código, JSON, Mermaid y fórmulas TeX (KaTeX) con fallback ante errores.
-- [ ] Las aprobaciones se resuelven desde la web y son fail-closed.
-- [ ] La paleta `/` lista los mismos comandos que la TUI para la superficie web.
-- [ ] Se habilitan/deshabilitan plugins, skills y servidores MCP; se ven los agent presets.
-- [ ] Se configuran proveedores y credenciales sin que ningún endpoint devuelva secretos.
-- [ ] Un run se audita por `sessionId`, `runId`, `eventId` y `correlationId` (Trajectory + Session log).
-- [ ] La experiencia CLI/TUI/headless es idéntica y su arranque no carga el servidor (T-12).
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check`, `pnpm docs:build` verdes.
-- [ ] `docs/web.md` y `docs/es/web.md` en paridad; `docs/implementation-status.md` actualizado con limitaciones y alcance de verificación.
+- [x] `alisio serve` arranca, imprime URL con token y la web abre sin parpadeo de tema.
+- [x] Se crean y ejecutan concurrentemente varias sesiones en al menos dos workspaces. *(tests de servidor con `RunScheduler`/`WorkspaceHost`; en navegador se probó con un workspace)*
+- [x] Se cambia modelo y esfuerzo por sesión; el proveedor se cambia por workspace desde Settings. *(fase 5: Settings → Models → Activate, 409 `runs_active` con runs)*
+- [x] Se envían texto e imágenes; las imágenes se guardan como blobs.
+- [x] Se cancela un run y queda `cancelled`.
+- [x] Un corte de red durante un run se recupera sin pérdida ni duplicados. *(T-08 en proceso: snapshot + deltas sin huecos ni duplicados tras reconectar; un corte de red real no se ha probado)*
+- [x] Un reintento con el mismo `requestId` no duplica el run.
+- [x] Se navegan archivos del workspace y se ven los cambios de la sesión con diff.
+- [x] Se ve la salida de terminal en streaming y los resultados de tests.
+- [x] Se renderizan código, JSON, Mermaid y fórmulas TeX (KaTeX) con fallback ante errores. *(Mermaid/KaTeX en fase 5, T-16/T-17 + smoke Playwright)*
+- [x] Las aprobaciones se resuelven desde la web y son fail-closed.
+- [x] La paleta `/` lista los mismos comandos que la TUI para la superficie web.
+- [x] Se habilitan/deshabilitan plugins, skills y servidores MCP; se ven los agent presets. *(fase 5; los plugins se aplican recargando la app del workspace sin runs)*
+- [x] Se configuran proveedores y credenciales sin que ningún endpoint devuelva secretos. *(fase 5, T-14)*
+- [x] Un run se audita por `sessionId`, `runId`, `eventId` y `correlationId` (Trajectory + Session log).
+- [x] La experiencia CLI/TUI/headless es idéntica y su arranque no carga el servidor (T-12).
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check`, `pnpm docs:build` verdes.
+- [x] `docs/web.md` y `docs/es/web.md` en paridad; `docs/implementation-status.md` actualizado con limitaciones y alcance de verificación.
+
+**Estado (fase 5)**: todos los puntos se cumplen con las salvedades anotadas; la verificación
+manual fue en Chromium (Playwright) y queda sin verificar en Firefox/Safari, lectores de pantalla,
+Windows/macOS y cortes de red reales (ver `docs/implementation-status.md`).
 
 ---
 

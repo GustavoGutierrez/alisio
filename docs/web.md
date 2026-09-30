@@ -6,9 +6,9 @@ session database are shared with the TUI and `alisio run`.
 
 ::: warning Status
 The server, its API and the browser interface are available, including image attachments, the
-files panel, the trajectory view and developer renderers (diff, terminal, JSON, test results).
-Mermaid and math rendering and plugin/model management arrive in later versions. See
-[Known limitations](/limitations).
+files panel, the trajectory view, developer renderers (diff, terminal, JSON, test results),
+Mermaid diagrams, TeX formulas and the Settings pages for models, plugins, skills, MCP servers and
+agent presets. See [Known limitations](/limitations).
 :::
 
 ## Start the server
@@ -68,6 +68,11 @@ one-line rows: `Think · …` for reasoning, `Context injection · AGENTS.md`, a
 such as `Read · README.md` or `Shell · npm test`. Click a row to see its input and output. The answer
 streams as Markdown; code blocks have a language label, **Wrap lines** and **Copy**, and are
 highlighted once they scroll into view. Links to workspace paths open the file in the files panel.
+` ```mermaid ` blocks become diagrams and ` ```math `, `$$ … $$` paragraphs and inline `\( … \)`
+become formulas (a lone `$` stays text, so prices are safe). The page loads Mermaid only when a
+diagram scrolls into view and KaTeX with the first formula. Diagrams have **Source**, zoom,
+**Export SVG**, full screen and **Copy**; formulas have a copy button for their TeX. An invalid
+diagram or formula shows its source and the error instead, without breaking the message.
 Reasoning is display-only: after a reload, earlier `Think`
 rows are gone because reasoning is never stored. When you scroll up, a button jumps back to the
 latest message; long sessions show the last 30 turns and load older messages on demand.
@@ -80,7 +85,8 @@ with ANSI colors, the exit code and the duration, streaming while they run and k
 their JSONPath; test results show passed, failed and skipped counts with a **Only failures**
 filter; progress blocks show their steps. The tool's raw text, which is what the model received,
 stays under **Raw output**. A block the page does not know shows its text and the folded JSON. The
-panel icon on a tool row with a path opens that file.
+panel icon on a tool row with a path opens that file. Tools contributed by plugins show their own
+name followed by the plugin's name as a tag (for example `Test report` · `Smoke tools`).
 
 **Trajectory.** The **Trajectory** tab lists the session's durable events grouped by run: status,
 start time, turns and duration per run, and one row per event with its time, turn, type, a short
@@ -124,9 +130,34 @@ receives focus: it names the tool, the effect and its input. Answer with **Deny*
 once** (`O`) or **Allow for session** (`S`); keys pressed in the first 300 ms are ignored so a stray
 `Enter` cannot approve. Plugin questions (for example `ask_user_question`) appear the same way.
 
-**Settings.** Choose the language (English or Spanish; the browser language by default), the theme
-(dark, light or system) and whether tool rows start collapsed or expanded. These preferences stay in
-this browser only.
+**Settings.** The gear at the bottom of the sidebar opens Settings. Pages that manage agent
+resources act on the workspace of the open session (or the first workspace when none is open):
+
+| Page | What it does |
+| --- | --- |
+| **General** | UI language (this browser), then the agent settings: compaction, context, limits, plugin hook timeout and web search provider, saved to your user `config.json` |
+| **Models** | Provider profiles with their non-secret values, credentials and **Activate in this workspace** with a model of that profile; **Add a profile** creates one |
+| **Plugins** | **Plugin configuration** (not sandboxed, how plugins are installed, the project file) and **Plugin list**: search, count and cards with an **Enabled**, **Disabled**, **Failed** or **Restart required** pill; the chevron shows version, categories, source, tools, commands, diagnostics and the switch |
+| **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette |
+| **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first |
+| **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |
+| **Appearance** | Theme (dark, light or system) and whether tool rows start collapsed or expanded, stored in this browser |
+
+**Open configuration file** (top right) shows the effective configuration file of the workspace,
+your user settings file and the provider profiles file, each with a copy button. The server never
+opens an editor.
+
+Credentials are write-only. A credential field is a password input: after **Save** it is cleared
+and the page only shows whether a value is stored, whether it comes from an environment variable,
+and, for stored values of 16 characters or more, the last three characters (`Stored · ends in …71B`).
+No API response contains a secret.
+
+Enabling or disabling a plugin writes a project override (`.alisio/config.json`) and needs the
+workspace to be trusted. Plugins are loaded when the workspace application starts, so the server
+reloads that application as soon as it has no runs: immediately when it is idle, otherwise when its
+last run finishes (the card shows **Restart required** meanwhile). Sessions keep their history, and
+every open command palette refreshes. Skill switches apply at once. Plugins cannot be installed
+from the web.
 
 ## Security model
 
@@ -198,7 +229,20 @@ GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?pat
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
+GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
+GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
+GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
+POST /api/mcp/consent {workspace, confirmed: true, remember?}
+GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}
+GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, provider, values, model}
+PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
+POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Management changes send a `catalog_changed` frame (`commands`, `plugins`, `skills`, `mcp`,
+`models` or `agents`) to every stream, so other tabs refresh. Activating a profile answers
+`409 runs_active` while the workspace has runs, and granting MCP access from the web is recorded
+with the `interactive-web` source.
 
 On every (re)connection the stream sends a snapshot of each subscribed session (recent messages,
 text still streaming, pending approvals) followed by live frames; durable events carry their
@@ -210,8 +254,11 @@ protocol version is reported by `/api/health` and in the stream's first frame.
 - Single host: session locks rely on process ids, and the web does not see live changes a TUI makes
   to a session until the session is reopened.
 - No TLS; remote access is opt-in and meant for SSH tunnels.
-- The provider is per workspace: every session of a workspace uses the workspace's active provider
-  profile; the web changes the model within it.
+- The provider is per workspace: **Activate in this workspace** switches that workspace's
+  application (and saves the profile as the default for new starts); other open workspaces keep
+  their provider until they reopen. Saved credentials apply the next time the profile is activated.
+- MCP access granted from the web lasts until `alisio serve` stops and covers one workspace, unless
+  you choose to remember it for the user.
 - The standalone binary serves the API only; the web UI assets ship with the npm package.
 - The web UI keeps command output, notices and reasoning only while the page is open; a reload
   rebuilds the conversation from stored messages.
@@ -221,3 +268,5 @@ protocol version is reported by `/api/health` and in the stream's first frame.
   `write_file` and `edit_file`; files a shell command changed appear in `git status`, not there.
 - Uploaded images are stored once per content hash next to the session database and are not
   deleted automatically.
+- Rich renderers need JavaScript chunks the page loads on demand: Mermaid is large (a few hundred
+  KB compressed across its chunks) and only loads when a diagram is shown.

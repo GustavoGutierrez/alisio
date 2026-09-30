@@ -619,6 +619,48 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
     incrementalmente) y línea de estadísticas bajo el compositor (último run; totales de la sesión
     al pasar el ratón; caché "—" si el proveedor no la informa). JS inicial 56,3 KB y CSS 7,8 KB
     gzip.
+- Fase 5 (renderizadores ricos y gestión):
+  - Web: `mermaid` (11.17.2) y `math` (KaTeX 0.18.9) como chunks diferidos. La vista de Mermaid
+    (chunk pequeño) importa Mermaid y DOMPurify (3.4.16) solo cuando el bloque entra en pantalla y
+    nunca mientras se genera; `securityLevel: "strict"`, `htmlLabels: false`, renders serializados
+    y reinicialización al cambiar de tema; el SVG pasa por DOMPurify (perfil SVG) antes del DOM.
+    Fuente/diagrama, zoom, exportar SVG, pantalla completa y copiar. KaTeX va con su vista, su CSS y
+    sus fuentes (servidas como archivos: la CSP no admite `data:` en fuentes), con `trust: false`,
+    `throwOnError: false`, `maxExpand: 500`, `maxSize: 50` y macros por bloque; el HTML se sanea con
+    DOMPurify. Un error de Mermaid o de KaTeX muestra la fuente y el mensaje (`renderMath`/
+    `renderMermaid` puros, T-17). Markdown: extensión de `marked` para `\( … \)` en línea (token
+    `inlineMath`); ` ```math `, ` ```latex ` y párrafos `$$ … $$` siguen siendo display; `$` suelto
+    no se interpreta (T-16).
+  - Servidor (`routes/management.ts`, `routes/providers.ts`): `GET/PATCH /api/plugins`,
+    `GET/PATCH /api/skills`, `GET/PATCH /api/mcp` y `POST /api/mcp/consent`, `GET /api/agents`,
+    `GET/PATCH /api/settings`, `GET /api/providers`, `PUT /api/providers/:profile`,
+    `PUT/DELETE /api/providers/:profile/credentials`, `POST /api/providers/:profile/activate` y
+    `GET /api/models`, todas con `?workspace=` o `{workspace}` (id opaco o ruta absoluta) y
+    validación propia. Los cambios emiten `catalog_changed` (`commands`, `plugins`, `skills`,
+    `mcp`, `models`, `agents`). MCP nunca devuelve comando, argumentos ni URL. Las credenciales
+    son de solo escritura: las respuestas llevan `{configured, source: "file"|"env", tail?}` con
+    `tail` (`…XYZ`) solo para secretos de 16 caracteres o más.
+  - Decisión (plugins): `setPluginEnabled` escribe el ajuste del proyecto y la app en curso queda
+    `restart-required`; el servidor recicla la `Application` del workspace (`WorkspaceHost.recycle`)
+    en cuanto no tiene runs (en el momento o cuando termina el último run, vía el `onChange` del
+    `RunScheduler`). Los workspaces no confiables marcan todos los plugins como no gestionables
+    (su `.alisio/config.json` se ignoraría). Las skills se aplican en caliente.
+  - Decisión (proveedores, P-01): activar un perfil responde `409 runs_active` si el workspace tiene
+    runs en cola o en curso; si no, `activateProviderProfile` cambia la app del workspace y guarda
+    el perfil como activo en `providers.json`. Otros workspaces abiertos mantienen su proveedor.
+  - Núcleo (aditivo): `ProviderSettingsStore.saveProfile/setCredentials/deleteCredentials/
+    credentialStatus` y `maskSecret`; `settableSettings()` (tipo y opciones de cada
+    `SettableSettingKey`); `PluginHost.toolsOf(plugin)` (dueño de cada tool registrada, también
+    para built-ins); `grantMcpRuntimePermission` y `rememberGlobalMcpConsent` aceptan la fuente
+    `"interactive-web"` (P-07).
+  - Web: el modal de Ajustes (chunk propio, cargado al abrirlo) con General (idioma y ajustes del
+    agente), Modelos (perfiles, credenciales con campos de contraseña que se vacían al guardar,
+    activación con modelo), Plugins (pestañas, buscador, contador y tarjetas de `image2.png`),
+    Skills, Servidores MCP (confirmación explícita antes de conceder acceso), Presets de agente
+    (usar en la sesión abierta) y Apariencia, más "Abrir archivo de configuración" con rutas
+    copiables. Las filas de tools de plugins muestran el nombre de la tool y el plugin como
+    etiqueta. JS inicial 60,6 KB y CSS 7,5 KB gzip (antes 56,3 y 7,8); chunk de `math` 75 KB gzip
+    (KaTeX incluido), Mermaid 32 KB de motor más ~138 KB de núcleo y un chunk por tipo de diagrama.
 
 ## Validación
 
@@ -1243,6 +1285,29 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   la proyección de texto) y la tabla de la trayectoria ocultaba la columna de duración. No
   verificado: rendimiento del árbol con 50 000 entradas reales en el navegador, `git`
   ausente y lectores de pantalla.
+- Fase 5: `tests/web-rich-renderers.test.ts` (T-17: opciones de KaTeX, display/inline, error de
+  análisis → fuente y mensaje, `\href{javascript:}` sin enlace, fallo inesperado del motor;
+  configuración estricta de Mermaid, SVG saneado, diagrama inválido sin llamar a `render`),
+  T-16 ampliado (`\( … \)` en línea, `$` de precios, `\(` sin cerrar, código en línea,
+  ` ```math ` y `$$` durante el streaming), `tests/web-tools.test.ts` (etiquetas de tools de
+  plugins), `tests/provider-credentials-store.test.ts` (máscara, estado sin valores, 0600,
+  borrado, perfil sin cambiar el activo, metadatos de ajustes), `tests/server-management.test.ts`
+  (plugins con tools/comandos, reciclado inmediato y diferido hasta el fin del run,
+  `catalog_changed` y paleta actualizada, 400/403/404, workspace no confiable, skills fuera de la
+  paleta y sin rutas, MCP sin comando ni argumentos, `mcp_not_permitted`, consentimiento que exige
+  `confirmed: true`, agentes y ajustes con validación) y `tests/server-secrets.test.ts` (T-14:
+  recorre todas las respuestas de gestión, sus cabeceras, los frames SSE y las líneas de log
+  buscando dos claves guardadas; `credentials.json` en 0600; `source: "env"` sin `tail`; perfiles
+  sin valores secretos; activación real y `409 runs_active`). Verificado a mano con Playwright
+  (Chromium, 1400 px) contra `alisio serve --trust-project` con un proveedor OpenAI-compatible
+  simulado, un plugin de proyecto, una skill y un servidor MCP inexistente: diagrama Mermaid en
+  oscuro y claro, pantalla completa, fórmulas en línea y en bloque, fallback de Mermaid y KaTeX
+  inválidos, cada página de Ajustes, "Abrir archivo de configuración", guardar una credencial (ni
+  el DOM, ni `localStorage`, ni `/api/providers` contienen el valor; solo `…XYZ`), activar
+  `fake-small`, deshabilitar el plugin y la skill (la paleta `/` pierde `/smoke-tools:smoke-hello`
+  y `/skill:tidy`), conceder MCP y ver el fallo de conexión saneado. La prueba encontró y corrigió
+  fuentes de KaTeX inlineadas como `data:` que la CSP bloqueaba. No verificado: 390 px del modal de
+  Ajustes, lectores de pantalla, Firefox/Safari y un servidor MCP real conectado desde la web.
 
 ## Límites conocidos
 
@@ -1479,8 +1544,15 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - La idempotencia de los prompts encolados es en memoria (100 ids por sesión, 10 min) y la cola de
   `enqueue` del runner se pierde si el proceso cae; un prompt con adjuntos durante una ejecución, o
   cualquier prompt mientras la sesión espera en cola o compacta, responde `409 session_busy`.
-- Las rutas de gestión (plugins, skills, MCP, proveedores, ajustes) llegan en la fase 5; los
-  bloques `mermaid` y `math` se muestran aún como código.
+- Gestión (fase 5): no se instalan plugins desde la web; un cambio de plugin se aplica cuando el
+  workspace queda sin runs (se recarga su app); el permiso MCP concedido desde la web vale para un
+  workspace hasta que se detiene el servidor (salvo "recordar"); la credencial nueva de un perfil
+  activo se usa al volver a activarlo; `DELETE .../credentials` borra todas las del perfil; la
+  edición de definiciones de agentes queda fuera de v1; los estados de servidores MCP se muestran
+  con su identificador sin traducir.
+- Renderizadores ricos (fase 5): Mermaid pesa varios cientos de KB gzip repartidos en chunks
+  (se carga solo con un diagrama visible); Mermaid incluye su propia copia de KaTeX para
+  diagramas con fórmulas, distinta de la del renderizador `math`.
 - Archivos (fase 4): el árbol, la lectura y el diff se limitan al workspace (las raíces de
   `--add-dir` no se exponen); `safePath` rechaza cualquier segmento que sea un enlace simbólico, así
   que los symlinks se listan pero no se abren aunque apunten dentro del workspace. El filtrado por

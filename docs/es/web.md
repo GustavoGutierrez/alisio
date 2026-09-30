@@ -6,9 +6,10 @@ aprobaciones y la base de datos de sesiones se comparten con la TUI y con `alisi
 
 ::: warning Estado
 El servidor, su API y la interfaz del navegador están disponibles, incluidos los adjuntos de
-imagen, el panel de archivos, la vista de trayectoria y los renderizadores de desarrollo (diff,
-terminal, JSON, resultados de tests). El renderizado de Mermaid y fórmulas y la gestión de plugins y
-modelos llegan en versiones posteriores. Consulte [Limitaciones conocidas](/es/limitations).
+imagen, el panel de archivos, la vista de trayectoria, los renderizadores de desarrollo (diff,
+terminal, JSON, resultados de tests), los diagramas Mermaid, las fórmulas TeX y las páginas de
+Ajustes para modelos, plugins, skills, servidores MCP y presets de agente. Consulte
+[Limitaciones conocidas](/es/limitations).
 :::
 
 ## Arrancar el servidor
@@ -70,7 +71,13 @@ aparece como filas de una línea: `Razonamiento · …`, `Inyección de contexto
 por llamada a herramienta, como `Read · README.md` o `Shell · npm test`. Haga clic en una fila para
 ver su entrada y su salida. La respuesta llega en streaming como Markdown; los bloques de código
 tienen etiqueta de lenguaje, **Ajustar líneas** y **Copiar**, y se resaltan cuando entran en
-pantalla. Los enlaces a rutas del workspace abren el archivo en el panel de archivos. El
+pantalla. Los enlaces a rutas del workspace abren el archivo en el panel de archivos. Los bloques
+` ```mermaid ` se convierten en diagramas, y ` ```math `, los párrafos `$$ … $$` y `\( … \)` en
+línea, en fórmulas (un `$` suelto sigue siendo texto, así que los precios no se alteran). La página
+carga Mermaid solo cuando un diagrama entra en pantalla y KaTeX con la primera fórmula. Los
+diagramas tienen **Fuente**, zoom, **Exportar SVG**, pantalla completa y **Copiar**; las fórmulas,
+un botón para copiar su TeX. Un diagrama o una fórmula no válidos muestran su fuente y el error, sin
+romper el mensaje. El
 razonamiento es solo de visualización: tras recargar, las filas de razonamiento
 anteriores desaparecen porque nunca se guarda. Al desplazarse hacia arriba, un botón vuelve al
 último mensaje; las sesiones largas muestran los últimos 30 turnos y cargan los mensajes anteriores
@@ -86,7 +93,8 @@ y de su JSONPath; los resultados de tests muestran el total de correctos, fallid
 un filtro **Solo fallos**; los bloques de progreso muestran sus pasos. El texto original de la
 herramienta, que es lo que recibió el modelo, queda bajo **Salida en bruto**. Un bloque que la
 página no conoce muestra su texto y el JSON plegado. El icono de panel de una fila de herramienta
-con ruta abre ese archivo.
+con ruta abre ese archivo. Las herramientas que aportan los plugins muestran su propio nombre
+seguido del nombre del plugin como etiqueta (por ejemplo `Test report` · `Smoke tools`).
 
 **Trayectoria.** La pestaña **Trayectoria** lista los eventos durables de la sesión agrupados por
 ejecución: estado, hora de inicio, turnos y duración de cada ejecución, y una fila por evento con su
@@ -133,9 +141,35 @@ compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Resp
 primeros 300 ms se ignoran para que un `Enter` accidental no apruebe. Las preguntas de plugins (por
 ejemplo `ask_user_question`) aparecen del mismo modo.
 
-**Ajustes.** Elija el idioma (inglés o español; por defecto el del navegador), el tema (oscuro, claro
-o sistema) y si las filas de herramientas empiezan plegadas o desplegadas. Estas preferencias se
-guardan solo en este navegador.
+**Ajustes.** El engranaje al pie de la barra lateral abre Ajustes. Las páginas que gestionan
+recursos del agente actúan sobre el workspace de la sesión abierta (o el primer workspace si no hay
+ninguna):
+
+| Página | Qué hace |
+| --- | --- |
+| **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de plugins y proveedor de búsqueda web, guardados en su `config.json` de usuario |
+| **Modelos** | Perfiles de proveedor con sus valores no secretos, credenciales y **Activar en este workspace** con un modelo del perfil; **Añadir un perfil** crea uno |
+| **Plugins** | **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto) y **Lista de plugins**: búsqueda, contador y tarjetas con una píldora **Habilitado**, **Deshabilitado**, **Con fallo** o **Requiere reinicio**; el chevron muestra versión, categorías, origen, tools, comandos, diagnósticos y el interruptor |
+| **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/` |
+| **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita |
+| **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
+| **Apariencia** | Tema (oscuro, claro o sistema) y si las filas de herramientas empiezan plegadas o desplegadas, guardado en este navegador |
+
+**Abrir archivo de configuración** (arriba a la derecha) muestra el archivo de configuración
+efectivo del workspace, su archivo de ajustes de usuario y el de perfiles de proveedor, cada uno con
+un botón de copiar. El servidor nunca abre un editor.
+
+Las credenciales son de solo escritura. El campo de una credencial es de tipo contraseña: tras
+**Guardar** se vacía y la página solo indica si hay un valor guardado, si viene de una variable de
+entorno y, para valores guardados de 16 caracteres o más, los tres últimos caracteres
+(`Guardada · termina en …71B`). Ninguna respuesta de la API contiene un secreto.
+
+Habilitar o deshabilitar un plugin escribe un ajuste del proyecto (`.alisio/config.json`) y requiere
+que el workspace sea de confianza. Los plugins se cargan al arrancar la aplicación del workspace,
+así que el servidor recarga esa aplicación en cuanto no tiene runs: de inmediato si está inactiva o,
+si no, cuando termina su último run (mientras tanto la tarjeta muestra **Requiere reinicio**). Las
+sesiones conservan su historial y todas las paletas de comandos abiertas se actualizan. Los
+interruptores de skills se aplican al momento. Los plugins no se instalan desde la web.
 
 ## Modelo de seguridad
 
@@ -212,7 +246,20 @@ GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?pat
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
+GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
+GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
+GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
+POST /api/mcp/consent {workspace, confirmed: true, remember?}
+GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}
+GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, provider, values, model}
+PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
+POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Los cambios de gestión envían un frame `catalog_changed` (`commands`, `plugins`, `skills`, `mcp`,
+`models` o `agents`) a todos los streams, para que otras pestañas se actualicen. Activar un perfil
+responde `409 runs_active` mientras el workspace tiene runs, y el acceso MCP concedido desde la web
+queda registrado con la fuente `interactive-web`.
 
 En cada (re)conexión el stream envía un snapshot de cada sesión suscrita (mensajes recientes, texto
 que aún se está generando, aprobaciones pendientes) seguido de frames en vivo; los eventos durables
@@ -224,8 +271,12 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
 - Un solo host: los bloqueos de sesión dependen de ids de proceso, y la web no ve en vivo los
   cambios que una TUI hace en una sesión hasta que la sesión se vuelve a abrir.
 - Sin TLS; el acceso remoto es opcional y está pensado para túneles SSH.
-- El proveedor es por workspace: todas las sesiones de un workspace usan su perfil de proveedor
-  activo; la web cambia el modelo dentro de él.
+- El proveedor es por workspace: **Activar en este workspace** cambia la aplicación de ese
+  workspace (y guarda el perfil como predeterminado para los próximos arranques); los demás
+  workspaces abiertos conservan su proveedor hasta que se vuelven a abrir. Las credenciales guardadas
+  se aplican la próxima vez que se activa el perfil.
+- El acceso MCP concedido desde la web dura hasta que se detiene `alisio serve` y cubre un
+  workspace, salvo que elija recordarlo para el usuario.
 - El binario independiente sirve solo la API; los assets de la interfaz web se distribuyen con el
   paquete npm.
 - La interfaz web conserva la salida de comandos, los avisos y el razonamiento solo mientras la
@@ -237,3 +288,6 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
   `git status`, no ahí.
 - Las imágenes subidas se guardan una vez por hash de contenido junto a la base de datos de
   sesiones y no se borran automáticamente.
+- Los renderizadores ricos necesitan fragmentos de JavaScript que la página carga a demanda:
+  Mermaid es grande (unos cientos de KB comprimidos entre sus fragmentos) y solo se carga cuando se
+  muestra un diagrama.
