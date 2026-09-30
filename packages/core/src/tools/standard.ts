@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, relative } from "node:path";
+import { dirname, extname, relative } from "node:path";
 import {
   type AskQuestionsRequest,
   type AskQuestionsResult,
@@ -9,16 +9,24 @@ import {
   type SearchProvider,
   type ToolContext,
   type ToolDefinition,
+  type ToolResult,
   textResult,
+  type UiBlock,
 } from "@alisio/sdk";
 import type { Policy } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import type { ProjectContext } from "../resources/context.ts";
 import type { Skills } from "../resources/skills.ts";
 import type { PathAccess } from "../runtime/access.ts";
+import { clipLines, unifiedPatch } from "../runtime/diff.ts";
 import { fileSize, readHead, readText } from "../runtime/fs.ts";
 import { safePath } from "../runtime/paths.ts";
-import { isMissingCommand, RIPGREP_INSTALL_HINT, runProcess } from "../runtime/process.ts";
+import {
+  isMissingCommand,
+  type ProcessResult,
+  RIPGREP_INSTALL_HINT,
+  runProcess,
+} from "../runtime/process.ts";
 import { EXECUTE_TIMEOUT_MS, MAX_NESTED_CALLS, runExecute } from "./execute.ts";
 import { searchWithFallback, type WebsearchConfig } from "./search.ts";
 import {
@@ -59,7 +67,7 @@ async function atomicWrite(
   path: string,
   content: string,
   expected: string | null,
-): Promise<void> {
+): Promise<string | undefined> {
   path = await resolve(path);
   await mkdir(dirname(path), { recursive: true });
   const before = await existing(path);
@@ -76,6 +84,54 @@ async function atomicWrite(
   } finally {
     await rm(temporary, { force: true });
   }
+  return before;
+}
+
+/** Producer-side bounds of the web-only ui parts (spec §8.6). */
+const DIFF_LIMIT = 200 * 1024;
+const TERMINAL_LIMIT = 256 * 1024;
+
+/**
+ * Appends a display-only ui part after the tool's text (which stays the first part and is all
+ * that providers and headless output see, via `textProjection`).
+ */
+const withUi = (result: ToolResult, block: UiBlock | undefined): ToolResult =>
+  block ? { ...result, content: [...result.content, { type: "ui", block }] } : result;
+
+/** A `diff` block of a file write, bounded to 200 KB at a line boundary. */
+function diffBlock(path: string, before: string | undefined, after: string): UiBlock | undefined {
+  const patch = unifiedPatch(path, before, after);
+  if (!patch) return undefined;
+  const { text, clipped } = clipLines(patch, DIFF_LIMIT);
+  const lang = extname(path).slice(1).toLowerCase();
+  return {
+    kind: "diff",
+    path,
+    patch: text,
+    ...(lang ? { lang } : {}),
+    ...(clipped ? { caption: `${path} (diff truncated to 200 KB)` } : {}),
+  };
+}
+
+/** A `terminal` block of a finished process: stdout then stderr, keeping the last 256 KB. */
+function terminalBlock(command: string, result: ProcessResult, durationMs: number): UiBlock {
+  const separator = result.stdout && result.stderr && !result.stdout.endsWith("\n") ? "\n" : "";
+  let output = `${result.stdout}${separator}${result.stderr}`;
+  const bytes = Buffer.byteLength(output);
+  const clipped = bytes > TERMINAL_LIMIT;
+  if (clipped)
+    output = Buffer.from(output)
+      .subarray(bytes - TERMINAL_LIMIT)
+      .toString("utf8")
+      .replace(/^\uFFFD+/, "");
+  return {
+    kind: "terminal",
+    command,
+    output,
+    exitCode: result.exitCode,
+    durationMs,
+    ...(result.truncated || clipped ? { truncated: true } : {}),
+  };
 }
 export function registerStandard(
   registry: ToolRegistry,
@@ -164,13 +220,16 @@ export function registerStandard(
     async execute(i, c) {
       const content = String(i.content);
       if (Buffer.byteLength(content) > 1_048_576) throw new Error("Write exceeds 1 MiB");
-      await atomicWrite(
+      const before = await atomicWrite(
         (path) => resolvePath(c, path),
         String(i.path),
         content,
         i.expectedHash as string | null,
       );
-      return textResult(JSON.stringify({ path: i.path, sha256: hash(content) }));
+      return withUi(
+        textResult(JSON.stringify({ path: i.path, sha256: hash(content) })),
+        diffBlock(String(i.path), before, content),
+      );
     },
   });
   register({
@@ -194,7 +253,10 @@ export function registerStandard(
       const after =
         before.slice(0, index) + String(i.newText) + before.slice(index + needle.length);
       await atomicWrite((p) => resolvePath(c, p), path, after, String(i.expectedHash));
-      return textResult(JSON.stringify({ path: i.path, sha256: hash(after) }));
+      return withUi(
+        textResult(JSON.stringify({ path: i.path, sha256: hash(after) })),
+        diffBlock(String(i.path), before, after),
+      );
     },
   });
   register({
@@ -276,15 +338,17 @@ export function registerStandard(
       ["command", "args"],
     ),
     async execute(i, c) {
-      return textResult(
-        JSON.stringify(
-          await runProcess(String(i.command), i.args as string[], {
-            cwd: c.workspace,
-            signal: c.signal,
-            timeoutMs: Number(i.timeoutMs ?? 30000),
-            onData: c.emit,
-          }),
-        ),
+      const started = Date.now();
+      const result = await runProcess(String(i.command), i.args as string[], {
+        cwd: c.workspace,
+        signal: c.signal,
+        timeoutMs: Number(i.timeoutMs ?? 30000),
+        onData: c.emit,
+      });
+      const command = [String(i.command), ...(i.args as string[])].join(" ");
+      return withUi(
+        textResult(JSON.stringify(result)),
+        terminalBlock(command, result, Date.now() - started),
       );
     },
   });
@@ -295,16 +359,17 @@ export function registerStandard(
       "Run an arbitrary shell command. Explicit process capability required; not sandboxed.",
     inputSchema: objectSchema({ command: str }, ["command"]),
     async execute(i, c) {
-      return textResult(
-        JSON.stringify(
-          await runProcess(
-            process.platform === "win32" ? "cmd.exe" : "/bin/sh",
-            process.platform === "win32"
-              ? ["/d", "/s", "/c", String(i.command)]
-              : ["-c", String(i.command)],
-            { cwd: c.workspace, signal: c.signal, onData: c.emit },
-          ),
-        ),
+      const started = Date.now();
+      const result = await runProcess(
+        process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+        process.platform === "win32"
+          ? ["/d", "/s", "/c", String(i.command)]
+          : ["-c", String(i.command)],
+        { cwd: c.workspace, signal: c.signal, onData: c.emit },
+      );
+      return withUi(
+        textResult(JSON.stringify(result)),
+        terminalBlock(String(i.command), result, Date.now() - started),
       );
     },
   });

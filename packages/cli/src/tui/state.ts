@@ -1170,13 +1170,31 @@ export function isImagePart(value: unknown): value is { mimeType: string; data: 
   return typeof record.mimeType === "string" && typeof record.data === "string";
 }
 
+/**
+ * Display blocks the standard tools attach for the web UI only (spec §8.6): the TUI already
+ * shows the same content from the text (output rows, exit line), so rendering them would repeat it.
+ */
+const WEB_ONLY_UI: Record<string, UiBlock["kind"]> = {
+  write_file: "diff",
+  edit_file: "diff",
+  shell: "terminal",
+  run_process: "terminal",
+};
+
 /** Rich (ui/image) parts of a persisted tool result, if any. */
-export function richPartsOf(result: ToolResult | undefined): {
+export function richPartsOf(
+  result: ToolResult | undefined,
+  toolName?: string,
+): {
   ui?: UiBlock;
   image?: { mimeType: string; data: string };
 } {
   if (!result) return {};
-  const ui = result.content.find((part) => part.type === "ui");
+  const skip =
+    toolName !== undefined && Object.hasOwn(WEB_ONLY_UI, toolName)
+      ? WEB_ONLY_UI[toolName]
+      : undefined;
+  const ui = result.content.find((part) => part.type === "ui" && part.block.kind !== skip);
   const image = result.content.find((part) => part.type === "image");
   return {
     ...(ui?.type === "ui" ? { ui: ui.block } : {}),
@@ -1568,7 +1586,7 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
           preview,
           toolKind: toolKindOf(c.name),
           ...exitCodePart(preview),
-          ...richPartsOf(r?.result),
+          ...richPartsOf(r?.result, c.name),
         });
       }
     }

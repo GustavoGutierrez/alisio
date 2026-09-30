@@ -605,7 +605,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // pulls the persisted rich parts (ui/image) itself so native rendering survives resume.
     if (event.type === "tool_completed") {
       const data = (event.data ?? {}) as Record<string, unknown>;
-      const rich = richPartsOf(app.store.callResult(event.sessionId, String(data.id ?? "")));
+      const rich = richPartsOf(
+        app.store.callResult(event.sessionId, String(data.id ?? "")),
+        String(data.name ?? ""),
+      );
       if (rich.ui !== undefined || rich.image !== undefined)
         event = { ...event, data: { ...data, ...rich } };
     }
