@@ -182,7 +182,7 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     values: [false, true],
     read: (_config, mcpAllowPersisted) => mcpAllowPersisted,
     description:
-      "Persist process/network consent for MCP servers in your user configuration (mcp.allow). On: every start grants permission and auto-connects enabled servers; use /mcp to connect now. Off: revokes the persisted consent and disconnects servers.",
+      "Persist process/network consent for MCP servers in your user configuration (mcp.allow). On: every start grants permission and auto-connects enabled servers; use /mcps to connect now. Off: revokes the persisted consent and disconnects servers.",
   },
   {
     id: "limits.maxTurns",
@@ -269,7 +269,7 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
 
 /**
  * Builds the full settings menu: the real, wired setting rows followed by the navigation rows the
- * host wires to the existing managers (`/model`, `/connect`, `/plugins`, `/skills`, `/mcp`, ...).
+ * host wires to the existing managers (`/model`, `/connect`, `/plugins`, `/skills`, `/mcps`, ...).
  * Under `--read-only` every setting row is marked read-only: nothing can be persisted.
  */
 export function settingsMenuRows(

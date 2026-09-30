@@ -89,7 +89,7 @@ Al principio solo se incluyen en el contexto el nombre y la descripción de cada
 carga con la herramienta `skill_load` o con `/skill:name`, y los archivos de apoyo con
 `skill_resource`. `skill_search` busca en el catálogo.
 
-En la TUI, `/skills` (o `/skill`) abre el catálogo efectivo sin cargar los cuerpos. Muestra
+En la TUI, `/skills` abre el catálogo efectivo sin cargar los cuerpos. Muestra
 alcance/origen, estado habilitado u ocultado y un coste aproximado de tokens (`~`, estimado desde los
 bytes del archivo a cuatro caracteres por token). Los ganadores de proyecto, configuración y usuario
 están habilitados por defecto y se pueden cambiar de inmediato. La anulación local se guarda de forma

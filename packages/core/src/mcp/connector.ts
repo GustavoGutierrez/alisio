@@ -276,7 +276,7 @@ export class McpConnector {
     this.assertAvailable();
     const config = this.servers[name];
     if (!config) throw new Error(`Unknown MCP server: ${name}`);
-    if (!config.enabled) throw new Error(`MCP server "${name}" is disabled; enable it in /mcp`);
+    if (!config.enabled) throw new Error(`MCP server "${name}" is disabled; enable it in /mcps`);
     if (this.clients.has(name)) return this.registeredNames(name);
     if (
       config.transport === "http" &&

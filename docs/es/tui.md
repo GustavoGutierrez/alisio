@@ -83,7 +83,7 @@ muestra una estimación marcada con `~` (unos 4 caracteres por token).
 
 ## Comandos
 
-Al escribir `/` se abre el autocompletado: `/skills` (`/skill`) sugiere las skills efectivas por
+Al escribir `/` se abre el autocompletado: `/skills` sugiere las skills efectivas por
 nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con el prefijo.
 
 ### Comandos de un vistazo
@@ -99,9 +99,9 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/sessions` | Sesiones recientes del workspace |
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
-| `/plugins` (`/plugin`) | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo. Los plugins se agrupan bajo cabeceras de categoría no seleccionables (`model-provider ›`, `memory ›`…); al filtrar, una cabecera solo permanece si su grupo aún tiene coincidencias, y `↑`/`↓` saltan las cabeceras |
-| `/skills` (`/skill`) | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
-| `/mcp` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
+| `/plugins` | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo. Los plugins se agrupan bajo cabeceras de categoría no seleccionables (`model-provider ›`, `memory ›`…); al filtrar, una cabecera solo permanece si su grupo aún tiene coincidencias, y `↑`/`↓` saltan las cabeceras |
+| `/skills` | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
+| `/mcps` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
 | `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor, inset del contenido) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
 | `/copy` | Copia la última respuesta del asistente al portapapeles como texto crudo (sin formato, sin los colores ANSI que se ven en pantalla) |
 | `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
@@ -121,7 +121,7 @@ Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una secció
 en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
-autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`,
+autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`,
 `/clear` y `/resume` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
 subagentes (`/agents open …`, `/agents list`, …) y `/btw` siguen funcionando durante un turno.
 
@@ -135,7 +135,7 @@ autocompletado de comandos del editor: al empezar a escribir `/ski…` (o el pro
 skill, como `/branch-pr…`) cada skill efectiva aparece como comando `skill:<nombre>` con un
 marcador de ámbito (`[u]` usuario, `[p]` proyecto, `[c]` config, `[l]` plugin) y su descripción, al
 estilo OpenCode; elegir una inserta `skill:<nombre>` y envía. Además, `/skills <prefijo>` (o
-`/skill <prefijo>`) autocompleta las entradas del catálogo por nombre o descripción (las
+`/skills <prefijo>`) autocompleta las entradas del catálogo por nombre o descripción (las
 deshabilitadas, bloqueadas y sombreadas siguen listadas con una pista de estado); aceptar una
 sugerencia solo rellena el argumento, así que enviar todavía abre el catálogo. Las entradas
 `skill:<nombre>` del autocompletado pueden ocultarse con el ajuste `tui.skillSlashCommands` (ver
@@ -176,8 +176,8 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Comandos slash de skills (`tui.skillSlashCommands`) | `true` / `false` | `true` | inmediato |
 
 "Recordar consentimiento MCP" alterna el mismo consentimiento persistido que el flujo de
-concesión de `/mcp`: activarlo escribe `mcp.allow` y concede el permiso en tiempo de ejecución
-(los servidores habilitados se conectarán solos desde el próximo inicio; usa `/mcp` para
+concesión de `/mcps`: activarlo escribe `mcp.allow` y concede el permiso en tiempo de ejecución
+(los servidores habilitados se conectarán solos desde el próximo inicio; usa `/mcps` para
 conectarlos ahora), y desactivarlo revoca el consentimiento y desconecta los servidores.
 
 Las filas inferiores navegan: Proveedor y modelo, Conectar proveedor, Compactar contexto ahora,
@@ -232,7 +232,7 @@ elegido también se muestra en la cabecera y en la barra de estado, en amarillo.
 
 ## Gestor MCP {#mcp}
 
-`/mcp` en la TUI lista los servidores por origen y, para el seleccionado, separa los estados
+`/mcps` en la TUI lista los servidores por origen y, para el seleccionado, separa los estados
 configurado/activado, permiso de sesión, conexión y herramientas cargadas, mostrando las anotaciones
 de las herramientas. Sin `--allow-mcp` al arrancar (o el `mcp.allow` global), **Conectar**/**Activar**
 explica las consecuencias de proceso/red y ofrece una concesión **solo para esta sesión** o

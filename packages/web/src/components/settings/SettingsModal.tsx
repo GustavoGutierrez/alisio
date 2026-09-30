@@ -8,6 +8,7 @@ import { t } from "../../i18n/index.ts";
 import { api, settingsOpen } from "../../store/app.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
+import { AboutPage } from "./AboutPage.tsx";
 import { AgentsPage } from "./AgentsPage.tsx";
 import { AppearancePage } from "./AppearancePage.tsx";
 import { GeneralPage } from "./GeneralPage.tsx";
@@ -18,7 +19,7 @@ import { SkillsPage } from "./SkillsPage.tsx";
 import styles from "./settings.module.css";
 import { settingsWorkspace, useLoad } from "./shared.tsx";
 
-type Page = "general" | "models" | "plugins" | "skills" | "mcp" | "agents" | "appearance";
+type Page = "general" | "models" | "plugins" | "skills" | "mcp" | "agents" | "appearance" | "about";
 
 const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "general", icon: "settings" },
@@ -28,6 +29,7 @@ const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "mcp", icon: "plug" },
   { id: "agents", icon: "users" },
   { id: "appearance", icon: "palette" },
+  { id: "about", icon: "info" },
 ];
 
 const FOCUSABLE =
@@ -167,8 +169,10 @@ export function SettingsModal() {
             <McpPage />
           ) : page === "agents" ? (
             <AgentsPage />
-          ) : (
+          ) : page === "appearance" ? (
             <AppearancePage />
+          ) : (
+            <AboutPage />
           )}
         </div>
       </div>

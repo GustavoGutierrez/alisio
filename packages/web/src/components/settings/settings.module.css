@@ -148,6 +148,43 @@
   font-size: 15px;
 }
 
+.about {
+  min-height: calc(100% - 42px);
+}
+
+.aboutLogo {
+  display: block;
+  width: min(480px, 100%);
+  height: auto;
+  margin: 36px auto 26px;
+}
+
+.aboutDescription {
+  max-width: 62ch;
+  margin: 0 auto;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.aboutAttribution {
+  margin: 18px 0 0;
+  font-weight: 550;
+  text-align: center;
+}
+
+.aboutLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 18px auto 0;
+  color: var(--accent-strong);
+  font-weight: 550;
+}
+
 .scope {
   margin: 6px 0 0;
   color: var(--faint);

@@ -304,7 +304,7 @@ shown in diagnostics.
 
 - `mcp_connect` connects on demand and registers the server's tools; `mcp_resource` and `mcp_prompt`
   list and read resources and prompts.
-- `/mcp` shows disabled, disconnected, connecting, connected, failed, needs authentication and
+- `/mcps` shows disabled, disconnected, connecting, connected, failed, needs authentication and
   restart-required states where applicable. Configured/enabled, runtime permission, connection and
   loaded-tool counts are separate states. It displays declared read-only, destructive and open-world
   tool annotations; missing annotations are not treated as destructive.
@@ -378,7 +378,7 @@ export BRAVE_API_KEY=your-key
 
 MCP stays disconnected until requested: passing `--allow-mcp` (or setting the global `mcp.allow`
 preference) grants process/network consent and auto-connects enabled servers; in the TUI you can
-also just choose **Connect** in `/mcp`.
+also just choose **Connect** in `/mcps`.
 
 ## Herdr
 

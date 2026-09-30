@@ -131,7 +131,7 @@ exceeded" error even with an almost-empty transcript — the reported failure fo
 explores in repos with several MCP servers.
 
 - Catalog size is a **`/plugins` decision**, not session growth: disable unneeded MCP servers
-  there (`/mcp` shows each server's tool count), instead of the runner corrupting a healthy
+  there (`/mcps` shows each server's tool count), instead of the runner corrupting a healthy
   transcript to "fit" a catalog it cannot shrink.
 - Auto-compaction still measures the **full** request (window thresholds protect everything the
   model sees, tools included); only the post-compaction hard cap and the transcript reduction

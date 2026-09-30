@@ -299,6 +299,7 @@ export const es: Record<MessageKey, string> = {
   "settings.skills": "Skills",
   "settings.mcp": "Servidores MCP",
   "settings.agents": "Presets de agente",
+  "settings.about": "Acerca de",
   "settings.workspace": "Workspace: {path}",
   "settings.noWorkspace":
     "Abre o añade primero un workspace; estos ajustes pertenecen a un workspace.",
@@ -380,6 +381,10 @@ export const es: Record<MessageKey, string> = {
   "agents.inUse": "En uso",
   "agents.use": "Usar en esta sesión",
   "appearance.lead": "Cómo se ve la interfaz en este navegador.",
+  "about.description":
+    "Alisio es un entorno para agentes de programación que se conecta a endpoints compatibles con OpenAI y se ejecuta en la terminal o el navegador, con núcleo propio en TypeScript y herramientas, plugins y skills extensibles.",
+  "about.repository": "Ver el repositorio en GitHub",
+  "about.repositoryLabel": "Ver el repositorio de Alisio en GitHub (se abre en una pestaña nueva)",
   "config.open": "Abrir archivo de configuración",
   "config.lead": "alisio serve no abre editores; copia una ruta y ábrela tú.",
   "config.effective": "Archivo de configuración efectivo",

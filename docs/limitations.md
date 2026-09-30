@@ -19,7 +19,7 @@ it is not a statement that all of its release criteria are met.
   (`scripts/publish.ts`, see [Publishing](/publishing)) is implemented and unit-tested but has not
   been run against the real registry; SemVer ranges for plugins and reload in an idle session.
 - Automatic discovery of Pi paths and incremental watch.
-- Interactive MCP OAuth and MCP multimedia capabilities. `/mcp` supports explicit reconnect and
+- Interactive MCP OAuth and MCP multimedia capabilities. `/mcps` supports explicit reconnect and
   environment-referenced bearer tokens, but not browser authentication flows.
   Configured servers connect lazily and stdio runs with the user's privileges; neither MCP nor its
   subprocess transport is a sandbox. Semantic names and descriptions improve model routing but do

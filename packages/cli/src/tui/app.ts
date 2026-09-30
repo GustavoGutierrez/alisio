@@ -1614,7 +1614,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
           .then(() =>
             notice(
               value === true
-                ? "MCP consent remembered globally (mcp.allow); enabled servers will auto-connect on every start. Use /mcp to connect them now."
+                ? "MCP consent remembered globally (mcp.allow); enabled servers will auto-connect on every start. Use /mcps to connect them now."
                 : "Global MCP consent revoked: runtime permission dropped and configured servers disconnected.",
             ),
           )
@@ -1830,7 +1830,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     "model",
     "plugins",
     "skills",
-    "mcp",
+    "mcps",
     "settings",
     "compact",
     "clear",
@@ -1888,7 +1888,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return managePlugins();
         case "skills":
           return manageSkills();
-        case "mcp":
+        case "mcps":
           return manageMcp();
         case "settings":
           return openSettings();

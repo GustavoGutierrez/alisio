@@ -294,6 +294,7 @@ export const en = {
   "settings.skills": "Skills",
   "settings.mcp": "MCP servers",
   "settings.agents": "Agent presets",
+  "settings.about": "About",
   "settings.workspace": "Workspace: {path}",
   "settings.noWorkspace": "Open or add a workspace first; these settings belong to a workspace.",
   "settings.default": "Default",
@@ -373,6 +374,10 @@ export const en = {
   "agents.inUse": "In use",
   "agents.use": "Use in this session",
   "appearance.lead": "How the interface looks in this browser.",
+  "about.description":
+    "Alisio is a coding-agent harness that connects to OpenAI-compatible endpoints and runs in your terminal or browser, with its own TypeScript core and extensible tools, plugins and skills.",
+  "about.repository": "View the repository on GitHub",
+  "about.repositoryLabel": "View the Alisio repository on GitHub (opens in a new tab)",
   "config.open": "Open configuration file",
   "config.lead": "alisio serve does not open editors; copy a path and open it yourself.",
   "config.effective": "Effective configuration file",

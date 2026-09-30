@@ -190,7 +190,7 @@ describe("persistent global MCP consent (mcp.allow)", () => {
     };
   }
 
-  it("auto-connects EVERY enabled stdio server at startup from mcp.allow alone (no /mcp interaction)", async () => {
+  it("auto-connects EVERY enabled stdio server at startup from mcp.allow alone (no /mcps interaction)", async () => {
     const { configHome, file } = await home("alisio-mcp-stdio-");
     const spawn = (enabled: boolean) => ({
       transport: "stdio" as const,

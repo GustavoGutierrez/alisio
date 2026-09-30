@@ -359,7 +359,7 @@ de `command`/`url`.
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
 | `transport` | inferido | `stdio` o `http` (Streamable HTTP) |
-| `enabled` | `true` | Estado configurado persistido que gestiona `/mcp`; no concede permiso de ejecución ni significa conectado |
+| `enabled` | `true` | Estado configurado persistido que gestiona `/mcps`; no concede permiso de ejecución ni significa conectado |
 | `command` | ninguno | stdio: ejecutable |
 | `args` | `[]` | stdio: argumentos; `./` y `../` se resuelven respecto al archivo de configuración |
 | `url` | ninguno | http: URL del servidor |
@@ -453,7 +453,7 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
 - Concederlo persiste entre sesiones y auto-conecta los servidores activados. Los servidores MCP
   se ejecutan sin sandbox con sus privilegios de usuario: active el consentimiento global solo si
   confía en cada servidor que configure.
-- El gestor `/mcp` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulte
+- El gestor `/mcps` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulte
   [Interfaz de terminal](/es/tui#mcp). En la interfaz web, **Ajustes → Servidores MCP → Conceder
   acceso MCP** pide una confirmación explícita y puede recordar la concesión del mismo modo; consulte
   [Interfaz web](/es/web).

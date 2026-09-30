@@ -78,7 +78,7 @@ as `model-provider` plugins and appear in `/connect` and `/model`.
 
 ## Managing plugins in the TUI
 
-Run `/plugins` (or `/plugin`) to open the filterable catalog. `[x]`, `[ ]`, `[!]` and `[*]` mean
+Run `/plugins` to open the filterable catalog. `[x]`, `[ ]`, `[!]` and `[*]` mean
 active, inactive, failed and restart required; rows also distinguish built-ins from safe external
 source labels. Select a row for its full description, category and available action.
 

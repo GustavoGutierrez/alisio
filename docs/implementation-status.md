@@ -170,11 +170,11 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `enabled` se auto-conectan como si se pulsara Conectar en cada uno, con fallos por servidor,
   saneados y no fatales al arranque (expuestos como `mcpStartupFailures` y avisos de la TUI/headless);
   el proyecto nunca puede concederse consentimiento (`mcp.allow` de capa seleccionada se ignora);
-  `--read-only` prevalece y bloquea también concesión, recuerdo y revocación. En `/mcp`, el diálogo
+  `--read-only` prevalece y bloquea también concesión, recuerdo y revocación. En `/mcps`, el diálogo
   de consentimiento ofrece "Conceder solo para esta sesión" o "Conceder y recordar (global)"; la
   escritura global es atómica y conserva campos no relacionados; una acción "Revocar consentimiento
   MCP global" limpia `mcp.allow` y elimina el permiso de ejecución desconectando los servidores.
-  Gestor TUI `/mcp` agrupado por origen real, con estados, detalles saneados, catálogo y anotaciones
+  Gestor TUI `/mcps` agrupado por origen real, con estados, detalles saneados, catálogo y anotaciones
   de herramientas; distingue activación configurada, permiso de ejecución, conexión y herramientas
   cargadas. La conexión/reconexión registra nombres semánticos seguros como
   `mcp_devforge_time_diff` para el siguiente turno, limpia al desconectar y persiste la activación de
@@ -249,7 +249,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens (ventana real
   del modelo cuando el catálogo la expone; `~9.9k / ?` honesto cuando no), comandos
   `/help /model /compact /stats /clear /sessions /resume /tools /exit` con autocompletado
-  (incluido `/skills`/`/skill` con sugerencias del catálogo por nombre o descripción),
+  (incluido `/skills` con sugerencias del catálogo por nombre o descripción),
   interrupción con Esc y aprobación interactiva de `write`/`process`. `--no-tui` conserva
   el modo readline.
 - Renderizado Markdown mejorado: títulos en cian brillante y negrita, tablas con columnas
@@ -327,7 +327,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   consentimiento `mcp.allow` por el camino
   `rememberGlobalMcpConsent`/`revokeGlobalMcpConsent`. Bajo
   `--read-only` todo se muestra en solo lectura. Las filas inferiores navegan a
-  `/model`, `/connect`, compactación, `/plugins`, `/skills`, `/mcp` y `/stats`; las puntuales
+  `/model`, `/connect`, compactación, `/plugins`, `/skills`, `/mcps` y `/stats`; las puntuales
   (compactar, estadísticas) avisan y reabren la lista. La lista es HONESTA: no se ofrecen ajustes
   inexistentes (telemetría, Mermaid, modo dirección, doble Esc, transporte automático, idle HTTP,
   tema, niveles de aviso, confianza persistida, ventana de contexto global...) — ver docs/tui.md.
@@ -363,7 +363,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   proveedor, `ui.status` y metadatos de comandos. El host aplica timeouts y aísla fallos.
   Registro de plugins integrados (`packages/cli/src/builtin.ts`) con ruta de confianza, nombres sin
   prefijo y efecto `internal`; desactivables por configuración o `--disable-plugin`.
-- Gestor TUI `/plugins` (`/plugin`): catálogo filtrable de plugins integrados y externos con nombre,
+- Gestor TUI `/plugins`: catálogo filtrable de plugins integrados y externos con nombre,
   descripción, categoría/origen seguro y estados activo, inactivo, fallido o reinicio necesario.
   El estado de reinicio desaparece al volver al estado original del runtime; no permite desactivar
   proveedores retenidos por ninguna sesión enrutada viva.
@@ -729,7 +729,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   pruebas unitarias, pero no se ha ejecutado contra el registro real; SemVer de rangos de plugins
   y recarga en sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
-- OAuth MCP interactivo y capacidades multimedia MCP. `/mcp` permite reconexión explícita y bearer
+- OAuth MCP interactivo y capacidades multimedia MCP. `/mcps` permite reconexión explícita y bearer
   mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.
   El comportamiento de consentimiento repetido es ahora configurable: la preferencia global
   `mcp.allow` concede consentimiento MCP de forma persistente y auto-conecta los servidores
@@ -907,7 +907,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   literales de versión; un test de regresión falla si cualquier fuente de `packages/*/src` vuelve a
   contener una literal de versión de publicación.
 - MCP: la auto-conexión de arranque con `mcp.allow:true` (o `--allow-mcp`) se verifica de extremo a
-  extremo por stdio con una fixtura real: cada servidor `enabled` conecta sin tocar `/mcp`, los
+  extremo por stdio con una fixtura real: cada servidor `enabled` conecta sin tocar `/mcps`, los
   `disabled` no, los definidos en un `.alisio/config.json` de proyecto de confianza también, y
   `--read-only` lo bloquea todo.
 - ripgrep ausente: el escenario `search` de integración se salta limpiamente cuando `rg` no está en
@@ -994,7 +994,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   compactación, truncación, subagentes, tokens de salida por hijo, tui-state) sin cambios o con
   ajustes de redacción.
 - Limitación documentada: un catálogo MCP enorme debe gestionarse con `/plugins` (desactivar el
-  servidor; `/mcp` muestra el recuento de herramientas); el runner nunca corrompe un transcript
+  servidor; `/mcps` muestra el recuento de herramientas); el runner nunca corrompe un transcript
   sano por el catálogo, y la compactación automática con ventana desconocida sigue disparándose
   por la petición completa (herramientas incluidas) como protección del contexto real del modelo.
 

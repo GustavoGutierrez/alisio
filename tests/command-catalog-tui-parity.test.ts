@@ -27,9 +27,9 @@ const LEGACY_COMMANDS = [
   { name: "sessions", description: "List recent sessions" },
   { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
   { name: "tools", description: "List tools and permission state" },
-  { name: "plugins", description: "Browse and manage project plugins", aliases: ["plugin"] },
-  { name: "skills", description: "Browse and manage effective skills", aliases: ["skill"] },
-  { name: "mcp", description: "Browse and manage MCP servers" },
+  { name: "plugins", description: "Browse and manage project plugins" },
+  { name: "skills", description: "Browse and manage effective skills" },
+  { name: "mcps", description: "Browse and manage MCP servers" },
   { name: "settings", description: "Open the settings menu", aliases: ["prefs"] },
   { name: "copy", description: "Copy the last assistant response to the clipboard" },
   {

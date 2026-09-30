@@ -65,18 +65,16 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
   {
     name: "plugins",
     description: "Browse and manage project plugins",
-    aliases: ["plugin"],
     surfaces: ALL,
     execution: "core",
   },
   {
     name: "skills",
     description: "Browse and manage effective skills",
-    aliases: ["skill"],
     surfaces: ALL,
     execution: "core",
   },
-  { name: "mcp", description: "Browse and manage MCP servers", surfaces: ALL, execution: "core" },
+  { name: "mcps", description: "Browse and manage MCP servers", surfaces: ALL, execution: "core" },
   {
     name: "settings",
     description: "Open the settings menu",

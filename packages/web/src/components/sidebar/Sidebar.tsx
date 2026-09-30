@@ -164,10 +164,7 @@ export function Sidebar() {
       data-mobile-open={mobileSidebar.value ? "true" : undefined}
     >
       <div class={styles.brand}>
-        <img class={styles.logo} src="/logo-64.png" alt="Alisio" width={26} height={26} />
-        <span class={styles.wordmark} aria-hidden="true">
-          alisio
-        </span>
+        <img class={styles.logo} src="/alisio-wordmark.png" alt="Alisio" width={96} height={45} />
         <button
           type="button"
           class={`icon-btn ${styles.collapse}`}

@@ -224,13 +224,15 @@ describe("commands", () => {
     expect(resolveCommand("copy")).toBe("copy");
     expect(resolveCommand("connect")).toBe("connect");
     expect(resolveCommand("models")).toBe("model");
-    expect(resolveCommand("plugin")).toBe("plugins");
-    expect(resolveCommand("skill")).toBe("skills");
+    expect(resolveCommand("plugin")).toBeUndefined();
+    expect(resolveCommand("skill")).toBeUndefined();
     expect(resolveCommand("skills")).toBe("skills");
-    expect(resolveCommand("mcp")).toBe("mcp");
+    expect(resolveCommand("mcp")).toBeUndefined();
+    expect(resolveCommand("mcps")).toBe("mcps");
     expect(resolveCommand("settings")).toBe("settings");
     expect(resolveCommand("prefs")).toBe("settings");
-    expect(reservedCommandNames()).toContain("mcp");
+    expect(reservedCommandNames()).toContain("mcps");
+    expect(reservedCommandNames()).not.toEqual(expect.arrayContaining(["plugin", "skill", "mcp"]));
   });
 
   it("lists /settings with its alias so autocomplete and /help discover it", () => {
@@ -342,14 +344,13 @@ describe("skill slash autocompletion", () => {
     expect(skillCompletions([docx, pdf], "zzz")).toEqual([]);
   });
 
-  it("wires argument completions to /skills (and its alias) and /resume only", () => {
+  it("wires argument completions to /skills and /resume only", () => {
     const long = "x".repeat(200);
     const commands = slashCompletionCommands(
       [
         {
           name: "skills",
           description: "Browse and manage effective skills",
-          aliases: ["skill"],
         },
         { name: "resume", description: "Resume a session by ID or prefix", argumentHint: "<id>" },
         { name: "help", description: "Show commands and keys" },
@@ -364,7 +365,6 @@ describe("skill slash autocompletion", () => {
     );
     expect(commands.map((c) => c.name)).toEqual([
       "skills",
-      "skill",
       "resume",
       "help",
       "skill:docx",
@@ -379,24 +379,19 @@ describe("skill slash autocompletion", () => {
         description: "Create, read and edit Word documents",
       },
     ]);
-    const alias = commands[1]!;
-    expect(alias.name).toBe("skill");
-    expect(alias.description).toBe("Browse and manage effective skills");
-    expect(alias.getArgumentCompletions?.("")).toHaveLength(2);
-    expect(alias.getArgumentCompletions?.("")?.[1]?.description?.length).toBeLessThanOrEqual(80);
-    const resume = commands[2]!;
+    const resume = commands[1]!;
     expect(resume.getArgumentCompletions?.("s")).toEqual([
       { value: "s1", label: "s1", description: "m1" },
     ]);
     expect(resume.getArgumentCompletions?.("z")).toEqual([]);
-    expect((commands[3]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
+    expect((commands[2]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
     // The appended skill entries are plain slash commands: inserting the name is enough, submitting
     // routes `skill:<id>` to skill load, and they must not steal argument completions.
-    const skillEntry = commands[4]!;
+    const skillEntry = commands[3]!;
     expect(skillEntry.name).toBe("skill:docx");
     expect(skillEntry.description).toBe("Create, read and edit Word documents");
     expect((skillEntry as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
-    expect((commands[5]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
+    expect((commands[4]! as Record<string, unknown>).getArgumentCompletions).toBeUndefined();
   });
 
   it("adds a first-class skill:<id> slash entry per catalog skill with scope marker, status and truncated description", () => {
@@ -442,7 +437,7 @@ describe("skill slash autocompletion", () => {
   it("keeps skill: entries filterable for a /ski-type prefix, case-insensitively", () => {
     const commands = slashCompletionCommands(
       [
-        { name: "skills", description: "Browse and manage effective skills", aliases: ["skill"] },
+        { name: "skills", description: "Browse and manage effective skills" },
         { name: "help", description: "Show commands and keys" },
       ],
       {
@@ -503,19 +498,16 @@ describe("skill slash autocompletion", () => {
   it("skillEntries:false gates only the standalone skill: entries and keeps /skills argument completion", () => {
     const commands = slashCompletionCommands(
       [
-        { name: "skills", description: "Browse and manage effective skills", aliases: ["skill"] },
+        { name: "skills", description: "Browse and manage effective skills" },
         { name: "help", description: "Show commands and keys" },
       ],
       { skills: [docx, pdf] },
       { skillEntries: false },
     );
-    expect(commands.map((c) => c.name)).toEqual(["skills", "skill", "help"]);
+    expect(commands.map((c) => c.name)).toEqual(["skills", "help"]);
     expect(commands.some((c) => c.name.startsWith("skill:"))).toBe(false);
-    // The /skills manager (and its alias) still offer argument completions from the same catalog.
+    // The /skills manager still offers argument completions from the same catalog.
     expect(commands[0]!.getArgumentCompletions?.("")).toHaveLength(2);
-    expect(commands[1]!.getArgumentCompletions?.("DOC")).toEqual([
-      { value: "docx", label: "docx", description: "Create, read and edit Word documents" },
-    ]);
     // Default (omitted) keeps the skill: entries.
     const defaulted = slashCompletionCommands(
       [{ name: "help", description: "Show commands and keys" }],
@@ -793,17 +785,9 @@ describe("event reduction", () => {
       { kind: "user", text: "plain" },
     ]);
     expect(reservedCommandNames()).toEqual(
-      expect.arrayContaining([
-        "help",
-        "quit",
-        "new",
-        "copy",
-        "plugins",
-        "plugin",
-        "skills",
-        "skill",
-      ]),
+      expect.arrayContaining(["help", "quit", "new", "copy", "plugins", "skills", "mcps"]),
     );
+    expect(reservedCommandNames()).not.toEqual(expect.arrayContaining(["plugin", "skill", "mcp"]));
     expect(reservedCommandNames()).not.toContain("init");
   });
 

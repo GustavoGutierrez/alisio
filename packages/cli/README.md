@@ -80,7 +80,7 @@ Other global flags: `--cwd`, `--config`, `--model`, `--base-url`, `--api-mode`, 
 ## In the TUI
 
 `/connect` adds a provider; `/model` picks a saved provider/model; `/compact`, `/stats`, `/clear`,
-`/sessions`, `/resume` manage conversations; `/plugins`, `/skills`, `/mcp`, `/settings` manage
+`/sessions`, `/resume` manage conversations; `/plugins`, `/skills`, `/mcps`, `/settings` manage
 extensions and preferences; `/memory` and `/agents` drive the built-in plugins; `/init` writes
 `AGENTS.md`.
 

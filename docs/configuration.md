@@ -342,7 +342,7 @@ The canonical form is `mcp.servers`, keyed by name. `transport` may be explicit 
 | Field | Default | Description |
 | --- | --- | --- |
 | `transport` | inferred | `stdio` or `http` (Streamable HTTP) |
-| `enabled` | `true` | Persisted configured state managed by `/mcp`; it does not grant runtime access or mean connected |
+| `enabled` | `true` | Persisted configured state managed by `/mcps`; it does not grant runtime access or mean connected |
 | `command` | none | stdio: executable |
 | `args` | `[]` | stdio: arguments; `./` and `../` are resolved relative to the configuration file |
 | `url` | none | http: server URL |
@@ -432,7 +432,7 @@ prompt on every restart.
 - Granting it persists across sessions and auto-connects enabled servers. MCP servers run
   unsandboxed with your user privileges, so only enable global consent when you trust every server
   you configure.
-- The TUI `/mcp` manager can set this (Grant and remember) and revoke it; see
+- The TUI `/mcps` manager can set this (Grant and remember) and revoke it; see
   [Terminal UI](/tui#mcp). In the web UI, **Settings → MCP servers → Grant MCP access** asks for
   an explicit confirmation and can remember the grant the same way; see [Web UI](/web).
 

@@ -80,7 +80,7 @@ estimate marked with `~` (about 4 characters per token) is shown.
 
 ## Commands
 
-Typing `/` opens autocompletion: `/skills` (`/skill`) suggests the effective skills by name or
+Typing `/` opens autocompletion: `/skills` suggests the effective skills by name or
 description, and `/resume` suggests matching session IDs.
 
 ### Commands at a glance
@@ -96,9 +96,9 @@ description, and `/resume` suggests matching session IDs.
 | `/sessions` | Recent sessions of the workspace |
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |
 | `/tools` | Tools and their state according to permissions (`enabled`, `ask`, `disabled`) |
-| `/plugins` (`/plugin`) | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled. Plugins are grouped under non-selectable category headers (`model-provider ›`, `memory ›`…); while filtering, a header only remains when its group still has matches, and `↑`/`↓` skip headers |
-| `/skills` (`/skill`) | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
-| `/mcp` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp` (or global `mcp.allow`), Connect/Enable shows process/network consequences and can grant access for this TUI session only, or remember it globally (`mcp.allow`) for every session. A "Revoke global MCP consent" row clears that preference and disconnects servers. `--read-only` blocks it |
+| `/plugins` | Filter active, inactive and failed plugins; inspect metadata/source and persist a project enable/disable override. Changes are marked `restart required`; external actions require project trust and confirmation, and the active model provider cannot be disabled. Plugins are grouped under non-selectable category headers (`model-provider ›`, `memory ›`…); while filtering, a header only remains when its group still has matches, and `↑`/`↓` skip headers |
+| `/skills` | Browse the bounded effective skills catalog; search with `/`, cycle name/source/token sorting with `t`, inspect safe details, and enable/disable manageable skills immediately. Plugin skills are locked and managed through `/plugins` |
+| `/mcps` | Browse servers by source; separately inspect configured/enabled, session permission, connection and loaded-tool states; view annotations; connect/reconnect; and persist enable/disable in the defining file. Without startup `--allow-mcp` (or global `mcp.allow`), Connect/Enable shows process/network consequences and can grant access for this TUI session only, or remember it globally (`mcp.allow`) for every session. A "Revoke global MCP consent" row clears that preference and disconnects servers. `--read-only` blocks it |
 | `/settings` (`/prefs`) | Settings menu: an OpenCode-style list of real, wired preferences (compaction, context, MCP consent, limits, editor padding, transcript inset) plus navigation rows for the managers below. Two-column rows (name + current value), type-to-search filter, `(n/total)` counter, footer with the highlighted row's description; Enter/Space changes a value, Esc leaves. Persisted to your user configuration and applied to the running session |
 | `/copy` | Copy the last assistant response to the clipboard as raw text (unformatted, without the ANSI colors you see on screen) |
 | `/ask <question>` | Turn your own question into a multiple-choice `ask_user_question` call; see [Asking the user](#ask-user-question) |
@@ -118,7 +118,7 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcp`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
 interrupt first. The subagent task-management verbs (`/agents open …`, `/agents list`, …) and `/btw` keep working during a run.
 
 ### Skills catalog and autocompletion
@@ -130,7 +130,7 @@ Esc closes it. Skills also appear directly in the editor's slash autocomplete: s
 `/ski…` (or the skill's own name, like `/branch-pr…`) shows every effective skill as a
 `skill:<name>` command with a scope marker (`[u]` user, `[p]` project, `[c]` config, `[l]` plugin)
 and its description, OpenCode-style; selecting one inserts `skill:<name>` and submits it. In
-addition, `/skills <prefix>` (or `/skill <prefix>`) autocompletes catalog
+addition, `/skills <prefix>` autocompletes catalog
 entries by name or description (disabled, locked and shadowed entries stay listed with a status
 hint); selecting a suggestion only fills the argument, so submitting still opens the catalog. The
 `skill:<name>` slash entries can be hidden with the `tui.skillSlashCommands` setting (see below);
@@ -170,9 +170,9 @@ hand-edited `compaction.threshold: 0.87`) move to the next offered candidate on 
 | Content inset (`tui.contentPaddingX`) | 0 – 12 | `2` | immediately |
 | Skill slash commands (`tui.skillSlashCommands`) | `true` / `false` | `true` | immediately |
 
-"Remember MCP consent" toggles the same persisted consent as the `/mcp` grant flow: turning it on
+"Remember MCP consent" toggles the same persisted consent as the `/mcps` grant flow: turning it on
 writes `mcp.allow` and grants runtime permission (enabled servers auto-connect from the next
-start; use `/mcp` to connect now), turning it off revokes the consent and disconnects servers.
+start; use `/mcps` to connect now), turning it off revokes the consent and disconnects servers.
 
 The bottom rows navigate: Provider & model, Connect provider, Compact context now, Plugins,
 Skills, MCP servers and Session statistics. Rows that open a manager leave Esc/back to that
@@ -225,7 +225,7 @@ header and the status line, in yellow.
 
 ## MCP manager {#mcp}
 
-`/mcp` in the TUI lists servers by source and, for the selected one, separates configured/enabled,
+`/mcps` in the TUI lists servers by source and, for the selected one, separates configured/enabled,
 session permission, connection and loaded-tool states, showing tool annotations. Without startup
 `--allow-mcp` (or the global `mcp.allow`), **Connect**/**Enable** explains the process/network
 consequences and offers a **session-only** grant or **Grant and remember** (which writes `mcp.allow`

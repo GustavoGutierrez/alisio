@@ -329,7 +329,7 @@ en diagnósticos.
 
 - `mcp_connect` conecta bajo demanda y registra las herramientas del servidor; `mcp_resource` y
   `mcp_prompt` permiten listar y consultar recursos y prompts.
-- `/mcp` muestra los estados desactivado, desconectado, conectando, conectado, fallido, requiere
+- `/mcps` muestra los estados desactivado, desconectado, conectando, conectado, fallido, requiere
   autenticación y requiere reinicio cuando correspondan. Configuración/activación, permiso de
   ejecución, conexión y cantidad de herramientas cargadas son estados separados. Presenta las
   anotaciones declaradas de solo lectura, destructiva y mundo abierto; una herramienta sin
@@ -406,7 +406,7 @@ export BRAVE_API_KEY=tu-clave
 
 MCP permanece desconectado hasta que se solicita: pasar `--allow-mcp` (o activar la preferencia
 global `mcp.allow`) concede el consentimiento de proceso/red y auto-conecta los servidores
-activados; en la TUI también puede elegir **Conectar** en `/mcp`.
+activados; en la TUI también puede elegir **Conectar** en `/mcps`.
 
 ## Herdr
 

@@ -78,7 +78,7 @@ registran como plugins `model-provider` y aparecen en `/connect` y `/model`.
 
 ## Gestionar plugins en la TUI
 
-Ejecute `/plugins` (o `/plugin`) para abrir el catálogo filtrable. `[x]`, `[ ]`, `[!]` y `[*]`
+Ejecute `/plugins` para abrir el catálogo filtrable. `[x]`, `[ ]`, `[!]` y `[*]`
 significan activo, inactivo, fallido y reinicio necesario; las filas también distinguen los plugins
 integrados de etiquetas de origen externas seguras. Seleccione una fila para ver la descripción
 completa, la categoría y la acción disponible.

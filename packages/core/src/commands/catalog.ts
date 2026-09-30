@@ -224,7 +224,7 @@ const HANDLERS: Record<string, Handler> = {
       data: plugins,
     };
   },
-  async mcp(_args, _ctx, host) {
+  async mcps(_args, _ctx, host) {
     const servers = host.mcp?.list() ?? [];
     if (!servers.length) return { text: "No MCP servers configured", tone: "notice" };
     return {

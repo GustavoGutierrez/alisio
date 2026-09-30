@@ -212,7 +212,7 @@ describe("CommandCatalog (T-05)", () => {
       "tools",
       "skills",
       "plugins",
-      "mcp",
+      "mcps",
       "agents",
       "btw",
     ])

@@ -19,22 +19,14 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
   padding: 0 4px 0 8px;
-  height: 34px;
+  height: 46px;
 }
 
 .logo {
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-}
-
-.wordmark {
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: -0.03em;
+  width: 96px;
+  height: auto;
 }
 
 .collapse {

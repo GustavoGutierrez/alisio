@@ -139,7 +139,7 @@ vacío — la falla reportada en subagentes y exploraciones en repositorios con 
 MCP.
 
 - El tamaño del catálogo es una decisión de **`/plugins`**, no crecimiento de sesión: desactive allí
-  los servidores MCP innecesarios (`/mcp` muestra el recuento de herramientas de cada servidor), en
+  los servidores MCP innecesarios (`/mcps` muestra el recuento de herramientas de cada servidor), en
   lugar de que el runner corrompa un transcript sano para «caber» un catálogo que no puede
   reducir.
 - La compactación automática sigue midiendo la petición **completa** (los umbrales de ventana
