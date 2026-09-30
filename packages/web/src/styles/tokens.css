@@ -1,0 +1,72 @@
+/*
+ * Design tokens (spec §10.8). Dark is the default; `data-theme` is set before first paint by the
+ * inline bootstrap in index.html ("system" resolves through prefers-color-scheme).
+ * Palette: night sea (blue-green neutrals) with a trade-wind teal accent.
+ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1417;
+  --surface: #13191d;
+  --panel: #182025;
+  --raised: #1e272d;
+  --hover: #222c33;
+  --border: #283239;
+  --border-strong: #35424a;
+  --text: #e3e9ec;
+  --muted: #93a0a8;
+  --faint: #66737b;
+  --accent: #4cc2b1;
+  --accent-strong: #7ad8ca;
+  --accent-soft: rgb(76 194 177 / 14%);
+  --accent-contrast: #062b26;
+  --user: #17333a;
+  --user-border: #214852;
+  --danger: #f07a7f;
+  --danger-soft: rgb(240 122 127 / 14%);
+  --warn: #e3b55c;
+  --ok: #7ccf8e;
+  --mark-bg: #123036;
+  --code-bg: #121a1e;
+  --shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f8f8;
+  --surface: #eef2f2;
+  --panel: #ffffff;
+  --raised: #ffffff;
+  --hover: #e6ecec;
+  --border: #d6dfe0;
+  --border-strong: #bccbcd;
+  --text: #172125;
+  --muted: #56646b;
+  --faint: #7d8a90;
+  --accent: #0a7768;
+  --accent-strong: #075e52;
+  --accent-soft: rgb(10 119 104 / 10%);
+  --accent-contrast: #ffffff;
+  --user: #e2f1ee;
+  --user-border: #c3e0da;
+  --danger: #b92f39;
+  --danger-soft: rgb(185 47 57 / 9%);
+  --warn: #8a5f00;
+  --ok: #2b7a3d;
+  --mark-bg: #d8efeb;
+  --code-bg: #f1f5f5;
+  --shadow: 0 12px 32px rgb(20 40 45 / 16%);
+}
+
+:root {
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 18px;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sidebar-w: 268px;
+  --rail-w: 56px;
+  --column: 760px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}

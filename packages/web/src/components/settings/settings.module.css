@@ -1,0 +1,129 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.dialog {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  width: min(820px, 100%);
+  min-height: min(520px, 90vh);
+  max-height: 90vh;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.nav {
+  padding: 26px 14px;
+  border-right: 1px solid var(--border);
+}
+
+.heading {
+  margin: 0 10px 18px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  font-size: 15px;
+}
+
+.navItem:hover {
+  background: var(--hover);
+}
+
+.navItem[aria-current="page"] {
+  background: var(--raised);
+  font-weight: 550;
+}
+
+.content {
+  position: relative;
+  padding: 28px 32px;
+  overflow-y: auto;
+}
+
+.close {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+}
+
+.pageTitle {
+  margin: 0 0 20px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.fieldset {
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: 10px;
+  font-weight: 550;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.note {
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    grid-template-columns: 1fr;
+  }
+
+  .nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 18px 12px 8px;
+  }
+}
