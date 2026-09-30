@@ -122,6 +122,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const base = options.app ?? {};
   // Server-level connection to the shared session database (lists, metadata, snapshots).
   const catalog = new SQLiteStore(base.db ?? join(stateHome(), "sessions.sqlite"));
+  // Startup reconciliation (RNF-09): runs and child sessions left queued/running by a dead
+  // process become interrupted before any client lists them.
+  catalog.interruptRuns();
+  catalog.interruptStale();
+  let shutdown: Promise<void> | undefined;
   let sessions: SessionService | undefined;
   const inflight = new InflightTracker();
   const scheduler = new RunScheduler({
@@ -333,19 +338,28 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     token: guard.token,
     launchUrl: `${url}/?token=${guard.token}`,
     webInstalled: assets.installed,
-    async close() {
-      closing = true;
-      clearInterval(sweeper);
-      approvals?.denyAll();
-      interactions?.cancelAll();
-      await scheduler.shutdown();
-      hub.closeAll();
-      await workspaces.closeAll();
-      await new Promise<void>((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      });
-      catalog.close();
+    close() {
+      shutdown ??= (async () => {
+        // RNF-08: refuse new work (503), abort runs (queued ones are journaled cancelled),
+        // withdraw approvals (deny), end the streams, close every app within the core's
+        // per-stage teardown caps, then stop listening. Locks are released by the runner.
+        const began = Date.now();
+        closing = true;
+        clearInterval(sweeper);
+        const settling = scheduler.shutdown(2_000);
+        approvals?.denyAll();
+        interactions?.cancelAll();
+        await settling;
+        hub.closeAll();
+        await workspaces.closeAll();
+        await new Promise<void>((resolve) => {
+          server.closeAllConnections();
+          server.close(() => resolve());
+        });
+        catalog.close();
+        logger.info("server stopped", { ms: Date.now() - began });
+      })();
+      return shutdown;
     },
   };
 }

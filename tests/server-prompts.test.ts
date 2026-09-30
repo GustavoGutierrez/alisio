@@ -209,9 +209,7 @@ describe("prompts (T-09)", () => {
     gated.release();
     await settled(t, a.id);
     await gated.started;
-    expect((await t.api.get(`/api/sessions/${b.id}`)).json<SessionDetail>().status).toBe(
-      "running",
-    );
+    expect((await t.api.get(`/api/sessions/${b.id}`)).json<SessionDetail>().status).toBe("running");
     gated.release();
     expect(await settled(t, b.id)).toMatchObject({ status: "completed" });
   });
