@@ -44,12 +44,14 @@ export {
   loadConfigWithProvenance,
   type McpServerSource,
   overridesSavedProviderProfile,
+  type SettableSettingInfo,
   type SettableSettingKey,
   setConfigValue,
   setGlobalMcpAllow,
   setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
+  settableSettings,
   stateHome,
 } from "./config.ts";
 export {
@@ -135,6 +137,7 @@ export {
   resolveProviderModel,
 } from "./providers/routing.ts";
 export {
+  maskSecret,
   type ProviderProfile,
   type ProviderSettings,
   ProviderSettingsStore,

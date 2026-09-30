@@ -2,10 +2,18 @@ import type { ToolResult } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
+import { pluginNames } from "../../store/app.ts";
 import { openInDock } from "../../store/dock.ts";
 import { density } from "../../store/prefs.ts";
 import type { ToolState } from "../../store/transcript.ts";
-import { liveCommand, prettyArgs, toolLabel, toolPath, toolSummary } from "../../util/tools.ts";
+import {
+  liveCommand,
+  prettyArgs,
+  toolLabel,
+  toolPath,
+  toolPlugin,
+  toolSummary,
+} from "../../util/tools.ts";
 import { Icon, type IconName } from "../icons.tsx";
 import styles from "./transcript.module.css";
 
@@ -66,6 +74,7 @@ export function ToolRow({ tool }: { tool: ToolState }) {
   const [open, setOpen] = useState<boolean | undefined>(undefined);
   const expanded = open ?? density.value === "detailed";
   const label = toolLabel(tool.name);
+  const plugin = toolPlugin(tool.name, pluginNames.value);
   const summary = toolSummary(tool.arguments);
   const path = toolPath(tool.arguments);
   const id = `tool-${tool.id}`;
@@ -84,6 +93,7 @@ export function ToolRow({ tool }: { tool: ToolState }) {
             <Icon name={expanded ? "chevronDown" : (ICONS[tool.name] ?? "tool")} size={15} />
           </span>
           <span class={styles.processName}>{label}</span>
+          {plugin ? <span class={styles.pluginTag}>{plugin}</span> : null}
           {summary ? (
             <>
               <span class={styles.dot} aria-hidden="true">

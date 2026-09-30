@@ -4,23 +4,34 @@
  * send by themselves). Failures become `ApiRequestError` with the server's error code.
  */
 import type {
+  AgentInfo,
   ApiError,
   ApiErrorCode,
   BlobRef,
   CommandDescriptor,
   CommandOutcome,
+  CredentialStatus,
   FileTreePage,
   HealthInfo,
+  McpOverview,
+  McpServerWire,
   Message,
   PendingApproval,
   PermissionPresetId,
+  PluginInfo,
   PromptAccepted,
+  ProviderConfigurationValue,
+  ProviderModelsInfo,
+  ProviderProfileInfo,
+  ProvidersOverview,
   RunEvent,
   SessionChange,
   SessionContextUsage,
   SessionDetail,
   SessionModels,
   SessionSummary,
+  SettingsOverview,
+  SkillInfo,
   UiBlock,
   WorkspaceInfo,
 } from "@alisio/sdk";
@@ -166,6 +177,55 @@ export class ApiClient {
     this.request<UiBlock>("GET", `/api/workspaces/${enc(workspaceId)}/diff?path=${enc(path)}`);
   changes = (sessionId: string) =>
     this.request<{ files: SessionChange[] }>("GET", `/api/sessions/${enc(sessionId)}/changes`);
+  // ---- Management (RF-14/15): every call names the workspace whose application it manages.
+  plugins = (wid: string) =>
+    this.request<PluginInfo[]>("GET", `/api/plugins?workspace=${enc(wid)}`);
+  setPlugin = (wid: string, id: string, enabled: boolean) =>
+    this.request<PluginInfo>("PATCH", `/api/plugins/${enc(id)}`, { workspace: wid, enabled });
+  skills = (wid: string) => this.request<SkillInfo[]>("GET", `/api/skills?workspace=${enc(wid)}`);
+  setSkill = (wid: string, id: string, enabled: boolean) =>
+    this.request<SkillInfo>("PATCH", `/api/skills/${enc(id)}`, { workspace: wid, enabled });
+  mcp = (wid: string) => this.request<McpOverview>("GET", `/api/mcp?workspace=${enc(wid)}`);
+  setMcp = (wid: string, name: string, enabled: boolean, connect = false) =>
+    this.request<McpServerWire>("PATCH", `/api/mcp/${enc(name)}`, {
+      workspace: wid,
+      enabled,
+      ...(connect ? { connect } : {}),
+    });
+  mcpConsent = (wid: string, remember: boolean) =>
+    this.request<McpOverview>("POST", "/api/mcp/consent", {
+      workspace: wid,
+      confirmed: true,
+      ...(remember ? { remember } : {}),
+    });
+  agents = (wid: string) => this.request<AgentInfo[]>("GET", `/api/agents?workspace=${enc(wid)}`);
+  settings = (wid: string) =>
+    this.request<SettingsOverview>("GET", `/api/settings?workspace=${enc(wid)}`);
+  setSetting = (wid: string, key: string, value: string | number | boolean | null) =>
+    this.request<{ message: string }>("PATCH", "/api/settings", { workspace: wid, key, value });
+  providers = (wid?: string) =>
+    this.request<ProvidersOverview>("GET", `/api/providers${wid ? `?workspace=${enc(wid)}` : ""}`);
+  providerModels = (wid: string) =>
+    this.request<ProviderModelsInfo[]>("GET", `/api/models?workspace=${enc(wid)}`);
+  saveProfile = (
+    wid: string,
+    name: string,
+    body: { provider: string; values: Record<string, ProviderConfigurationValue>; model: string },
+  ) =>
+    this.request<ProviderProfileInfo>("PUT", `/api/providers/${enc(name)}`, {
+      workspace: wid,
+      ...body,
+    });
+  /** Write-only: the answer says only whether it is configured and a masked tail. */
+  setCredentials = (name: string, secrets: { apiKey?: string; bearerToken?: string }) =>
+    this.request<CredentialStatus>("PUT", `/api/providers/${enc(name)}/credentials`, secrets);
+  deleteCredentials = (name: string) =>
+    this.request<CredentialStatus>("DELETE", `/api/providers/${enc(name)}/credentials`);
+  activateProvider = (wid: string, name: string, model: string) =>
+    this.request<{ changed: boolean }>("POST", `/api/providers/${enc(name)}/activate`, {
+      workspace: wid,
+      model,
+    });
   fileUrl = (workspaceId: string, path: string, download = false) =>
     `/api/workspaces/${enc(workspaceId)}/file?path=${enc(path)}${download ? "&download=1" : ""}`;
 

@@ -1,4 +1,5 @@
-import { useEffect } from "preact/hooks";
+import type { ComponentType } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import styles from "./app.module.css";
 import { ApprovalPanel } from "./components/approval/ApprovalPanel.tsx";
 import { InteractionPanel } from "./components/approval/InteractionPanel.tsx";
@@ -6,7 +7,6 @@ import { Composer } from "./components/composer/Composer.tsx";
 import { Dock } from "./components/dock/Dock.tsx";
 import { Header } from "./components/header/Header.tsx";
 import { Icon } from "./components/icons.tsx";
-import { SettingsModal } from "./components/settings/SettingsModal.tsx";
 import { Sidebar, searchRequest } from "./components/sidebar/Sidebar.tsx";
 import { StatsLine } from "./components/stats/StatsLine.tsx";
 import { TrajectoryTab } from "./components/trajectory/TrajectoryTab.tsx";
@@ -44,6 +44,21 @@ function Centered(props: { title: string; body: string; action?: preact.Componen
 const editable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+/** The settings modal is its own chunk, loaded the first time it opens. */
+function LazySettings() {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("./components/settings/SettingsModal.tsx").then((m) => {
+      if (alive) setView(() => m.SettingsModal);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View /> : null;
+}
 
 export function App() {
   useEffect(() => {
@@ -119,7 +134,7 @@ export function App() {
         )}
       </main>
       {dockOpen.value && id ? <Dock /> : null}
-      {settingsOpen.value ? <SettingsModal /> : null}
+      {settingsOpen.value ? <LazySettings /> : null}
       {toast.value ? (
         <div class={styles.toast} role="status">
           {toast.value}

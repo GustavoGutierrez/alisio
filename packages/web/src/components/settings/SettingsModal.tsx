@@ -1,55 +1,89 @@
+/**
+ * Settings (RF-14, image2.png): left navigation (General, Models, Plugins, Skills, MCP, Agent
+ * presets, Appearance) and, top right, "Open configuration file" (shows the effective paths with
+ * copy buttons; the server never opens editors) and close. Loaded lazily on first open.
+ */
 import { useEffect, useRef, useState } from "preact/hooks";
-import { LOCALES, locale, setLocale, t } from "../../i18n/index.ts";
-import { settingsOpen } from "../../store/app.ts";
-import {
-  type Density,
-  density,
-  setDensity,
-  setTheme,
-  type ThemePref,
-  theme,
-} from "../../store/prefs.ts";
-import { Icon } from "../icons.tsx";
+import { t } from "../../i18n/index.ts";
+import { api, settingsOpen } from "../../store/app.ts";
+import { CopyButton } from "../CopyButton.tsx";
+import { Icon, type IconName } from "../icons.tsx";
+import { AgentsPage } from "./AgentsPage.tsx";
+import { AppearancePage } from "./AppearancePage.tsx";
+import { GeneralPage } from "./GeneralPage.tsx";
+import { McpPage } from "./McpPage.tsx";
+import { PluginsPage } from "./PluginsPage.tsx";
+import { SkillsPage } from "./SkillsPage.tsx";
 import styles from "./settings.module.css";
+import { settingsWorkspace, useLoad } from "./shared.tsx";
 
-type Page = "general" | "appearance";
+type Page = "general" | "plugins" | "skills" | "mcp" | "agents" | "appearance";
 
-function Choice<T extends string>(props: {
-  legend: string;
-  value: T;
-  options: Array<{ id: T; label: string }>;
-  onChange: (value: T) => void;
-}) {
+const PAGES: Array<{ id: Page; icon: IconName }> = [
+  { id: "general", icon: "settings" },
+  { id: "plugins", icon: "sliders" },
+  { id: "skills", icon: "book" },
+  { id: "mcp", icon: "plug" },
+  { id: "agents", icon: "users" },
+  { id: "appearance", icon: "palette" },
+];
+
+const FOCUSABLE =
+  "button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']";
+
+function ConfigFiles(props: { onClose: () => void }) {
+  const workspace = settingsWorkspace();
+  const overview = useLoad(workspace ? () => api.settings(workspace.id) : undefined, [
+    workspace?.id,
+  ]);
+  const rows = overview.data
+    ? [
+        { label: t("config.effective"), path: overview.data.configPath },
+        { label: t("config.settings"), path: overview.data.settingsPath },
+        { label: t("config.providers"), path: overview.data.providersPath },
+      ]
+    : [];
   return (
-    <fieldset class={styles.fieldset}>
-      <legend class={styles.legend}>{props.legend}</legend>
-      <div class={styles.choices}>
-        {props.options.map((option) => (
-          <label key={option.id} class={styles.choice}>
-            <input
-              type="radio"
-              name={props.legend}
-              checked={props.value === option.id}
-              onChange={() => props.onChange(option.id)}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
+    <div class={styles.popover} role="dialog" aria-label={t("config.open")}>
+      <div class={styles.popoverHead}>
+        <strong>{t("config.open")}</strong>
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label={t("common.close")}
+          onClick={props.onClose}
+        >
+          <Icon name="x" size={16} />
+        </button>
       </div>
-    </fieldset>
+      <p class={styles.note}>{t("config.lead")}</p>
+      {!workspace ? <p class={styles.note}>{t("settings.noWorkspace")}</p> : null}
+      {overview.error ? <p class={styles.errorText}>{overview.error}</p> : null}
+      <ul class={styles.paths}>
+        {rows.map((row) => (
+          <li key={row.label}>
+            <span class={styles.meta}>{row.label}</span>
+            <span class={styles.pathRow}>
+              <code class={styles.path}>{row.path}</code>
+              <CopyButton text={() => row.path} label={t("config.copy")} />
+            </span>
+          </li>
+        ))}
+      </ul>
+      {overview.data && !overview.data.trusted ? (
+        <p class={styles.note}>{t("config.untrusted")}</p>
+      ) : null}
+    </div>
   );
 }
 
-/**
- * Settings (phase 3 subset): language, theme and density. Models, plugins, skills, MCP and agent
- * presets arrive in phase 5 (RF-14) in this same modal.
- */
 export function SettingsModal() {
   const [page, setPage] = useState<Page>("general");
+  const [files, setFiles] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.querySelector<HTMLElement>("button, input")?.focus();
+    dialog.current?.querySelector<HTMLElement>("nav button")?.focus();
     return () => previous?.focus();
   }, []);
   const close = () => {
@@ -69,11 +103,12 @@ export function SettingsModal() {
         aria-modal="true"
         aria-labelledby="settings-title"
         onKeyDown={(event) => {
-          if (event.key === "Escape") close();
+          if (event.key === "Escape") {
+            if (files) setFiles(false);
+            else close();
+          }
           if (event.key === "Tab") {
-            const focusable = [
-              ...(dialog.current?.querySelectorAll<HTMLElement>("button, input") ?? []),
-            ];
+            const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
             const first = focusable[0];
             const last = focusable.at(-1);
             if (event.shiftKey && document.activeElement === first) {
@@ -86,11 +121,11 @@ export function SettingsModal() {
           }
         }}
       >
-        <nav class={styles.nav}>
+        <nav class={styles.nav} aria-label={t("settings.title")}>
           <h2 id="settings-title" class={styles.heading}>
             {t("settings.title")}
           </h2>
-          {(["general", "appearance"] as const).map((id) => (
+          {PAGES.map(({ id, icon }) => (
             <button
               key={id}
               type="button"
@@ -98,52 +133,38 @@ export function SettingsModal() {
               aria-current={page === id ? "page" : undefined}
               onClick={() => setPage(id)}
             >
-              <Icon name={id === "general" ? "settings" : "sparkle"} size={17} />
+              <Icon name={icon} size={17} />
               {t(`settings.${id}`)}
             </button>
           ))}
         </nav>
         <div class={styles.content}>
-          <button
-            type="button"
-            class={`icon-btn ${styles.close}`}
-            aria-label={t("common.close")}
-            onClick={close}
-          >
-            <Icon name="x" size={18} />
-          </button>
-          <h3 class={styles.pageTitle}>{t(`settings.${page}`)}</h3>
+          <div class={styles.topBar}>
+            <button
+              type="button"
+              class={styles.outline}
+              aria-expanded={files}
+              onClick={() => setFiles(!files)}
+            >
+              {t("config.open")}
+            </button>
+            <button type="button" class="icon-btn" aria-label={t("common.close")} onClick={close}>
+              <Icon name="x" size={18} />
+            </button>
+          </div>
+          {files ? <ConfigFiles onClose={() => setFiles(false)} /> : null}
           {page === "general" ? (
-            <>
-              <Choice
-                legend={t("settings.language")}
-                value={locale.value}
-                options={LOCALES.map((id) => ({ id, label: t(`language.${id}`) }))}
-                onChange={setLocale}
-              />
-              <p class={styles.note}>{t("settings.more")}</p>
-            </>
+            <GeneralPage />
+          ) : page === "plugins" ? (
+            <PluginsPage />
+          ) : page === "skills" ? (
+            <SkillsPage />
+          ) : page === "mcp" ? (
+            <McpPage />
+          ) : page === "agents" ? (
+            <AgentsPage />
           ) : (
-            <>
-              <Choice<ThemePref>
-                legend={t("settings.theme")}
-                value={theme.value}
-                options={(["dark", "light", "system"] as const).map((id) => ({
-                  id,
-                  label: t(`theme.${id}`),
-                }))}
-                onChange={setTheme}
-              />
-              <Choice<Density>
-                legend={t("settings.density")}
-                value={density.value}
-                options={(["compact", "detailed"] as const).map((id) => ({
-                  id,
-                  label: t(`density.${id}`),
-                }))}
-                onChange={setDensity}
-              />
-            </>
+            <AppearancePage />
           )}
         </div>
       </div>

@@ -183,6 +183,18 @@ export class WorkspaceHost {
     }
   }
 
+  /**
+   * Closes and reopens a workspace's app so configuration read at startup (plugins, skills) takes
+   * effect. Callers make sure it has no runs; SSE subscribers are unaffected (they read the
+   * shared store) and the next request uses the new app.
+   */
+  async recycle(id: string): Promise<OpenWorkspace | undefined> {
+    const entry = this.open.get(id);
+    if (!entry) return undefined;
+    await this.close(id);
+    return this.openPath(entry.path);
+  }
+
   /** Closes every app in parallel (each close is capped by the core's teardown timeouts). */
   async closeAll(): Promise<void> {
     this.closed = true;

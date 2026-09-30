@@ -1125,6 +1125,136 @@ export interface SessionContextUsage {
   /** Percentage of `total` at which auto-compaction triggers. */
   compactionAt: number;
 }
+/** `GET /api/plugins`: one plugin of a workspace (credential- and path-safe). */
+export interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+  version?: string;
+  categories: string[];
+  builtin: boolean;
+  source: string;
+  status: "active" | "inactive" | "failed" | "restart-required";
+  enabled: boolean;
+  /** Whether the web may toggle it (else `diagnostic` says why). */
+  manageable: boolean;
+  diagnostic?: string;
+  /** Tools it contributes, without the namespacing prefix. */
+  tools: string[];
+  /** Slash commands it contributes. */
+  commands: string[];
+  /** Prefix of its namespaced tool names (`p_<hash>`), to label tool calls. */
+  toolPrefix: string;
+}
+/** `GET /api/skills`: one discovered skill (no file paths). */
+export interface SkillInfo {
+  id: string;
+  name: string;
+  displayId: string;
+  description: string;
+  scope: "project" | "config" | "user" | "plugin";
+  source: string;
+  owner?: { id: string; name: string };
+  manageable: boolean;
+  locked: boolean;
+  enabled: boolean;
+  effective: boolean;
+  shadowedBy?: string;
+  approximateTokens: number;
+}
+/** One MCP server of a workspace; commands, arguments and URLs are never sent. */
+export interface McpServerWire {
+  name: string;
+  displayName: string;
+  /** Configuration layer that defines it (`global`, `project`, …). */
+  source: string;
+  status: string;
+  enabled: boolean;
+  transport: "stdio" | "http";
+  capabilities: string[];
+  counts: { tools: number; resources: number; prompts: number };
+  diagnostic?: string;
+}
+/** `GET /api/mcp`: the workspace's MCP runtime permission and servers. */
+export interface McpOverview {
+  permission: "granted" | "not-granted" | "read-only";
+  /** Global consent (`mcp.allow`) is persisted for this user. */
+  persisted: boolean;
+  servers: McpServerWire[];
+}
+/** `GET /api/agents`: a selectable main-session agent. */
+export interface AgentInfo {
+  id: string;
+  name: string;
+  description: string;
+  instructions?: string;
+  model?: string;
+  readOnly?: boolean;
+  source: "builtin" | "user" | "plugin";
+  /** The workspace default (`agents.active`) used by sessions without their own agent. */
+  default: boolean;
+}
+/** One user-facing setting (`SettableSettingKey`) and its effective value. */
+export interface SettingInfo {
+  key: string;
+  kind: "boolean" | "number" | "string" | "enum";
+  options?: string[];
+  value?: string | number | boolean;
+}
+/** `GET /api/settings`: effective settings and where configuration lives. */
+export interface SettingsOverview {
+  /** Highest-priority configuration file of the workspace (it may not exist yet). */
+  configPath: string;
+  /** Global file that setting changes are written to. */
+  settingsPath: string;
+  /** Provider profiles (`providers.json`); credentials live apart, never shown. */
+  providersPath: string;
+  trusted: boolean;
+  readOnly: boolean;
+  settings: SettingInfo[];
+}
+/** A credential as the web sees it: never the value, at most a short masked tail. */
+export interface CredentialStatus {
+  configured: boolean;
+  source?: "file" | "env";
+  /** Last characters behind an ellipsis (`…71B`), only for long stored secrets. */
+  tail?: string;
+}
+/** One stored provider profile (non-secret values only). */
+export interface ProviderProfileInfo {
+  name: string;
+  provider: string;
+  model: string;
+  values: Record<string, ProviderConfigurationValue>;
+  /** The globally active profile (`providers.json`). */
+  active: boolean;
+  credentials: Record<string, CredentialStatus>;
+}
+/** A provider type a profile can use, with its configuration fields. */
+export interface ProviderTypeInfo {
+  id: string;
+  name: string;
+  description?: string;
+  fields: ProviderConfigurationField[];
+}
+/** `GET /api/providers`. */
+export interface ProvidersOverview {
+  active?: string;
+  profiles: ProviderProfileInfo[];
+  /** Provider types of the requested workspace (empty without `?workspace=`). */
+  types: ProviderTypeInfo[];
+  /** What the requested workspace's application currently runs. */
+  current?: { provider: string; model: string; profile?: string };
+}
+/** `GET /api/models`: models of every configured profile (credential-free). */
+export interface ProviderModelsInfo {
+  profile: string;
+  provider: string;
+  title: string;
+  configuredModel: string;
+  models: ModelInfo[];
+  unavailable: boolean;
+}
 /** Body of every non-2xx web API response. */
 export interface ApiError {
   error: { code: ApiErrorCode; message: string; details?: unknown };

@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { BlobStore, SQLiteStore, stateHome } from "@alisio/core";
+import type { ServerFrame } from "@alisio/sdk";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
@@ -23,6 +24,7 @@ import { registerCommandRoutes } from "./routes/commands.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerFileRoutes } from "./routes/files.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
+import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
@@ -139,11 +141,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   let shutdown: Promise<void> | undefined;
   let sessions: SessionService | undefined;
   const inflight = new InflightTracker();
+  let recycler: WorkspaceRecycler | undefined;
   const scheduler = new RunScheduler({
     ...(options.maxConcurrentRuns ? { maxConcurrent: options.maxConcurrentRuns } : {}),
     onChange: (job, status) => {
-      if (status === "finished") inflight.clear(job.sessionId, job.runId);
-      else inflight.mark(job.sessionId, job.runId, status);
+      if (status === "finished") {
+        inflight.clear(job.sessionId, job.runId);
+        // A deferred plugin change applies once the workspace has no runs left.
+        setImmediate(() => recycler?.idle(job.workspaceId));
+      } else inflight.mark(job.sessionId, job.runId, status);
       sessions?.notify(job.sessionId);
     },
   });
@@ -257,6 +263,14 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerPromptRoutes(router, { sessions, scheduler });
   registerCommandRoutes(router, { sessions, scheduler, workspaces });
   registerApprovalRoutes(router, { approvals, interactions });
+  const management = {
+    workspaces,
+    scheduler,
+    base,
+    broadcast: (frame: ServerFrame) => hub.broadcast(frame),
+  };
+  recycler = new WorkspaceRecycler(management);
+  registerManagementRoutes(router, management, recycler);
   registerEventRoutes(router, {
     hub,
     sessions,

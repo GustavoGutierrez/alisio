@@ -64,6 +64,10 @@ export const composerInsert = signal<{ text: string; n: number } | undefined>(un
 export const runEnded = signal(0);
 /** Bumped when durable events of the open session arrive (stats and trajectory catch up). */
 export const eventsTick = signal(0);
+/** Bumped per `catalog_changed` scope (settings pages reload what changed). */
+export const catalogTick = signal<Record<string, number>>({});
+/** Plugin display names by their tool prefix (`p_<hash>`), to label plugin tool calls. */
+export const pluginNames = signal<Record<string, string>>({});
 /** The session view tab (RF-10). */
 export const sessionTab = signal<"conversation" | "trajectory">("conversation");
 
@@ -154,6 +158,18 @@ async function refreshCommands(): Promise<void> {
   }
 }
 
+/** Loads plugin names for the open session's workspace (labels of plugin tool calls). */
+async function refreshPluginNames(): Promise<void> {
+  const wid = detail.value?.workspaceId;
+  if (!wid) return;
+  try {
+    const list = await api.plugins(wid);
+    pluginNames.value = Object.fromEntries(list.map((p) => [p.toolPrefix, p.name]));
+  } catch {
+    /* labels fall back to "plugin" */
+  }
+}
+
 async function refreshDetail(): Promise<void> {
   const id = currentId.value;
   if (!id) return;
@@ -173,6 +189,7 @@ function onFrames(frames: ServerFrame[]): void {
   let rewritten = false;
   let catalog = false;
   let durable = false;
+  const scopes = new Set<string>();
   batch(() => {
     transcript.value = applyFrames(transcript.value, frames);
     let nextPending = pending.value;
@@ -182,7 +199,10 @@ function onFrames(frames: ServerFrame[]): void {
       if (frame.t === "session_status") nextSidebar = applySessionStatus(nextSidebar, frame);
       if (frame.t === "approval" && frame.approval.rootSessionId === currentId.value)
         announceAssertive.value = frame.approval.name ?? frame.approval.approvalId;
-      if (frame.t === "catalog_changed" && frame.scope === "commands") catalog = true;
+      if (frame.t === "catalog_changed") {
+        scopes.add(frame.scope);
+        if (frame.scope === "commands") catalog = true;
+      }
       if (frame.t === "event" && frame.sessionId === currentId.value) {
         durable = true;
         const type = frame.event.type;
@@ -203,6 +223,13 @@ function onFrames(frames: ServerFrame[]): void {
     void refreshContext();
   }
   if (catalog) void refreshCommands();
+  if (scopes.size) {
+    const next = { ...catalogTick.value };
+    for (const scope of scopes) next[scope] = (next[scope] ?? 0) + 1;
+    catalogTick.value = next;
+    if (scopes.has("models")) void refreshModels();
+    if (scopes.has("plugins")) void refreshPluginNames();
+  }
   // A compaction replaced older messages: take a fresh snapshot of the history.
   if (rewritten) {
     stream?.refresh();
@@ -239,6 +266,7 @@ export async function openSession(id: string | undefined): Promise<void> {
   }
   void refreshModels();
   void refreshContext();
+  void refreshPluginNames();
 }
 
 function history_replace(hash: string): void {

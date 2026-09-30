@@ -4,6 +4,7 @@ import {
   prettyArgs,
   toolLabel,
   toolPath,
+  toolPlugin,
   toolSummary,
 } from "../packages/web/src/util/tools.ts";
 
@@ -12,6 +13,14 @@ describe("tool rows", () => {
     expect(toolLabel("read_file")).toBe("Read");
     expect(toolLabel("run_process")).toBe("Shell");
     expect(toolLabel("wayfinder:explore_repo")).toBe("Wayfinder explore repo");
+  });
+
+  it("drops the namespacing prefix of plugin tools and names their plugin when known", () => {
+    expect(toolLabel("p_d0e045341e_test_report")).toBe("Test report");
+    expect(toolPlugin("p_d0e045341e_test_report", { p_d0e045341e: "Tests" })).toBe("Tests");
+    expect(toolPlugin("p_d0e045341e_test_report", {})).toBe("plugin");
+    expect(toolPlugin("read_file", { p_d0e045341e: "Tests" })).toBeUndefined();
+    expect(toolLabel("p_short_name")).toBe("P short name");
   });
 
   it("summarizes calls from their most telling argument, on one bounded line", () => {

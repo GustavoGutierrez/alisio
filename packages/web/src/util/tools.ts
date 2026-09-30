@@ -34,9 +34,18 @@ const SUMMARY_KEYS = [
   "name",
 ];
 
+/** Plugin tools are namespaced `p_<10 hex>_<tool>` by the plugin host. */
+const PLUGIN_TOOL = /^(p_[0-9a-f]{10})_(.+)$/;
+
+/** The plugin that contributed a namespaced tool (`plugin` when its name is unknown). */
+export function toolPlugin(name: string, names: Record<string, string>): string | undefined {
+  const prefix = PLUGIN_TOOL.exec(name)?.[1];
+  return prefix ? (names[prefix] ?? "plugin") : undefined;
+}
+
 export const toolLabel = (name: string): string =>
   NAMES[name] ??
-  name
+  (PLUGIN_TOOL.exec(name)?.[2] ?? name)
     .split(/[_:]/)
     .filter(Boolean)
     .map((part, i) => (i === 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part))

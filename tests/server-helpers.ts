@@ -37,6 +37,11 @@ export function raw(port: number, path: string, init: RequestInit = {}): Promise
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(init.headers ?? {}))
     if (value !== undefined) headers[key] = value;
+  if (
+    payload !== undefined &&
+    !Object.keys(headers).some((k) => k.toLowerCase() === "content-length")
+  )
+    headers["Content-Length"] = String(Buffer.byteLength(payload));
   return new Promise((resolve, reject) => {
     const req = httpRequest(
       {
@@ -96,6 +101,9 @@ export function client(port: number, cookie: string) {
       call("POST", path, body, headers),
     patch: (path: string, body: unknown = {}, headers?: Record<string, string>) =>
       call("PATCH", path, body, headers),
+    put: (path: string, body: unknown = {}, headers?: Record<string, string>) =>
+      call("PUT", path, body, headers),
+    delete: (path: string, headers?: Record<string, string>) => call("DELETE", path, {}, headers),
   };
 }
 

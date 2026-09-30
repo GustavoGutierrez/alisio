@@ -892,11 +892,17 @@ export async function createApplication(options: AppOptions = {}) {
       mcpStartupFailures() {
         return [...mcpStartupFailures];
       },
-      /** Host-owned interactive consent boundary. Headless callers remain blocked unless flagged. */
-      grantMcpRuntimePermission(request: { source: "interactive-tui"; confirmed: boolean }) {
+      /**
+       * Host-owned interactive consent boundary: the TUI and the web UI (`alisio serve`, after an
+       * explicit confirmation dialog) may grant. Headless callers remain blocked unless flagged.
+       */
+      grantMcpRuntimePermission(request: {
+        source: "interactive-tui" | "interactive-web";
+        confirmed: boolean;
+      }) {
         if (!request.confirmed) return mcpRuntimePermission;
-        if (request.source !== "interactive-tui")
-          throw new Error("MCP runtime permission may only be granted by the interactive TUI");
+        if (request.source !== "interactive-tui" && request.source !== "interactive-web")
+          throw new Error("MCP runtime permission may only be granted by an interactive UI");
         if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
         if (mcpRuntimePermission === "granted") return mcpRuntimePermission;
         mcp.grantRuntimePermission();
@@ -905,11 +911,13 @@ export async function createApplication(options: AppOptions = {}) {
         return mcpRuntimePermission;
       },
       /** Persist global consent atomically, then grant runtime permission for this process. */
-      async rememberGlobalMcpConsent(): Promise<void> {
+      async rememberGlobalMcpConsent(
+        source: "interactive-tui" | "interactive-web" = "interactive-tui",
+      ): Promise<void> {
         if (options.readOnly) throw new Error("MCP is unavailable under --read-only");
         await setGlobalMcpAllow({ allow: true });
         persistedMcpAllow = true;
-        this.grantMcpRuntimePermission({ source: "interactive-tui", confirmed: true });
+        this.grantMcpRuntimePermission({ source, confirmed: true });
       },
       /**
        * Clear the persisted global consent atomically and drop the runtime permission (disconnecting

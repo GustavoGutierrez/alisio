@@ -40,6 +40,12 @@ export class Router {
   patch(path: string, handler: RouteHandler): this {
     return this.add("PATCH", path, handler);
   }
+  put(path: string, handler: RouteHandler): this {
+    return this.add("PUT", path, handler);
+  }
+  delete(path: string, handler: RouteHandler): this {
+    return this.add("DELETE", path, handler);
+  }
 
   /**
    * The handler and params for a request, `"method"` when the path exists with another method,
