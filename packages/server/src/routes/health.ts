@@ -29,8 +29,7 @@ export function registerHealthRoutes(
         sse: true,
         websocket: false,
         multiWorkspace: true,
-        // Uploads (`POST /api/blobs`) arrive in phase 4.
-        attachments: false,
+        attachments: true,
         uiBlocks: [...UI_BLOCK_KINDS],
         mcpApps: false,
         automation: false,

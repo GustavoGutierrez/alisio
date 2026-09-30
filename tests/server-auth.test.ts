@@ -108,6 +108,7 @@ describe("server auth (T-07)", () => {
     expect(health).toMatchObject({ name: "alisio", version: "9.9.9", protocolVersion: 1 });
     expect(health.capabilities.sse).toBe(true);
     expect(health.capabilities.websocket).toBe(false);
+    expect(health.capabilities.attachments).toBe(true);
     expect(health.capabilities.uiBlocks).toContain("diff");
   });
 
