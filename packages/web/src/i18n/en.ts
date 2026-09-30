@@ -33,6 +33,12 @@ export const en = {
   "sidebar.untrustedHint":
     "Project resources are not loaded. Trust this folder by running alisio in it from the terminal.",
   "sidebar.newIn": "New session in {name}",
+  "sidebar.missing": "folder not found",
+  "sidebar.missingHint":
+    "This folder was deleted or moved. Its sessions stay readable; new sessions are disabled.",
+  "sidebar.openWorkspaceFirst": "Open a workspace folder to start a session.",
+  "error.workspaceMissing":
+    "The folder {path} no longer exists. Its sessions stay readable, but new sessions need an existing folder.",
   "sidebar.toggleFolder": "Show or hide sessions of {name}",
   "session.untitled": "Untitled session",
   "session.actions": "Actions for {title}",

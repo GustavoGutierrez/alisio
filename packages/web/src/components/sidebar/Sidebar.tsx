@@ -9,6 +9,7 @@ import {
   newSession,
   now,
   openSession,
+  openWorkspaceRequest,
   patchCurrent,
   settingsOpen,
   sidebar,
@@ -86,6 +87,14 @@ export function Sidebar() {
   const search = useRef<HTMLInputElement>(null);
   const groups = useComputed(() => groupSessions(sidebar.value, query, archived));
   const collapsed = sidebarCollapsed.value && !mobileSidebar.value;
+  const workspaceRequest = openWorkspaceRequest.value;
+
+  // "New session" found no existing workspace: show the open-a-workspace form.
+  useEffect(() => {
+    if (!workspaceRequest) return;
+    if (sidebarCollapsed.value) setSidebarCollapsed(false);
+    setAdding(true);
+  }, [workspaceRequest]);
 
   useEffect(() => {
     searchRequest.focus = () => {
@@ -239,8 +248,14 @@ export function Sidebar() {
         {groups.value.map((group) => {
           const open = !closed[group.workspace.id] || !!query;
           const listId = `ws-${group.workspace.id}`;
+          const missing = group.workspace.exists === false;
+          const label = group.hint ? `${group.name} · ${group.hint}` : group.name;
           return (
-            <section key={group.workspace.id} class={styles.folder}>
+            <section
+              key={group.workspace.id}
+              class={styles.folder}
+              data-missing={missing ? "true" : undefined}
+            >
               <div class={styles.folderHead}>
                 <button
                   type="button"
@@ -251,10 +266,22 @@ export function Sidebar() {
                   onClick={() => setClosed({ ...closed, [group.workspace.id]: open })}
                 >
                   <Icon name="folder" size={16} class={open ? styles.folderOpen : undefined} />
-                  <span class={styles.folderName}>{group.name}</span>
-                  <span class="sr-only">{t("sidebar.toggleFolder", { name: group.name })}</span>
+                  <span class={styles.folderLabel}>
+                    <span class={styles.folderName}>{group.name}</span>
+                    {group.hint || missing ? (
+                      <span class={styles.folderMeta}>
+                        {group.hint ? <span class={styles.folderHint}>{group.hint}</span> : null}
+                        {missing ? (
+                          <span class={styles.missing} title={t("sidebar.missingHint")}>
+                            {t("sidebar.missing")}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span class="sr-only">{t("sidebar.toggleFolder", { name: label })}</span>
                 </button>
-                {group.workspace.untrustedResources ? (
+                {!missing && group.workspace.untrustedResources ? (
                   <span class={styles.untrusted} title={t("sidebar.untrustedHint")}>
                     {t("sidebar.untrusted")}
                   </span>
@@ -262,8 +289,9 @@ export function Sidebar() {
                 <button
                   type="button"
                   class={`icon-btn ${styles.folderAdd}`}
-                  aria-label={t("sidebar.newIn", { name: group.name })}
-                  title={t("sidebar.newIn", { name: group.name })}
+                  aria-label={t("sidebar.newIn", { name: label })}
+                  title={missing ? t("sidebar.missingHint") : t("sidebar.newIn", { name: label })}
+                  disabled={missing}
                   onClick={() => void newSession(group.workspace.id)}
                 >
                   <Icon name="plus" size={15} />

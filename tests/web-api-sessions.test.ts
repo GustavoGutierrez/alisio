@@ -1,12 +1,16 @@
 import type { SessionSummary, WorkspaceInfo } from "@alisio/sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { setLocale } from "../packages/web/src/i18n/index.ts";
 import { ApiClient, ApiRequestError } from "../packages/web/src/net/api.ts";
+import { errorText } from "../packages/web/src/store/errors.ts";
 import {
   applySessionStatus,
   emptySidebar,
   groupSessions,
   loadSidebar,
+  newSessionTarget,
   upsertSession,
+  workspaceHints,
 } from "../packages/web/src/store/sessions.ts";
 import { relativeTime } from "../packages/web/src/util/time.ts";
 
@@ -30,6 +34,7 @@ const workspace = (
   path,
   pinned: false,
   open: false,
+  exists: true,
   trusted: true,
   untrustedResources: false,
   ...extra,
@@ -66,6 +71,38 @@ describe("api client", () => {
     expect(error).toMatchObject({ status: 409, code: "session_busy", message: "Busy" });
     await api.workspaces().catch(() => {});
     expect(unauthorized).toBe(1);
+  });
+
+  it("explains a deleted workspace folder with its path instead of a raw error", async () => {
+    const api = new ApiClient({
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "workspace_missing",
+              message: "Workspace folder not found: /gone/app",
+              details: { path: "/gone/app" },
+            },
+            correlationId: "x",
+          }),
+          { status: 404 },
+        ),
+    });
+    const error = await api.createSession({ workspace: "w1" }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "workspace_missing", details: { path: "/gone/app" } });
+    vi.stubGlobal("document", { documentElement: {} });
+    try {
+      setLocale("en");
+      expect(errorText(error)).toBe(
+        "The folder /gone/app no longer exists. Its sessions stay readable, but new sessions need an existing folder.",
+      );
+      setLocale("es");
+      expect(errorText(error)).toContain("/gone/app");
+      expect(errorText(new Error("boom"))).toBe("boom");
+    } finally {
+      setLocale("en");
+      vi.unstubAllGlobals();
+    }
   });
 
   it("reports network failures with the network code", async () => {
@@ -137,6 +174,73 @@ describe("sidebar store", () => {
     state = upsertSession(state, summary("a", { archived: true }));
     expect(groupSessions(state, "")[0]?.sessions).toEqual([]);
     expect(groupSessions(state, "", true)[0]?.sessions.map((s) => s.id)).toEqual(["a"]);
+  });
+
+  it("tells apart workspaces that share a folder name with a short parent-path hint", () => {
+    const gone = workspace("w1", "/home/me/Descargas/alisio-0.1.0-alpha.1/alisio");
+    const here = workspace("w2", "/home/me/Documentos/Proyectos/Personal/alisio");
+    const other = workspace("w3", "/home/me/other");
+    const hints = workspaceHints([gone, here, other]);
+    expect(hints.get("w1")).toBe("Descargas/alisio-0.1.0-alpha.1");
+    expect(hints.get("w2")).toBe("Proyectos/Personal");
+    expect(hints.has("w3")).toBe(false);
+    const state = loadSidebar(emptySidebar(), [gone, here, other], []);
+    expect(groupSessions(state, "").map((g) => [g.name, g.hint])).toEqual([
+      ["alisio", "Descargas/alisio-0.1.0-alpha.1"],
+      ["alisio", "Proyectos/Personal"],
+      ["other", undefined],
+    ]);
+  });
+
+  it("grows the hint until same-named folders with a common parent differ", () => {
+    const hints = workspaceHints([
+      workspace("a", "/x/one/common/deep/app"),
+      workspace("b", "/y/one/common/deep/app"),
+      workspace("c", "/app"),
+    ]);
+    expect([hints.get("a"), hints.get("b"), hints.get("c")]).toEqual([
+      "x/one/common/deep",
+      "y/one/common/deep",
+      "/",
+    ]);
+  });
+
+  it("does not hint labelled workspaces, whose names are already chosen", () => {
+    const hints = workspaceHints([
+      workspace("a", "/x/app", { label: "Main" }),
+      workspace("b", "/y/app"),
+    ]);
+    expect(hints.size).toBe(0);
+  });
+
+  it("starts new sessions in an existing workspace, never a missing one", () => {
+    const state = loadSidebar(
+      emptySidebar(),
+      [
+        workspace("gone", "/a/gone", { exists: false, lastOpenedAt: 900 }),
+        workspace("old", "/b/old", { lastOpenedAt: 100 }),
+        workspace("recent", "/c/recent", { lastOpenedAt: 500 }),
+      ],
+      [],
+    );
+    expect(newSessionTarget(state, "old")).toBe("old");
+    expect(newSessionTarget(state, "gone")).toBe("recent");
+    expect(newSessionTarget(state)).toBe("recent");
+    const onlyMissing = loadSidebar(
+      emptySidebar(),
+      [workspace("gone", "/a/gone", { exists: false })],
+      [],
+    );
+    expect(newSessionTarget(onlyMissing)).toBeUndefined();
+  });
+
+  it("falls back to the workspace with the latest session when none was opened yet", () => {
+    const state = loadSidebar(
+      emptySidebar(),
+      [workspace("w1", "/ws/one"), workspace("w2", "/ws/two")],
+      [summary("a", { updatedAt: 10 }), summary("b", { workspaceId: "w2", updatedAt: 20 })],
+    );
+    expect(newSessionTarget(state)).toBe("w2");
   });
 });
 

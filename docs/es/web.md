@@ -199,6 +199,13 @@ aplicación para un workspace solo cuando se usa. Como mucho hay `--max-workspac
 vez: el inactivo usado hace más tiempo se cierra para dejar sitio y, cuando todos están ocupados, la
 petición falla con `workspace_limit`. Los workspaces inactivos se cierran tras 10 minutos.
 
+Un workspace cuya carpeta se eliminó o se movió sigue en la barra lateral, atenuado y marcado como
+"carpeta no encontrada": sus sesiones siguen visibles, pero no se pueden crear sesiones ni enviar
+prompts en él (el servidor responde `404 workspace_missing`). **Nueva sesión** usa el workspace de
+la sesión actual o el usado más recientemente que todavía exista; si no hay ninguno, pide abrir un
+workspace. Las carpetas con el mismo nombre muestran junto a él una ruta padre corta, y la ruta
+completa al pasar el ratón.
+
 La web nunca concede confianza de proyecto. Un directorio cuya configuración `.alisio` no haya
 aceptado desde la terminal se abre sin sus recursos de proyecto (plugins, skills, prompts,
 configuración) y se marca como no confiable. Ejecute `alisio` en ese directorio para responder a la

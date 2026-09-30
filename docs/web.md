@@ -185,6 +185,12 @@ application for a workspace only when it is used. At most `--max-workspaces` are
 least recently used idle one is closed to make room, and when all of them are busy the request
 fails with `workspace_limit`. Idle workspaces close after 10 minutes.
 
+A workspace whose folder was deleted or moved stays in the sidebar, dimmed and marked "folder not
+found": its sessions remain readable, but you cannot start new sessions or send prompts there (the
+server answers `404 workspace_missing`). **New session** uses the current session's workspace, or
+the most recently used one that still exists; with none, it asks you to open a workspace. Folders
+with the same name show a short parent path next to it, and the full path on hover.
+
 The web never grants project trust. A directory whose `.alisio` configuration you have not trusted
 from the terminal opens without its project resources (plugins, skills, prompts, configuration) and
 is marked untrusted. Run `alisio` in that directory to answer the trust prompt.

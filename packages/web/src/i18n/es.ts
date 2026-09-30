@@ -36,6 +36,12 @@ export const es: Record<MessageKey, string> = {
   "sidebar.untrustedHint":
     "Los recursos del proyecto no se cargan. Confía en esta carpeta ejecutando alisio en ella desde la terminal.",
   "sidebar.newIn": "Nueva sesión en {name}",
+  "sidebar.missing": "carpeta no encontrada",
+  "sidebar.missingHint":
+    "Esta carpeta se eliminó o se movió. Sus sesiones siguen visibles; no se pueden crear sesiones nuevas.",
+  "sidebar.openWorkspaceFirst": "Abre una carpeta de workspace para empezar una sesión.",
+  "error.workspaceMissing":
+    "La carpeta {path} ya no existe. Sus sesiones siguen visibles, pero las sesiones nuevas necesitan una carpeta existente.",
   "sidebar.toggleFolder": "Mostrar u ocultar las sesiones de {name}",
   "session.untitled": "Sesión sin título",
   "session.actions": "Acciones de {title}",

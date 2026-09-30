@@ -14,14 +14,17 @@ import type {
   SessionModels,
 } from "@alisio/sdk";
 import { batch, computed, signal } from "@preact/signals";
+import { t } from "../i18n/index.ts";
 import { ApiClient, ApiRequestError, newId } from "../net/api.ts";
 import { type EventSourceLike, EventStream, type StreamStatus } from "../net/events.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
+import { errorText } from "./errors.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
 import {
   applySessionStatus,
   emptySidebar,
   loadSidebar,
+  newSessionTarget,
   upsertSession,
   upsertWorkspace,
 } from "./sessions.ts";
@@ -94,8 +97,8 @@ export const api = new ApiClient({
 let stream: EventStream | undefined;
 let reloadingSidebar: Promise<void> | undefined;
 
-const errorText = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+/** Asks the sidebar to show its "open a workspace" form (no existing workspace to use). */
+export const openWorkspaceRequest = signal(0);
 
 export function insertIntoComposer(text: string): void {
   composerInsert.value = { text, n: (composerInsert.value?.n ?? 0) + 1 };
@@ -328,11 +331,17 @@ export async function init(): Promise<void> {
   }
 }
 
-/** Creates a session in a workspace (the open session's, else the first known one). */
+/**
+ * Creates a session in a workspace: the given one, else the open session's if its folder exists,
+ * else the most recently used existing one; with none, asks the user to open a workspace.
+ */
 export async function newSession(workspaceId?: string): Promise<void> {
-  const workspace =
-    workspaceId ?? detail.value?.workspaceId ?? sidebar.value.workspaces[0]?.id ?? undefined;
-  if (!workspace) return;
+  const workspace = workspaceId ?? newSessionTarget(sidebar.value, detail.value?.workspaceId);
+  if (!workspace) {
+    showToast(t("sidebar.openWorkspaceFirst"));
+    openWorkspaceRequest.value++;
+    return;
+  }
   try {
     const created = await api.createSession({ workspace });
     sidebar.value = upsertSession(sidebar.value, created);
@@ -340,6 +349,9 @@ export async function newSession(workspaceId?: string): Promise<void> {
     focusComposer.value++;
   } catch (error) {
     showToast(errorText(error));
+    // The folder was deleted since the list loaded: refresh so the sidebar marks it missing.
+    if (error instanceof ApiRequestError && error.code === "workspace_missing")
+      void reloadSidebar();
   }
 }
 

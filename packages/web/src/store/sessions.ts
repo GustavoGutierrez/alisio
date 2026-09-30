@@ -16,6 +16,8 @@ export interface SidebarState {
 export interface WorkspaceGroup {
   workspace: WorkspaceInfo;
   name: string;
+  /** Short parent path that tells apart workspaces sharing `name` (e.g. two `alisio` clones). */
+  hint?: string;
   sessions: SessionSummary[];
 }
 
@@ -68,6 +70,56 @@ export function applySessionStatus(
 export const workspaceName = (workspace: WorkspaceInfo): string =>
   workspace.label ?? workspace.path.split(/[\\/]/).filter(Boolean).at(-1) ?? workspace.path;
 
+const parentSegments = (path: string): string[] => path.split(/[\\/]/).filter(Boolean).slice(0, -1);
+
+/**
+ * Hints for workspaces whose display names collide: the shortest parent-path suffix (at least two
+ * folders when available) that is unique among the same-named ones. Labelled workspaces are named
+ * by their user and get no hint.
+ */
+export function workspaceHints(workspaces: WorkspaceInfo[]): Map<string, string> {
+  const byName = new Map<string, WorkspaceInfo[]>();
+  for (const workspace of workspaces) {
+    if (workspace.label) continue;
+    const key = workspaceName(workspace).toLowerCase();
+    byName.set(key, [...(byName.get(key) ?? []), workspace]);
+  }
+  const hints = new Map<string, string>();
+  for (const group of byName.values()) {
+    if (group.length < 2) continue;
+    const parents = group.map((w) => parentSegments(w.path));
+    const longest = Math.max(...parents.map((p) => p.length));
+    const suffixes = (k: number) => parents.map((p) => (p.length ? p.slice(-k).join("/") : "/"));
+    let k = Math.min(2, Math.max(1, longest));
+    while (k < longest && new Set(suffixes(k)).size < group.length) k++;
+    suffixes(k).forEach((suffix, i) => {
+      const id = group[i]?.id;
+      if (id) hints.set(id, suffix);
+    });
+  }
+  return hints;
+}
+
+/**
+ * Where a "New session" without an explicit workspace goes: the current session's workspace if its
+ * folder still exists, else the most recently used existing one (opened or with the latest
+ * session). `undefined` when no existing workspace is known (the user must open one).
+ */
+export function newSessionTarget(
+  state: SidebarState,
+  currentWorkspaceId?: string,
+): string | undefined {
+  const exists = (id: string) => state.workspaces.find((w) => w.id === id)?.exists !== false;
+  if (currentWorkspaceId && exists(currentWorkspaceId)) return currentWorkspaceId;
+  const latest = new Map<string, number>();
+  for (const s of Object.values(state.sessions))
+    latest.set(s.workspaceId, Math.max(latest.get(s.workspaceId) ?? 0, s.updatedAt ?? 0));
+  const recency = (w: WorkspaceInfo) => Math.max(w.lastOpenedAt ?? 0, latest.get(w.id) ?? 0);
+  return state.workspaces
+    .filter((w) => w.exists !== false)
+    .sort((a, b) => recency(b) - recency(a))[0]?.id;
+}
+
 /** Pinned first, then most recently updated; sessions without `updatedAt` last. */
 const bySidebarOrder = (a: SessionSummary, b: SessionSummary): number =>
   a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : (b.updatedAt ?? -1) - (a.updatedAt ?? -1);
@@ -88,12 +140,16 @@ export function groupSessions(
         path: s.workspace,
         pinned: false,
         open: false,
+        // Unknown to the server list: assume present; opening it reports `workspace_missing`.
+        exists: true,
         trusted: false,
         untrustedResources: false,
       });
   const groups: WorkspaceGroup[] = [];
+  const hints = workspaceHints([...known.values()]);
   for (const workspace of known.values()) {
     const name = workspaceName(workspace);
+    const hint = hints.get(workspace.id);
     const sessions = all
       .filter((s) => s.workspaceId === workspace.id)
       .filter(
@@ -105,7 +161,7 @@ export function groupSessions(
       )
       .sort(bySidebarOrder);
     if (q && !sessions.length && !name.toLowerCase().includes(q)) continue;
-    groups.push({ workspace, name, sessions });
+    groups.push({ workspace, name, ...(hint ? { hint } : {}), sessions });
   }
   return groups.sort(
     (a, b) =>

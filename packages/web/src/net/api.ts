@@ -41,6 +41,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: ApiErrorCode | "network",
     message: string,
+    /** The server's `error.details` (e.g. `{path}` of `workspace_missing`). */
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -105,6 +107,7 @@ export class ApiClient {
         res.status,
         parsed?.error?.code ?? "internal",
         parsed?.error?.message ?? `HTTP ${res.status}`,
+        parsed?.error?.details,
       );
     }
     return (text ? JSON.parse(text) : undefined) as T;
@@ -286,6 +289,7 @@ export class ApiClient {
         res.status,
         parsed?.error?.code ?? "internal",
         parsed?.error?.message ?? `HTTP ${res.status}`,
+        parsed?.error?.details,
       );
     }
     return res;
