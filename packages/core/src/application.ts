@@ -41,6 +41,7 @@ import { ProjectContext } from "./resources/context.ts";
 import { expandSlashPrompt, loadPromptTemplates, promptSources } from "./resources/prompts.ts";
 import { Skills, skillRoots } from "./resources/skills.ts";
 import { type ExternalDirectoryHandler, PathAccess } from "./runtime/access.ts";
+import { BlobStore } from "./runtime/blobs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
@@ -194,6 +195,14 @@ export async function createApplication(options: AppOptions = {}) {
     readOnly: !!options.readOnly,
   });
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
+  // Content-addressed attachment bytes next to the session database (no I/O until `put`).
+  const blobs = new BlobStore({
+    root:
+      options.db && options.db !== ":memory:"
+        ? join(dirname(options.db), "blobs")
+        : join(stateHome(), "blobs"),
+    db: store.db,
+  });
   const registry = new ToolRegistry(),
     skills = new Skills({ overrides: config.skillOverrides }),
     context = new ProjectContext(workspace, {
@@ -776,6 +785,8 @@ export async function createApplication(options: AppOptions = {}) {
       prompts,
       expandPrompt,
       store,
+      /** Uploaded attachment bytes; resolve a `BlobRef` with `blobs.attachment(ref)` before a run. */
+      blobs,
       registry,
       context,
       skills,

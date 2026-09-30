@@ -151,6 +151,7 @@ export {
   type PathAccessOptions,
   type ResolvePathOptions,
 } from "./runtime/access.ts";
+export { BlobStore, type BlobStoreOptions } from "./runtime/blobs.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
 export {
   defaultGlobalRoots,
