@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { AppOptions } from "@alisio/core";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
@@ -32,7 +33,24 @@ export interface ServerOptions {
   /** Directory with the web UI build (default: `dist/web` next to the server). */
   webRoot?: string;
   logger?: Logger;
+  /**
+   * Base options for every workspace `Application` (launch flags, builtins, prompts, db). The
+   * policy flags are the capability ceiling of every web session.
+   */
+  app?: ServerAppOptions;
+  /** Listed as a workspace even before it has sessions (the CLI passes its cwd). */
+  defaultWorkspace?: string;
+  /** Maximum workspace applications open at once (default 4). */
+  maxOpenWorkspaces?: number;
+  /** Maximum runs executing at once across all sessions (default 4). */
+  maxConcurrentRuns?: number;
 }
+
+/** `AppOptions` minus what the server owns per workspace (cwd, events, approvals). */
+export type ServerAppOptions = Omit<
+  AppOptions,
+  "cwd" | "onEvent" | "approve" | "approveExternalDirectory"
+>;
 
 export interface RunningServer {
   host: string;

@@ -54,6 +54,7 @@
     "@alisio/plugin-openai-compatible": "workspace:*",
     "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
+    "@alisio/server": "workspace:*",
     "@earendil-works/pi-tui": "0.87.1",
     "commander": "15.0.0"
   },

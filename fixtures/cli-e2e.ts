@@ -99,6 +99,52 @@ const executeWithStderr = async (args: string[]) => {
   assert.equal(code, 0, stderr);
   return { stdout, stderr };
 };
+/**
+ * `alisio serve --no-open --port 0`: the launch URL is printed, /api/health answers without a
+ * cookie, /api/metrics needs the cookie obtained from the token, and SIGTERM stops it cleanly.
+ */
+const serveSmoke = async () => {
+  const [program = "", ...prefix] = command;
+  const child = spawn(program, [...prefix, "serve", "--no-open", "--port", "0"], {
+    cwd: directory,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ALISIO_CONFIG_HOME: join(directory, "global"),
+      ALISIO_STATE_HOME: join(directory, "state"),
+      HERDR_ENV: "0",
+    },
+  });
+  let stdout = "",
+    stderr = "";
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  const exited = new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+  try {
+    const launch = await new Promise<string>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error(`serve did not start: ${stderr}`)), 15_000);
+      child.stdout.on("data", (d: Buffer) => {
+        stdout += d.toString();
+        const match = /(http:\/\/127\.0\.0\.1:\d+)\/\?token=([\w-]+)/.exec(stdout);
+        if (match) {
+          clearTimeout(timer);
+          done(match[0]);
+        }
+      });
+    });
+    const base = new URL(launch).origin;
+    const health = await fetch(`${base}/api/health`);
+    assert.equal(health.status, 200);
+    assert.equal(((await health.json()) as { protocolVersion: number }).protocolVersion, 1);
+    assert.equal((await fetch(`${base}/api/metrics`)).status, 401);
+    const exchange = await fetch(launch, { redirect: "manual" });
+    assert.equal(exchange.status, 303);
+    const cookie = String(exchange.headers.get("set-cookie")).split(";")[0] ?? "";
+    assert.equal((await fetch(`${base}/api/metrics`, { headers: { Cookie: cookie } })).status, 200);
+  } finally {
+    child.kill("SIGTERM");
+  }
+  assert.equal(await exited, 0, stderr);
+};
 const rgAvailable = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 try {
   await writeFile(join(directory, "note.txt"), "fixture content");
@@ -348,6 +394,13 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
     assert.match(unknownInit, /error:/i);
     const helpOutput = await execute(["--help"]);
     assert.match(helpOutput, /\bsetup\b/);
+    assert.match(helpOutput, /\bserve\b/);
+    const serveHelp = await execute(["serve", "--help"]);
+    assert.match(serveHelp, /--allow-remote/);
+    assert.match(serveHelp, /--no-open/);
+    const remoteRefused = await execute(["serve", "--host", "0.0.0.0", "--no-open"], false, 1);
+    assert.match(remoteRefused, /--allow-remote/);
+    await serveSmoke();
 
     // Headless paths (doctor, and `run`/`--json` elsewhere) never prompt for trust and keep the
     // exact pre-existing behavior: without --trust-project, a distinguishing custom baseURL in
@@ -402,6 +455,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
         "headless prompt template /init; --read-only refusal",
         "alisio setup scaffolds config; alisio init is now an unknown command",
+        "alisio serve: --help, --allow-remote refusal, health/token/cookie smoke, SIGTERM exit",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
       ],

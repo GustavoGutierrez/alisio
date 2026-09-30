@@ -77,6 +77,9 @@ importers:
       '@alisio/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@alisio/server':
+        specifier: workspace:*
+        version: link:../server
       '@earendil-works/pi-tui':
         specifier: 0.87.1
         version: 0.87.1(patch_hash=c40e878af7047432cf34dfdfba7015386fc9f2b99b5e039ce2cb5c10f8b9f641)
