@@ -29,7 +29,78 @@ export type UiBlock =
   | { kind: "key-value"; entries: Array<[string, string]>; caption?: string }
   | { kind: "tree"; nodes: Array<TreeNode> }
   | { kind: "code"; lang?: string; code: string; caption?: string }
-  | { kind: "markdown"; text: string };
+  | { kind: "markdown"; text: string }
+  /**
+   * A file change: a unified `patch`, or `before`/`after` contents when no patch is available.
+   * Producers bound the payload (about 200 KB).
+   */
+  | {
+      kind: "diff";
+      path?: string;
+      patch?: string;
+      before?: string;
+      after?: string;
+      lang?: string;
+      caption?: string;
+    }
+  /** Output of a command. `output` may contain ANSI escapes; producers bound it (about 256 KB). */
+  | {
+      kind: "terminal";
+      command?: string;
+      cwd?: string;
+      output: string;
+      exitCode?: number;
+      durationMs?: number;
+      truncated?: boolean;
+    }
+  /** Mermaid diagram source; text surfaces show the source verbatim. */
+  | { kind: "mermaid"; source: string; title?: string }
+  /** A LaTeX formula; `display` requests block (not inline) layout. */
+  | { kind: "math"; latex: string; display?: boolean }
+  /** Any JSON value, shown as a collapsible tree by rich surfaces (bounded to about 256 KB). */
+  | { kind: "json"; value: unknown; collapsedDepth?: number; caption?: string }
+  /** Test run results grouped by suite. */
+  | {
+      kind: "test-results";
+      framework?: string;
+      durationMs?: number;
+      suites: Array<{ name: string; file?: string; cases: TestCaseResult[] }>;
+    }
+  /** A checklist of steps with their current status. */
+  | { kind: "progress"; title?: string; steps: ProgressStep[] };
+/** One case of a `{ kind: "test-results" }` UI block. */
+export interface TestCaseResult {
+  name: string;
+  status: "passed" | "failed" | "skipped" | "todo";
+  durationMs?: number;
+  error?: string;
+  line?: number;
+}
+/** One step of a `{ kind: "progress" }` UI block. */
+export interface ProgressStep {
+  label: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  detail?: string;
+}
+/**
+ * Every `UiBlock` kind, for surfaces that dispatch on the kind at runtime (renderer registries,
+ * validators). Surfaces must still render an unknown kind as text: blocks persisted by a newer
+ * Alisio can be replayed by an older one.
+ */
+export const UI_BLOCK_KINDS = [
+  "table",
+  "key-value",
+  "tree",
+  "code",
+  "markdown",
+  "diff",
+  "terminal",
+  "mermaid",
+  "math",
+  "json",
+  "test-results",
+  "progress",
+] as const satisfies readonly UiBlock["kind"][];
 export interface ToolResult {
   content: Array<
     | { type: "text"; text: string }
@@ -46,7 +117,11 @@ export interface ToolResult {
 export interface Attachment {
   kind: "image";
   mimeType: string;
-  /** Base64-encoded bytes, no `data:` prefix. */
+  /**
+   * Base64-encoded bytes, no `data:` prefix. Required: providers and plugins read it directly,
+   * and no runtime check yet guarantees an alternative source. Content-addressed uploads travel
+   * as `BlobRef` and are resolved to `data` by the host before they reach an `Attachment`.
+   */
   data: string;
   bytes: number;
   width?: number;
@@ -212,15 +287,121 @@ export interface ToolDefinition {
   paths?: (input: Record<string, unknown>) => string[];
   execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }
+/**
+ * One event of an agent run, as delivered to `onEvent`, plugins and `alisio run --json` (JSONL).
+ * `schemaVersion` stays `1` while changes are additive (new optional fields, new event types);
+ * consumers must ignore unknown fields and unknown `type` values. See `KnownRunEvent` for the
+ * typed payloads of the events the core emits today.
+ */
 export interface RunEvent {
   schemaVersion: 1;
   runId: string;
   sessionId: string;
+  /** Per-run counter starting at 1 (restarts on every run; not unique within a session). */
   seq: number;
   type: string;
   timestamp: string;
   data: unknown;
+  /**
+   * Stable id of a durable event: the persisted global `events.seq`, as a decimal string. Absent
+   * for ephemeral events (`EphemeralRunEventType`) and when the host store does not report it.
+   */
+  eventId?: string;
+  /** Embedder-supplied correlation id (for example an HTTP `X-Request-Id`), when given. */
+  correlationId?: string;
 }
+/**
+ * Payload of each event type the core emits today, keyed by `RunEvent.type`. Additive: new
+ * types and new optional fields may appear; existing fields keep their meaning.
+ */
+export interface RunEventDataMap {
+  run_started: { model: string };
+  text_delta: { delta: string };
+  /** Provider-visible reasoning text; display only, never persisted. */
+  reasoning_delta: { delta: string };
+  turn_completed: {
+    /** 1-based turn number within the run. */
+    turn: number;
+    /** Cumulative input + output tokens of the run so far. */
+    tokens: number;
+    calls: number;
+    model: string;
+    usage?: Usage;
+    /** Milliseconds from sending the provider request to its completed response. */
+    durationMs?: number;
+    /** Milliseconds to the first streamed text/reasoning delta; absent when nothing streamed. */
+    ttftMs?: number;
+  };
+  tool_started: { id: string; name: string; arguments: string; effect: Effect };
+  /** `data` is whatever the tool passed to `ToolContext.emit`. */
+  tool_progress: { id: string; data: unknown };
+  tool_completed: {
+    id: string;
+    name: string;
+    isError: boolean;
+    durationMs: number;
+    /** Text projection of the result, capped at 2,000 characters. */
+    preview: string;
+  };
+  approval_requested: {
+    id: string;
+    name: string;
+    effect: "write" | "process" | "external";
+    label?: string;
+  };
+  approval_resolved: {
+    id: string;
+    name: string;
+    effect: "write" | "process" | "external";
+    decision: "once" | "session" | "deny";
+  };
+  run_completed: { tokens: number; text: string; truncated?: boolean };
+  response_truncated: { turn: number; maxOutputTokens: number };
+  run_turns_exceeded: { turns: number; maxTurns: number };
+  run_failed: { error: string };
+  run_cancelled: { error: string };
+  model_changed: { model: string; previous: string };
+  compaction_started: { reason: "manual" | "auto"; before: number; messages: number };
+  compaction_completed: {
+    reason: "manual" | "auto";
+    before: number;
+    after: number;
+    replaced: number;
+    structured: boolean;
+    summarizedTokens: number;
+    checkpointTokens: number;
+    /** Per-plugin `CompactionOutcome.report`, keyed by plugin id. */
+    plugins: Record<string, Record<string, unknown>>;
+    /** The summary hit its output budget and was accepted as partial. */
+    partial?: true;
+  };
+  compaction_skipped: { reason: "manual" | "auto"; before: number; detail: string };
+  compaction_failed: { reason: "manual" | "auto"; error: string };
+  /** Tool results clipped in place to fit the context budget. */
+  context_reduced: { messages: number };
+  session_context_injected: { tokens: number; sources: string[] };
+  plugin_hook_failed: { source: string; hook: string; error: string; continued: true };
+}
+/** Every `RunEvent.type` the core emits today. `RunEvent.type` itself stays `string`. */
+export type RunEventType = keyof RunEventDataMap;
+/** Event types never persisted to the session store (and therefore without `eventId`). */
+export type EphemeralRunEventType = "text_delta" | "reasoning_delta" | "tool_progress";
+export const EPHEMERAL_RUN_EVENT_TYPES: readonly EphemeralRunEventType[] = [
+  "text_delta",
+  "reasoning_delta",
+  "tool_progress",
+];
+/** True for streaming-only event types that are never persisted. */
+export function isEphemeralRunEventType(type: string): type is EphemeralRunEventType {
+  return (EPHEMERAL_RUN_EVENT_TYPES as readonly string[]).includes(type);
+}
+/**
+ * Discriminated view of `RunEvent` with typed `data`, for consumers that narrow on `type`.
+ * Every member is assignable to `RunEvent`; events of unknown types remain plain `RunEvent`s.
+ */
+export type KnownRunEvent = {
+  [K in RunEventType]: RunEvent & { type: K; data: RunEventDataMap[K] };
+}[RunEventType];
 /** Generic structured checkpoint produced by core context compaction. */
 export interface CompactionCheckpoint {
   goal: string;
@@ -646,6 +827,184 @@ export interface Plugin {
   extensions?: { [K in keyof ExtensionPoints]?: ExtensionPoints[K] };
   setup(api: PluginAPI): void | Promise<void>;
   dispose?(): void | Promise<void>;
+}
+// ---------------------------------------------------------------------------------------------
+// Web protocol v1 (`alisio serve`). Types only: the server validates requests at runtime and the
+// browser imports these with `import type`. Draft until `@alisio/server` ships; changes stay
+// additive once it does. `protocolVersion` is independent of `RunEvent.schemaVersion`.
+// ---------------------------------------------------------------------------------------------
+/** Derived status of a root session as shown by web clients (never persisted). */
+export type SessionUiStatus = "idle" | "queued" | "running" | "awaiting_input" | "locked" | "error";
+/** A content-addressed upload (for example an image attached from the web composer). */
+export interface BlobRef {
+  /** Lowercase hex sha256 of the bytes. */
+  hash: string;
+  mimeType: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+}
+/** Session metadata carried by snapshot frames. */
+export interface SessionDetailWire {
+  id: string;
+  /** Opaque, stable workspace id (never a filesystem path in URLs). */
+  workspaceId: string;
+  /** Absolute workspace path, for display. */
+  workspace: string;
+  provider: string;
+  model: string;
+  status: SessionUiStatus;
+  title?: string;
+  parentId?: string;
+  /** Persisted child-session status, shown verbatim for child sessions. */
+  childStatus?: SessionStatus;
+  createdAt?: number;
+  updatedAt?: number;
+}
+/** In-flight state of a running run, rebuilt by the server for snapshots. */
+export interface InflightState {
+  runId: string;
+  status: "queued" | "running";
+  /** Assistant text streamed since the last `turn_completed`. */
+  text: string;
+  /** Reasoning streamed since the last `turn_completed` (never persisted). */
+  reasoning: string;
+  tools: Array<{
+    id: string;
+    name: string;
+    arguments: string;
+    effect: Effect;
+    startedAt: number;
+    /** Latest progress output, bounded. */
+    tail: string;
+  }>;
+}
+/** An approval waiting for a decision from a web client. */
+export interface PendingApproval {
+  /** `<sessionId>:<callId>` for tool effects; `<sessionId>:dir:<uuid>` for directories. */
+  approvalId: string;
+  sessionId: string;
+  /** Root of `sessionId`, so child-session approvals show in the root session view. */
+  rootSessionId: string;
+  runId?: string;
+  kind: "effect" | "directory";
+  callId?: string;
+  name?: string;
+  effect?: "write" | "process" | "external";
+  label?: string;
+  directory?: string;
+  /** Pretty-printed tool input, truncated to 4 KB. */
+  input: string;
+  expiresAt?: number;
+}
+/** A plugin UI request (`ui.select` / `ui.askQuestions`) waiting for a web client. */
+export interface PendingInteraction {
+  interactionId: string;
+  /** Present when the request names a session (`AskQuestionsRequest.session`). */
+  sessionId?: string;
+  workspaceId: string;
+  request:
+    | { kind: "select"; select: SelectRequest }
+    | { kind: "questions"; questions: Question[]; label?: string };
+}
+/** One entry of the shared slash-command catalog. */
+export interface CommandDescriptor {
+  name: string;
+  description: string;
+  aliases?: string[];
+  argumentHint?: string;
+  source: "builtin" | "plugin" | "prompt" | "skill";
+  /** Plugin id or resource owner, when not built in. */
+  owner?: string;
+  surfaces: Array<"tui" | "web" | "api">;
+  /** `core` commands run through the catalog; `surface` commands are handled by each UI. */
+  execution: "core" | "surface";
+}
+/** One JSON object per SSE `data:` line. Clients ignore unknown `t` values. */
+export type ServerFrame =
+  | { t: "hello"; protocolVersion: 1; streamId: string; serverTime: number }
+  | {
+      t: "snapshot";
+      sessionId: string;
+      /** `MAX(events.seq)` of the session when the snapshot was taken. */
+      cursor: number;
+      session: SessionDetailWire;
+      messages: {
+        items: Array<{ seq: number; message: Message; compacted: boolean }>;
+        hasMore: boolean;
+      };
+      inflight?: InflightState;
+      pending: { approvals: PendingApproval[]; interactions: PendingInteraction[] };
+    }
+  /** Durable event; its SSE `id` is `event.eventId`. */
+  | { t: "event"; sessionId: string; event: RunEvent }
+  /** Coalesced ephemeral output; carries no SSE `id`. */
+  | {
+      t: "delta";
+      sessionId: string;
+      runId: string;
+      text?: string;
+      reasoning?: string;
+      progress?: Array<{ toolId: string; chunk: string }>;
+    }
+  | {
+      t: "tool_result";
+      sessionId: string;
+      runId: string;
+      callId: string;
+      result: ToolResult;
+      truncated?: boolean;
+    }
+  | { t: "message"; sessionId: string; seq: number; message: Message }
+  | { t: "approval"; approval: PendingApproval }
+  | {
+      t: "approval_withdrawn";
+      approvalId: string;
+      reason: "cancelled" | "timeout" | "resolved_elsewhere";
+    }
+  | { t: "interaction"; interaction: PendingInteraction }
+  | { t: "interaction_withdrawn"; interactionId: string }
+  | {
+      t: "session_status";
+      sessionId: string;
+      workspaceId: string;
+      status: SessionUiStatus;
+      title?: string;
+      updatedAt?: number;
+    }
+  | {
+      t: "catalog_changed";
+      workspaceId: string;
+      scope: "commands" | "plugins" | "skills" | "mcp" | "models" | "agents";
+    }
+  | { t: "resync"; sessionId?: string; reason: "overflow" | "gap" | "server_restart" };
+export type ApiErrorCode =
+  | "unauthorized"
+  | "forbidden_origin"
+  | "forbidden_host"
+  | "validation_failed"
+  | "not_found"
+  | "unknown_command"
+  | "session_busy"
+  | "session_locked"
+  | "workspace_limit"
+  | "payload_too_large"
+  | "unsupported_media_type"
+  | "path_outside_workspace"
+  | "not_a_git_repo"
+  | "approval_resolved"
+  | "capability_ceiling"
+  | "not_manageable"
+  | "mcp_not_permitted"
+  | "runs_active"
+  | "provider_unavailable"
+  | "protocol_mismatch"
+  | "shutting_down"
+  | "internal";
+/** Body of every non-2xx web API response. */
+export interface ApiError {
+  error: { code: ApiErrorCode; message: string; details?: unknown };
+  correlationId: string;
 }
 export function definePlugin<T extends Plugin>(plugin: T): T {
   return plugin;

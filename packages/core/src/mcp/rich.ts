@@ -16,6 +16,7 @@
  *   `JSON.stringify(result)` behavior verbatim.
  */
 import { type ToolResult, type TreeNode, textResult, type UiBlock } from "@alisio/sdk";
+import { stripAnsi } from "../startup/text.ts";
 
 const scalar = (value: unknown): string | undefined =>
   typeof value === "string"
@@ -174,6 +175,82 @@ export function renderUiBlockText(block: UiBlock): string {
     }
     case "markdown":
       return block.text;
+    case "diff": {
+      const label = [block.caption, block.path].filter(Boolean).join(" · ");
+      const head = label ? `[diff: ${label}]` : "[diff]";
+      if (block.patch !== undefined) return `${head}\n${fenced(block.patch, "diff")}`;
+      return [
+        head,
+        `before:\n${fenced(block.before ?? "", block.lang)}`,
+        `after:\n${fenced(block.after ?? "", block.lang)}`,
+      ].join("\n");
+    }
+    case "terminal": {
+      const status = [
+        block.exitCode !== undefined ? `exit ${block.exitCode}` : "",
+        block.durationMs !== undefined ? `${block.durationMs}ms` : "",
+        block.truncated ? "output truncated" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return [
+        block.command ? `$ ${block.command}` : "[terminal]",
+        fenced(stripAnsi(block.output)),
+        status,
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+    }
+    case "mermaid":
+      return [block.title ? `[mermaid: ${block.title}]` : "", fenced(block.source, "mermaid")]
+        .filter((line) => line !== "")
+        .join("\n");
+    case "math":
+      return block.display ? `$$\n${block.latex}\n$$` : `$${block.latex}$`;
+    case "json":
+      return [
+        block.caption ? `[json: ${block.caption}]` : "",
+        fenced(jsonText(block.value), "json"),
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+    case "test-results": {
+      const cases = block.suites.flatMap((suite) =>
+        suite.cases.map(
+          (c) =>
+            `${c.status.toUpperCase()} ${suite.name} › ${c.name}${c.error ? `: ${c.error}` : ""}`,
+        ),
+      );
+      return [`[test-results${block.framework ? `: ${block.framework}` : ""}]`, ...cases].join(
+        "\n",
+      );
+    }
+    case "progress":
+      return [
+        block.title ? `[progress: ${block.title}]` : "[progress]",
+        ...block.steps.map(
+          (step) => `- [${step.status}] ${step.label}${step.detail ? ` (${step.detail})` : ""}`,
+        ),
+      ].join("\n");
+    default: {
+      // A kind this build does not know (e.g. persisted by a newer Alisio): keep it readable.
+      const kind = String((block as { kind?: unknown }).kind ?? "unknown");
+      return `[ui block: ${kind}]\n${fenced(jsonText(block), "json")}`;
+    }
+  }
+}
+
+function fenced(text: string, lang?: string): string {
+  const body = text.endsWith("\n") ? text : `${text}\n`;
+  return `\`\`\`${lang ?? ""}\n${body}\`\`\``;
+}
+
+/** `JSON.stringify` that never throws and never returns `undefined`. */
+function jsonText(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
   }
 }
 

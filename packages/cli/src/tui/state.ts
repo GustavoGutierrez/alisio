@@ -1128,10 +1128,73 @@ export function isUiBlock(value: unknown): value is UiBlock {
       );
     case "markdown":
       return typeof block.text === "string";
+    case "diff":
+      return optionalStrings(block, ["path", "patch", "before", "after", "lang", "caption"]);
+    case "terminal":
+      return (
+        typeof block.output === "string" &&
+        optionalStrings(block, ["command", "cwd"]) &&
+        optionalNumbers(block, ["exitCode", "durationMs"]) &&
+        (block.truncated === undefined || typeof block.truncated === "boolean")
+      );
+    case "mermaid":
+      return typeof block.source === "string" && optionalStrings(block, ["title"]);
+    case "math":
+      return (
+        typeof block.latex === "string" &&
+        (block.display === undefined || typeof block.display === "boolean")
+      );
+    case "json":
+      return (
+        "value" in block &&
+        optionalNumbers(block, ["collapsedDepth"]) &&
+        optionalStrings(block, ["caption"])
+      );
+    case "test-results":
+      return (
+        optionalStrings(block, ["framework"]) &&
+        optionalNumbers(block, ["durationMs"]) &&
+        Array.isArray(block.suites) &&
+        (block.suites as unknown[]).every(
+          (suite) =>
+            isRecord(suite) &&
+            typeof suite.name === "string" &&
+            optionalStrings(suite, ["file"]) &&
+            Array.isArray(suite.cases) &&
+            (suite.cases as unknown[]).every(
+              (c) =>
+                isRecord(c) &&
+                typeof c.name === "string" &&
+                TEST_STATUSES.has(c.status as string) &&
+                optionalStrings(c, ["error"]) &&
+                optionalNumbers(c, ["durationMs", "line"]),
+            ),
+        )
+      );
+    case "progress":
+      return (
+        optionalStrings(block, ["title"]) &&
+        Array.isArray(block.steps) &&
+        (block.steps as unknown[]).every(
+          (step) =>
+            isRecord(step) &&
+            typeof step.label === "string" &&
+            PROGRESS_STATUSES.has(step.status as string) &&
+            optionalStrings(step, ["detail"]),
+        )
+      );
     default:
       return false;
   }
 }
+const TEST_STATUSES = new Set(["passed", "failed", "skipped", "todo"]);
+const PROGRESS_STATUSES = new Set(["pending", "running", "completed", "failed", "cancelled"]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const optionalStrings = (record: Record<string, unknown>, keys: string[]) =>
+  keys.every((key) => record[key] === undefined || typeof record[key] === "string");
+const optionalNumbers = (record: Record<string, unknown>, keys: string[]) =>
+  keys.every((key) => record[key] === undefined || typeof record[key] === "number");
 
 /** True when an unknown event value is a `{type:"image"}`-style part (mime + base64 data). */
 export function isImagePart(value: unknown): value is { mimeType: string; data: string } {

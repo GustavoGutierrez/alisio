@@ -47,6 +47,7 @@ import {
   humanizeToolName,
   type IdentityInput,
   type IdentityRole,
+  isUiBlock,
   previewLinesFor,
   previewRows,
   previewTruncated,
@@ -66,6 +67,7 @@ import {
   markdownDefaultTextStyle,
   markdownTheme,
   markdownTransform,
+  sanitizeCode,
   style,
 } from "./theme.ts";
 
@@ -261,8 +263,159 @@ function renderCodeBlock(block: Extract<UiBlock, { kind: "code" }>, _width: numb
   ];
 }
 
-/** Renders a `{type:"ui"}` block to styled lines for the given inner width. */
+/** Longest JSON/unknown-block text shown inline before a `… truncated` marker. */
+const MAX_BLOCK_LINES = 200;
+const MAX_BLOCK_CHARS = 20_000;
+
+/** Caps free-form text by lines and characters, appending a dim marker when anything is cut. */
+function capText(text: string): { text: string; truncated: boolean } {
+  let out = text.length > MAX_BLOCK_CHARS ? text.slice(0, MAX_BLOCK_CHARS) : text;
+  const lines = out.split("\n");
+  if (lines.length > MAX_BLOCK_LINES) out = lines.slice(0, MAX_BLOCK_LINES).join("\n");
+  return { text: out, truncated: out.length < text.length };
+}
+
+/** `JSON.stringify` that never throws and never returns `undefined`. */
+function jsonText(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderCappedCode(code: string, lang: string | undefined, caption?: string): string[] {
+  const capped = capText(code);
+  return [
+    ...renderCodeBlock(
+      {
+        kind: "code",
+        code: capped.text,
+        ...(lang ? { lang } : {}),
+        ...(caption ? { caption } : {}),
+      },
+      0,
+    ),
+    ...(capped.truncated ? [style.gray("… truncated")] : []),
+  ];
+}
+
+function renderDiffBlock(block: Extract<UiBlock, { kind: "diff" }>): string[] {
+  const caption = [block.caption, block.path].filter(Boolean).join(" · ") || undefined;
+  if (block.patch !== undefined) return renderCappedCode(block.patch, "diff", caption);
+  if (block.before === undefined && block.after === undefined)
+    return [...(caption ? [style.dim(caption)] : []), style.gray("(empty diff)")];
+  return [
+    ...(caption ? [style.dim(caption)] : []),
+    ...renderCappedCode(block.before ?? "", block.lang, "before"),
+    ...renderCappedCode(block.after ?? "", block.lang, "after"),
+  ];
+}
+
+function renderTerminalBlock(block: Extract<UiBlock, { kind: "terminal" }>): string[] {
+  const head = block.command
+    ? [style.dim(`$ ${block.command}${block.cwd ? `  (${block.cwd})` : ""}`)]
+    : [];
+  const status = [
+    block.exitCode !== undefined ? `exit ${block.exitCode}` : "",
+    block.durationMs !== undefined ? formatDuration(block.durationMs) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const paint = block.exitCode !== undefined && block.exitCode !== 0 ? style.red : style.gray;
+  return [
+    ...head,
+    ...renderCappedCode(sanitizeCode(block.output), undefined),
+    ...(block.truncated ? [style.gray("… output truncated")] : []),
+    ...(status ? [paint(status)] : []),
+  ];
+}
+
+function renderTestResultsBlock(
+  block: Extract<UiBlock, { kind: "test-results" }>,
+  width: number,
+  unicode: boolean,
+): string[] {
+  const cases = block.suites.flatMap((suite) => suite.cases.map((c) => ({ suite, c })));
+  const counts = new Map<string, number>();
+  for (const { c } of cases) counts.set(c.status, (counts.get(c.status) ?? 0) + 1);
+  const summary = [
+    block.framework,
+    ["passed", "failed", "skipped", "todo"]
+      .filter((status) => counts.get(status))
+      .map((status) => `${counts.get(status)} ${status}`)
+      .join(", ") || "no tests",
+    block.durationMs !== undefined ? formatDuration(block.durationMs) : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const table = renderTableBlock(
+    {
+      kind: "table",
+      columns: ["suite", "case", "status", "time"],
+      rows: cases.map(({ suite, c }) => [
+        suite.name,
+        c.name,
+        c.status,
+        c.durationMs !== undefined ? formatDuration(c.durationMs) : "",
+      ]),
+      caption: summary,
+    },
+    width,
+  );
+  const errors = cases
+    .filter(({ c }) => c.status === "failed" && c.error)
+    .map(({ suite, c }) =>
+      style.red(
+        `${unicode ? "✗" : "x"} ${suite.name} ${unicode ? "›" : ">"} ${c.name}${suite.file ? ` (${suite.file}${c.line !== undefined ? `:${c.line}` : ""})` : ""}: ${c.error}`,
+      ),
+    );
+  return [...table, ...errors];
+}
+
+const PROGRESS_GLYPHS = {
+  unicode: { completed: "✓", running: "●", pending: "○", failed: "✗", cancelled: "⊘" },
+  ascii: { completed: "[x]", running: "[>]", pending: "[ ]", failed: "[!]", cancelled: "[-]" },
+} as const;
+
+function renderProgressBlock(
+  block: Extract<UiBlock, { kind: "progress" }>,
+  unicode: boolean,
+): string[] {
+  const glyphs = PROGRESS_GLYPHS[unicode ? "unicode" : "ascii"];
+  const paint = {
+    completed: style.green,
+    running: style.brightCyan,
+    pending: style.gray,
+    failed: style.red,
+    cancelled: style.gray,
+  } as const;
+  return [
+    ...(block.title ? [style.bold(block.title)] : []),
+    ...(block.steps.length ? [] : [style.gray("(no steps)")]),
+    ...block.steps.map(
+      (step) =>
+        `${paint[step.status](glyphs[step.status])} ${step.label}${step.detail ? ` ${style.dim(step.detail)}` : ""}`,
+    ),
+  ];
+}
+
+/** Text fallback for a kind this build does not know (or a malformed block): never throws. */
+function renderUnknownBlock(block: unknown): string[] {
+  const kind =
+    block && typeof block === "object" && typeof (block as { kind?: unknown }).kind === "string"
+      ? (block as { kind: string }).kind
+      : "unknown";
+  return [style.gray(`[ui block: ${kind}]`), ...renderCappedCode(jsonText(block), "json")];
+}
+
+/**
+ * Renders a `{type:"ui"}` block to styled lines for the given inner width. Blocks come from
+ * persisted transcripts too, so anything that does not validate (a kind added by a newer Alisio,
+ * or a malformed plugin block) falls back to labeled JSON instead of throwing.
+ */
 export function renderUiBlock(block: UiBlock, width: number, unicode: boolean): string[] {
+  if (!isUiBlock(block)) return renderUnknownBlock(block);
   switch (block.kind) {
     case "table":
       return renderTableBlock(block, width);
@@ -278,6 +431,22 @@ export function renderUiBlock(block: UiBlock, width: number, unicode: boolean): 
       });
       return md.render(Math.max(1, width - 2));
     }
+    case "diff":
+      return renderDiffBlock(block);
+    case "terminal":
+      return renderTerminalBlock(block);
+    case "mermaid":
+      return renderCappedCode(block.source, "mermaid", block.title);
+    case "math":
+      return block.latex.split("\n");
+    case "json":
+      return renderCappedCode(jsonText(block.value), "json", block.caption);
+    case "test-results":
+      return renderTestResultsBlock(block, width, unicode);
+    case "progress":
+      return renderProgressBlock(block, unicode);
+    default:
+      return renderUnknownBlock(block);
   }
 }
 
