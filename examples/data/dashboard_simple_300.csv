@@ -1,0 +1,301 @@
+﻿order_id,date,region,channel,salesperson,product,category,units,unit_price_cop,sales_cop,cost_cop,profit_cop,margin_pct,status
+ORD-0001,2026-06-15,Cali,Marketplace,Ana,Monitor,Tecnología,4,964000,3856000,2420000,1436000,37.24,Entregado
+ORD-0002,2026-09-17,Barranquilla,Web,Ana,Monitor,Tecnología,1,911000,911000,620000,291000,31.94,Entregado
+ORD-0003,2026-04-25,Bogotá,Marketplace,Carlos,Silla,Mobiliario,1,1108000,1108000,718000,390000,35.2,Cancelado
+ORD-0004,2026-05-29,Medellín,Web,Carlos,Mouse,Accesorios,2,131000,262000,122000,140000,53.44,Entregado
+ORD-0005,2026-07-10,Barranquilla,Marketplace,Diego,Laptop,Tecnología,5,3268000,16340000,11610000,4730000,28.95,Entregado
+ORD-0006,2026-06-10,Medellín,Marketplace,Carlos,Mouse,Accesorios,5,136000,680000,300000,380000,55.88,Entregado
+ORD-0007,2026-02-11,Cali,Marketplace,Ana,Silla,Mobiliario,3,1103000,3309000,2229000,1080000,32.64,Entregado
+ORD-0008,2026-03-02,Barranquilla,Web,Ana,Silla,Mobiliario,4,1063000,4252000,2864000,1388000,32.64,En tránsito
+ORD-0009,2026-06-10,Bogotá,Tienda,Diego,Teclado,Accesorios,3,222000,666000,333000,333000,50.0,Entregado
+ORD-0010,2026-02-03,Cali,Marketplace,Diego,Laptop,Tecnología,3,3247000,9741000,7173000,2568000,26.36,En tránsito
+ORD-0011,2026-06-27,Medellín,Tienda,Carlos,Laptop,Tecnología,4,3154000,12616000,9316000,3300000,26.16,Entregado
+ORD-0012,2026-05-07,Barranquilla,Marketplace,Laura,Mouse,Accesorios,4,135000,540000,240000,300000,55.56,Entregado
+ORD-0013,2026-03-12,Barranquilla,Web,Carlos,Mouse,Accesorios,5,127000,635000,300000,335000,52.76,Entregado
+ORD-0014,2026-02-12,Medellín,Tienda,Laura,Monitor,Tecnología,2,925000,1850000,1224000,626000,33.84,Entregado
+ORD-0015,2026-01-03,Medellín,Marketplace,Ana,Monitor,Tecnología,4,953000,3812000,2512000,1300000,34.1,Entregado
+ORD-0016,2026-08-22,Barranquilla,Web,Carlos,Silla,Mobiliario,4,1089000,4356000,2872000,1484000,34.07,Entregado
+ORD-0017,2026-02-04,Bogotá,Marketplace,Carlos,Monitor,Tecnología,4,918000,3672000,2464000,1208000,32.9,Entregado
+ORD-0018,2026-02-21,Medellín,Marketplace,Laura,Teclado,Accesorios,5,210000,1050000,565000,485000,46.19,Entregado
+ORD-0019,2026-06-27,Barranquilla,Tienda,Diego,Silla,Mobiliario,3,1097000,3291000,2112000,1179000,35.82,Entregado
+ORD-0020,2026-06-09,Medellín,Marketplace,Ana,Laptop,Tecnología,2,3073000,6146000,4572000,1574000,25.61,Entregado
+ORD-0021,2026-04-16,Cali,Marketplace,Ana,Silla,Mobiliario,3,1061000,3183000,2178000,1005000,31.57,Entregado
+ORD-0022,2026-05-14,Cali,Marketplace,Carlos,Silla,Mobiliario,3,1145000,3435000,2148000,1287000,37.47,Entregado
+ORD-0023,2026-04-10,Cali,Marketplace,Ana,Monitor,Tecnología,4,973000,3892000,2444000,1448000,37.2,Entregado
+ORD-0024,2026-01-15,Barranquilla,Marketplace,Laura,Teclado,Accesorios,4,215000,860000,448000,412000,47.91,Cancelado
+ORD-0025,2026-07-06,Barranquilla,Marketplace,Ana,Laptop,Tecnología,2,3073000,6146000,4614000,1532000,24.93,Entregado
+ORD-0026,2026-09-03,Medellín,Tienda,Carlos,Teclado,Accesorios,1,227000,227000,108000,119000,52.42,Entregado
+ORD-0027,2026-08-11,Barranquilla,Marketplace,Ana,Teclado,Accesorios,1,227000,227000,114000,113000,49.78,Entregado
+ORD-0028,2026-03-23,Medellín,Marketplace,Diego,Monitor,Tecnología,2,905000,1810000,1254000,556000,30.72,Entregado
+ORD-0029,2026-06-29,Bogotá,Marketplace,Carlos,Monitor,Tecnología,5,955000,4775000,3010000,1765000,36.96,Entregado
+ORD-0030,2026-08-11,Cali,Tienda,Diego,Monitor,Tecnología,2,905000,1810000,1222000,588000,32.49,Entregado
+ORD-0031,2026-03-09,Barranquilla,Marketplace,Carlos,Laptop,Tecnología,3,3327000,9981000,7014000,2967000,29.73,En tránsito
+ORD-0032,2026-09-30,Bogotá,Web,Carlos,Monitor,Tecnología,5,951000,4755000,3195000,1560000,32.81,Entregado
+ORD-0033,2026-03-14,Barranquilla,Web,Ana,Mouse,Accesorios,5,133000,665000,305000,360000,54.14,Entregado
+ORD-0034,2026-05-08,Bogotá,Web,Diego,Monitor,Tecnología,3,907000,2721000,1818000,903000,33.19,Entregado
+ORD-0035,2026-06-16,Barranquilla,Marketplace,Carlos,Silla,Mobiliario,5,1112000,5560000,3540000,2020000,36.33,Entregado
+ORD-0036,2026-09-25,Barranquilla,Web,Diego,Teclado,Accesorios,5,229000,1145000,540000,605000,52.84,Entregado
+ORD-0037,2026-08-15,Cali,Web,Carlos,Teclado,Accesorios,1,224000,224000,110000,114000,50.89,Entregado
+ORD-0038,2026-07-07,Bogotá,Tienda,Diego,Monitor,Tecnología,3,986000,2958000,1929000,1029000,34.79,Entregado
+ORD-0039,2026-03-25,Barranquilla,Web,Laura,Monitor,Tecnología,2,970000,1940000,1290000,650000,33.51,Entregado
+ORD-0040,2026-06-13,Bogotá,Tienda,Laura,Laptop,Tecnología,3,3046000,9138000,6960000,2178000,23.83,Entregado
+ORD-0041,2026-09-22,Medellín,Web,Ana,Silla,Mobiliario,3,1101000,3303000,2106000,1197000,36.24,Cancelado
+ORD-0042,2026-05-16,Barranquilla,Marketplace,Laura,Teclado,Accesorios,1,229000,229000,108000,121000,52.84,Entregado
+ORD-0043,2026-07-27,Bogotá,Tienda,Ana,Monitor,Tecnología,5,990000,4950000,3130000,1820000,36.77,Entregado
+ORD-0044,2026-04-04,Cali,Web,Carlos,Mouse,Accesorios,1,127000,127000,58000,69000,54.33,Entregado
+ORD-0045,2026-02-04,Cali,Marketplace,Carlos,Teclado,Accesorios,1,219000,219000,109000,110000,50.23,Entregado
+ORD-0046,2026-01-23,Medellín,Web,Laura,Silla,Mobiliario,2,1148000,2296000,1494000,802000,34.93,Entregado
+ORD-0047,2026-06-06,Cali,Web,Laura,Silla,Mobiliario,2,1077000,2154000,1448000,706000,32.78,Entregado
+ORD-0048,2026-01-19,Barranquilla,Web,Diego,Laptop,Tecnología,1,3275000,3275000,2320000,955000,29.16,Entregado
+ORD-0049,2026-02-24,Cali,Marketplace,Carlos,Mouse,Accesorios,4,131000,524000,248000,276000,52.67,Cancelado
+ORD-0050,2026-04-28,Barranquilla,Tienda,Ana,Teclado,Accesorios,2,227000,454000,224000,230000,50.66,Entregado
+ORD-0051,2026-03-08,Bogotá,Web,Diego,Laptop,Tecnología,1,3240000,3240000,2373000,867000,26.76,Entregado
+ORD-0052,2026-09-17,Medellín,Tienda,Diego,Teclado,Accesorios,5,214000,1070000,545000,525000,49.07,Entregado
+ORD-0053,2026-01-02,Medellín,Web,Laura,Teclado,Accesorios,3,230000,690000,342000,348000,50.43,Entregado
+ORD-0054,2026-04-22,Medellín,Web,Ana,Teclado,Accesorios,2,209000,418000,220000,198000,47.37,Entregado
+ORD-0055,2026-02-16,Cali,Tienda,Carlos,Teclado,Accesorios,1,212000,212000,111000,101000,47.64,Entregado
+ORD-0056,2026-02-13,Barranquilla,Tienda,Diego,Silla,Mobiliario,5,1139000,5695000,3530000,2165000,38.02,En tránsito
+ORD-0057,2026-03-18,Barranquilla,Marketplace,Carlos,Teclado,Accesorios,5,223000,1115000,535000,580000,52.02,En tránsito
+ORD-0058,2026-09-26,Medellín,Web,Ana,Silla,Mobiliario,5,1137000,5685000,3695000,1990000,35.0,En tránsito
+ORD-0059,2026-01-22,Bogotá,Marketplace,Ana,Monitor,Tecnología,3,994000,2982000,1854000,1128000,37.83,Entregado
+ORD-0060,2026-09-30,Bogotá,Marketplace,Ana,Monitor,Tecnología,4,928000,3712000,2484000,1228000,33.08,Entregado
+ORD-0061,2026-08-31,Medellín,Marketplace,Diego,Teclado,Accesorios,1,228000,228000,109000,119000,52.19,Entregado
+ORD-0062,2026-09-10,Medellín,Web,Carlos,Mouse,Accesorios,1,130000,130000,61000,69000,53.08,Entregado
+ORD-0063,2026-06-19,Barranquilla,Tienda,Ana,Teclado,Accesorios,3,223000,669000,324000,345000,51.57,Entregado
+ORD-0064,2026-04-22,Bogotá,Marketplace,Carlos,Mouse,Accesorios,3,133000,399000,177000,222000,55.64,Entregado
+ORD-0065,2026-06-09,Barranquilla,Tienda,Diego,Laptop,Tecnología,4,3046000,12184000,9220000,2964000,24.33,En tránsito
+ORD-0066,2026-04-18,Cali,Web,Laura,Monitor,Tecnología,1,958000,958000,608000,350000,36.53,Entregado
+ORD-0067,2026-02-27,Medellín,Web,Diego,Teclado,Accesorios,2,220000,440000,226000,214000,48.64,Entregado
+ORD-0068,2026-08-19,Bogotá,Tienda,Ana,Mouse,Accesorios,3,133000,399000,180000,219000,54.89,Entregado
+ORD-0069,2026-06-16,Cali,Tienda,Laura,Teclado,Accesorios,4,212000,848000,456000,392000,46.23,Entregado
+ORD-0070,2026-02-03,Barranquilla,Tienda,Ana,Mouse,Accesorios,4,136000,544000,244000,300000,55.15,Entregado
+ORD-0071,2026-05-24,Medellín,Tienda,Diego,Laptop,Tecnología,1,3307000,3307000,2277000,1030000,31.15,En tránsito
+ORD-0072,2026-09-19,Bogotá,Marketplace,Diego,Teclado,Accesorios,2,226000,452000,226000,226000,50.0,Entregado
+ORD-0073,2026-04-15,Medellín,Marketplace,Laura,Laptop,Tecnología,1,3339000,3339000,2297000,1042000,31.21,Entregado
+ORD-0074,2026-09-06,Cali,Tienda,Laura,Laptop,Tecnología,5,3081000,15405000,11535000,3870000,25.12,Entregado
+ORD-0075,2026-07-27,Medellín,Web,Carlos,Monitor,Tecnología,3,948000,2844000,1890000,954000,33.54,Entregado
+ORD-0076,2026-09-14,Barranquilla,Tienda,Carlos,Mouse,Accesorios,5,126000,630000,310000,320000,50.79,Cancelado
+ORD-0077,2026-04-09,Cali,Tienda,Carlos,Monitor,Tecnología,1,919000,919000,626000,293000,31.88,Entregado
+ORD-0078,2026-01-11,Cali,Web,Diego,Mouse,Accesorios,4,129000,516000,240000,276000,53.49,Entregado
+ORD-0079,2026-05-23,Medellín,Web,Laura,Silla,Mobiliario,3,1059000,3177000,2172000,1005000,31.63,Entregado
+ORD-0080,2026-05-08,Bogotá,Web,Ana,Mouse,Accesorios,4,132000,528000,240000,288000,54.55,Entregado
+ORD-0081,2026-08-06,Barranquilla,Tienda,Carlos,Mouse,Accesorios,5,130000,650000,295000,355000,54.62,En tránsito
+ORD-0082,2026-02-25,Barranquilla,Web,Ana,Monitor,Tecnología,2,917000,1834000,1288000,546000,29.77,Entregado
+ORD-0083,2026-01-01,Medellín,Marketplace,Laura,Monitor,Tecnología,2,957000,1914000,1206000,708000,36.99,Entregado
+ORD-0084,2026-09-28,Medellín,Tienda,Laura,Mouse,Accesorios,1,125000,125000,59000,66000,52.8,En tránsito
+ORD-0085,2026-04-25,Cali,Marketplace,Carlos,Silla,Mobiliario,1,1046000,1046000,714000,332000,31.74,Entregado
+ORD-0086,2026-09-01,Cali,Web,Ana,Silla,Mobiliario,2,1105000,2210000,1400000,810000,36.65,Entregado
+ORD-0087,2026-04-10,Cali,Web,Diego,Mouse,Accesorios,4,125000,500000,236000,264000,52.8,Entregado
+ORD-0088,2026-01-18,Cali,Marketplace,Ana,Teclado,Accesorios,4,217000,868000,440000,428000,49.31,Entregado
+ORD-0089,2026-04-16,Medellín,Tienda,Laura,Mouse,Accesorios,2,128000,256000,124000,132000,51.56,Entregado
+ORD-0090,2026-02-25,Bogotá,Marketplace,Carlos,Silla,Mobiliario,4,1112000,4448000,2976000,1472000,33.09,Entregado
+ORD-0091,2026-07-21,Bogotá,Web,Diego,Laptop,Tecnología,2,3048000,6096000,4654000,1442000,23.65,Entregado
+ORD-0092,2026-08-19,Medellín,Marketplace,Diego,Teclado,Accesorios,1,231000,231000,114000,117000,50.65,Entregado
+ORD-0093,2026-01-17,Bogotá,Web,Ana,Teclado,Accesorios,4,227000,908000,456000,452000,49.78,Entregado
+ORD-0094,2026-05-24,Medellín,Tienda,Laura,Laptop,Tecnología,3,3174000,9522000,7122000,2400000,25.2,Entregado
+ORD-0095,2026-06-08,Barranquilla,Web,Laura,Mouse,Accesorios,1,124000,124000,60000,64000,51.61,Entregado
+ORD-0096,2026-07-06,Barranquilla,Web,Diego,Mouse,Accesorios,1,132000,132000,59000,73000,55.3,Entregado
+ORD-0097,2026-01-18,Bogotá,Marketplace,Laura,Mouse,Accesorios,1,134000,134000,58000,76000,56.72,Entregado
+ORD-0098,2026-07-05,Cali,Tienda,Laura,Teclado,Accesorios,3,230000,690000,333000,357000,51.74,Entregado
+ORD-0099,2026-01-02,Barranquilla,Tienda,Laura,Silla,Mobiliario,1,1048000,1048000,710000,338000,32.25,Entregado
+ORD-0100,2026-08-09,Cali,Marketplace,Carlos,Mouse,Accesorios,2,136000,272000,118000,154000,56.62,En tránsito
+ORD-0101,2026-05-01,Medellín,Tienda,Carlos,Teclado,Accesorios,3,219000,657000,339000,318000,48.4,Entregado
+ORD-0102,2026-05-07,Medellín,Tienda,Ana,Mouse,Accesorios,1,132000,132000,60000,72000,54.55,Entregado
+ORD-0103,2026-02-06,Barranquilla,Web,Carlos,Teclado,Accesorios,5,211000,1055000,535000,520000,49.29,Entregado
+ORD-0104,2026-03-10,Bogotá,Tienda,Laura,Mouse,Accesorios,4,132000,528000,244000,284000,53.79,Entregado
+ORD-0105,2026-05-24,Medellín,Web,Carlos,Silla,Mobiliario,3,1086000,3258000,2208000,1050000,32.23,Entregado
+ORD-0106,2026-05-01,Barranquilla,Tienda,Carlos,Monitor,Tecnología,3,986000,2958000,1878000,1080000,36.51,Entregado
+ORD-0107,2026-09-17,Bogotá,Web,Ana,Silla,Mobiliario,2,1116000,2232000,1406000,826000,37.01,Entregado
+ORD-0108,2026-09-01,Bogotá,Web,Carlos,Monitor,Tecnología,4,989000,3956000,2412000,1544000,39.03,Entregado
+ORD-0109,2026-04-10,Bogotá,Web,Laura,Laptop,Tecnología,3,3204000,9612000,6780000,2832000,29.46,Entregado
+ORD-0110,2026-04-22,Bogotá,Marketplace,Carlos,Laptop,Tecnología,3,3149000,9447000,6714000,2733000,28.93,Cancelado
+ORD-0111,2026-01-06,Medellín,Web,Diego,Teclado,Accesorios,4,224000,896000,432000,464000,51.79,Entregado
+ORD-0112,2026-09-05,Bogotá,Marketplace,Carlos,Laptop,Tecnología,4,3072000,12288000,9180000,3108000,25.29,Entregado
+ORD-0113,2026-07-23,Bogotá,Tienda,Laura,Teclado,Accesorios,4,231000,924000,448000,476000,51.52,Entregado
+ORD-0114,2026-08-01,Medellín,Tienda,Diego,Mouse,Accesorios,1,135000,135000,62000,73000,54.07,Entregado
+ORD-0115,2026-04-15,Barranquilla,Marketplace,Laura,Laptop,Tecnología,4,3329000,13316000,9196000,4120000,30.94,En tránsito
+ORD-0116,2026-08-24,Barranquilla,Web,Laura,Monitor,Tecnología,2,904000,1808000,1250000,558000,30.86,Entregado
+ORD-0117,2026-09-16,Bogotá,Web,Diego,Monitor,Tecnología,2,936000,1872000,1216000,656000,35.04,Entregado
+ORD-0118,2026-09-09,Barranquilla,Tienda,Ana,Monitor,Tecnología,3,915000,2745000,1926000,819000,29.84,Cancelado
+ORD-0119,2026-07-18,Medellín,Marketplace,Diego,Laptop,Tecnología,5,3260000,16300000,11870000,4430000,27.18,Entregado
+ORD-0120,2026-04-11,Medellín,Tienda,Laura,Mouse,Accesorios,2,131000,262000,116000,146000,55.73,En tránsito
+ORD-0121,2026-03-05,Bogotá,Marketplace,Laura,Monitor,Tecnología,2,995000,1990000,1274000,716000,35.98,Entregado
+ORD-0122,2026-03-02,Barranquilla,Tienda,Carlos,Mouse,Accesorios,5,129000,645000,310000,335000,51.94,Entregado
+ORD-0123,2026-08-06,Barranquilla,Tienda,Carlos,Mouse,Accesorios,3,129000,387000,180000,207000,53.49,Entregado
+ORD-0124,2026-08-17,Bogotá,Web,Laura,Silla,Mobiliario,4,1137000,4548000,2956000,1592000,35.0,Entregado
+ORD-0125,2026-08-09,Bogotá,Marketplace,Carlos,Teclado,Accesorios,1,227000,227000,111000,116000,51.1,Entregado
+ORD-0126,2026-02-12,Medellín,Web,Ana,Teclado,Accesorios,5,211000,1055000,560000,495000,46.92,En tránsito
+ORD-0127,2026-02-26,Medellín,Marketplace,Carlos,Monitor,Tecnología,2,996000,1992000,1246000,746000,37.45,Cancelado
+ORD-0128,2026-02-03,Cali,Tienda,Carlos,Teclado,Accesorios,5,226000,1130000,540000,590000,52.21,En tránsito
+ORD-0129,2026-05-11,Cali,Tienda,Ana,Silla,Mobiliario,4,1068000,4272000,2848000,1424000,33.33,Entregado
+ORD-0130,2026-04-12,Barranquilla,Web,Laura,Monitor,Tecnología,4,918000,3672000,2568000,1104000,30.07,Entregado
+ORD-0131,2026-02-28,Bogotá,Tienda,Diego,Silla,Mobiliario,1,1115000,1115000,717000,398000,35.7,En tránsito
+ORD-0132,2026-07-10,Bogotá,Tienda,Carlos,Teclado,Accesorios,4,231000,924000,444000,480000,51.95,Entregado
+ORD-0133,2026-04-01,Cali,Marketplace,Ana,Silla,Mobiliario,1,1078000,1078000,724000,354000,32.84,Entregado
+ORD-0134,2026-01-18,Cali,Web,Carlos,Monitor,Tecnología,2,930000,1860000,1258000,602000,32.37,Entregado
+ORD-0135,2026-09-08,Cali,Tienda,Ana,Monitor,Tecnología,5,965000,4825000,3010000,1815000,37.62,Entregado
+ORD-0136,2026-09-25,Medellín,Tienda,Diego,Teclado,Accesorios,5,214000,1070000,555000,515000,48.13,Entregado
+ORD-0137,2026-03-23,Bogotá,Web,Carlos,Monitor,Tecnología,1,991000,991000,612000,379000,38.24,Entregado
+ORD-0138,2026-05-19,Cali,Marketplace,Diego,Mouse,Accesorios,3,136000,408000,174000,234000,57.35,En tránsito
+ORD-0139,2026-09-23,Bogotá,Tienda,Carlos,Mouse,Accesorios,2,126000,252000,116000,136000,53.97,Entregado
+ORD-0140,2026-05-02,Medellín,Web,Diego,Monitor,Tecnología,1,989000,989000,606000,383000,38.73,Entregado
+ORD-0141,2026-04-13,Medellín,Marketplace,Laura,Silla,Mobiliario,5,1116000,5580000,3655000,1925000,34.5,Entregado
+ORD-0142,2026-02-02,Bogotá,Tienda,Diego,Teclado,Accesorios,1,231000,231000,112000,119000,51.52,Entregado
+ORD-0143,2026-08-27,Bogotá,Web,Laura,Laptop,Tecnología,4,3096000,12384000,9564000,2820000,22.77,Entregado
+ORD-0144,2026-05-15,Cali,Tienda,Carlos,Laptop,Tecnología,3,3243000,9729000,7020000,2709000,27.84,Entregado
+ORD-0145,2026-02-13,Medellín,Web,Laura,Silla,Mobiliario,1,1064000,1064000,744000,320000,30.08,En tránsito
+ORD-0146,2026-04-09,Barranquilla,Tienda,Ana,Mouse,Accesorios,3,131000,393000,180000,213000,54.2,En tránsito
+ORD-0147,2026-01-14,Bogotá,Marketplace,Carlos,Mouse,Accesorios,2,131000,262000,118000,144000,54.96,Entregado
+ORD-0148,2026-03-16,Medellín,Marketplace,Ana,Laptop,Tecnología,1,3076000,3076000,2331000,745000,24.22,Entregado
+ORD-0149,2026-01-16,Bogotá,Web,Laura,Laptop,Tecnología,2,3262000,6524000,4666000,1858000,28.48,Entregado
+ORD-0150,2026-04-13,Barranquilla,Web,Carlos,Silla,Mobiliario,1,1142000,1142000,736000,406000,35.55,Entregado
+ORD-0151,2026-04-16,Bogotá,Marketplace,Laura,Monitor,Tecnología,1,906000,906000,643000,263000,29.03,En tránsito
+ORD-0152,2026-09-02,Cali,Tienda,Diego,Laptop,Tecnología,2,3071000,6142000,4706000,1436000,23.38,Entregado
+ORD-0153,2026-05-14,Cali,Tienda,Diego,Laptop,Tecnología,3,3122000,9366000,6828000,2538000,27.1,Entregado
+ORD-0154,2026-05-28,Bogotá,Tienda,Diego,Silla,Mobiliario,1,1132000,1132000,700000,432000,38.16,Entregado
+ORD-0155,2026-01-25,Cali,Web,Diego,Silla,Mobiliario,5,1069000,5345000,3710000,1635000,30.59,Entregado
+ORD-0156,2026-01-01,Cali,Tienda,Ana,Silla,Mobiliario,2,1077000,2154000,1472000,682000,31.66,Entregado
+ORD-0157,2026-09-09,Medellín,Tienda,Carlos,Monitor,Tecnología,4,959000,3836000,2572000,1264000,32.95,Entregado
+ORD-0158,2026-04-29,Bogotá,Marketplace,Laura,Mouse,Accesorios,2,125000,250000,122000,128000,51.2,Entregado
+ORD-0159,2026-07-02,Barranquilla,Marketplace,Ana,Laptop,Tecnología,4,3337000,13348000,9500000,3848000,28.83,Entregado
+ORD-0160,2026-07-10,Barranquilla,Marketplace,Carlos,Monitor,Tecnología,3,928000,2784000,1923000,861000,30.93,Entregado
+ORD-0161,2026-08-24,Bogotá,Tienda,Laura,Monitor,Tecnología,5,959000,4795000,3155000,1640000,34.2,Entregado
+ORD-0162,2026-09-25,Barranquilla,Marketplace,Laura,Monitor,Tecnología,4,965000,3860000,2536000,1324000,34.3,Entregado
+ORD-0163,2026-04-29,Medellín,Tienda,Laura,Monitor,Tecnología,3,946000,2838000,1920000,918000,32.35,Entregado
+ORD-0164,2026-03-21,Medellín,Tienda,Carlos,Monitor,Tecnología,2,971000,1942000,1256000,686000,35.32,Entregado
+ORD-0165,2026-05-13,Medellín,Tienda,Laura,Laptop,Tecnología,2,3348000,6696000,4494000,2202000,32.89,Entregado
+ORD-0166,2026-08-11,Barranquilla,Tienda,Ana,Teclado,Accesorios,2,211000,422000,228000,194000,45.97,Entregado
+ORD-0167,2026-01-07,Barranquilla,Web,Carlos,Mouse,Accesorios,4,133000,532000,240000,292000,54.89,Entregado
+ORD-0168,2026-05-12,Barranquilla,Web,Carlos,Silla,Mobiliario,4,1046000,4184000,2844000,1340000,32.03,En tránsito
+ORD-0169,2026-04-03,Barranquilla,Web,Diego,Laptop,Tecnología,4,3178000,12712000,9092000,3620000,28.48,Entregado
+ORD-0170,2026-03-22,Medellín,Marketplace,Laura,Teclado,Accesorios,4,220000,880000,428000,452000,51.36,En tránsito
+ORD-0171,2026-01-06,Medellín,Web,Carlos,Mouse,Accesorios,4,135000,540000,236000,304000,56.3,Entregado
+ORD-0172,2026-09-23,Barranquilla,Marketplace,Ana,Teclado,Accesorios,1,228000,228000,110000,118000,51.75,Entregado
+ORD-0173,2026-07-09,Medellín,Tienda,Ana,Silla,Mobiliario,3,1090000,3270000,2238000,1032000,31.56,Entregado
+ORD-0174,2026-07-02,Barranquilla,Tienda,Laura,Laptop,Tecnología,3,3128000,9384000,6885000,2499000,26.63,Entregado
+ORD-0175,2026-05-16,Medellín,Tienda,Diego,Laptop,Tecnología,2,3137000,6274000,4590000,1684000,26.84,Cancelado
+ORD-0176,2026-04-19,Medellín,Tienda,Carlos,Monitor,Tecnología,2,991000,1982000,1208000,774000,39.05,Entregado
+ORD-0177,2026-03-16,Medellín,Tienda,Laura,Teclado,Accesorios,4,219000,876000,436000,440000,50.23,Entregado
+ORD-0178,2026-04-28,Barranquilla,Web,Laura,Teclado,Accesorios,4,224000,896000,456000,440000,49.11,Entregado
+ORD-0179,2026-07-03,Bogotá,Marketplace,Laura,Monitor,Tecnología,3,933000,2799000,1866000,933000,33.33,Entregado
+ORD-0180,2026-03-20,Medellín,Marketplace,Laura,Teclado,Accesorios,4,210000,840000,452000,388000,46.19,En tránsito
+ORD-0181,2026-01-08,Bogotá,Marketplace,Carlos,Laptop,Tecnología,2,3345000,6690000,4674000,2016000,30.13,Entregado
+ORD-0182,2026-04-30,Medellín,Marketplace,Ana,Monitor,Tecnología,4,935000,3740000,2432000,1308000,34.97,En tránsito
+ORD-0183,2026-06-02,Barranquilla,Marketplace,Ana,Monitor,Tecnología,4,968000,3872000,2496000,1376000,35.54,Entregado
+ORD-0184,2026-03-02,Bogotá,Tienda,Diego,Teclado,Accesorios,4,214000,856000,432000,424000,49.53,Entregado
+ORD-0185,2026-03-15,Bogotá,Web,Laura,Mouse,Accesorios,2,130000,260000,120000,140000,53.85,En tránsito
+ORD-0186,2026-08-28,Barranquilla,Marketplace,Ana,Silla,Mobiliario,4,1118000,4472000,2964000,1508000,33.72,Entregado
+ORD-0187,2026-04-03,Cali,Web,Diego,Teclado,Accesorios,1,209000,209000,107000,102000,48.8,Entregado
+ORD-0188,2026-09-06,Bogotá,Marketplace,Laura,Monitor,Tecnología,1,923000,923000,619000,304000,32.94,Entregado
+ORD-0189,2026-06-24,Cali,Tienda,Laura,Mouse,Accesorios,5,131000,655000,310000,345000,52.67,Entregado
+ORD-0190,2026-01-27,Cali,Marketplace,Laura,Teclado,Accesorios,3,217000,651000,333000,318000,48.85,Entregado
+ORD-0191,2026-04-15,Bogotá,Web,Diego,Mouse,Accesorios,1,128000,128000,60000,68000,53.12,Entregado
+ORD-0192,2026-07-27,Medellín,Tienda,Ana,Silla,Mobiliario,5,1050000,5250000,3570000,1680000,32.0,Entregado
+ORD-0193,2026-09-14,Bogotá,Web,Ana,Silla,Mobiliario,5,1086000,5430000,3530000,1900000,34.99,Entregado
+ORD-0194,2026-08-23,Bogotá,Marketplace,Ana,Monitor,Tecnología,1,966000,966000,639000,327000,33.85,Entregado
+ORD-0195,2026-07-08,Barranquilla,Web,Laura,Monitor,Tecnología,3,956000,2868000,1839000,1029000,35.88,Entregado
+ORD-0196,2026-01-11,Bogotá,Web,Diego,Mouse,Accesorios,5,132000,660000,310000,350000,53.03,Entregado
+ORD-0197,2026-07-27,Medellín,Tienda,Diego,Mouse,Accesorios,1,124000,124000,60000,64000,51.61,Entregado
+ORD-0198,2026-02-22,Bogotá,Web,Ana,Laptop,Tecnología,4,3108000,12432000,9020000,3412000,27.45,Entregado
+ORD-0199,2026-02-15,Medellín,Tienda,Carlos,Monitor,Tecnología,1,915000,915000,602000,313000,34.21,Entregado
+ORD-0200,2026-01-26,Barranquilla,Tienda,Laura,Teclado,Accesorios,2,225000,450000,214000,236000,52.44,Entregado
+ORD-0201,2026-01-27,Bogotá,Tienda,Laura,Laptop,Tecnología,1,3059000,3059000,2373000,686000,22.43,Entregado
+ORD-0202,2026-06-09,Cali,Tienda,Diego,Silla,Mobiliario,2,1150000,2300000,1480000,820000,35.65,Entregado
+ORD-0203,2026-08-29,Medellín,Marketplace,Diego,Monitor,Tecnología,2,994000,1988000,1212000,776000,39.03,Cancelado
+ORD-0204,2026-09-02,Cali,Tienda,Ana,Mouse,Accesorios,4,136000,544000,244000,300000,55.15,Entregado
+ORD-0205,2026-06-20,Barranquilla,Web,Diego,Silla,Mobiliario,1,1136000,1136000,729000,407000,35.83,Entregado
+ORD-0206,2026-07-18,Bogotá,Tienda,Laura,Mouse,Accesorios,5,134000,670000,295000,375000,55.97,Entregado
+ORD-0207,2026-05-18,Bogotá,Tienda,Carlos,Mouse,Accesorios,2,131000,262000,124000,138000,52.67,En tránsito
+ORD-0208,2026-03-17,Bogotá,Marketplace,Diego,Teclado,Accesorios,5,224000,1120000,570000,550000,49.11,Entregado
+ORD-0209,2026-07-15,Medellín,Tienda,Ana,Monitor,Tecnología,2,932000,1864000,1208000,656000,35.19,Entregado
+ORD-0210,2026-07-17,Medellín,Tienda,Laura,Mouse,Accesorios,5,125000,625000,310000,315000,50.4,Entregado
+ORD-0211,2026-09-25,Bogotá,Web,Laura,Teclado,Accesorios,4,220000,880000,432000,448000,50.91,Entregado
+ORD-0212,2026-07-05,Medellín,Web,Diego,Silla,Mobiliario,5,1084000,5420000,3690000,1730000,31.92,En tránsito
+ORD-0213,2026-07-11,Bogotá,Tienda,Laura,Laptop,Tecnología,3,3242000,9726000,7074000,2652000,27.27,Entregado
+ORD-0214,2026-09-23,Barranquilla,Marketplace,Carlos,Silla,Mobiliario,1,1055000,1055000,709000,346000,32.8,En tránsito
+ORD-0215,2026-05-14,Medellín,Tienda,Ana,Teclado,Accesorios,4,211000,844000,440000,404000,47.87,Entregado
+ORD-0216,2026-06-23,Cali,Marketplace,Diego,Monitor,Tecnología,2,938000,1876000,1206000,670000,35.71,Entregado
+ORD-0217,2026-09-07,Bogotá,Tienda,Laura,Laptop,Tecnología,5,3245000,16225000,11895000,4330000,26.69,Entregado
+ORD-0218,2026-04-30,Medellín,Marketplace,Carlos,Laptop,Tecnología,5,3166000,15830000,11515000,4315000,27.26,Entregado
+ORD-0219,2026-03-30,Bogotá,Web,Laura,Laptop,Tecnología,3,3341000,10023000,6723000,3300000,32.92,Entregado
+ORD-0220,2026-09-20,Medellín,Marketplace,Laura,Mouse,Accesorios,1,125000,125000,60000,65000,52.0,Entregado
+ORD-0221,2026-08-14,Barranquilla,Tienda,Carlos,Laptop,Tecnología,4,3144000,12576000,9088000,3488000,27.74,Entregado
+ORD-0222,2026-08-14,Medellín,Web,Carlos,Monitor,Tecnología,2,989000,1978000,1280000,698000,35.29,Entregado
+ORD-0223,2026-04-23,Barranquilla,Web,Diego,Laptop,Tecnología,5,3317000,16585000,11870000,4715000,28.43,Entregado
+ORD-0224,2026-01-12,Bogotá,Marketplace,Laura,Laptop,Tecnología,4,3351000,13404000,9132000,4272000,31.87,Entregado
+ORD-0225,2026-03-15,Medellín,Tienda,Carlos,Teclado,Accesorios,2,225000,450000,216000,234000,52.0,Entregado
+ORD-0226,2026-05-17,Cali,Tienda,Carlos,Mouse,Accesorios,4,127000,508000,232000,276000,54.33,Entregado
+ORD-0227,2026-05-14,Bogotá,Marketplace,Carlos,Mouse,Accesorios,1,128000,128000,62000,66000,51.56,Entregado
+ORD-0228,2026-09-02,Cali,Web,Carlos,Teclado,Accesorios,1,215000,215000,108000,107000,49.77,Entregado
+ORD-0229,2026-02-19,Cali,Web,Ana,Mouse,Accesorios,3,129000,387000,177000,210000,54.26,En tránsito
+ORD-0230,2026-08-15,Cali,Web,Laura,Silla,Mobiliario,3,1101000,3303000,2163000,1140000,34.51,Entregado
+ORD-0231,2026-08-11,Medellín,Marketplace,Carlos,Laptop,Tecnología,4,3110000,12440000,9292000,3148000,25.31,Entregado
+ORD-0232,2026-03-31,Barranquilla,Tienda,Carlos,Monitor,Tecnología,5,910000,4550000,3025000,1525000,33.52,Entregado
+ORD-0233,2026-04-16,Cali,Web,Ana,Monitor,Tecnología,5,966000,4830000,3145000,1685000,34.89,Entregado
+ORD-0234,2026-02-03,Cali,Tienda,Laura,Silla,Mobiliario,4,1138000,4552000,2980000,1572000,34.53,Entregado
+ORD-0235,2026-09-10,Cali,Web,Carlos,Laptop,Tecnología,1,3171000,3171000,2354000,817000,25.76,Entregado
+ORD-0236,2026-07-07,Cali,Marketplace,Diego,Laptop,Tecnología,2,3265000,6530000,4648000,1882000,28.82,En tránsito
+ORD-0237,2026-09-22,Cali,Marketplace,Diego,Laptop,Tecnología,1,3154000,3154000,2270000,884000,28.03,En tránsito
+ORD-0238,2026-02-01,Medellín,Web,Carlos,Teclado,Accesorios,1,230000,230000,111000,119000,51.74,Entregado
+ORD-0239,2026-02-15,Bogotá,Web,Ana,Monitor,Tecnología,5,920000,4600000,3030000,1570000,34.13,Entregado
+ORD-0240,2026-04-10,Medellín,Marketplace,Diego,Teclado,Accesorios,1,227000,227000,112000,115000,50.66,Entregado
+ORD-0241,2026-02-22,Barranquilla,Marketplace,Laura,Teclado,Accesorios,1,225000,225000,107000,118000,52.44,Entregado
+ORD-0242,2026-02-26,Medellín,Web,Diego,Laptop,Tecnología,1,3170000,3170000,2253000,917000,28.93,Entregado
+ORD-0243,2026-07-23,Bogotá,Tienda,Ana,Monitor,Tecnología,1,992000,992000,618000,374000,37.7,Entregado
+ORD-0244,2026-07-05,Cali,Tienda,Ana,Teclado,Accesorios,4,214000,856000,436000,420000,49.07,Entregado
+ORD-0245,2026-06-16,Barranquilla,Marketplace,Ana,Silla,Mobiliario,2,1150000,2300000,1490000,810000,35.22,Entregado
+ORD-0246,2026-07-06,Bogotá,Web,Carlos,Laptop,Tecnología,5,3100000,15500000,11415000,4085000,26.35,Entregado
+ORD-0247,2026-08-04,Bogotá,Web,Laura,Mouse,Accesorios,4,132000,528000,248000,280000,53.03,En tránsito
+ORD-0248,2026-05-20,Barranquilla,Web,Ana,Silla,Mobiliario,1,1113000,1113000,711000,402000,36.12,Entregado
+ORD-0249,2026-05-28,Cali,Web,Diego,Laptop,Tecnología,3,3151000,9453000,6774000,2679000,28.34,Entregado
+ORD-0250,2026-03-17,Cali,Tienda,Carlos,Mouse,Accesorios,1,130000,130000,62000,68000,52.31,En tránsito
+ORD-0251,2026-02-14,Barranquilla,Web,Laura,Silla,Mobiliario,3,1137000,3411000,2187000,1224000,35.88,Entregado
+ORD-0252,2026-08-24,Medellín,Tienda,Carlos,Silla,Mobiliario,3,1112000,3336000,2166000,1170000,35.07,Entregado
+ORD-0253,2026-04-07,Cali,Web,Carlos,Silla,Mobiliario,5,1087000,5435000,3640000,1795000,33.03,Entregado
+ORD-0254,2026-06-15,Cali,Web,Ana,Silla,Mobiliario,3,1099000,3297000,2139000,1158000,35.12,Cancelado
+ORD-0255,2026-03-23,Barranquilla,Tienda,Laura,Silla,Mobiliario,1,1112000,1112000,716000,396000,35.61,Entregado
+ORD-0256,2026-02-25,Barranquilla,Tienda,Laura,Silla,Mobiliario,2,1154000,2308000,1466000,842000,36.48,En tránsito
+ORD-0257,2026-03-13,Bogotá,Marketplace,Diego,Monitor,Tecnología,5,961000,4805000,3065000,1740000,36.21,En tránsito
+ORD-0258,2026-05-18,Bogotá,Tienda,Diego,Monitor,Tecnología,4,985000,3940000,2408000,1532000,38.88,Entregado
+ORD-0259,2026-03-18,Barranquilla,Marketplace,Diego,Mouse,Accesorios,3,135000,405000,183000,222000,54.81,Entregado
+ORD-0260,2026-05-28,Cali,Web,Diego,Teclado,Accesorios,3,217000,651000,333000,318000,48.85,Entregado
+ORD-0261,2026-07-14,Barranquilla,Marketplace,Carlos,Mouse,Accesorios,3,126000,378000,177000,201000,53.17,Entregado
+ORD-0262,2026-02-15,Cali,Web,Diego,Teclado,Accesorios,3,230000,690000,333000,357000,51.74,Entregado
+ORD-0263,2026-01-06,Cali,Marketplace,Diego,Laptop,Tecnología,1,3122000,3122000,2375000,747000,23.93,Entregado
+ORD-0264,2026-09-22,Cali,Tienda,Ana,Silla,Mobiliario,4,1088000,4352000,2864000,1488000,34.19,Entregado
+ORD-0265,2026-02-04,Medellín,Web,Diego,Silla,Mobiliario,2,1056000,2112000,1434000,678000,32.1,Entregado
+ORD-0266,2026-09-07,Bogotá,Web,Laura,Mouse,Accesorios,4,133000,532000,248000,284000,53.38,Entregado
+ORD-0267,2026-06-12,Cali,Marketplace,Laura,Teclado,Accesorios,1,227000,227000,111000,116000,51.1,Entregado
+ORD-0268,2026-09-18,Medellín,Tienda,Carlos,Mouse,Accesorios,2,130000,260000,124000,136000,52.31,Entregado
+ORD-0269,2026-01-31,Bogotá,Marketplace,Diego,Silla,Mobiliario,5,1057000,5285000,3635000,1650000,31.22,Entregado
+ORD-0270,2026-01-06,Barranquilla,Web,Ana,Laptop,Tecnología,3,3267000,9801000,6960000,2841000,28.99,En tránsito
+ORD-0271,2026-01-16,Medellín,Marketplace,Carlos,Monitor,Tecnología,2,950000,1900000,1250000,650000,34.21,Entregado
+ORD-0272,2026-07-30,Bogotá,Web,Ana,Silla,Mobiliario,1,1061000,1061000,725000,336000,31.67,Entregado
+ORD-0273,2026-03-29,Bogotá,Marketplace,Ana,Silla,Mobiliario,4,1136000,4544000,2916000,1628000,35.83,En tránsito
+ORD-0274,2026-06-15,Bogotá,Marketplace,Ana,Monitor,Tecnología,2,936000,1872000,1218000,654000,34.94,Entregado
+ORD-0275,2026-06-28,Barranquilla,Marketplace,Ana,Monitor,Tecnología,4,962000,3848000,2408000,1440000,37.42,Entregado
+ORD-0276,2026-08-14,Medellín,Tienda,Ana,Laptop,Tecnología,5,3116000,15580000,11335000,4245000,27.25,Entregado
+ORD-0277,2026-08-22,Bogotá,Web,Diego,Teclado,Accesorios,4,222000,888000,456000,432000,48.65,Entregado
+ORD-0278,2026-04-24,Medellín,Web,Carlos,Mouse,Accesorios,3,129000,387000,183000,204000,52.71,Entregado
+ORD-0279,2026-03-29,Cali,Web,Laura,Teclado,Accesorios,4,213000,852000,456000,396000,46.48,Entregado
+ORD-0280,2026-07-17,Cali,Marketplace,Carlos,Teclado,Accesorios,4,223000,892000,456000,436000,48.88,Entregado
+ORD-0281,2026-07-18,Bogotá,Tienda,Carlos,Monitor,Tecnología,4,929000,3716000,2448000,1268000,34.12,Entregado
+ORD-0282,2026-05-04,Barranquilla,Tienda,Carlos,Monitor,Tecnología,1,921000,921000,625000,296000,32.14,Entregado
+ORD-0283,2026-03-23,Medellín,Tienda,Diego,Teclado,Accesorios,3,214000,642000,330000,312000,48.6,Entregado
+ORD-0284,2026-09-16,Cali,Marketplace,Diego,Monitor,Tecnología,2,984000,1968000,1262000,706000,35.87,En tránsito
+ORD-0285,2026-07-08,Bogotá,Marketplace,Ana,Silla,Mobiliario,2,1089000,2178000,1448000,730000,33.52,Entregado
+ORD-0286,2026-05-19,Barranquilla,Marketplace,Ana,Mouse,Accesorios,1,132000,132000,61000,71000,53.79,Entregado
+ORD-0287,2026-04-01,Cali,Marketplace,Laura,Monitor,Tecnología,3,920000,2760000,1920000,840000,30.43,Entregado
+ORD-0288,2026-04-09,Barranquilla,Tienda,Laura,Laptop,Tecnología,3,3068000,9204000,6831000,2373000,25.78,En tránsito
+ORD-0289,2026-07-26,Cali,Tienda,Ana,Mouse,Accesorios,2,136000,272000,118000,154000,56.62,Entregado
+ORD-0290,2026-08-25,Bogotá,Tienda,Carlos,Monitor,Tecnología,4,936000,3744000,2516000,1228000,32.8,Entregado
+ORD-0291,2026-01-21,Medellín,Tienda,Ana,Mouse,Accesorios,1,131000,131000,60000,71000,54.2,Entregado
+ORD-0292,2026-06-09,Cali,Tienda,Laura,Monitor,Tecnología,5,982000,4910000,3130000,1780000,36.25,Entregado
+ORD-0293,2026-01-01,Bogotá,Web,Ana,Laptop,Tecnología,3,3328000,9984000,7116000,2868000,28.73,Entregado
+ORD-0294,2026-01-20,Barranquilla,Marketplace,Diego,Teclado,Accesorios,2,226000,452000,218000,234000,51.77,En tránsito
+ORD-0295,2026-04-24,Cali,Marketplace,Diego,Teclado,Accesorios,5,211000,1055000,570000,485000,45.97,Entregado
+ORD-0296,2026-09-18,Medellín,Tienda,Carlos,Laptop,Tecnología,2,3177000,6354000,4626000,1728000,27.2,En tránsito
+ORD-0297,2026-01-23,Medellín,Marketplace,Laura,Silla,Mobiliario,3,1064000,3192000,2121000,1071000,33.55,Entregado
+ORD-0298,2026-05-08,Cali,Web,Carlos,Laptop,Tecnología,2,3155000,6310000,4594000,1716000,27.19,Entregado
+ORD-0299,2026-09-07,Medellín,Marketplace,Laura,Mouse,Accesorios,2,133000,266000,116000,150000,56.39,Entregado
+ORD-0300,2026-06-03,Bogotá,Marketplace,Diego,Monitor,Tecnología,2,958000,1916000,1224000,692000,36.12,Entregado
