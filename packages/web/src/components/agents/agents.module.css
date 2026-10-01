@@ -4,6 +4,22 @@
 .shell.shell {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
+  transition:
+    width 0.18s ease,
+    height 0.18s ease;
+}
+
+/* Near full viewport; the backdrop keeps its 16px gutter. */
+.shell.shell.maximized {
+  width: 100%;
+  height: calc(100dvh - 32px);
+  max-height: none;
+}
+
+/* Inset the scroll container so its scrollbar track stays clear of the 22px rounded corners. */
+.scroll.scroll {
+  margin: 12px 6px 12px 0;
+  scrollbar-gutter: stable;
 }
 
 .breadcrumb {
@@ -410,6 +426,10 @@ textarea.control {
   .spinner,
   .progressBar {
     animation: none;
+  }
+
+  .shell.shell {
+    transition: none;
   }
 }
 

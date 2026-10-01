@@ -431,6 +431,8 @@ export const es: Record<MessageKey, string> = {
   "error.generic": "{message}",
   "sidebar.agents": "Agentes",
   "agentsWin.title": "Agentes",
+  "agentsWin.maximize": "Maximizar",
+  "agentsWin.restore": "Restaurar tamaño",
   "agentsWin.lead":
     "Los agentes son archivos Markdown que otras herramientas también pueden leer: los de proyecto viven en .agents/agents del workspace y los globales en ~/.agents/agents.",
   "agentsWin.create": "Crear",

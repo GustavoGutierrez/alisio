@@ -423,6 +423,8 @@ export const en = {
   "error.generic": "{message}",
   "sidebar.agents": "Agents",
   "agentsWin.title": "Agents",
+  "agentsWin.maximize": "Maximize",
+  "agentsWin.restore": "Restore size",
   "agentsWin.lead":
     "Agents are Markdown files other harnesses can read too: project agents live in .agents/agents of the workspace, global agents in ~/.agents/agents.",
   "agentsWin.create": "Create",

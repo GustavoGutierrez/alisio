@@ -14,11 +14,14 @@ import {
 } from "../../store/agents.ts";
 import { agentsOpen, api, showToast } from "../../store/app.ts";
 import { errorText } from "../../store/errors.ts";
+import { readPref, writePref } from "../../store/storage.ts";
 import { Icon } from "../icons.tsx";
 import settings from "../settings/settings.module.css";
 import { Pill, Status, settingsWorkspace, useLoad } from "../settings/shared.tsx";
 import { AgentEditor } from "./AgentEditor.tsx";
 import styles from "./agents.module.css";
+
+const MAXIMIZED_PREF = "alisio.agents.maximized";
 
 const FOCUSABLE =
   "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']";
@@ -44,6 +47,7 @@ export function AgentsModal() {
   const workspace = settingsWorkspace();
   const [view, setView] = useState<View>({ kind: "list" });
   const [dirty, setDirty] = useState(false);
+  const [maximized, setMaximized] = useState(() => readPref(MAXIMIZED_PREF) === "1");
   const dialog = useRef<HTMLDivElement>(null);
   const overview = useLoad(() => api.agentDefinitions(workspace?.id), [workspace?.id], ["agents"]);
   const templates = useLoad(() => api.agentTemplates(), []);
@@ -97,7 +101,7 @@ export function AgentsModal() {
     >
       <div
         ref={dialog}
-        class={`${settings.dialog} ${styles.shell}`}
+        class={`${settings.dialog} ${styles.shell}${maximized ? ` ${styles.maximized}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="agents-title"
@@ -121,7 +125,7 @@ export function AgentsModal() {
           }
         }}
       >
-        <div class={settings.content}>
+        <div class={`${settings.content} ${styles.scroll}`}>
           <div class={settings.topBar}>
             <nav class={styles.breadcrumb} aria-label={t("agentsWin.title")}>
               {view.kind === "editor" ? (
@@ -140,6 +144,20 @@ export function AgentsModal() {
                 </span>
               )}
             </nav>
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label={t(maximized ? "agentsWin.restore" : "agentsWin.maximize")}
+              title={t(maximized ? "agentsWin.restore" : "agentsWin.maximize")}
+              aria-pressed={maximized}
+              onClick={() => {
+                const next = !maximized;
+                setMaximized(next);
+                writePref(MAXIMIZED_PREF, next ? "1" : undefined);
+              }}
+            >
+              <Icon name={maximized ? "shrink" : "expand"} size={16} />
+            </button>
             <button type="button" class="icon-btn" aria-label={t("common.close")} onClick={close}>
               <Icon name="x" size={18} />
             </button>
