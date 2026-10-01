@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
 import { useData } from "vitepress";
+import { computed, onBeforeUnmount, ref } from "vue";
 
 const PACKAGE = "@alisio/alisio-code";
 const managers = [

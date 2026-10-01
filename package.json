@@ -27,13 +27,13 @@
     "install:smoke": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/install-smoke.ts"
   },
   "devDependencies": {
+    "@alisio/alisio-code": "workspace:*",
     "@alisio/core": "workspace:*",
     "@alisio/plugin-memory": "workspace:*",
     "@alisio/plugin-openai-compatible": "workspace:*",
     "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
     "@alisio/server": "workspace:*",
-    "@alisio/alisio-code": "workspace:*",
     "@biomejs/biome": "2.5.14",
     "@changesets/cli": "3.0.3",
     "@modelcontextprotocol/server": "2.1.0",
@@ -42,6 +42,7 @@
     "typescript": "7.0.2",
     "vitepress": "1.6.4",
     "vitest": "5.0.1",
+    "vue": "3.5.43",
     "zod": "4.6.5"
   },
   "engines": {
