@@ -330,10 +330,19 @@ describe("legacy provider provenance", () => {
 });
 
 describe("run time limits", () => {
-  it("allows 10 minutes per run and cuts a completely silent model request after 2 minutes", () => {
+  it("allows 10 minutes per run, cuts a silent model request after 90 s and retries it once", () => {
     const { limits } = configSchema.parse({});
     expect(limits.timeoutMs).toBe(600_000);
-    expect(limits.firstTokenTimeoutMs).toBe(120_000);
+    expect(limits.firstTokenTimeoutMs).toBe(90_000);
+    expect(limits.firstTokenRetries).toBe(1);
+  });
+
+  it("accepts 0 to 3 silent-request retries and rejects more", () => {
+    const parse = (n: number) => configSchema.safeParse({ limits: { firstTokenRetries: n } });
+    expect(parse(0).success).toBe(true);
+    expect(parse(3).success).toBe(true);
+    expect(parse(4).success).toBe(false);
+    expect(parse(-1).success).toBe(false);
   });
 
   it("lets the first-token limit be switched off with 0", () => {

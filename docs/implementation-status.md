@@ -1710,11 +1710,25 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   una ejecución que lo alcanza termina como `failed` con `run_failed { code: "timeout", timeout }` y
   un mensaje que nombra modelo, proveedor y qué hacer (antes: `cancelled` con «The operation was
   aborted due to timeout»). La detención del usuario sigue siendo `cancelled`.
-- Nueva clave `limits.firstTokenTimeoutMs` (por defecto `120000`; `0` la desactiva): detiene una
+- Nueva clave `limits.firstTokenTimeoutMs` (por defecto `120000`, ahora `90000`, ver abajo; `0` la desactiva): detiene una
   petición totalmente silenciosa. El propietario decidió (2026-10-01) activarla en 2 min y subir
   `limits.timeoutMs` de 300000 a 600000: DeepSeek llegó a responder tras 56 s de cola, pero un
   modelo que no emite su razonamiento en streaming puede callar más de 2 min (riesgo conocido: en
   ese caso hay que subirla o poner `0`).
+- Decisión del propietario (2026-10-01): una petición silenciosa se reintenta **una vez** y el valor
+  por defecto de `limits.firstTokenTimeoutMs` baja de 120000 a **90000** (la petición con 56 s de
+  cola sigue cabiendo). Nueva clave `limits.firstTokenRetries` (entero 0 a 3, por defecto `1`; `0`
+  lo desactiva). El reintento es genérico y vive en el runner (ningún plugin de proveedor cambia):
+  solo si saltó el temporizador de primer token, no llegó ningún delta de la petición y quedan
+  reintentos; reenvía exactamente las mismas entradas (sin mensajes ni eventos duplicados), no cuenta
+  como turno (`maxTurns` intacto) y no se inicia si no cabe en `limits.timeoutMs`. Evento aditivo
+  `request_retry { attempt, of, reason, afterMs }`; `RunTimeoutInfo.attempts` (aditivo) y mensaje
+  «did not respond after N attempts of 90 s each». Peor caso con los valores por defecto: unos
+  2 × 90 s más una pausa de 250 ms. Contabilidad: el intento abortado no devuelve `usage`, así que no
+  suma tokens; `requests` (usado solo para `firstRequest` del mensaje de timeout) cuenta turnos, no
+  reintentos. Límite conocido: un modelo que no emite su razonamiento en streaming puede callar más
+  de 90 s y recibir un reintento innecesario (hay que subir `firstTokenTimeoutMs` o poner `0`).
+  Web, TUI y modo texto sin interfaz muestran «The model did not respond; retrying (1/1)…».
 - `InflightState.startedAt` (aditivo) permite que una recarga conserve el tiempo transcurrido.
 - Web: línea de estado (`RunStatus`) con fase, tiempo de ejecución y del paso, última actividad,
   aviso a los 15 s y a los 60 s con **Detener**, región `aria-live` que cambia solo con la fase o el

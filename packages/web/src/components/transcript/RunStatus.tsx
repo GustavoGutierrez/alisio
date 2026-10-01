@@ -36,6 +36,8 @@ export function phaseLabel(phase: Phase): string {
       return t("run.phase.writing");
     case "compacting":
       return t("run.phase.compacting");
+    case "retrying":
+      return t("run.phase.retrying", { attempt: phase.attempt, of: phase.of });
     case "approval":
       return t("run.phase.approval", { name: toolLabel(phase.name) });
     case "tool": {

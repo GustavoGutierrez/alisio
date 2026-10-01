@@ -488,6 +488,11 @@ export interface RunTimeoutInfo {
   tool?: string;
   /** Nothing had been produced yet: the very first model request of the run got no answer. */
   firstRequest?: boolean;
+  /**
+   * `first_token` only: how many times the same request was sent (the first try plus the silent
+   * retries of `limits.firstTokenRetries`); `1` when retrying is disabled.
+   */
+  attempts?: number;
 }
 /**
  * Payload of each event type the core emits today, keyed by `RunEvent.type`. Additive: new
@@ -553,6 +558,13 @@ export interface RunEventDataMap {
   };
   run_completed: { tokens: number; text: string; truncated?: boolean };
   response_truncated: { turn: number; maxOutputTokens: number };
+  /**
+   * A model request stayed completely silent for `limits.firstTokenTimeoutMs` and the same
+   * request is sent again (no new turn, nothing appended to the session). `attempt` is the
+   * retry about to start (1-based), `of` the retries allowed (`limits.firstTokenRetries`) and
+   * `afterMs` how long the aborted request had been silent.
+   */
+  request_retry: { attempt: number; of: number; reason: "first_token_timeout"; afterMs: number };
   run_turns_exceeded: { turns: number; maxTurns: number };
   /**
    * The run failed. `error` is always a human-readable message. `code: "timeout"` (with `timeout`)

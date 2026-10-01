@@ -181,11 +181,17 @@ const configObjectSchema = z
         timeoutMs: z.number().int().min(100).default(600000),
         /**
          * Stop a model request that stays completely silent (no text, reasoning or tool-call
-         * delta) this long, so a queued or stuck provider is cut after 2 minutes instead of the
+         * delta) this long, so a queued or stuck provider is cut after 90 s instead of the
          * whole-run `timeoutMs`. 0 disables it (models that do not stream their reasoning can stay
          * silent for minutes: raise or disable it for those).
          */
-        firstTokenTimeoutMs: z.number().int().min(0).default(120000),
+        firstTokenTimeoutMs: z.number().int().min(0).default(90000),
+        /**
+         * How many times the SAME request is sent again after it stayed silent for
+         * `firstTokenTimeoutMs` (a stalled connection usually answers on the next try). 0
+         * disables the retry. Never counts as a turn.
+         */
+        firstTokenRetries: z.number().int().min(0).max(3).default(1),
         maxContextChars: z.number().int().positive().default(800000),
         /**
          * Per-call output token budget for one agent turn. 4096 starves reasoning-heavy models,
@@ -198,7 +204,8 @@ const configObjectSchema = z
       .default(() => ({
         maxTurns: 100,
         timeoutMs: 600000,
-        firstTokenTimeoutMs: 120000,
+        firstTokenTimeoutMs: 90000,
+        firstTokenRetries: 1,
         maxContextChars: 800000,
         maxOutputTokens: 16384,
       })),
@@ -771,6 +778,7 @@ const SETTABLE_KEYS = {
   "limits.maxContextChars": SETTABLE_SECTIONS.limits.shape.maxContextChars,
   "limits.timeoutMs": SETTABLE_SECTIONS.limits.shape.timeoutMs,
   "limits.firstTokenTimeoutMs": SETTABLE_SECTIONS.limits.shape.firstTokenTimeoutMs,
+  "limits.firstTokenRetries": SETTABLE_SECTIONS.limits.shape.firstTokenRetries,
   "pluginHooks.timeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.timeoutMs,
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
   "tui.contentPaddingX": SETTABLE_SECTIONS.tui.shape.contentPaddingX,

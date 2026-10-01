@@ -43,6 +43,12 @@ export function describeTimeout(info: RunTimeoutInfo): string {
     ? `The model ${info.model}${info.provider ? ` (${info.provider})` : ""}`
     : "The model";
   const limit = `${seconds(info.ms)} s`;
+  if (info.kind === "first_token" && info.attempts && info.attempts > 1)
+    return (
+      `${who} did not respond after ${info.attempts} attempts of ${limit} each: no tokens were received, so the run was stopped. ` +
+      "Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs (0 disables it); " +
+      "limits.firstTokenRetries sets how many times a silent request is sent again."
+    );
   if (info.kind === "first_token")
     return (
       `${who} sent nothing within ${limit} of the request, so the run was stopped. ` +

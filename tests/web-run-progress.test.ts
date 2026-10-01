@@ -39,6 +39,41 @@ const play = (steps: Array<[number, ServerFrame]>): RunProgress | undefined =>
     undefined,
   );
 
+describe("silent-request retry phase", () => {
+  const retry = event("request_retry", {
+    attempt: 1,
+    of: 1,
+    reason: "first_token_timeout",
+    afterMs: 90_000,
+  });
+  it("shows the retry for the attempt and returns to the normal phases afterwards", () => {
+    const phaseAt = (steps: Array<[number, ServerFrame]>) => {
+      const state = play(steps);
+      return state ? describePhase(state) : undefined;
+    };
+    const start: [number, ServerFrame] = [0, event("run_started", { model: "m" })];
+    expect(phaseAt([start, [90_000, retry]])).toEqual({ kind: "retrying", attempt: 1, of: 1 });
+    expect(phaseAt([start, [90_000, retry], [91_000, delta({ reasoning: "hmm" })]])).toEqual({
+      kind: "thinking",
+    });
+    expect(phaseAt([start, [90_000, retry], [91_000, delta({ text: "ok" })]])).toEqual({
+      kind: "writing",
+    });
+    expect(
+      phaseAt([start, [90_000, retry], [95_000, event("turn_completed", { turn: 1, calls: 0 })]]),
+    ).toEqual({ kind: "waiting" });
+  });
+  it("restarts the step clock and the quiet counter with the retried attempt", () => {
+    const state = play([
+      [0, event("run_started")],
+      [90_000, retry],
+    ]);
+    expect(state?.phaseSince).toBe(90_000);
+    expect(stallOf(state as RunProgress, 90_000 + STALL_QUIET_MS - 1).level).toBe("none");
+    expect(stallOf(state as RunProgress, 90_000 + STALL_QUIET_MS).level).toBe("quiet");
+  });
+});
+
 describe("phase derivation from run events", () => {
   it("follows a dashboard run: model, reasoning, Python, data, artifact, answer", () => {
     const phases: string[] = [];
@@ -312,6 +347,16 @@ describe("timeout failures in the transcript", () => {
         timeout: { kind: "first_token", ms: 90_000, model: "m" },
       }),
     ).toMatchObject({ code: "run_timeout_first_token", params: { seconds: "90" } });
+    expect(
+      run({
+        error: "x",
+        code: "timeout",
+        timeout: { kind: "first_token", ms: 90_000, model: "m", attempts: 2 },
+      }),
+    ).toMatchObject({
+      code: "run_timeout_first_token_retried",
+      params: { seconds: "90", attempts: "2" },
+    });
     expect(
       run({
         error: "x",

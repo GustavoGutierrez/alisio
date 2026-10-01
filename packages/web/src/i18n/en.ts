@@ -131,6 +131,7 @@ export const en = {
   "run.phase.thinking": "Thinking…",
   "run.phase.writing": "Writing the answer…",
   "run.phase.compacting": "Compacting context…",
+  "run.phase.retrying": "The model did not respond; retrying ({attempt}/{of})…",
   "run.phase.approval": "Waiting for your approval: {name}",
   "run.phase.python": "Running Python…",
   "run.phase.pythonWith": "Running Python ({detail})…",
@@ -167,6 +168,8 @@ export const en = {
     "The run reached its {seconds} s limit. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
   "notice.run_timeout_first_token":
     "{who} sent nothing within {seconds} s of the request, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs.",
+  "notice.run_timeout_first_token_retried":
+    "{who} did not respond after {attempts} attempts of {seconds} s each, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs; limits.firstTokenRetries sets how many times a silent request is sent again.",
   "transcript.sending": "Sending…",
   "transcript.notSent": "Not sent: {error}",
   "transcript.images": "{count} image(s)",

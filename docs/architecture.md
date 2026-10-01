@@ -91,8 +91,12 @@ before observers see it. `turn_completed` adds `durationMs` (provider request to
 and `ttftMs` (time to the first streamed delta, absent when the provider streamed nothing).
 `run_failed` is additive for time limits: a run stopped by `limits.timeoutMs` or
 `limits.firstTokenTimeoutMs` ends as `failed` with `code: "timeout"` and a `timeout` object (`kind`,
-`ms`, `model`, `provider`, `stage`, `tool`, `firstRequest`); `error` is always a readable English
-sentence. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
+`ms`, `model`, `provider`, `stage`, `tool`, `firstRequest`, `attempts`); `error` is always a readable English
+sentence. When a model request stays silent until `limits.firstTokenTimeoutMs` the runner sends the
+same request again up to `limits.firstTokenRetries` times (default 1) and emits `request_retry`
+(`attempt`, `of`, `reason: "first_token_timeout"`, `afterMs`); a retry is not a turn, appends nothing
+to the session and only happens while nothing was received for the request, so tool call IDs and the
+persisted session stay consistent. `attempts` counts the sends of the request that finally failed. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
 emits; `tests/run-events-contract.test.ts` checks the runner against them.
 
 ## Session database (v4) {#session-database}

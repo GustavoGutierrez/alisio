@@ -129,6 +129,8 @@ const contract: { [K in RunEventType]: Check } = {
     num(d.tokens) && str(d.text) && opt(d.truncated, (v) => typeof v === "boolean"),
   response_truncated: (d) => num(d.turn) && num(d.maxOutputTokens),
   run_turns_exceeded: (d) => num(d.turns) && num(d.maxTurns),
+  request_retry: (d) =>
+    num(d.attempt) && num(d.of) && d.reason === "first_token_timeout" && num(d.afterMs),
   run_failed: (d) => str(d.error),
   run_cancelled: (d) => str(d.error),
   model_changed: (d) => str(d.model) && str(d.previous),

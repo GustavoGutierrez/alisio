@@ -88,7 +88,8 @@ a demanda.
 conversación dice lo que realmente está haciendo, a partir únicamente de los eventos y la salida en
 streaming que la página ha recibido: *Esperando al modelo…*, *Pensando…*, *Redactando la
 respuesta…*, *Leyendo tus datos (ventas.csv)…*, *Ejecutando Python (analisis.py)…*, *Publicando el
-artefacto (dashboard.html)…*, *Ejecutando* `<herramienta>`*…*, *Compactando el contexto…* o *Esperando
+artefacto (dashboard.html)…*, *Ejecutando* `<herramienta>`*…*, *Compactando el contexto…*, *El modelo no respondió; reintentando (1/1)…* (mientras se reenvía una
+petición silenciosa, ver `limits.firstTokenRetries`) o *Esperando
 tu aprobación / tu respuesta* (estas dos nunca cuentan como bloqueo). Junto a ella aparecen el tiempo
 transcurrido de la ejecución, el del paso actual y cuándo llegó algo por última vez (*última
 actualización hace 3 s*). Si no llega nada durante 15 s, la línea indica cuánto lleva en silencio y

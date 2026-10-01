@@ -143,7 +143,12 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       if (opts.json) process.stdout.write(`${JSON.stringify(event)}\n`);
       else if (event.type === "text_delta")
         process.stdout.write(String((event.data as { delta: string }).delta));
-      else if (event.type === "tool_started")
+      else if (event.type === "request_retry") {
+        const retry = event.data as import("@alisio/sdk").RunEventDataMap["request_retry"];
+        process.stderr.write(
+          `\nThe model did not respond; retrying (${retry.attempt}/${retry.of})…\n`,
+        );
+      } else if (event.type === "tool_started")
         process.stderr.write(`\n→ ${(event.data as { name: string }).name}\n`);
       else if (event.type === "artifact_published") process.stderr.write(artifactLine(event));
     },

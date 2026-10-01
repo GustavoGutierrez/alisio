@@ -32,6 +32,11 @@ export interface RunProgress {
   /** Approvals waiting for the user, by call id. */
   approvals: Record<string, string>;
   compacting: boolean;
+  /**
+   * The runner is sending the same request again after it stayed silent (`request_retry`);
+   * cleared by the first thing the retried request produces, or by the end of the turn.
+   */
+  retry?: { attempt: number; of: number };
   /** Identity of the phase shown; `phaseSince` restarts when it changes. */
   phaseKey: string;
   phaseSince: number;
@@ -44,6 +49,7 @@ export type Phase =
   | { kind: "thinking" }
   | { kind: "writing" }
   | { kind: "compacting" }
+  | { kind: "retrying"; attempt: number; of: number }
   | { kind: "approval"; name: string }
   | { kind: "tool"; name: string; category: ToolCategory; summary: string };
 
@@ -114,6 +120,7 @@ export function describePhase(progress: RunProgress): Phase {
       summary: argumentSummary(tool.arguments),
     };
   if (progress.compacting) return { kind: "compacting" };
+  if (progress.retry) return { kind: "retrying", ...progress.retry };
   return { kind: progress.stream };
 }
 
@@ -122,7 +129,14 @@ const keyOf = (progress: Omit<RunProgress, "phaseKey" | "phaseSince">): string =
   if (approval !== undefined) return `approval:${approval}`;
   const tool = progress.tools.at(-1);
   if (tool) return `tool:${tool.id}`;
-  return progress.compacting ? "compacting" : progress.stream;
+  if (progress.compacting) return "compacting";
+  return progress.retry ? `retry:${progress.retry.attempt}` : progress.stream;
+};
+
+/** The same progress without a pending retry (anything the retried request produced ends it). */
+const settled = <T extends { retry?: RunProgress["retry"] }>(progress: T): Omit<T, "retry"> => {
+  const { retry: _retry, ...rest } = progress;
+  return rest;
 };
 
 const settle = (
@@ -193,7 +207,11 @@ export function applyProgress(
   if (frame.t === "delta") {
     const current = state?.runId === frame.runId ? state : fresh(frame.runId, now);
     const stream: Stream = frame.text ? "writing" : frame.reasoning ? "thinking" : current.stream;
-    return settle({ ...current, stream, lastActivityAt: now, compacting: false }, current, now);
+    return settle(
+      { ...settled(current), stream, lastActivityAt: now, compacting: false },
+      current,
+      now,
+    );
   }
   if (frame.t !== "event") return state;
   const event = frame.event;
@@ -218,14 +236,14 @@ export function applyProgress(
             ...current.tools,
             { id, name: str(data.name), arguments: str(data.arguments), startedAt: now },
           ];
-      return settle({ ...touched, tools, compacting: false }, current, now);
+      return settle({ ...settled(touched), tools, compacting: false }, current, now);
     }
     case "tool_completed": {
       const id = str(data.id);
       const { [id]: _gone, ...approvals } = current.approvals;
       return settle(
         {
-          ...touched,
+          ...settled(touched),
           tools: current.tools.filter((t) => t.id !== id),
           approvals,
           // The tool's results go back to the model: from here on it is the model's turn.
@@ -251,13 +269,23 @@ export function applyProgress(
       return settle({ ...touched, approvals }, current, now);
     }
     case "compaction_started":
-      return settle({ ...touched, compacting: true }, current, now);
+      return settle({ ...settled(touched), compacting: true }, current, now);
     case "compaction_completed":
     case "compaction_failed":
     case "compaction_skipped":
-      return settle({ ...touched, compacting: false, stream: "waiting" }, current, now);
+      return settle({ ...settled(touched), compacting: false, stream: "waiting" }, current, now);
     case "turn_completed":
-      return settle({ ...touched, stream: "waiting" }, current, now);
+      return settle({ ...settled(touched), stream: "waiting" }, current, now);
+    case "request_retry":
+      return settle(
+        {
+          ...touched,
+          stream: "waiting",
+          retry: { attempt: Number(data.attempt) || 1, of: Number(data.of) || 1 },
+        },
+        current,
+        now,
+      );
     case "artifact_published":
     case "plugin_hook_failed":
     case "context_reduced":

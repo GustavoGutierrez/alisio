@@ -748,6 +748,8 @@ export interface ViewState {
   items: TranscriptItem[];
   streaming: boolean;
   compacting: boolean;
+  /** The runner is sending a silent request again (`request_retry`); cleared by any output. */
+  retry?: { attempt: number; of: number };
   model: string;
   /** Context size in tokens: provider-reported, or estimated (`~`). */
   context?: { used: number; estimated: boolean };
@@ -853,7 +855,7 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
     event.type === "run_cancelled" ||
     event.type === "run_turns_exceeded";
   if (terminal) {
-    const { lastEventAt: _ended, ...rest } = next;
+    const { lastEventAt: _ended, retry: _retry, ...rest } = next;
     return rest;
   }
   return { ...next, lastEventAt: Date.parse(event.timestamp) || Date.now() };
@@ -884,6 +886,11 @@ export interface RunPhase {
 /** What the live run is doing, from the transcript items and flags the events already update. */
 export function runPhase(view: ViewState): RunPhase {
   if (view.compacting) return { label: "compacting context", silentByDesign: false };
+  if (view.retry)
+    return {
+      label: `the model did not respond; retrying (${view.retry.attempt}/${view.retry.of})`,
+      silentByDesign: false,
+    };
   const tool = view.items.findLast(
     (i) => i.kind === "tool" && i.status !== "ok" && i.status !== "error",
   );
@@ -921,7 +928,19 @@ export function quietFor(view: ViewState, now: number): number {
   const idle = Math.max(0, now - view.lastEventAt);
   return idle >= QUIET_MS ? idle : 0;
 }
+/** What the retried request produced (or the end of the turn) ends the retry label. */
+const RETRY_ENDERS = new Set([
+  "text_delta",
+  "reasoning_delta",
+  "turn_completed",
+  "tool_started",
+  "compaction_started",
+]);
 function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
+  if (state.retry && RETRY_ENDERS.has(event.type)) {
+    const { retry: _retry, ...rest } = state;
+    return reduceEventItems(rest, event);
+  }
   const d = (event.data ?? {}) as Record<string, unknown>;
   const at = Date.parse(event.timestamp);
   switch (event.type) {
@@ -1029,6 +1048,8 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
       }
       return ended;
     }
+    case "request_retry":
+      return { ...state, retry: { attempt: Number(d.attempt) || 1, of: Number(d.of) || 1 } };
     case "compaction_started":
       return { ...state, compacting: true };
     case "compaction_completed": {

@@ -92,6 +92,32 @@ describe("TUI run phase (footer)", () => {
   });
 });
 
+describe("TUI silent-request retry", () => {
+  const retry = ev("request_retry", 90_000, {
+    attempt: 1,
+    of: 1,
+    reason: "first_token_timeout",
+    afterMs: 90_000,
+  });
+  it("shows the retry in the footer until the retried request produces output", () => {
+    const retrying = play([ev("run_started", 0), retry]);
+    expect(runPhase(retrying)).toEqual({
+      label: "the model did not respond; retrying (1/1)",
+      silentByDesign: false,
+    });
+    expect(
+      runPhase(reduceEvent(retrying, ev("reasoning_delta", 91_000, { delta: "x" }))).label,
+    ).toBe("thinking");
+    expect(runPhase(reduceEvent(retrying, ev("turn_completed", 91_000, { turn: 1 }))).label).toBe(
+      "waiting for the model",
+    );
+  });
+  it("forgets the retry when the run ends", () => {
+    const ended = reduceEvent(play([ev("run_started", 0), retry]), ev("run_failed", 91_000, {}));
+    expect(ended.retry).toBeUndefined();
+  });
+});
+
 describe("TUI quiet detection with a fake clock", () => {
   const view = play([ev("run_started", 0), ev("reasoning_delta", 1_000, { delta: "x" })]);
   it("is zero until the quiet threshold and then reports the silence", () => {

@@ -357,13 +357,26 @@ function timeoutNotice(
         stage?: string;
         tool?: string;
         firstRequest?: boolean;
+        attempts?: number;
       }
     | undefined;
   if (!info || typeof info.ms !== "number") return undefined;
   const who = info.model ? (info.provider ? `${info.model} (${info.provider})` : info.model) : "";
-  const params = { who, seconds: String(Math.round(info.ms / 1000)), tool: info.tool ?? "" };
+  const params = {
+    who,
+    seconds: String(Math.round(info.ms / 1000)),
+    tool: info.tool ?? "",
+    attempts: String(info.attempts ?? 1),
+  };
   // The model-centred messages need its name; without it only the generic limit text is true.
-  if (info.kind === "first_token" && who) return { code: "run_timeout_first_token", params };
+  if (info.kind === "first_token" && who)
+    return {
+      code:
+        info.attempts && info.attempts > 1
+          ? "run_timeout_first_token_retried"
+          : "run_timeout_first_token",
+      params,
+    };
   if (info.stage === "waiting_model" && who)
     return {
       code: info.firstRequest ? "run_timeout_waiting" : "run_timeout_waiting_later",

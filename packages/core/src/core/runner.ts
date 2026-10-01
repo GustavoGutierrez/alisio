@@ -39,6 +39,21 @@ import type {
 } from "./contracts.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
+
+/** Pause before a silent request is sent again; short, and cut off by a stop or the run limit. */
+const FIRST_TOKEN_RETRY_PAUSE_MS = 250;
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
 export interface CompactionSettings {
   /** Compact automatically when context usage crosses `threshold` of a known window. */
   auto?: boolean;
@@ -63,6 +78,8 @@ export interface RunnerOptions {
   timeoutMs?: number;
   /** See `RunnerSettingsPatch.firstTokenTimeoutMs`. */
   firstTokenTimeoutMs?: number;
+  /** See `RunnerSettingsPatch.firstTokenRetries`. */
+  firstTokenRetries?: number;
   maxContextChars?: number;
   maxOutputTokens?: number;
   maxTokens?: number;
@@ -114,6 +131,12 @@ export interface RunnerSettingsPatch {
    * for this many milliseconds. `0` or unset disables it: only the run timeout applies.
    */
   firstTokenTimeoutMs?: number;
+  /**
+   * How many times the same request is sent again after a silent timeout (`firstTokenTimeoutMs`).
+   * `0` or unset disables it. A retry is not a turn; it only happens while nothing at all was
+   * received for the request.
+   */
+  firstTokenRetries?: number;
 }
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
@@ -143,6 +166,8 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Silent-request limit for this run; beats the runner-level `firstTokenTimeoutMs`. */
   firstTokenTimeoutMs?: number;
+  /** Silent-request retries for this run; beats the runner-level `firstTokenRetries`. */
+  firstTokenRetries?: number;
   /** Reasoning effort level for this run; beats the runner-level default when set. */
   reasoningEffort?: string;
   /** Run id to use for this run's events (e.g. preassigned by an embedder); a UUID otherwise. */
@@ -913,6 +938,9 @@ export class AgentRunner {
     const usageTotal = { input: 0, output: 0 };
     const runTimeoutMs = options.timeoutMs ?? o.timeoutMs ?? 300_000;
     const firstTokenMs = options.firstTokenTimeoutMs ?? o.firstTokenTimeoutMs ?? 0;
+    const firstTokenRetries =
+      firstTokenMs > 0 ? Math.max(0, options.firstTokenRetries ?? o.firstTokenRetries ?? 0) : 0;
+    const runStartedAt = Date.now();
     const timeout = AbortSignal.timeout(runTimeoutMs);
     const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
     // What the run was doing, so a timeout can say where it was stuck (see `RunTimeoutError`).
@@ -922,6 +950,8 @@ export class AgentRunner {
     let providerName: string | undefined;
     let requests = 0;
     let silentTimedOut = false;
+    /** Sends of the request that is (or was last) waiting for its first token. */
+    let silentAttempts = 0;
     const context = options.context ?? o.context;
     const workspace = options.workspace ?? o.workspace;
     const pathAccess = o.pathAccess;
@@ -1072,55 +1102,94 @@ export class AgentRunner {
         const providerMessages = messages.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
-        const requested = Date.now();
+        let requested = Date.now();
         let firstDelta: number | undefined;
-        // A request that stays completely silent can be stopped early (`firstTokenTimeoutMs`).
-        const silent = new AbortController();
-        let silentTimer: ReturnType<typeof setTimeout> | undefined =
-          firstTokenMs > 0
-            ? setTimeout(() => {
-                silentTimedOut = true;
-                silent.abort();
-              }, firstTokenMs)
-            : undefined;
-        const stopSilentTimer = () => {
-          if (silentTimer) clearTimeout(silentTimer);
-          silentTimer = undefined;
-        };
         stage = "waiting_model";
         requests++;
-        try {
-          for await (const e of provider.stream({
-            instructions,
-            messages: providerMessages,
-            tools,
-            maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
-            signal: firstTokenMs > 0 ? AbortSignal.any([combined, silent.signal]) : combined,
-            model,
-            sessionId,
-            ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
-            ...((options.reasoningEffort ?? o.reasoningEffort)
-              ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
-              : {}),
-          })) {
-            combined.throwIfAborted();
-            stopSilentTimer();
-            if (stage === "waiting_model") stage = "streaming";
-            if (e.type !== "completed") firstDelta ??= Date.now();
-            if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
-            else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
-            else {
-              if (completion) throw new Error("Provider emitted multiple completions");
-              completion = e.message;
-              truncated = e.message.truncated === true;
-              usage = e.usage;
-              tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
-              usageTotal.input += e.usage?.input ?? 0;
-              usageTotal.output += e.usage?.output ?? 0;
+        silentAttempts = 0;
+        // The same request is sent again only while the provider stayed completely silent until
+        // `firstTokenTimeoutMs`. Nothing was received, appended or accounted for the aborted
+        // attempt, so the retry reuses the exact same inputs inside this turn.
+        for (;;) {
+          silentAttempts++;
+          silentTimedOut = false;
+          requested = Date.now();
+          // A request that stays completely silent can be stopped early (`firstTokenTimeoutMs`).
+          const silent = new AbortController();
+          let silentTimer: ReturnType<typeof setTimeout> | undefined =
+            firstTokenMs > 0
+              ? setTimeout(() => {
+                  silentTimedOut = true;
+                  silent.abort();
+                }, firstTokenMs)
+              : undefined;
+          const stopSilentTimer = () => {
+            if (silentTimer) clearTimeout(silentTimer);
+            silentTimer = undefined;
+          };
+          let failure: unknown;
+          try {
+            for await (const e of provider.stream({
+              instructions,
+              messages: providerMessages,
+              tools,
+              maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
+              signal: firstTokenMs > 0 ? AbortSignal.any([combined, silent.signal]) : combined,
+              model,
+              sessionId,
+              ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
+              ...((options.reasoningEffort ?? o.reasoningEffort)
+                ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
+                : {}),
+            })) {
+              combined.throwIfAborted();
+              stopSilentTimer();
+              if (stage === "waiting_model") stage = "streaming";
+              if (e.type !== "completed") firstDelta ??= Date.now();
+              if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
+              else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
+              else {
+                if (completion) throw new Error("Provider emitted multiple completions");
+                completion = e.message;
+                truncated = e.message.truncated === true;
+                usage = e.usage;
+                tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
+                usageTotal.input += e.usage?.input ?? 0;
+                usageTotal.output += e.usage?.output ?? 0;
+              }
             }
+          } catch (error) {
+            failure = error;
+          } finally {
+            stopSilentTimer();
           }
-        } finally {
-          stopSilentTimer();
+          const silentFailure =
+            silentTimedOut &&
+            firstDelta === undefined &&
+            !completion &&
+            !combined.aborted &&
+            silentAttempts <= firstTokenRetries;
+          if (!silentFailure) {
+            if (failure !== undefined) throw failure;
+            break;
+          }
+          // Do not start an attempt the whole-run limit could not let finish.
+          const retryPauseMs = FIRST_TOKEN_RETRY_PAUSE_MS;
+          if (runTimeoutMs - (Date.now() - runStartedAt) < retryPauseMs + firstTokenMs) {
+            if (failure !== undefined) throw failure;
+            break;
+          }
+          // From here the silence is handled: a later stop or run timeout is judged on its own.
+          silentTimedOut = false;
+          emit("request_retry", {
+            attempt: silentAttempts,
+            of: firstTokenRetries,
+            reason: "first_token_timeout",
+            afterMs: Date.now() - requested,
+          });
+          await abortableDelay(retryPauseMs, combined);
+          combined.throwIfAborted();
+          stage = "waiting_model";
         }
         stage = "other";
         if (!completion) throw new Error("Provider stream ended without a completed response");
@@ -1256,7 +1325,7 @@ export class AgentRunner {
       return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
     } catch (error) {
       const timedOut = silentTimedOut
-        ? { kind: "first_token" as const, ms: firstTokenMs }
+        ? { kind: "first_token" as const, ms: firstTokenMs, attempts: Math.max(1, silentAttempts) }
         : combined.aborted && isTimeoutReason(combined.reason)
           ? { kind: "run" as const, ms: runTimeoutMs }
           : undefined;

@@ -96,7 +96,12 @@ petición al proveedor a la respuesta completa) y `ttftMs` (tiempo hasta el prim
 ausente si el proveedor no transmitió nada). `run_failed` es aditivo para los límites de tiempo: una
 ejecución detenida por `limits.timeoutMs` o `limits.firstTokenTimeoutMs` termina como `failed` con
 `code: "timeout"` y un objeto `timeout` (`kind`, `ms`, `model`, `provider`, `stage`, `tool`,
-`firstRequest`); `error` es siempre una frase legible en inglés. Una detención del usuario sigue siendo
+`firstRequest`, `attempts`); `error` es siempre una frase legible en inglés. Cuando una petición al
+modelo permanece en silencio hasta `limits.firstTokenTimeoutMs`, el runner reenvía la misma petición
+hasta `limits.firstTokenRetries` veces (por defecto 1) y emite `request_retry` (`attempt`, `of`,
+`reason: "first_token_timeout"`, `afterMs`); un reintento no es un turno, no añade nada a la sesión y
+solo ocurre mientras no llegó nada de la petición, de modo que los ids de llamadas a herramientas y la
+sesión persistida siguen consistentes. `attempts` cuenta los envíos de la petición que finalmente falló. Una detención del usuario sigue siendo
 `run_cancelled`. `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk` tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
 runner contra ellos.
 

@@ -134,6 +134,7 @@ export const es: Record<MessageKey, string> = {
   "run.phase.thinking": "Pensando…",
   "run.phase.writing": "Redactando la respuesta…",
   "run.phase.compacting": "Compactando el contexto…",
+  "run.phase.retrying": "El modelo no respondió; reintentando ({attempt}/{of})…",
   "run.phase.approval": "Esperando tu aprobación: {name}",
   "run.phase.python": "Ejecutando Python…",
   "run.phase.pythonWith": "Ejecutando Python ({detail})…",
@@ -171,6 +172,8 @@ export const es: Record<MessageKey, string> = {
     "La ejecución alcanzó su límite de {seconds} s. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
   "notice.run_timeout_first_token":
     "{who} no envió nada en {seconds} s desde la petición, por lo que se detuvo la ejecución. Reintenta, cambia de modelo o aumenta o desactiva limits.firstTokenTimeoutMs.",
+  "notice.run_timeout_first_token_retried":
+    "{who} no respondió tras {attempts} intentos de {seconds} s cada uno, por lo que se detuvo la ejecución. Reintenta, cambia de modelo o aumenta o desactiva limits.firstTokenTimeoutMs; limits.firstTokenRetries indica cuántas veces se reenvía una petición silenciosa.",
   "transcript.sending": "Enviando…",
   "transcript.notSent": "No se envió: {error}",
   "transcript.images": "{count} imagen(es)",
