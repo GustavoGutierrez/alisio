@@ -1513,8 +1513,8 @@ Fase 1 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): `python_run`, `ar
 `--python`, migración v6, rutas de artefactos y permisos, tarjeta de descarga y popover de
 permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
 
-- Decisiones del propietario (§23.2) adoptadas según la recomendación del documento, **pendientes
-  de confirmación**: D1 core (no plugin), D2 `analysis.enabled` activo por defecto, D3 el permiso
+- Decisiones del propietario (§23.2) adoptadas según la recomendación del documento y **confirmadas
+  por el propietario el 2026-10-01**: D1 core (no plugin), D2 `analysis.enabled` activo por defecto, D3 el permiso
   de sesión persistido aplica en `resume` headless, D4 flag `--allow-analysis`, D5 contenido de los
   extras (`analysis`/`science`, lockfiles con hashes generados con `uv pip compile --universal`),
   D7 helper XLSX como efecto `read` (fase 3; sin efecto aún), D8 origen separado del visor
@@ -1643,8 +1643,8 @@ Podman, imagen fijada por digest), instalación de extras bajo demanda con la ca
 `analysis.install`, `AnalysisJanitor` (retención de artefactos, datasets, originales en `blobs/` y
 trabajos internos), `Rerun` con procedencia (modelo y proveedor incluidos), la página **Análisis de
 datos** de Ajustes y las claves `analysis.*` editables (con claves de tres niveles en
-`setConfigValue`). Decisiones del propietario: D1–D14 según la recomendación, pendientes de
-confirmación (D10: retención 30 / 7 días y artefactos sin caducidad).
+`setConfigValue`). Decisiones del propietario: D1–D14 según la recomendación, confirmadas
+el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 
 - Desviaciones del documento (editadas en la especificación): `analysis.retention.*` es **solo
   global** como `runtime` y `oci.*` (el barrido cubre todos los workspaces; las claves ignoradas de

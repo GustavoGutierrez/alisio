@@ -63,7 +63,7 @@ it is not a statement that all of its release criteria are met.
   permissions belong to the root session; `execute` reaches `python_run` only through
   `--allow-analysis` or `--allow-process`. A separate origin for the viewer, a Node XLSX reader,
   artifact templates and XLS, ODS and Parquet files were left out (spec §21 lists them as optional).
-  The recommended owner decisions of the spec (§23.2) were adopted pending confirmation. Verified on
+  The owner confirmed the recommended decisions of the spec (§23.2) on 2026-10-01. Verified on
   Linux with Python 3.10 and Docker; Windows and macOS rely on the CI portability job.
 - **Tabular data (phase 3)**: datasets are SQLite files built with `node:sqlite` (still marked
   experimental in Node 22; the warning is silenced) and read in a separate process, because
