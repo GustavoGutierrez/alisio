@@ -1697,6 +1697,38 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   y macOS (job `portability`), la TUI interactiva en un terminal real, Firefox y Safari y lectores de
   pantalla.
 
+## Estado en vivo de la ejecución y tiempos de espera: alcance de la verificación
+
+- Diagnóstico (proveedor DeepSeek, 36 herramientas, petición de ~37 KB): la misma petición respondió
+  en 2 a 7 s en casi todos los intentos (directos y por Alisio), pero de forma intermitente el
+  proveedor aceptó la conexión (HTTP 200 en menos de 1 s) y solo envió comentarios SSE
+  `: keep-alive` durante 54 s a 300 s sin ningún token (una vez el token llegó tras 56 s de cola).
+  No depende del tamaño del prompt ni de las herramientas de análisis. El SDK de OpenAI descarta esos
+  comentarios, por lo que ni el núcleo ni el plugin pueden distinguir «en cola» de «conexión muerta»;
+  el temporizador de 120 s del cliente solo cubre hasta las cabeceras.
+- `limits.timeoutMs` (300 s) es un límite de reloj de **toda la ejecución**, no de inactividad. Ahora
+  una ejecución que lo alcanza termina como `failed` con `run_failed { code: "timeout", timeout }` y
+  un mensaje que nombra modelo, proveedor y qué hacer (antes: `cancelled` con «The operation was
+  aborted due to timeout»). La detención del usuario sigue siendo `cancelled`.
+- Nueva clave `limits.firstTokenTimeoutMs` (por defecto `120000`; `0` la desactiva): detiene una
+  petición totalmente silenciosa. El propietario decidió (2026-10-01) activarla en 2 min y subir
+  `limits.timeoutMs` de 300000 a 600000: DeepSeek llegó a responder tras 56 s de cola, pero un
+  modelo que no emite su razonamiento en streaming puede callar más de 2 min (riesgo conocido: en
+  ese caso hay que subirla o poner `0`).
+- `InflightState.startedAt` (aditivo) permite que una recarga conserve el tiempo transcurrido.
+- Web: línea de estado (`RunStatus`) con fase, tiempo de ejecución y del paso, última actividad,
+  aviso a los 15 s y a los 60 s con **Detener**, región `aria-live` que cambia solo con la fase o el
+  nivel. TUI: la pieza de estado del pie muestra la fase y `no response for N s`.
+- Pruebas: `tests/run-timeout.test.ts` (mensaje, evento y estado en el runner con un proveedor
+  silencioso, parada del usuario, `firstTokenTimeoutMs`), `tests/web-run-progress.test.ts` (derivación
+  de fases, umbrales con reloj falso, avisos de tiempo en el transcript), `tests/tui-run-phase.test.ts`,
+  `tests/server-inflight.test.ts`. Verificado a mano en Chromium con `alisio serve` y un proveedor
+  falso: fases en orden (esperando, pensando, aprobación, Python, esperando, redactando), silencio a
+  15 s y 60 s, Detener, y el mensaje de tiempo agotado en EN y ES.
+- No verificado: lectores de pantalla reales, Firefox y Safari, la TUI en un terminal real, y la
+  detección de `: keep-alive`: el plugin `@alisio/plugin-deepseek` (repositorio aparte) tendría que
+  envolver `fetch` y emitir un evento de latido; no se inventó esa señal.
+
 ## Límites conocidos
 
 ## Límites conocidos

@@ -127,7 +127,46 @@ export const en = {
   "transcript.copyMessage": "Copy message",
   "transcript.think": "Think",
   "transcript.context": "Context injection",
-  "transcript.working": "Working…",
+  "run.phase.waiting": "Waiting for the model…",
+  "run.phase.thinking": "Thinking…",
+  "run.phase.writing": "Writing the answer…",
+  "run.phase.compacting": "Compacting context…",
+  "run.phase.approval": "Waiting for your approval: {name}",
+  "run.phase.python": "Running Python…",
+  "run.phase.pythonWith": "Running Python ({detail})…",
+  "run.phase.data": "Reading your data…",
+  "run.phase.dataWith": "Reading your data ({detail})…",
+  "run.phase.artifact": "Publishing the artifact…",
+  "run.phase.artifactWith": "Publishing the artifact ({detail})…",
+  "run.phase.question": "Waiting for your answer…",
+  "run.phase.agent": "A sub-agent is working…",
+  "run.phase.tool": "Running {name}…",
+  "run.phase.toolWith": "Running {name} ({detail})…",
+  "run.elapsed": "Run {time}",
+  "run.stepElapsed": "this step {time}",
+  "run.lastUpdateNow": "updated just now",
+  "run.lastUpdate": "last update {seconds} s ago",
+  "run.quiet.model": "No response from the model for {seconds} s.",
+  "run.stalled.model":
+    "No response from the model for {seconds} s. The provider may be busy or the connection stuck: keep waiting or stop the run.",
+  "run.quiet.tool": "No output from {name} for {seconds} s.",
+  "run.stalled.tool":
+    "No output from {name} for {seconds} s. It may still be working; stop the run if you do not want to wait.",
+  "run.announce.quiet": "No news for over {seconds} seconds.",
+  "run.announce.stalled": "No response for over {seconds} seconds. You can stop the run.",
+  "run.stop": "Stop",
+  "notice.run_timeout_waiting":
+    "{who} did not respond within {seconds} s: no tokens were received. Retry, switch to another model, or raise limits.timeoutMs.",
+  "notice.run_timeout_waiting_later":
+    "The run reached its {seconds} s limit while waiting for {who}. What was produced so far is kept: prompt again to continue, switch model, or raise limits.timeoutMs.",
+  "notice.run_timeout_streaming":
+    "The run reached its {seconds} s limit while {who} was answering. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+  "notice.run_timeout_tool":
+    "The run reached its {seconds} s limit while running {tool}. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+  "notice.run_timeout_other":
+    "The run reached its {seconds} s limit. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+  "notice.run_timeout_first_token":
+    "{who} sent nothing within {seconds} s of the request, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs.",
   "transcript.sending": "Sending…",
   "transcript.notSent": "Not sent: {error}",
   "transcript.images": "{count} image(s)",

@@ -38,6 +38,7 @@ import type {
   TerminalRunStatus,
 } from "./contracts.ts";
 import type { ToolRegistry } from "./registry.ts";
+import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
 export interface CompactionSettings {
   /** Compact automatically when context usage crosses `threshold` of a known window. */
   auto?: boolean;
@@ -60,6 +61,8 @@ export interface RunnerOptions {
   workspace: string;
   maxTurns?: number;
   timeoutMs?: number;
+  /** See `RunnerSettingsPatch.firstTokenTimeoutMs`. */
+  firstTokenTimeoutMs?: number;
   maxContextChars?: number;
   maxOutputTokens?: number;
   maxTokens?: number;
@@ -106,6 +109,11 @@ export interface RunnerSettingsPatch {
   maxContextChars?: number;
   /** Per-run timeout in milliseconds; the next run honors it. */
   timeoutMs?: number;
+  /**
+   * Stop a model request that stays completely silent (no text, reasoning or tool-call delta)
+   * for this many milliseconds. `0` or unset disables it: only the run timeout applies.
+   */
+  firstTokenTimeoutMs?: number;
 }
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
@@ -133,6 +141,8 @@ export interface RunOptions {
   /** Per-call output token budget for this run; beats the runner-level budget when set. */
   maxOutputTokens?: number;
   timeoutMs?: number;
+  /** Silent-request limit for this run; beats the runner-level `firstTokenTimeoutMs`. */
+  firstTokenTimeoutMs?: number;
   /** Reasoning effort level for this run; beats the runner-level default when set. */
   reasoningEffort?: string;
   /** Run id to use for this run's events (e.g. preassigned by an embedder); a UUID otherwise. */
@@ -788,7 +798,8 @@ export class AgentRunner {
         /* A journal write failure cannot invalidate an executed run. */
       }
     };
-    const timeout = AbortSignal.timeout(options.timeoutMs ?? o.timeoutMs ?? 300_000);
+    const runTimeoutMs = options.timeoutMs ?? o.timeoutMs ?? 300_000;
+    const timeout = AbortSignal.timeout(runTimeoutMs);
     const combined = AbortSignal.any([
       controller.signal,
       timeout,
@@ -851,6 +862,17 @@ export class AgentRunner {
       finish("completed");
       return { runId, status: "completed", result };
     } catch (error) {
+      if (combined.aborted && isTimeoutReason(combined.reason)) {
+        const failure = new RunTimeoutError({
+          kind: "run",
+          ms: runTimeoutMs,
+          stage: "tool",
+          tool: name,
+        });
+        emit("run_failed", { error: failure.message, code: "timeout", timeout: failure.info });
+        finish("failed", failure.message);
+        throw failure;
+      }
       const cause = combined.aborted ? (combined.reason ?? error) : error;
       const message = cause instanceof Error ? cause.message : String(cause);
       emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
@@ -889,8 +911,17 @@ export class AgentRunner {
       lastText = "",
       acquired = false;
     const usageTotal = { input: 0, output: 0 };
-    const timeout = AbortSignal.timeout(options.timeoutMs ?? o.timeoutMs ?? 300_000);
+    const runTimeoutMs = options.timeoutMs ?? o.timeoutMs ?? 300_000;
+    const firstTokenMs = options.firstTokenTimeoutMs ?? o.firstTokenTimeoutMs ?? 0;
+    const timeout = AbortSignal.timeout(runTimeoutMs);
     const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
+    // What the run was doing, so a timeout can say where it was stuck (see `RunTimeoutError`).
+    let stage: "waiting_model" | "streaming" | "tool" | "other" = "other";
+    let stageTool: string | undefined;
+    let modelId: string | undefined;
+    let providerName: string | undefined;
+    let requests = 0;
+    let silentTimedOut = false;
     const context = options.context ?? o.context;
     const workspace = options.workspace ?? o.workspace;
     const pathAccess = o.pathAccess;
@@ -917,6 +948,8 @@ export class AgentRunner {
         throw new Error("Session provider/workspace mismatch");
       // The session records the model; switching models is explicit via setModel.
       const model = session.model;
+      modelId = model;
+      providerName = providerLabel(provider.id);
       combined.throwIfAborted();
       if (o.extensions && o.store.messages(sessionId).length === 0) {
         // New session: extensions may inject budgeted context once, persisted with the session.
@@ -1041,33 +1074,55 @@ export class AgentRunner {
         );
         const requested = Date.now();
         let firstDelta: number | undefined;
-        for await (const e of provider.stream({
-          instructions,
-          messages: providerMessages,
-          tools,
-          maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
-          signal: combined,
-          model,
-          sessionId,
-          ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
-          ...((options.reasoningEffort ?? o.reasoningEffort)
-            ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
-            : {}),
-        })) {
-          combined.throwIfAborted();
-          if (e.type !== "completed") firstDelta ??= Date.now();
-          if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
-          else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
-          else {
-            if (completion) throw new Error("Provider emitted multiple completions");
-            completion = e.message;
-            truncated = e.message.truncated === true;
-            usage = e.usage;
-            tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
-            usageTotal.input += e.usage?.input ?? 0;
-            usageTotal.output += e.usage?.output ?? 0;
+        // A request that stays completely silent can be stopped early (`firstTokenTimeoutMs`).
+        const silent = new AbortController();
+        let silentTimer: ReturnType<typeof setTimeout> | undefined =
+          firstTokenMs > 0
+            ? setTimeout(() => {
+                silentTimedOut = true;
+                silent.abort();
+              }, firstTokenMs)
+            : undefined;
+        const stopSilentTimer = () => {
+          if (silentTimer) clearTimeout(silentTimer);
+          silentTimer = undefined;
+        };
+        stage = "waiting_model";
+        requests++;
+        try {
+          for await (const e of provider.stream({
+            instructions,
+            messages: providerMessages,
+            tools,
+            maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
+            signal: firstTokenMs > 0 ? AbortSignal.any([combined, silent.signal]) : combined,
+            model,
+            sessionId,
+            ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
+            ...((options.reasoningEffort ?? o.reasoningEffort)
+              ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
+              : {}),
+          })) {
+            combined.throwIfAborted();
+            stopSilentTimer();
+            if (stage === "waiting_model") stage = "streaming";
+            if (e.type !== "completed") firstDelta ??= Date.now();
+            if (e.type === "text_delta") emit("text_delta", { delta: e.delta });
+            else if (e.type === "reasoning_delta") emit("reasoning_delta", { delta: e.delta });
+            else {
+              if (completion) throw new Error("Provider emitted multiple completions");
+              completion = e.message;
+              truncated = e.message.truncated === true;
+              usage = e.usage;
+              tokens += (e.usage?.input ?? 0) + (e.usage?.output ?? 0);
+              usageTotal.input += e.usage?.input ?? 0;
+              usageTotal.output += e.usage?.output ?? 0;
+            }
           }
+        } finally {
+          stopSilentTimer();
         }
+        stage = "other";
         if (!completion) throw new Error("Provider stream ended without a completed response");
         const durationMs = Date.now() - requested;
         const ids = completion.calls.map((c) => c.id);
@@ -1156,6 +1211,8 @@ export class AgentRunner {
             };
           },
         };
+        stage = "tool";
+        stageTool = prepared[0]?.call.name;
         const execute = (p: (typeof prepared)[number]) => this.executeCall(scope, p);
         const results: ToolResult[] = [];
         // Bounded parallel batches for consecutive read or explicitly concurrent tools.
@@ -1186,6 +1243,8 @@ export class AgentRunner {
             r = results[i];
           if (c && r) o.store.append(sessionId, { role: "tool", callId: c.id, result: r });
         }
+        stage = "other";
+        stageTool = undefined;
         if (tokens >= budget) throw new Error("Token budget exhausted");
       }
       // Turn cap reached. This is NOT a failure: everything produced up to this point stays in
@@ -1196,6 +1255,24 @@ export class AgentRunner {
       finish("turns_exceeded");
       return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
     } catch (error) {
+      const timedOut = silentTimedOut
+        ? { kind: "first_token" as const, ms: firstTokenMs }
+        : combined.aborted && isTimeoutReason(combined.reason)
+          ? { kind: "run" as const, ms: runTimeoutMs }
+          : undefined;
+      if (timedOut && !(combined.aborted && !isTimeoutReason(combined.reason))) {
+        const failure = new RunTimeoutError({
+          ...timedOut,
+          ...(modelId ? { model: modelId } : {}),
+          ...(providerName ? { provider: providerName } : {}),
+          stage,
+          ...(stage === "tool" && stageTool ? { tool: stageTool } : {}),
+          ...(requests <= 1 ? { firstRequest: true } : {}),
+        });
+        emit("run_failed", { error: failure.message, code: "timeout", timeout: failure.info });
+        finish("failed", failure.message);
+        throw failure;
+      }
       // On cancellation report the abort reason, not the transport's secondary error.
       const cause = combined.aborted ? (combined.reason ?? error) : error;
       const message = cause instanceof Error ? cause.message : String(cause);

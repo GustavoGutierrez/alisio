@@ -31,6 +31,7 @@ import { parseSlash, pushHistory } from "./composer.ts";
 import { pushDatasetNotice } from "./datasets.ts";
 import { errorText } from "./errors.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
+import { applyProgress, type RunProgress } from "./progress.ts";
 import {
   applySessionStatus,
   emptySidebar,
@@ -58,6 +59,11 @@ export const sidebar = signal(emptySidebar());
 export const currentId = signal<string | undefined>(undefined);
 export const detail = signal<SessionDetail | undefined>(undefined);
 export const transcript = signal(emptyTranscript(""));
+/**
+ * What the live run of the open session is doing (phase, elapsed, last activity), derived from
+ * the frames received. Undefined when no run is live.
+ */
+export const runProgress = signal<RunProgress | undefined>(undefined);
 export const pending = signal(emptyPending());
 export const commands = signal<CommandDescriptor[]>([]);
 export const models = signal<SessionModels | undefined>(undefined);
@@ -231,6 +237,12 @@ function onFrames(frames: ServerFrame[]): void {
   const scopes = new Set<string>();
   batch(() => {
     transcript.value = applyFrames(transcript.value, frames);
+    const at = Date.now();
+    let progress = runProgress.value;
+    for (const frame of frames)
+      if (!("sessionId" in frame) || frame.sessionId === transcript.value.sessionId)
+        progress = applyProgress(progress, frame, at);
+    runProgress.value = progress;
     let nextPending = pending.value;
     let nextSidebar = sidebar.value;
     for (const frame of frames) {
@@ -293,6 +305,7 @@ export async function openSession(id: string | undefined): Promise<void> {
     currentId.value = id;
     detail.value = undefined;
     transcript.value = emptyTranscript(id ?? "");
+    runProgress.value = undefined;
     models.value = undefined;
     context.value = undefined;
     mobileSidebar.value = false;

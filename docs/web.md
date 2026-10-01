@@ -78,6 +78,25 @@ Reasoning is display-only: after a reload, earlier `Think`
 rows are gone because reasoning is never stored. When you scroll up, a button jumps back to the
 latest message; long sessions show the last 30 turns and load older messages on demand.
 
+**Run status.** While a run is live, one line at the end of the conversation says what it is really
+doing, taken only from the events and streamed output the page has received: *Waiting for the
+model…*, *Thinking…*, *Writing the answer…*, *Reading your data (sales.csv)…*, *Running Python
+(analysis.py)…*, *Publishing the artifact (dashboard.html)…*, *Running* `<tool>`*…*, *Compacting
+context…*, or *Waiting for your approval / your answer* (those two never count as a stall). Next
+to it are the run's elapsed time, the time in the current step and when something last arrived
+(*last update 3 s ago*). If nothing arrives for 15 s the line says how long the run has been quiet
+and shows **Stop**; after 60 s it says plainly *No response from the model for 60 s* (or *No output
+from `<tool>` …* when a tool is the one running) and suggests waiting or stopping. A sub-agent wait
+is never reported as a stall because its events belong to another session. The line only reads
+frames, it never invents activity. It announces itself to screen readers only when the step or the
+quiet level changes (not every second) and its spinner stops with *reduce motion*. After a reload
+the elapsed time continues from the server's start time; the *last update* time restarts at the
+reload because the page cannot know when the previous frame arrived.
+
+If a run is stopped by its time limit, the conversation shows a message that names the model and
+the provider, the number of seconds and how to proceed (retry, switch model, raise
+`limits.timeoutMs`, see [configuration](/configuration#limits)).
+
 **Tool output.** Tools that return structured blocks get a native view, each loaded the first time
 it is needed: file writes and edits show a diff (unified by default, **Side by side** on demand,
 foldable hunks, a file list when a patch touches several files); shell commands show their output
@@ -409,7 +428,7 @@ Management changes send a `catalog_changed` frame (`commands`, `plugins`, `skill
 with the `interactive-web` source.
 
 On every (re)connection the stream sends a snapshot of each subscribed session (recent messages,
-text still streaming, pending approvals) followed by live frames; durable events carry their
+text still streaming, the run's start time, pending approvals) followed by live frames; durable events carry their
 `eventId` as the SSE `id`, and streamed text arrives coalesced about 30 times per second. The
 protocol version is reported by `/api/health` and in the stream's first frame.
 

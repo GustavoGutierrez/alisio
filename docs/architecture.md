@@ -89,7 +89,10 @@ must ignore unknown fields and event types.
 stream to observers but are never stored, so they carry no `eventId`. Every other event is stored
 before observers see it. `turn_completed` adds `durationMs` (provider request to completed response)
 and `ttftMs` (time to the first streamed delta, absent when the provider streamed nothing).
-`RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
+`run_failed` is additive for time limits: a run stopped by `limits.timeoutMs` or
+`limits.firstTokenTimeoutMs` ends as `failed` with `code: "timeout"` and a `timeout` object (`kind`,
+`ms`, `model`, `provider`, `stage`, `tool`, `firstRequest`); `error` is always a readable English
+sentence. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
 emits; `tests/run-events-contract.test.ts` checks the runner against them.
 
 ## Session database (v4) {#session-database}

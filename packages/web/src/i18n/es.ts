@@ -130,7 +130,47 @@ export const es: Record<MessageKey, string> = {
   "transcript.copyMessage": "Copiar el mensaje",
   "transcript.think": "Razonamiento",
   "transcript.context": "Inyección de contexto",
-  "transcript.working": "Trabajando…",
+  "run.phase.waiting": "Esperando al modelo…",
+  "run.phase.thinking": "Pensando…",
+  "run.phase.writing": "Redactando la respuesta…",
+  "run.phase.compacting": "Compactando el contexto…",
+  "run.phase.approval": "Esperando tu aprobación: {name}",
+  "run.phase.python": "Ejecutando Python…",
+  "run.phase.pythonWith": "Ejecutando Python ({detail})…",
+  "run.phase.data": "Leyendo tus datos…",
+  "run.phase.dataWith": "Leyendo tus datos ({detail})…",
+  "run.phase.artifact": "Publicando el artefacto…",
+  "run.phase.artifactWith": "Publicando el artefacto ({detail})…",
+  "run.phase.question": "Esperando tu respuesta…",
+  "run.phase.agent": "Un subagente está trabajando…",
+  "run.phase.tool": "Ejecutando {name}…",
+  "run.phase.toolWith": "Ejecutando {name} ({detail})…",
+  "run.elapsed": "Ejecución {time}",
+  "run.stepElapsed": "este paso {time}",
+  "run.lastUpdateNow": "actualizado ahora mismo",
+  "run.lastUpdate": "última actualización hace {seconds} s",
+  "run.quiet.model": "Sin respuesta del modelo desde hace {seconds} s.",
+  "run.stalled.model":
+    "Sin respuesta del modelo desde hace {seconds} s. El proveedor puede estar ocupado o la conexión atascada: sigue esperando o detén la ejecución.",
+  "run.quiet.tool": "{name} no ha producido salida desde hace {seconds} s.",
+  "run.stalled.tool":
+    "{name} no ha producido salida desde hace {seconds} s. Puede seguir trabajando; detén la ejecución si no quieres esperar.",
+  "run.announce.quiet": "Sin novedades desde hace más de {seconds} segundos.",
+  "run.announce.stalled":
+    "Sin respuesta desde hace más de {seconds} segundos. Puedes detener la ejecución.",
+  "run.stop": "Detener",
+  "notice.run_timeout_waiting":
+    "{who} no respondió en {seconds} s: no llegó ningún token. Reintenta, cambia de modelo o aumenta limits.timeoutMs.",
+  "notice.run_timeout_waiting_later":
+    "La ejecución alcanzó su límite de {seconds} s mientras esperaba a {who}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar, cambia de modelo o aumenta limits.timeoutMs.",
+  "notice.run_timeout_streaming":
+    "La ejecución alcanzó su límite de {seconds} s mientras {who} respondía. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+  "notice.run_timeout_tool":
+    "La ejecución alcanzó su límite de {seconds} s mientras ejecutaba {tool}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+  "notice.run_timeout_other":
+    "La ejecución alcanzó su límite de {seconds} s. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+  "notice.run_timeout_first_token":
+    "{who} no envió nada en {seconds} s desde la petición, por lo que se detuvo la ejecución. Reintenta, cambia de modelo o aumenta o desactiva limits.firstTokenTimeoutMs.",
   "transcript.sending": "Enviando…",
   "transcript.notSent": "No se envió: {error}",
   "transcript.images": "{count} imagen(es)",

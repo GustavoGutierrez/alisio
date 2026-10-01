@@ -1179,6 +1179,7 @@ export async function createApplication(options: AppOptions = {}) {
           case "limits.maxTurns":
           case "limits.maxOutputTokens":
           case "limits.maxContextChars":
+          case "limits.firstTokenTimeoutMs":
           case "limits.timeoutMs": {
             const patch = limitLeaf(key.slice("limits.".length));
             config.limits = { ...config.limits, ...patch };

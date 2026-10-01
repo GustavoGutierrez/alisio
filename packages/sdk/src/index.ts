@@ -472,6 +472,23 @@ export interface RunEvent {
   /** Embedder-supplied correlation id (for example an HTTP `X-Request-Id`), when given. */
   correlationId?: string;
 }
+/** What a `run_failed` event with `code: "timeout"` says about the limit that stopped the run. */
+export interface RunTimeoutInfo {
+  /** `run`: the whole-run limit (`limits.timeoutMs`); `first_token`: a silent request (`limits.firstTokenTimeoutMs`). */
+  kind: "run" | "first_token";
+  /** The limit that was reached, in milliseconds. */
+  ms: number;
+  /** Model the run was using, when known. */
+  model?: string;
+  /** Short provider label (the host of an OpenAI-compatible endpoint), when known. */
+  provider?: string;
+  /** What the run was doing: waiting for the first token of a request, streaming, or running a tool. */
+  stage: "waiting_model" | "streaming" | "tool" | "other";
+  /** The tool that was running when `stage` is `tool`. */
+  tool?: string;
+  /** Nothing had been produced yet: the very first model request of the run got no answer. */
+  firstRequest?: boolean;
+}
 /**
  * Payload of each event type the core emits today, keyed by `RunEvent.type`. Additive: new
  * types and new optional fields may appear; existing fields keep their meaning.
@@ -537,7 +554,12 @@ export interface RunEventDataMap {
   run_completed: { tokens: number; text: string; truncated?: boolean };
   response_truncated: { turn: number; maxOutputTokens: number };
   run_turns_exceeded: { turns: number; maxTurns: number };
-  run_failed: { error: string };
+  /**
+   * The run failed. `error` is always a human-readable message. `code: "timeout"` (with `timeout`)
+   * marks a run stopped by a time limit instead of a provider or tool error; both fields are
+   * additive and absent for every other failure.
+   */
+  run_failed: { error: string; code?: "timeout"; timeout?: RunTimeoutInfo };
   run_cancelled: { error: string };
   model_changed: { model: string; previous: string };
   compaction_started: { reason: "manual" | "auto"; before: number; messages: number };
@@ -1067,6 +1089,8 @@ export interface SessionDetailWire {
 export interface InflightState {
   runId: string;
   status: "queued" | "running";
+  /** Epoch milliseconds when the run started executing; lets a reloaded client show elapsed time. */
+  startedAt?: number;
   /** Assistant text streamed since the last `turn_completed`. */
   text: string;
   /** Reasoning streamed since the last `turn_completed` (never persisted). */

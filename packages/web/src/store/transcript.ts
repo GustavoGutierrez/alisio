@@ -339,6 +339,41 @@ const notice = (
   params,
 });
 
+/**
+ * A `run_failed` event with `code: "timeout"` becomes a localized notice that names the model,
+ * the limit and what to do; any other failure (or a payload without the details) keeps the
+ * plain `run_failed` notice with the server's English text.
+ */
+function timeoutNotice(
+  data: Record<string, unknown>,
+): { code: string; params: Record<string, string> } | undefined {
+  if (data.code !== "timeout") return undefined;
+  const info = data.timeout as
+    | {
+        kind?: string;
+        ms?: number;
+        model?: string;
+        provider?: string;
+        stage?: string;
+        tool?: string;
+        firstRequest?: boolean;
+      }
+    | undefined;
+  if (!info || typeof info.ms !== "number") return undefined;
+  const who = info.model ? (info.provider ? `${info.model} (${info.provider})` : info.model) : "";
+  const params = { who, seconds: String(Math.round(info.ms / 1000)), tool: info.tool ?? "" };
+  // The model-centred messages need its name; without it only the generic limit text is true.
+  if (info.kind === "first_token" && who) return { code: "run_timeout_first_token", params };
+  if (info.stage === "waiting_model" && who)
+    return {
+      code: info.firstRequest ? "run_timeout_waiting" : "run_timeout_waiting_later",
+      params,
+    };
+  if (info.stage === "streaming" && who) return { code: "run_timeout_streaming", params };
+  if (info.stage === "tool" && info.tool) return { code: "run_timeout_tool", params };
+  return { code: "run_timeout_other", params };
+}
+
 function applyEvent(state: TranscriptState, event: RunEvent): TranscriptState {
   const cursor = Math.max(state.cursor, Number(event.eventId ?? 0) || 0);
   const next = { ...state, cursor, counter: state.counter + 1 };
@@ -382,11 +417,15 @@ function applyEvent(state: TranscriptState, event: RunEvent): TranscriptState {
     }
     case "run_completed":
       return bump(next, { live: undefined });
-    case "run_failed":
+    case "run_failed": {
+      const timeout = timeoutNotice(data);
       return {
-        ...withNotice("run_failed", "error", { error: str(data.error) }),
+        ...(timeout
+          ? withNotice(timeout.code, "error", timeout.params)
+          : withNotice("run_failed", "error", { error: str(data.error) })),
         live: undefined,
       };
+    }
     case "run_cancelled":
       return { ...withNotice("run_cancelled", "warning"), live: undefined };
     case "run_turns_exceeded":

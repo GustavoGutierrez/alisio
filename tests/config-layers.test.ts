@@ -329,6 +329,20 @@ describe("legacy provider provenance", () => {
   });
 });
 
+describe("run time limits", () => {
+  it("allows 10 minutes per run and cuts a completely silent model request after 2 minutes", () => {
+    const { limits } = configSchema.parse({});
+    expect(limits.timeoutMs).toBe(600_000);
+    expect(limits.firstTokenTimeoutMs).toBe(120_000);
+  });
+
+  it("lets the first-token limit be switched off with 0", () => {
+    expect(
+      configSchema.parse({ limits: { firstTokenTimeoutMs: 0 } }).limits.firstTokenTimeoutMs,
+    ).toBe(0);
+  });
+});
+
 describe("active agent and effort configuration", () => {
   it("defaults agents.active to build and keeps effort optional", () => {
     const parsed = configSchema.parse({});

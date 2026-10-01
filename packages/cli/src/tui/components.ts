@@ -63,8 +63,11 @@ import {
   previewLinesFor,
   previewRows,
   previewTruncated,
+  quietFor,
   REASONING_EXPAND_MAX_LINES,
   reasoningDurationMs,
+  runPhase,
+  STALLED_MS,
   TOOL_KIND_VERB,
   TOOL_KIND_WORD,
   type ToolItemView,
@@ -606,10 +609,14 @@ export class Footer implements Component {
       pct === undefined
         ? style.gray("░".repeat(cells))
         : levelColor(level)("█".repeat(filled)) + style.gray("░".repeat(cells - filled));
+    const quiet = v.streaming ? quietFor(v, clock.now) : 0;
+    const quietNote = quiet
+      ? ` · no response for ${formatDuration(quiet)}${quiet >= STALLED_MS ? " (stuck?)" : ""}`
+      : "";
     const state = v.compacting
       ? `${SPINNER[clock.frame % SPINNER.length]} compacting`
       : v.streaming
-        ? `${SPINNER[clock.frame % SPINNER.length]} streaming ${formatDuration(clock.now - (v.runStartedAt ?? clock.now))}`
+        ? `${SPINNER[clock.frame % SPINNER.length]} ${runPhase(v).label} ${formatDuration(clock.now - (v.runStartedAt ?? clock.now))}${quietNote}`
         : "● idle";
     const s = v.stats;
     type Seg = { text: string; priority: number; paint: (t: string) => string };
@@ -619,7 +626,16 @@ export class Footer implements Component {
         priority: 10,
         paint: pct === undefined ? style.gray : levelColor(level),
       },
-      { text: state, priority: 9, paint: v.streaming || v.compacting ? style.cyan : style.green },
+      {
+        text: state,
+        priority: 9,
+        paint:
+          quiet >= STALLED_MS
+            ? style.yellow
+            : v.streaming || v.compacting
+              ? style.cyan
+              : style.green,
+      },
       {
         text: `↑${formatTokens(s.input)} ↓${formatTokens(s.output)}${s.cached ? ` ⚡${formatTokens(s.cached)}` : ""}`,
         priority: 6,

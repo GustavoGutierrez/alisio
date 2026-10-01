@@ -274,13 +274,55 @@ button.processHead:hover,
   font-size: 14px;
 }
 
-.working {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.runStatus {
   margin: 12px 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+.runLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.runLabel {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.runMeta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runWarn {
+  margin: 6px 0 0 22px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.runStatus[data-level="stalled"] .runLabel {
+  color: var(--warn);
+}
+
+.runStop {
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.runStop:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.runStop:disabled {
+  opacity: 0.55;
 }
 
 .older {

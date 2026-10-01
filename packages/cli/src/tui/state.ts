@@ -752,6 +752,8 @@ export interface ViewState {
   /** Context size in tokens: provider-reported, or estimated (`~`). */
   context?: { used: number; estimated: boolean };
   runStartedAt?: number;
+  /** Epoch ms of the latest event of the live run (any type); undefined when no run is live. */
+  lastEventAt?: number;
   stats: Stats;
 }
 export function initialViewState(model: string, now = Date.now()): ViewState {
@@ -844,6 +846,82 @@ function updateTool(
   return { ...state, items };
 }
 export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
+  const next = reduceEventItems(state, event);
+  const terminal =
+    event.type === "run_completed" ||
+    event.type === "run_failed" ||
+    event.type === "run_cancelled" ||
+    event.type === "run_turns_exceeded";
+  if (terminal) {
+    const { lastEventAt: _ended, ...rest } = next;
+    return rest;
+  }
+  return { ...next, lastEventAt: Date.parse(event.timestamp) || Date.now() };
+}
+/** No event for this long: the footer says how long the run has been quiet. */
+export const QUIET_MS = 15_000;
+/** No event for this long: the footer marks the run as possibly stuck. */
+export const STALLED_MS = 60_000;
+/** A short, safe label from tool arguments: a title or a file name, never commands or URLs. */
+function shortArg(args: string): string {
+  const input = parseArgs(args);
+  if (!input) return "";
+  const first = Array.isArray(input.inputs) ? (input.inputs[0] as Record<string, unknown>) : {};
+  const value = [input.title, input.fileName, input.path, input.file_path, first?.path].find(
+    (v): v is string => typeof v === "string" && v.trim() !== "",
+  );
+  if (!value) return "";
+  return truncatePlain(
+    oneLine(value.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? ""),
+    40,
+  );
+}
+export interface RunPhase {
+  label: string;
+  /** Silence is expected here (the user's turn, or a sub-agent working in its own session). */
+  silentByDesign: boolean;
+}
+/** What the live run is doing, from the transcript items and flags the events already update. */
+export function runPhase(view: ViewState): RunPhase {
+  if (view.compacting) return { label: "compacting context", silentByDesign: false };
+  const tool = view.items.findLast(
+    (i) => i.kind === "tool" && i.status !== "ok" && i.status !== "error",
+  );
+  if (tool?.kind === "tool") {
+    const name = tool.name.replace(/^p_[0-9a-f]{10}_/, "");
+    const arg = shortArg(tool.args);
+    const detail = arg ? ` (${arg})` : "";
+    if (tool.status === "approval")
+      return {
+        label: `waiting for your approval: ${humanizeToolName(name)}`,
+        silentByDesign: true,
+      };
+    if (name === "ask_user_question")
+      return { label: "waiting for your answer", silentByDesign: true };
+    if (name === "task" || name === "task_wait")
+      return { label: "a sub-agent is working", silentByDesign: true };
+    if (name === "python_run") return { label: `running Python${detail}`, silentByDesign: false };
+    if (name === "data_inspect" || name === "data_query")
+      return { label: `reading your data${detail}`, silentByDesign: false };
+    if (name === "artifact_create")
+      return { label: `publishing the artifact${detail}`, silentByDesign: false };
+    return { label: `running ${humanizeToolName(name)}${detail}`, silentByDesign: false };
+  }
+  const last = view.items.at(-1);
+  if (last?.kind === "assistant" && !last.done)
+    return {
+      label: last.text ? "writing the answer" : "thinking",
+      silentByDesign: false,
+    };
+  return { label: "waiting for the model", silentByDesign: false };
+}
+/** Milliseconds of silence worth reporting (0 when the run is busy, or silent by design). */
+export function quietFor(view: ViewState, now: number): number {
+  if (view.lastEventAt === undefined || runPhase(view).silentByDesign) return 0;
+  const idle = Math.max(0, now - view.lastEventAt);
+  return idle >= QUIET_MS ? idle : 0;
+}
+function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
   const d = (event.data ?? {}) as Record<string, unknown>;
   const at = Date.parse(event.timestamp);
   switch (event.type) {

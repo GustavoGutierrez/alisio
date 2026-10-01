@@ -93,8 +93,11 @@ sean aditivos, por lo que los consumidores deben ignorar campos y tipos de event
 transmiten a los observadores pero nunca se guardan, así que no llevan `eventId`. Todos los demás
 eventos se guardan antes de que los observadores los vean. `turn_completed` añade `durationMs` (de la
 petición al proveedor a la respuesta completa) y `ttftMs` (tiempo hasta el primer delta transmitido,
-ausente si el proveedor no transmitió nada). `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk`
-tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
+ausente si el proveedor no transmitió nada). `run_failed` es aditivo para los límites de tiempo: una
+ejecución detenida por `limits.timeoutMs` o `limits.firstTokenTimeoutMs` termina como `failed` con
+`code: "timeout"` y un objeto `timeout` (`kind`, `ms`, `model`, `provider`, `stage`, `tool`,
+`firstRequest`); `error` es siempre una frase legible en inglés. Una detención del usuario sigue siendo
+`run_cancelled`. `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk` tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
 runner contra ellos.
 
 ## Base de datos de sesiones (v4) {#session-database}

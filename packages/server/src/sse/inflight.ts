@@ -6,6 +6,8 @@ const MAX_TAIL = 4_096;
 interface Inflight {
   runId: string;
   status: "queued" | "running";
+  /** Epoch ms of the `run_started` event (absent while still queued). */
+  startedAt?: number;
   text: string;
   reasoning: string;
   tools: Map<string, InflightState["tools"][number]>;
@@ -38,6 +40,8 @@ export class InflightTracker {
     const sessionId = event.sessionId;
     if (event.type === "run_started") {
       this.mark(sessionId, event.runId, "running");
+      const started = this.runs.get(sessionId);
+      if (started) started.startedAt = Date.parse(event.timestamp) || Date.now();
       return;
     }
     const run = this.runs.get(sessionId);
@@ -87,6 +91,7 @@ export class InflightTracker {
     return {
       runId: run.runId,
       status: run.status,
+      ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
       text: run.text,
       reasoning: run.reasoning,
       tools: [...run.tools.values()].map((tool) => ({ ...tool })),

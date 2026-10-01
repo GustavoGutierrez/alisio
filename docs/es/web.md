@@ -84,6 +84,27 @@ anteriores desaparecen porque nunca se guarda. Al desplazarse hacia arriba, un b
 último mensaje; las sesiones largas muestran los últimos 30 turnos y cargan los mensajes anteriores
 a demanda.
 
+**Estado de la ejecución.** Mientras una ejecución está en curso, una línea al final de la
+conversación dice lo que realmente está haciendo, a partir únicamente de los eventos y la salida en
+streaming que la página ha recibido: *Esperando al modelo…*, *Pensando…*, *Redactando la
+respuesta…*, *Leyendo tus datos (ventas.csv)…*, *Ejecutando Python (analisis.py)…*, *Publicando el
+artefacto (dashboard.html)…*, *Ejecutando* `<herramienta>`*…*, *Compactando el contexto…* o *Esperando
+tu aprobación / tu respuesta* (estas dos nunca cuentan como bloqueo). Junto a ella aparecen el tiempo
+transcurrido de la ejecución, el del paso actual y cuándo llegó algo por última vez (*última
+actualización hace 3 s*). Si no llega nada durante 15 s, la línea indica cuánto lleva en silencio y
+muestra **Detener**; a los 60 s dice sin rodeos *Sin respuesta del modelo desde hace 60 s* (o
+*«herramienta» no ha producido salida…* cuando es una herramienta la que se ejecuta) y sugiere
+esperar o detener. La espera de un subagente nunca se informa como bloqueo, porque sus eventos
+pertenecen a otra sesión. La línea solo lee frames y nunca inventa actividad. Se anuncia a los
+lectores de pantalla únicamente cuando cambia el paso o el nivel de silencio (no cada segundo) y su
+indicador se detiene con *reducir movimiento*. Tras recargar, el tiempo transcurrido continúa desde
+la hora de inicio del servidor; la hora de la *última actualización* se reinicia con la recarga,
+porque la página no puede saber cuándo llegó el frame anterior.
+
+Si una ejecución se detiene por su límite de tiempo, la conversación muestra un mensaje que nombra
+el modelo y el proveedor, los segundos y cómo continuar (reintentar, cambiar de modelo, subir
+`limits.timeoutMs`; ver [configuración](/es/configuration#limits)).
+
 **Salida de herramientas.** Las herramientas que devuelven bloques estructurados tienen una vista
 nativa, que se carga la primera vez que hace falta: las escrituras y ediciones de archivos muestran
 un diff (unificado por defecto, **Lado a lado** a demanda, hunks plegables y una lista de archivos
@@ -438,7 +459,7 @@ responde `409 runs_active` mientras el workspace tiene runs, y el acceso MCP con
 queda registrado con la fuente `interactive-web`.
 
 En cada (re)conexión el stream envía un snapshot de cada sesión suscrita (mensajes recientes, texto
-que aún se está generando, aprobaciones pendientes) seguido de frames en vivo; los eventos durables
+que aún se está generando, la hora de inicio de la ejecución, aprobaciones pendientes) seguido de frames en vivo; los eventos durables
 llevan su `eventId` como `id` de SSE, y el texto generado llega agrupado unas 30 veces por segundo.
 La versión del protocolo aparece en `/api/health` y en el primer frame del stream.
 
