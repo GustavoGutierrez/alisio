@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -199,7 +199,8 @@ describe("python_run (fake interpreter)", () => {
       );
       expect(env.key).toBeNull();
       expect(env.mpl).toBe("Agg");
-      expect(env.home).toBe(env.cwd);
+      // macOS tmpdir() sits behind the /var -> /private/var symlink; the child reports the real path.
+      expect(realpathSync(String(env.home))).toBe(realpathSync(String(env.cwd)));
       expect(String(env.cwd)).toMatch(/[\\/]work$/);
     } finally {
       delete process.env.OPENAI_API_KEY;

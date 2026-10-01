@@ -220,6 +220,9 @@ describe("ToolBlock rich rendering", () => {
   it("renders ui blocks without color when NO_COLOR is set before first import", async () => {
     // The theme styles read NO_COLOR at module load, so simulate a fresh process with NO_COLOR.
     setEnv("NO_COLOR", "1");
+    setEnv("LC_ALL");
+    setEnv("LC_CTYPE");
+    setEnv("LANG", "en_US.UTF-8"); // the glyphs asserted below need a Unicode locale, not the host's
     vi.resetModules();
     const fresh = await import("../packages/cli/src/tui/components.ts");
     const lines = new fresh.ToolBlock(

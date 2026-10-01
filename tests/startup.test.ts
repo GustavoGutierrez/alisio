@@ -392,6 +392,13 @@ describe("banner policy and terminal capabilities", () => {
     expect(terminalCapabilities({ env: { LANG: "C" }, columns: 90, tty: true }).unicode).toBe(
       false,
     );
+    // C.UTF-8 (the CI default) is a UTF-8 locale; plain C/POSIX is not.
+    expect(terminalCapabilities({ env: { LANG: "C.UTF-8" }, columns: 90, tty: true }).unicode).toBe(
+      true,
+    );
+    expect(terminalCapabilities({ env: { LC_ALL: "POSIX" }, columns: 90, tty: true }).unicode).toBe(
+      false,
+    );
     // Some pseudo-terminals report 0 columns: fall back to 80 instead of collapsing output.
     expect(terminalCapabilities({ env: {}, columns: 0, tty: true }).columns).toBe(80);
   });

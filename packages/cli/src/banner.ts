@@ -36,7 +36,8 @@ export function terminalCapabilities(input: {
   const locale = env.LC_ALL || env.LC_CTYPE || env.LANG || "";
   return {
     color: input.tty && !dumb && env.NO_COLOR === undefined,
-    unicode: !dumb && !/^(C|POSIX)(\.|$)/i.test(locale),
+    // `C.UTF-8` is a UTF-8 locale (the default on CI runners); only bare C/POSIX is ASCII.
+    unicode: !dumb && (/utf-?8/i.test(locale) || !/^(C|POSIX)(\.|$)/i.test(locale)),
     columns: input.columns > 0 ? input.columns : 80,
     interactive: input.tty,
   };

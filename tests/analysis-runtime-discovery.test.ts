@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AnalysisRuntimeManager,
@@ -143,7 +143,10 @@ describe("AnalysisRuntimeManager discovery", () => {
       python: "/does/not/exist",
       deps: m.deps,
     });
-    expect(await manager.candidates()).toEqual([{ source: "flag", command: "/does/not/exist" }]);
+    // The flag is resolved against the host's path rules (a drive letter is added on Windows).
+    expect(await manager.candidates()).toEqual([
+      { source: "flag", command: resolve("/does/not/exist") },
+    ]);
     expect(await manager.resolve()).toMatchObject({
       ok: false,
       flag: true,
