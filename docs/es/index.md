@@ -42,33 +42,6 @@ features:
     details: Un cliente MCP (stdio y Streamable HTTP) con conexiones perezosas sujetas a consentimiento, más una integración de reportes de Herdr.
 ---
 
-## Instalación
-
-Elija su gestor de paquetes y copie el comando:
-
-::: code-group
-
-```sh [npm]
-npm i -g @alisio/alisio-code
-```
-
-```sh [pnpm]
-pnpm add -g @alisio/alisio-code
-```
-
-```sh [yarn]
-yarn global add @alisio/alisio-code
-```
-
-```sh [bun]
-bun add -g @alisio/alisio-code
-```
-
-:::
-
-Esto instala el comando `alisio`. Requiere Node.js **>= 22.16** o Bun **>= 1.4.2**; consulte
-[Instalación](/es/installation) para el binario independiente, que no necesita ninguno de los dos.
-
 ## ¿Qué es Alisio?
 
 <img data-component="brand-banner" src="/assets/banner.png" alt="Alisio — arnés de agentes de programación" width="1447" height="680" />
