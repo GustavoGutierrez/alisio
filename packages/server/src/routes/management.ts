@@ -7,6 +7,7 @@
 import { isAbsolute, join } from "node:path";
 import {
   agentCatalogFromState,
+  analysisStatus,
   CommandCatalog,
   configFile,
   configHome,
@@ -21,6 +22,7 @@ import {
 } from "@alisio/core";
 import type {
   AgentInfo,
+  AnalysisStatus,
   McpOverview,
   McpServerWire,
   PluginInfo,
@@ -171,9 +173,12 @@ function mcpOverview(opened: OpenWorkspace): McpOverview {
   };
 }
 
+/** The current value of a `section.leaf` or `section.group.leaf` key of the loaded config. */
 function settingValue(config: unknown, key: string): SettingInfo["value"] {
-  const [section, leaf] = key.split(".") as [string, string];
-  const value = (config as Record<string, Record<string, unknown> | undefined>)[section]?.[leaf];
+  let value: unknown = config;
+  for (const part of key.split("."))
+    value =
+      value && typeof value === "object" ? (value as Record<string, unknown>)[part] : undefined;
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
     ? value
     : undefined;
@@ -394,6 +399,22 @@ export function registerManagementRoutes(
     return { body };
   });
 
+  // Settings → Data analysis: the runtime state, read only (probes Python once, the container
+  // engine only when it is the configured mode).
+  router.get("/api/analysis", async ({ url }) => {
+    const opened = await open(url.searchParams.get("workspace"));
+    const { app } = opened;
+    const body: AnalysisStatus = await analysisStatus({
+      config: app.config.analysis,
+      runtime: app.analysis.runtime,
+      oci: () => app.analysis.oci.runtime(),
+      janitor: app.analysis.janitor,
+      enabled: app.analysis.enabled,
+      readOnly: !!ctx.base.readOnly,
+    });
+    return { body };
+  });
+
   router.patch("/api/settings", async ({ req }) => {
     const input = validate<{ workspace: string; key: string; value: unknown }>(
       await readJson(req),
@@ -423,6 +444,9 @@ export function registerManagementRoutes(
       throw new HttpError("validation_failed", message(error), { fields: ["value"] });
     }
     if (key.startsWith("agents.")) recycler.announce(opened.id, ["agents"]);
+    // Analysis tools are registered when the workspace application starts: rebuild it (after its
+    // runs) so `analysis.enabled` applies without restarting the server.
+    if (key === "analysis.enabled") void recycler.request(opened.id).catch(() => undefined);
     return { body: { message: `Saved ${key}` } };
   });
 }

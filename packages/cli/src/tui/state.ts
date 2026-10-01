@@ -1063,6 +1063,18 @@ export function isUiBlock(value: unknown): value is UiBlock {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const block = value as Record<string, unknown>;
   switch (block.kind) {
+    case "artifact": {
+      const a = block.artifact as Record<string, unknown> | undefined;
+      return (
+        !!a &&
+        typeof a === "object" &&
+        typeof a.id === "string" &&
+        typeof a.fileName === "string" &&
+        typeof a.kind === "string" &&
+        typeof a.bytes === "number" &&
+        typeof a.status === "string"
+      );
+    }
     case "table":
       return (
         Array.isArray(block.columns) &&

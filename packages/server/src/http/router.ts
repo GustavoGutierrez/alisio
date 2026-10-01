@@ -23,7 +23,10 @@ interface Route {
   handler: RouteHandler;
 }
 
-/** Minimal method + path router with `:param` segments (no regex, no wildcards). */
+/**
+ * Minimal method + path router with `:param` segments and an optional trailing `*` segment that
+ * captures the rest of the path (at least one segment) in `params["*"]`. No regex.
+ */
 export class Router {
   private routes: Route[] = [];
 
@@ -67,21 +70,38 @@ export class Router {
   }
 }
 
+const decode = (segment: string): string | undefined => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
+};
+
 function matchSegments(pattern: string[], parts: string[]): Record<string, string> | undefined {
-  if (pattern.length !== parts.length) return undefined;
+  const wildcard = pattern.at(-1) === "*";
+  const fixed = wildcard ? pattern.length - 1 : pattern.length;
+  if (wildcard ? parts.length <= fixed : parts.length !== fixed) return undefined;
   const params: Record<string, string> = {};
-  for (let i = 0; i < pattern.length; i++) {
+  for (let i = 0; i < fixed; i++) {
     const expected = pattern[i] as string;
     const actual = parts[i] as string;
     if (expected.startsWith(":")) {
-      let decoded: string;
-      try {
-        decoded = decodeURIComponent(actual);
-      } catch {
-        return undefined;
-      }
+      const decoded = decode(actual);
+      if (decoded === undefined) return undefined;
       params[expected.slice(1)] = decoded;
     } else if (expected !== actual) return undefined;
+  }
+  if (wildcard) {
+    // Each segment is decoded on its own and the rest is joined with "/": confinement of the
+    // resulting path is the handler's job (it may contain "..").
+    const rest: string[] = [];
+    for (const part of parts.slice(fixed)) {
+      const decoded = decode(part);
+      if (decoded === undefined) return undefined;
+      rest.push(decoded);
+    }
+    params["*"] = rest.join("/");
   }
   return params;
 }

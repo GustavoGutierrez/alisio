@@ -1506,6 +1506,197 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   fuentes de KaTeX inlineadas como `data:` que la CSP bloqueaba. No verificado: 390 px del modal de
   Ajustes, lectores de pantalla, Firefox/Safari y un servidor MCP real conectado desde la web.
 
+## Análisis en Python y artefactos (fase 1): alcance de la verificación
+
+Fase 1 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): `python_run`, `artifact_create`,
+`artifact_list`, capability `analysis.run` con permisos persistidos, `--allow-analysis`,
+`--python`, migración v6, rutas de artefactos y permisos, tarjeta de descarga y popover de
+permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
+
+- Decisiones del propietario (§23.2) adoptadas según la recomendación del documento, **pendientes
+  de confirmación**: D1 core (no plugin), D2 `analysis.enabled` activo por defecto, D3 el permiso
+  de sesión persistido aplica en `resume` headless, D4 flag `--allow-analysis`, D5 contenido de los
+  extras (`analysis`/`science`, lockfiles con hashes generados con `uv pip compile --universal`),
+  D7 helper XLSX como efecto `read` (fase 3; sin efecto aún), D8 origen separado del visor
+  diferido, D11 tabla `datasets` creada en v6, D12 `ctx.artifacts` solo para built-ins (el host
+  de plugins lo retira, junto con `capability`, de las herramientas de plugins externos), D14 sin
+  devolver imágenes al modelo.
+- Vitest: `store-migration-v6` (v5 con datos → v6 sin pérdida, idempotencia, `CHECK`, raíz de
+  sesión), `artifact-kinds` (extensión frente a bytes; conflicto → `file`), `artifact-store`
+  (copia byte a byte, dashboard multiarchivo, ZIP de carpeta, `outputs.json`, idempotencia por
+  ejecución, rechazo completo por symlink, hard link, `..`, `maxFiles` y `maxFileBytes` sin filas ni
+  carpetas), `zip-writer` (CRC, nombres UTF-8; `python -m zipfile -t` cuando hay Python),
+  `analysis-install-hints` (Windows, macOS con y sin Homebrew, Debian/Ubuntu, Fedora/RHEL, Arch,
+  openSUSE, Alpine, otro Linux, Python < 3.10), `analysis-runtime-discovery` (arranque sin
+  procesos, una sonda y `discovery.json`, caché por `mtime`, orden `--python` → `uv` → `py -3` →
+  `python3` → `python`, alias de Microsoft Store, `PATHEXT`, intérprete del venv por plataforma),
+  `analysis-python-run` (intérprete falso portable en `fixtures/fake-python.mjs`: dos
+  `artifact_published`, separación de scripts/logs, entorno sin claves, salida ≠ 0,
+  `publishOnError`, `timed_out`, cancelación ≤ 6 s, rechazo sin publicar, `runtime_unavailable`;
+  más un caso con Python real que se salta si no hay Python 3.10+), `analysis-capabilities`
+  (matriz de §10.3 con una `Application` real), `analysis-runtime-sources`, `server-artifacts`,
+  `server-capabilities`, `web-artifacts-store`, `tui-artifacts`, `open-path` y ampliaciones de
+  `run-events-contract`, `ui-blocks-fallback`, `command-catalog-tui-parity` y `server-approvals`.
+- Verificado a mano el 2026-10-01 en Linux (Ubuntu 22.04, Python 3.10.12 encontrado vía `uv`) con
+  el CLI compilado y un proveedor OpenAI-compatible simulado: `alisio run --allow-analysis --json`
+  emite tres `artifact_published` con `path`; sin `--json` imprime las líneas `artifact: …`;
+  `alisio analysis status` muestra el intérprete y, con `--python` inexistente, el motivo y la
+  guía; en `alisio serve` (Playwright, Chromium) el panel de aprobación muestra el título, la
+  advertencia y el script, **S** guarda el permiso, aparecen las tarjetas bajo la herramienta
+  (también tras recargar), la descarga desde el botón y desde la tarjeta entrega los bytes
+  publicados, y el popover lista y revoca el permiso. No verificado: Windows y macOS (el job
+  `portability` de CI ejecuta las pruebas marcadas), la TUI interactiva en un terminal real,
+  `alisio analysis setup --extras` (requiere red; los lockfiles se generaron pero no se instalaron)
+  y lectores de pantalla.
+
+## Análisis en Python y artefactos (fase 2): alcance de la verificación
+
+Fase 2 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): comodín del router, visor aislado
+`/artifact-view/<token>/*` con enlace firmado (HMAC con el secreto del proceso, 10 min), rutas
+`files/*`, `view`, `export`, `sources` y `DELETE`, `runToolCall` (un run sin modelo con las mismas
+puertas que una llamada del modelo), `artifact_read` y `artifact_export`; en la web "Abrir archivo"
+en las tarjetas previsualizables, `ArtifactPanel` con asa compartida con el Dock, desplegable,
+menú, pantalla completa, expandir, renderers por tipo, modo estrecho, Detalles y `/artifacts`; en
+la TUI "Preview here", "Copy to workspace…", "Reveal analysis sources" y "Details".
+
+- Vitest: `server-http` (comodín del router), `server-artifact-view` (CSP exacta, sin
+  `X-Frame-Options`, `CORP cross-origin`, `private, no-store`, token caducado o falsificado → 403,
+  token de A sin acceso a B, `..`, `%2e%2e%2f` y rutas absolutas → 404, `Host` inválido → 403,
+  solo GET/HEAD, tokens ausentes de los logs, PDF sin `sandbox`, `files/*` en línea salvo HTML,
+  `sources` con y sin `?logs=1`, `DELETE`), `server-artifacts-export` (aprobación `write` en la web,
+  archivo en `Changes`, transcripción válida, `409 runs_active`), `artifact-tools`
+  (`artifact_read` truncado y confinado a la sesión, `artifact_export` con y sin `--allow-write`,
+  separadores `\` y `/`, sin sobrescribir, confinado al workspace, carpeta multiarchivo, ausente con
+  `--read-only`), `web-artifact-panel` (`clampPanelWidth`, pasos de teclado, ancho guardado con
+  almacenamiento que lanza, exclusividad de la ranura derecha, `cardSubtitle`, renderer por tipo,
+  imágenes relativas de Markdown, filtro y caché de enlaces), `tui-artifact-preview` (límites,
+  leyenda, `truncated`, desplazamiento y teclas) y ampliaciones de `tui-artifacts`,
+  `web-artifacts-store` y `command-catalog`.
+- Verificado a mano el 2026-10-01 en Linux con Chromium (Playwright), `alisio serve` compilado y un
+  proveedor OpenAI-compatible simulado que publica un Markdown, un dashboard HTML, un JSON y un
+  binario: en reposo la tarjeta muestra el tipo y con hover o foco de teclado "Abrir archivo" (el
+  binario nunca); el clic abre el panel (`aria-expanded="true"`) y la descarga no lo abre; el asa
+  respeta 320 px y el máximo (viewport − sidebar − 360), ←/→, Shift, Inicio/Fin, doble clic y
+  arrastre, y el ancho persiste tras recargar; el desplegable lista los artefactos con el actual
+  marcado y cambia con flechas y Enter; Descargar, Pantalla completa (`aria-pressed`) y Cerrar (el
+  foco vuelve a la tarjeta); Esc cierra primero el menú; abrir el Dock cierra el panel y viceversa;
+  con Ajustes abiertos el panel queda `inert` sin recargar el iframe; a 600 px es un diálogo modal
+  con el foco atrapado; Expandir oculta el chat; Copiar al workspace pide la aprobación y el archivo
+  aparece en Cambios; Eliminar confirma y la tarjeta pasa a "Eliminado"; `/artifacts dash` abre el
+  panel filtrado. El dashboard de prueba, dentro del iframe y en una pestaña nueva, no pudo leer
+  `document.cookie` ni `localStorage` (`SecurityError`), su origen es `null` y `fetch` a
+  `/api/sessions` y a un sitio externo falló por `connect-src 'none'`; en el iframe
+  `parent.document` lanzó `SecurityError` (en la pestaña nueva `parent` es la propia página). No
+  verificado: Firefox y Safari, Windows y macOS (`explorer.exe /select,` y `open -R` solo tienen
+  pruebas de construcción de argumentos), la TUI interactiva en un terminal real y lectores de
+  pantalla.
+
+## Datos tabulares con `node:sqlite` (fase 3): alcance de la verificación
+
+Fase 3 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): ingesta de CSV, TSV, JSON, JSONL y
+XLSX en un archivo SQLite por dataset, `data_inspect` y `data_query`, guardia SQL, rutas de datasets
+y frames `dataset_ready`/`dataset_failed`, subida desde el compositor web con chips y resumen en el
+prompt, `SpreadsheetView` (también para artefactos `spreadsheet`), helper XLSX en Python con la
+biblioteca estándar (D6, opción B), `datasetId` en `python_run` y `alisio_runtime.datasets`.
+
+- Desviaciones del documento (editadas en la especificación): el motor de datos es un **proceso
+  hijo**, no `worker_threads`, porque `worker.terminate()` no interrumpe una llamada nativa de
+  SQLite (comprobado en Node 22.19 y Bun 1.4.2 con una CTE recursiva infinita); el límite de tiempo
+  mata el proceso. El motor se empaqueta en `engine-source.ts` (regenerar con
+  `node --experimental-strip-types scripts/analysis-data-engine.ts`; un test detecta el desfase). El
+  cursor de página es `[rowid]`. `node:sqlite` enlaza todo número como REAL, así que los enteros se
+  enlazan como BigInt. La migración v6 no cambió. No hay `ingest.ts`/`query.ts` separados.
+- Fuera de esta fase por §21/§18: la página **Data analysis** de Settings y las claves editables de
+  `analysis` (fase 4, con la retención).
+- Vitest: `data-csv-parser` (RFC 4180, trozos arbitrarios, delimitador, codificaciones, conversión
+  sin pérdida), `data-sql-guard` (tabla de aceptadas/rechazadas), `data-ingest` (valores exactos,
+  BOM UTF-8/UTF-16, CRLF, `;`, windows-1252, nombres, filas irregulares, JSONL con claves tardías,
+  límites sin dataset parcial, reutilización por sha256, borrar y reemplazar con el motor activo,
+  lectura con `sqlite3` de Python), `data-query` (solo lectura, truncado, CTE recursiva detenida en
+  ≤ `queryTimeoutMs + 1 s` y consulta siguiente válida, dataset de otra sesión → `not_found`),
+  `data-rows` y `web-spreadsheet` (keyset con empates, NULL y tipos mezclados sin duplicados ni
+  huecos, filtro, saltos, `maxInteractiveRows`), `data-xlsx` (hojas, fechas, épocas, fórmulas,
+  equivalencia con el CSV exportado, zip bomb, DOCTYPE, `maxRows`; sin Python →
+  `dataset_unsupported`), `data-tools` (herramientas con un runner real y `python_run` con
+  `datasetId`), `server-datasets` (subida, esquema, páginas, límites, resumen del prompt, artefacto
+  perezoso y **1 000 000 de filas con `/api/health` < 100 ms y latido SSE estable**),
+  `analysis-data-engine-sources`, `web-attachments`, `web-transcript-store`, `artifact-kinds` y
+  `tui-artifact-preview`. `fixtures/cli-e2e.ts` ejecuta `data_inspect` + `data_query` con Node y con
+  el binario Bun (que se relanza como su propio motor con `BUN_BE_BUN=1`).
+- Verificado a mano el 2026-10-01 en Linux con Chromium (Playwright), `alisio serve` compilado y un
+  proveedor OpenAI-compatible simulado: se adjuntó un CSV de 4 000 filas (con `007`, `N/A`, vacíos y
+  comillas), el chip mostró `4,000 filas × 5 columnas` y el mensaje no se duplicó al llegar el
+  durable; el modelo llamó a `data_inspect`, `data_query` y `python_run { inputs: [{ datasetId }] }`,
+  cuyo script leyó el mismo archivo con `sqlite3` (intento de `DELETE` → solo lectura) y publicó un
+  dashboard y un CSV; el chip abre `SpreadsheetView` con 4 001 filas aria, orden por cabecera
+  (`aria-sort`, ascendente/descendente), recorrido por todo el rango, flechas, Ctrl+C y Ctrl+Mayús+C
+  (celda y fila en TSV), filtro con recuento (207 coincidencias) y el artefacto CSV generado se abrió
+  en la vista (ingesta perezosa). Sin errores en la consola. No verificado: Windows y macOS (el job
+  `portability` ejecuta las pruebas de datos), Firefox y Safari, la TUI interactiva en un terminal
+  real, lectores de pantalla, el efecto de `PRAGMA hard_heap_limit` y el redimensionado de columnas
+  con el puntero (solo probadas las funciones puras).
+
+## OCI, extras, retención y rerun (fase 4): alcance de la verificación
+
+Fase 4 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): runtime `oci` opcional (Docker o
+Podman, imagen fijada por digest), instalación de extras bajo demanda con la capability
+`analysis.install`, `AnalysisJanitor` (retención de artefactos, datasets, originales en `blobs/` y
+trabajos internos), `Rerun` con procedencia (modelo y proveedor incluidos), la página **Análisis de
+datos** de Ajustes y las claves `analysis.*` editables (con claves de tres niveles en
+`setConfigValue`). Decisiones del propietario: D1–D14 según la recomendación, pendientes de
+confirmación (D10: retención 30 / 7 días y artefactos sin caducidad).
+
+- Desviaciones del documento (editadas en la especificación): `analysis.retention.*` es **solo
+  global** como `runtime` y `oci.*` (el barrido cubre todos los workspaces; las claves ignoradas de
+  una capa de proyecto se listan en `alisio doctor`); `0` significa "no borrar nunca" en las tres
+  claves de retención; `input/` se conserva con `script/` mientras haya un artefacto `ready`; el
+  "último uso" de un dataset es la fecha de modificación de su archivo (sin migración v7); el rerun
+  usa las copias de `input/` del trabajo original verificadas por sha256 (no vuelve a leer el
+  archivo del workspace) y se pide con `python_run { rerunOf }`; la instalación desde el chat usa
+  `ToolContext.approveInstall` y `PendingApproval.install`; los artefactos expirados siguen listados
+  con `Details` y `Rerun`; el comprobador de wheels es un job propio (`extras-wheels`) además del
+  paso de `portability`. No se implementaron los opcionales de §23: origen separado del visor (D8),
+  lector XLSX en Node (D6), plantillas de artefacto ni XLS/ODS/Parquet.
+- Marcas "(verificar)" de la especificación comprobadas y corregidas: `@tanstack/preact-table`
+  **sí existe** en npm (9.2.4); `xlsx@0.18.5` sigue siendo `latest` y `npm audit` lo marca *high*;
+  `exceljs@4.4.0` instala 78 paquetes y 36 MB; `--user` se omite en macOS y Windows **sin
+  verificar** (no hay Docker Desktop aquí).
+- Vitest: `analysis-config` (imagen sin digest rechazada al cargar, runtime/oci/retención ignorados
+  desde un proyecto y listados, claves de tres niveles que conservan hermanas, solo las cinco claves),
+  `analysis-oci` (argumentos exactos de §8.3 con rutas de Windows, macOS y con espacios, `--user` y
+  rootless, SELinux, ruta con `:` rechazada; CLI de contenedor falsa: sin Python del host, cancelar y
+  agotar el tiempo ejecutan `kill` y no queda ningún `alisio-*`, motor ausente con el otro
+  instalado, sin imagen; los casos con motor real, red bloqueada, escritura fuera de `/job/out` y
+  `/job/work` y cancelación, corren con `ALISIO_TEST_OCI_IMAGE` y se saltan sin él),
+  `analysis-extras` (pip falso: `--require-hashes` y `--only-binary=:all:`, `uv`, fallo sin red sin
+  entorno a medias ni cambio del activo, instalaciones concurrentes, aprobación solo `once`, nunca
+  persistida, sin flag, headless con el remedio), `analysis-rerun` (mismo hash de script, artefactos
+  nuevos con `rerunOf`, los anteriores intactos, entrada cambiada o ausente, script ausente o
+  alterado, referencias ajenas, expirado, gate de capability con el script guardado, datasets,
+  extras), `analysis-janitor` (reloj inyectado: `work/` a los 7 días, logs a los 30, script mientras
+  haya artefactos `ready`, expiración, datasets y originales, una vez cada 24 h, bloqueo, temporizador
+  sin referencia, nunca fuera de `analysis/jobs`), `analysis-application`, `server-analysis-phase4`
+  (`POST …/rerun`, `GET /api/analysis`, ajustes), `web-analysis-settings`, ampliaciones de
+  `tui-artifacts`, `settings`, `settings-menu` y `run-events-contract`, y `fixtures/cli-e2e.ts`
+  (`analysis status` y `analysis sweep`, también con el binario Bun).
+- Verificado a mano el 2026-10-01 en Linux: Docker real con `python:3.12-slim` fijada por digest
+  (las pruebas con motor real pasan); `alisio analysis setup --extras analysis` instaló los extras de
+  verdad con `uv` (3 s con caché) y, sin red (proxy inalcanzable), `--extras science` falló con el
+  mensaje limpio, código de salida 1, sin carpeta nueva y con el entorno activo intacto; en
+  `alisio serve` (Playwright, Chromium) con un proveedor simulado y Python real: ejecución con
+  aprobación **S**, **Ejecutar de nuevo** desde el menú del panel (nueva ejecución con
+  `rerunOf`, modelo y proveedor en la procedencia, la anterior intacta), la página **Análisis de
+  datos** (estado del runtime, edición de `jobsDays` persistida en el archivo global, última
+  limpieza), un artefacto envejecido y expirado con `alisio analysis sweep --force` (la tarjeta dice
+  "Caducado", el desplegable lo lista, el menú ofrece solo Detalles y Ejecutar de nuevo y este
+  recrea un artefacto nuevo) y la aprobación de instalación (paquetes, 75 MB, red; sin botón de
+  sesión, la tecla S no hace nada, **D** deniega y el resultado nombra el comando opcional). Wheels:
+  `scripts/analysis-extras-wheels.ts` comprobó 6 plataformas × Python 3.10/3.12/3.13 contra PyPI;
+  huecos reales: Windows Arm (`analysis` solo con 3.12+, `science` solo con 3.13) y Alpine/musl
+  (`science` sin scikit-learn). No verificado: Podman, Docker Desktop en macOS y Windows, Windows
+  y macOS (job `portability`), la TUI interactiva en un terminal real, Firefox y Safari y lectores de
+  pantalla.
+
 ## Límites conocidos
 
 ## Límites conocidos
@@ -1810,3 +2001,58 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `compaction_completed` se lo indica).
 - El binario independiente sirve solo la API y una página provisional: los assets web van con el
   paquete npm.
+
+### Análisis en Python y artefactos
+
+- Python administrado **no es un sandbox**: el script se ejecuta con los permisos del usuario,
+  puede leer archivos, usar la red y modificar el repositorio; un proceso que haga `setsid` puede
+  escapar del grupo de procesos al cancelar. El modo `oci` (Docker o Podman, imagen fijada por
+  digest) bloquea la red, monta solo las carpetas del trabajo y limita memoria, CPU y procesos, pero
+  un contenedor no es una frontera frente a una vulnerabilidad del kernel o del motor; solo se
+  verificó en Linux con Docker. La imagen debe traer sus paquetes (el entorno de extras no se usa en
+  `oci`).
+- Panel de artefactos (fase 2): `Esc` pulsado dentro de un dashboard no llega a la app (el iframe
+  aislado se queda con el teclado; queda el botón Cerrar); los dashboards no tienen red,
+  `localStorage`, scripts de módulo ni fuentes desde archivos (sin `Access-Control-Allow-Origin`
+  las peticiones CORS de un origen opaco fallan: fuentes en línea como `data:`); el enlace del
+  visor caduca a los 10 minutos y los recursos que un dashboard pide más tarde fallan hasta
+  reabrirlo; el PDF usa el visor del navegador sin `sandbox` (D9) y, sin visor integrado, la
+  descarga; CSV/TSV/XLSX se abren en `SpreadsheetView` (fase 3). La página de Ajustes "Análisis de
+  datos" (fase 4) edita `analysis.enabled`, el tiempo máximo y la retención; `runtime` y `oci.*` solo
+  se editan en el archivo.
+- `runToolCall` (copiar al workspace desde la web o la TUI) deja en el historial una nota de
+  usuario, una llamada del asistente con un id de 9 caracteres, el resultado y un resumen del
+  asistente: el modelo ve la copia en su siguiente turno como si la hubiera pedido él.
+- El permiso persistido se registra para la sesión raíz; `execute` solo alcanza `python_run` con
+  `--allow-analysis`/`--allow-process`, nunca con un permiso guardado. El uso de un permiso guardado
+  no crea fila de auditoría (sí las decisiones y las ejecuciones por flag).
+- La aprobación no muestra la ruta del intérprete (sí lo hace la página de Ajustes y `alisio
+  analysis status`). La procedencia incluye modelo y proveedor desde la fase 4.
+- No existe la operación de borrar sesión, así que sus permisos no se limpian. La retención
+  (`AnalysisJanitor`) corre como máximo una vez al día y solo con Alisio abierto y escribible; el
+  "último uso" de un dataset es la fecha de modificación de su archivo; los valores son solo
+  globales. Un rerun usa las copias de entrada del trabajo original y se rechaza cuando el barrido
+  ya borró el script. Extras: sin red no se instalan; sin wheel de `science` en Alpine ni en Windows
+  Arm anterior a Python 3.13. No se implementaron el origen separado del visor, el lector XLSX en
+  Node, las plantillas de artefacto ni XLS/ODS/Parquet (opcionales de §23).
+- Las entradas (`inputs`) se copian siempre (sin enlace duro), también `datasetId` (fase 3).
+- `alisio serve` sigue abriendo el navegador con su comando anterior (`cmd /c start` en
+  Windows); `open-path.ts` solo se usa para archivos de la TUI.
+- La línea `artifact: …` de los modos sin TUI va a stderr y no la oculta `--quiet` (no es una
+  pista, es la ubicación del resultado).
+
+
+### Datos tabulares
+
+- Los datasets son archivos SQLite de `node:sqlite` (experimental en Node 22) leídos por un
+  proceso aparte; sin `interrupt()` ni *authorizer*, la seguridad es la conexión de solo lectura
+  más la guardia léxica de sentencia única. Sin índices: ordenar y filtrar recorren la hoja y se
+  desactivan por encima de `analysis.data.maxInteractiveRows`; la hoja con orden o filtro solo
+  alcanza por salto las primeras 100 000 filas (después se carga al desplazarse).
+- XLSX requiere Python 3.10+ (helper con la biblioteca estándar; omite filas vacías; las celdas
+  combinadas conservan el valor de la esquina superior izquierda); XLS, ODS y Parquet no se leen.
+  Los JSON (no JSONL) se leen en memoria hasta 50 MiB. La cuadrícula recorta celdas de más de
+  4 096 caracteres y el modelo ve 2 KiB por celda.
+- La ingesta de más de 1 000 000 filas calcula `distinct`/más frecuentes sobre una muestra
+  (`distinct_exact=0`). Los originales subidos desde la web quedan en `blobs/` hasta que la
+  retención borra su dataset (30 días sin uso por defecto).

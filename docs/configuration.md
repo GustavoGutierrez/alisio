@@ -306,6 +306,47 @@ persisted active agent's system prompt and read-only narrowing to each run (the 
 TUI feature: it is sent only by the interactive TUI, after validation against the active model's
 catalog).
 
+## `analysis`
+
+[Python analysis and artifacts](/analysis). The interpreter has no configuration key: it is
+discovered automatically or pinned with `--python <path>`. `runtime`, `oci.*` and `retention.*` are
+**global only**: they are read from `<config home>/config.json`, and a project or `--config` layer
+that sets them is ignored with a notice (`alisio doctor` lists what was ignored), so a repository can
+neither pick the binary that runs scripts nor shorten the retention of every workspace.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | `false` registers none of `python_run`, `artifact_create`, `artifact_list`, `data_inspect` and `data_query` |
+| `runtime` | `"managed"` | `managed` (your Python, not a sandbox) or `oci` (a Docker or Podman container; see [Container runtime](/analysis#oci)). Global only |
+| `oci.engine` | `"docker"` | `docker` or `podman`. Global only |
+| `oci.image` | unset | The image, pinned by digest (`name@sha256:<64 hex>`); a value without a digest is rejected when the configuration loads. Global only |
+| `oci.memoryMb` | `2048` | Container memory limit (256–65 536) |
+| `oci.cpus` | `2` | Container CPU limit (0.5–64) |
+| `retention.jobsDays` | `30` | Logs and staging of a job, its script once no artifact is ready, and datasets unused for this long (0–3 650; `0` never deletes). Global only |
+| `retention.intermediateDays` | `7` | The scratch folder (`work/`) of a job (0–3 650; `0` never deletes). Global only |
+| `retention.artifactsDays` | `0` | Artifacts older than this become expired (files deleted, card kept); `0` keeps them forever (0–3 650). Global only |
+| `limits.timeoutMs` | `120000` | Default and maximum run time of one `python_run` call (1 000–900 000) |
+| `limits.maxFiles` | `200` | Files one execution may publish |
+| `limits.maxFileBytes` | `104857600` | Largest published file (100 MiB) |
+| `limits.maxOutputBytes` | `524288000` | Total bytes one execution may publish (500 MiB) |
+| `limits.maxLogBytes` | `10485760` | Size cap of each job log (`stdout.log`, `stderr.log`) |
+| `data.maxUploadBytes` | `209715200` | Largest data file ingested, an upload or a workspace file (200 MiB) |
+| `data.maxRows` | `5000000` | Rows per sheet; a larger file stops the ingestion and leaves no dataset |
+| `data.queryTimeoutMs` | `5000` | Time limit of one `data_query` statement (100–60 000); past it the engine process is killed |
+| `data.maxInteractiveRows` | `1000000` | Above it the web table viewer disables sorting and filtering |
+
+```json
+{ "analysis": { "limits": { "timeoutMs": 300000 }, "retention": { "artifactsDays": 90 } } }
+```
+
+`analysis.enabled`, `analysis.limits.timeoutMs` and the three `analysis.retention.*` keys can also be
+edited from **Settings → Data analysis** in [`alisio serve`](/web) and from `/settings` in the
+[TUI](/tui); they are written to the global file with the same validated writer as the other
+settings (a key with three levels, such as `analysis.retention.jobsDays`, keeps its siblings).
+The timeout and the retention apply from the next call or sweep; `analysis.enabled` applies when
+Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime` and
+`oci.*` are not editable from the UI: edit the file.
+
 ## Changes made from the web UI
 
 The **Settings** pages of [`alisio serve`](/web) write to the same files as the terminal:
@@ -470,6 +511,8 @@ Global flags (valid for every command):
 | `--api-mode <mode>` | `chat` or `responses` |
 | `--allow-write` | Allow file writes |
 | `--allow-process` | Allow arbitrary subprocesses; not sandboxed |
+| `--allow-analysis` | Allow Python analysis (`python_run`) without asking; not sandboxed, never allows `shell` |
+| `--python <path>` | Python 3.10+ interpreter for `python_run` (default: discovered) |
 | `--allow-external` | Allow network tools: `webfetch`, `websearch` and provider-native search |
 | `--allow-mcp` | Allow configured MCP servers and remote tool calls |
 | `--allow-agents` | Allow messaging neighboring agents through Herdr |
@@ -494,7 +537,11 @@ Commands:
 | `alisio run <prompt>` | Headless run; `/name args` runs a [prompt template](/prompt-templates) |
 | `alisio resume <session> [prompt]` | Resume a session (TUI without prompt, headless with prompt) |
 | `alisio setup` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
-| `alisio doctor` | Environment and provider diagnostics; warns when no model is configured |
+| `alisio doctor` | Environment and provider diagnostics; warns when no model is configured; shows the Python of `python_run` (or how to install it) |
+| `alisio analysis status` | Mode, the discovered Python interpreter, installed extras, the container engine and image, limits and retention, and install guidance when Python is missing |
+| `alisio analysis setup --extras analysis\|science` | Optional: install hash-locked extras (pandas…) into a private virtualenv; needs network and fails cleanly without it |
+| `alisio analysis setup --oci [--image <name>]` | Optional: pull the container image once and verify its digest (Docker or Podman) |
+| `alisio analysis sweep [--force]` | Run the retention sweep now (it also runs by itself at most once a day) |
 | `alisio trust list` | List directories with a stored project-trust decision |
 | `alisio trust revoke <path>` | Forget a directory's trust decision (re-prompts next time) |
 | `alisio sessions list` | List sessions |

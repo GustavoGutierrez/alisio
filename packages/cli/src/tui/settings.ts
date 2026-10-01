@@ -57,6 +57,11 @@ export interface SettingsConfigView {
   mcp: { allow?: boolean };
   websearch: { provider?: (typeof WEBSEARCH_PROVIDERS)[number] };
   pluginHooks: { timeoutMs: number };
+  analysis: {
+    enabled: boolean;
+    limits: { timeoutMs: number };
+    retention: { jobsDays: number; intermediateDays: number; artifactsDays: number };
+  };
 }
 
 export interface SettingsMenuInput {
@@ -76,6 +81,11 @@ export const defaultConfig: SettingsConfigView = {
   mcp: { allow: false },
   websearch: { provider: undefined },
   pluginHooks: { timeoutMs: 15_000 },
+  analysis: {
+    enabled: true,
+    limits: { timeoutMs: 120_000 },
+    retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
+  },
 };
 
 /** Strictly ascending number sequence with exact step arithmetic (0.85 stays 0.85). */
@@ -234,6 +244,57 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.pluginHooks.timeoutMs,
     description:
       "Host-enforced plugin hook timeout. Hooks (compaction, session start/end) are aborted when they exceed it; raise it for plugins that summarize slowly.",
+  },
+  {
+    id: "analysis.enabled",
+    label: "Data analysis",
+    category: "Data analysis",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.analysis.enabled,
+    description:
+      "Python analysis (python_run), downloadable artifacts and tabular data tools. Off removes them. Applies the next time Alisio starts.",
+  },
+  {
+    id: "analysis.limits.timeoutMs",
+    label: "Analysis timeout",
+    category: "Data analysis",
+    valueType: "number",
+    // Displayed in seconds; the app host multiplies by 1000 before persisting milliseconds.
+    values: [30, 60, 120, 300, 600, 900],
+    read: (config) => config.analysis.limits.timeoutMs / 1000,
+    description:
+      "Maximum run time of one python_run call, in seconds. The model can ask for less, never more. Applied from the next call.",
+  },
+  {
+    id: "analysis.retention.jobsDays",
+    label: "Keep analysis jobs (days)",
+    category: "Data analysis",
+    valueType: "number",
+    values: [0, 7, 14, 30, 60, 90, 180, 365],
+    read: (config) => config.analysis.retention.jobsDays,
+    description:
+      "Logs and staging of an analysis job, its script once no artifact is ready, and datasets unused for this long. 0 never deletes them. Swept at most once a day.",
+  },
+  {
+    id: "analysis.retention.intermediateDays",
+    label: "Keep intermediates (days)",
+    category: "Data analysis",
+    valueType: "number",
+    values: [0, 1, 3, 7, 14, 30, 60],
+    read: (config) => config.analysis.retention.intermediateDays,
+    description:
+      "The scratch folder (work/) of an analysis job. 0 never deletes it. Swept at most once a day.",
+  },
+  {
+    id: "analysis.retention.artifactsDays",
+    label: "Expire artifacts after (days)",
+    category: "Data analysis",
+    valueType: "number",
+    values: [0, 7, 30, 90, 180, 365, 730],
+    read: (config) => config.analysis.retention.artifactsDays,
+    description:
+      "Artifacts older than this expire: their files are deleted and the card shows Expired (Rerun can recreate them). 0 keeps them forever.",
   },
   {
     id: "tui.paddingX",

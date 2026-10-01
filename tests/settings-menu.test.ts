@@ -48,7 +48,7 @@ describe("SettingsMenu", () => {
     expect(text).toContain("Auto-compact");
     expect(text).toContain("true"); // default compaction.auto
     expect(text).toContain("85%"); // default compaction.threshold
-    expect(text).toContain("(1/18)");
+    expect(text).toContain(`(1/${settingsMenuRows(input(), NAVIGATION).length})`);
     // Footer: description of the highlighted row is shown.
     expect(text).toContain("Summarize older history automatically");
     expect(text).toContain("Type to search · Enter/Space to change · Esc to cancel");

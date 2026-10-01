@@ -30,6 +30,12 @@ export const STATUS: Record<ApiErrorCode, number> = {
   picker_unavailable: 503,
   permission_denied: 403,
   cancelled: 409,
+  artifact_not_found: 404,
+  artifact_too_large: 413,
+  runtime_unavailable: 503,
+  dataset_unsupported: 415,
+  query_rejected: 400,
+  query_timeout: 408,
   internal: 500,
 };
 

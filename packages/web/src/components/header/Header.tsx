@@ -12,6 +12,7 @@ import {
 import { dockOpen, setDockOpen } from "../../store/dock.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./header.module.css";
+import { PermissionsButton } from "./PermissionsPopover.tsx";
 
 /** Session header (RF-10): editable title, agent/preset badge, tabs and the session log. */
 export function Header() {
@@ -88,6 +89,7 @@ export function Header() {
             {session.agent ?? "build"} · {t(`preset.${session.preset}`)}
           </button>
         ) : null}
+        {session ? <PermissionsButton /> : null}
         <span class={styles.spacer} />
         {session ? (
           <a

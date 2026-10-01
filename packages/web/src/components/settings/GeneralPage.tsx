@@ -1,7 +1,7 @@
 /**
  * Settings → General: the UI language (this browser) and the agent settings of the workspace
  * application (`SettableSettingKey`, written to the global config file). Terminal-only (`tui.*`)
- * and agent-selection (`agents.*`) keys live elsewhere.
+ * and agent-selection (`agents.*`) keys live elsewhere, and so do the data-analysis ones.
  */
 import type { SettingInfo } from "@alisio/sdk";
 import { useState } from "preact/hooks";
@@ -18,7 +18,7 @@ import {
   useLoad,
 } from "./shared.tsx";
 
-const HIDDEN = /^(tui|agents)\./;
+const HIDDEN = /^(tui|agents|analysis)\./;
 
 function SettingRow(props: {
   setting: SettingInfo;

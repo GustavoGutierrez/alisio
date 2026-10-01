@@ -214,6 +214,30 @@ describe("ApprovalBridge", () => {
     expect(bridge.resolve("child:x", "once")).toBe("already_resolved");
   });
 
+  it("carries the capability, script preview and runtime of a capability approval", async () => {
+    const bridge = new ApprovalBridge({ hub: fakeHub(new Set(["s"])), rootOf: (id) => id });
+    const decision = bridge.handler({
+      call: call("py"),
+      session: "s",
+      effect: "process",
+      capability: "analysis.run",
+      preview: "print(1)",
+      runtime: "managed",
+      input: { code: "print(1)" },
+      signal: new AbortController().signal,
+    });
+    expect(bridge.pending("s")).toEqual([
+      expect.objectContaining({
+        capability: "analysis.run",
+        preview: "print(1)",
+        runtime: "managed",
+        effect: "process",
+      }),
+    ]);
+    bridge.resolve("s:py", "deny");
+    expect(await decision).toBe("deny");
+  });
+
   it("denies after the timeout even when watched, and on abort", async () => {
     const bridge = new ApprovalBridge({
       hub: fakeHub(new Set(["s"])),

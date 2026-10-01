@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Attachment, BlobRef, PromptAccepted } from "@alisio/sdk";
+import { DataError, toDatasetRef } from "@alisio/core";
+import type { Attachment, BlobRef, DatasetRef, PromptAccepted } from "@alisio/sdk";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { SessionService } from "../host/sessions.ts";
 import { readJson } from "../http/body.ts";
@@ -57,11 +58,14 @@ export function registerPromptRoutes(
       requestId: string;
       text: string;
       attachments?: BlobRef[];
+      /** Ids of datasets (uploaded in this session) the prompt attaches. */
+      datasets?: string[];
       display?: string;
     }>(await readJson(req), {
       requestId: { check: is.requestId(), required: true },
       text: { check: is.string(200_000), required: true },
       attachments: { check: is.array(isBlobRef, 16) },
+      datasets: { check: is.array(is.nonEmpty(64), 8) },
       display: { check: is.string(1_000) },
     });
     if (session.parentId)
@@ -88,7 +92,7 @@ export function registerPromptRoutes(
     if (job || scheduler.busy(session.id) || opened.app.runner.isRunning(session.id)) {
       if (job?.status === "queued" || scheduler.compacting(session.id))
         throw new HttpError("session_busy", "The session is waiting for or compacting a run");
-      if (input.attachments?.length)
+      if (input.attachments?.length || input.datasets?.length)
         throw new HttpError(
           "session_busy",
           "The session is running; only text can be queued (retry attachments when idle)",
@@ -106,6 +110,25 @@ export function registerPromptRoutes(
           fields: ["attachments"],
         });
       }
+    // Attached datasets: the model reads a bounded text summary (schema, sample rows, statistics);
+    // the UI keeps the typed text (`display`) and shows the dataset chips.
+    const datasets: DatasetRef[] = [];
+    let text = input.text;
+    if (input.datasets?.length) {
+      const root = sessions.rootOf(session.id);
+      const summaries: string[] = [];
+      for (const id of input.datasets)
+        try {
+          const record = opened.app.datasets.getFor(id, root);
+          datasets.push(toDatasetRef(record));
+          summaries.push(await opened.app.datasets.summary(record));
+        } catch (error) {
+          if (error instanceof DataError && error.code === "not_found")
+            throw new HttpError("validation_failed", "Unknown dataset", { fields: ["datasets"] });
+          throw error;
+        }
+      text = `${input.text}\n\n${summaries.join("\n\n")}`;
+    }
     const { run, created } = sessions.beginRun({
       id: randomUUID(),
       session: session.id,
@@ -124,10 +147,11 @@ export function registerPromptRoutes(
       sessionId: session.id,
       workspaceId: opened.id,
       app: opened.app,
-      text: input.text,
+      text,
       correlationId,
       ...(attachments.length ? { attachments } : {}),
-      ...(input.display ? { display: input.display } : {}),
+      ...(datasets.length ? { datasets } : {}),
+      ...(input.display || datasets.length ? { display: input.display ?? input.text } : {}),
       options: () => sessions.runOptions(session.id),
     });
     return { status: 202, body: { runId: run.id, status } satisfies PromptAccepted };

@@ -37,6 +37,7 @@ const LOADERS: Record<LazyKind, Loader> = {
   // Mermaid itself loads from the view once the block is visible; KaTeX ships with its view.
   mermaid: view(() => import("./mermaid/view.tsx")),
   math: view(() => import("./math/view.tsx")),
+  artifact: view(() => import("./artifact/view.tsx")),
 };
 
 /** The view of a block kind: sync when bundled, else a cached dynamic import. */

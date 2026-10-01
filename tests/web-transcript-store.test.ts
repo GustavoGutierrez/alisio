@@ -334,3 +334,54 @@ describe("attachments in the transcript (phase 4)", () => {
     });
   });
 });
+
+describe("datasets in the transcript (phase 3)", () => {
+  const dataset = {
+    id: "ds_1",
+    name: "sales.csv",
+    format: "csv" as const,
+    bytes: 10,
+    sha256: "x",
+    sheets: [{ name: "data", table: "data", rows: 3, columns: 2 }],
+  };
+
+  it("shows what the user typed with the dataset chips, and replaces the echo that carried them", () => {
+    let state = applyFrame(emptyTranscript(SID), snapshot([]));
+    state = localEcho(state, {
+      localId: "l1",
+      requestId: "q1",
+      text: "what is in it?",
+      datasets: [dataset],
+    });
+    expect(visibleItems(state).find((i) => i.kind === "echo")).toMatchObject({
+      echo: { datasets: [{ id: "ds_1" }] },
+    });
+    // The server stores the model text (with the summary) and the typed text as `display`.
+    state = applyFrame(
+      state,
+      message(
+        0,
+        user("what is in it?\n\n[Attached Dataset ds_1 …]", {
+          display: "what is in it?",
+          datasets: [dataset],
+        }),
+      ),
+    );
+    const items = visibleItems(state);
+    expect(items.some((i) => i.kind === "echo")).toBe(false);
+    expect(items.find((i) => i.kind === "user")).toMatchObject({
+      text: "what is in it?",
+      datasets: [{ id: "ds_1", name: "sales.csv" }],
+    });
+  });
+
+  it("keeps the echo of a different prompt when only the typed text differs", () => {
+    let state = applyFrame(emptyTranscript(SID), snapshot([]));
+    state = localEcho(state, { localId: "l1", requestId: "q1", text: "one", datasets: [dataset] });
+    state = applyFrame(
+      state,
+      message(0, user("two\n\n[Attached …]", { display: "two", datasets: [dataset] })),
+    );
+    expect(state.echoes).toHaveLength(1);
+  });
+});

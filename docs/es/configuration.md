@@ -315,6 +315,47 @@ prompt de sistema del agente activo persistido y su limitación de solo lectura 
 (el nivel de effort es una función de la TUI: solo la envía la TUI interactiva, tras validarlo
 contra el catálogo del modelo activo).
 
+## `analysis`
+
+[Análisis en Python y artefactos](/es/analysis). El intérprete no tiene clave de configuración: se
+descubre automáticamente o se fija con `--python <path>`. `runtime`, `oci.*` y `retention.*` son
+**solo globales**: se leen de `<config home>/config.json`, y una capa de proyecto o `--config` que
+las defina se ignora con un aviso (`alisio doctor` lista lo ignorado), de modo que un repositorio no
+puede elegir el binario que ejecuta los scripts ni acortar la retención de todos los workspaces.
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | `false` no registra `python_run`, `artifact_create`, `artifact_list`, `data_inspect` ni `data_query` |
+| `runtime` | `"managed"` | `managed` (tu Python, sin sandbox) u `oci` (un contenedor Docker o Podman; consulta [Runtime de contenedor](/es/analysis#oci)). Solo global |
+| `oci.engine` | `"docker"` | `docker` o `podman`. Solo global |
+| `oci.image` | sin definir | La imagen, fijada por digest (`nombre@sha256:<64 hex>`); un valor sin digest se rechaza al cargar la configuración. Solo global |
+| `oci.memoryMb` | `2048` | Límite de memoria del contenedor (256–65 536) |
+| `oci.cpus` | `2` | Límite de CPU del contenedor (0,5–64) |
+| `retention.jobsDays` | `30` | Logs y staging de un trabajo, su script cuando ya no queda ningún artefacto listo, y datasets sin uso durante este tiempo (0–3 650; `0` no borra nunca). Solo global |
+| `retention.intermediateDays` | `7` | La carpeta de temporales (`work/`) de un trabajo (0–3 650; `0` no borra nunca). Solo global |
+| `retention.artifactsDays` | `0` | Los artefactos más antiguos caducan (archivos borrados, tarjeta conservada); `0` los conserva siempre (0–3 650). Solo global |
+| `limits.timeoutMs` | `120000` | Tiempo de ejecución por defecto y máximo de una llamada a `python_run` (1 000–900 000) |
+| `limits.maxFiles` | `200` | Archivos que puede publicar una ejecución |
+| `limits.maxFileBytes` | `104857600` | Archivo publicado más grande (100 MiB) |
+| `limits.maxOutputBytes` | `524288000` | Bytes totales que puede publicar una ejecución (500 MiB) |
+| `limits.maxLogBytes` | `10485760` | Tamaño máximo de cada log del trabajo (`stdout.log`, `stderr.log`) |
+| `data.maxUploadBytes` | `209715200` | Archivo de datos más grande que se ingiere, subido o del workspace (200 MiB) |
+| `data.maxRows` | `5000000` | Filas por hoja; un archivo mayor detiene la ingesta y no deja dataset |
+| `data.queryTimeoutMs` | `5000` | Tiempo máximo de una sentencia de `data_query` (100–60 000); al superarlo se mata el proceso del motor |
+| `data.maxInteractiveRows` | `1000000` | Por encima, el visor de tablas web desactiva el orden y el filtro |
+
+```json
+{ "analysis": { "limits": { "timeoutMs": 300000 }, "retention": { "artifactsDays": 90 } } }
+```
+
+`analysis.enabled`, `analysis.limits.timeoutMs` y las tres claves `analysis.retention.*` también se
+pueden editar en **Ajustes → Análisis de datos** de [`alisio serve`](/es/web) y con `/settings` en
+la [TUI](/es/tui); se escriben en el archivo global con el mismo escritor validado que el resto de
+ajustes (una clave de tres niveles, como `analysis.retention.jobsDays`, conserva sus hermanas). El
+tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; `analysis.enabled` se
+aplica al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
+ejecuciones). `runtime` y `oci.*` no se editan desde la interfaz: edita el archivo.
+
 ## Cambios hechos desde la interfaz web
 
 Las páginas de **Ajustes** de [`alisio serve`](/es/web) escriben en los mismos archivos que la
@@ -493,6 +534,8 @@ Flags globales (válidos para todos los comandos):
 | `--api-mode <mode>` | `chat` o `responses` |
 | `--allow-write` | Permite escribir archivos |
 | `--allow-process` | Permite subprocesos arbitrarios; sin sandbox |
+| `--allow-analysis` | Permite el análisis en Python (`python_run`) sin preguntar; sin sandbox, nunca permite `shell` |
+| `--python <path>` | Intérprete Python 3.10+ para `python_run` (por defecto: se descubre) |
 | `--allow-external` | Permite herramientas de red: `webfetch`, `websearch` y la búsqueda nativa del proveedor |
 | `--allow-mcp` | Permite los servidores MCP configurados y las llamadas a herramientas remotas |
 | `--allow-agents` | Permite enviar mensajes a agentes vecinos mediante Herdr |
@@ -517,7 +560,11 @@ Comandos:
 | `alisio run <prompt>` | Ejecución headless; `/name args` ejecuta una [plantilla de prompt](/es/prompt-templates) |
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
 | `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
-| `alisio doctor` | Diagnóstico del entorno y del proveedor; avisa cuando no hay modelo configurado |
+| `alisio doctor` | Diagnóstico del entorno y del proveedor; avisa cuando no hay modelo configurado; muestra el Python de `python_run` (o cómo instalarlo) |
+| `alisio analysis status` | Modo, el intérprete Python descubierto, los extras instalados, el motor e imagen de contenedor, límites y retención, y la guía de instalación si falta Python |
+| `alisio analysis setup --extras analysis\|science` | Opcional: instala extras con hashes fijados (pandas…) en un entorno virtual privado; necesita red y falla limpiamente sin ella |
+| `alisio analysis setup --oci [--image <nombre>]` | Opcional: descarga una vez la imagen de contenedor y verifica su digest (Docker o Podman) |
+| `alisio analysis sweep [--force]` | Ejecuta ahora el barrido de retención (también se ejecuta solo, como máximo una vez al día) |
 | `alisio trust list` | Lista los directorios con una decisión de confianza guardada |
 | `alisio trust revoke <path>` | Olvida la decisión de confianza de un directorio (vuelve a preguntar la próxima vez) |
 | `alisio sessions list` | Lista las sesiones |

@@ -4,7 +4,9 @@
  * `store/app.ts`.
  */
 import type {
+  ArtifactRef,
   BlobRef,
+  DatasetRef,
   Effect,
   Message,
   RunEvent,
@@ -12,6 +14,7 @@ import type {
   SessionDetailWire,
   ToolResult,
 } from "@alisio/sdk";
+import { artifactsOfResult } from "../util/artifacts.ts";
 
 export type ToolStatus = "pending" | "running" | "completed" | "failed";
 
@@ -43,6 +46,8 @@ type Entry =
       attachments: number;
       /** Attached images (the persisted base64), shown as thumbnails. */
       images?: Array<{ mimeType: string; data: string }>;
+      /** Datasets attached to the prompt (chips that open the table). */
+      datasets?: DatasetRef[];
     }
   | {
       kind: "assistant";
@@ -77,6 +82,8 @@ export interface Echo {
   /** Uploaded images sent with the prompt, and their local thumbnails (object URLs). */
   attachments?: BlobRef[];
   thumbs?: string[];
+  /** Datasets attached to the prompt: the server adds their summary to the text it stores. */
+  datasets?: DatasetRef[];
 }
 
 export interface LiveRun {
@@ -118,7 +125,9 @@ export type VisibleItem =
   | { kind: "tool"; key: string; tool: ToolState }
   | { kind: "echo"; key: string; echo: Echo }
   | { kind: "think"; key: string; text: string }
-  | { kind: "streaming"; key: string; text: string };
+  | { kind: "streaming"; key: string; text: string }
+  /** Artifacts published by the tool rows just above (one card each, in publication order). */
+  | { kind: "artifacts"; key: string; artifacts: ArtifactRef[] };
 
 const TAIL_LIMIT = 8_192;
 
@@ -180,6 +189,7 @@ function fromMessages(
                 images: message.attachments.map((a) => ({ mimeType: a.mimeType, data: a.data })),
               }
             : {}),
+          ...(message.datasets?.length ? { datasets: message.datasets } : {}),
         });
     } else if (message.role === "assistant") {
       for (const call of message.calls)
@@ -274,9 +284,12 @@ function applySnapshot(
 }
 
 const matchesEcho = (message: Extract<Message, { role: "user" }>, echo: Echo): boolean =>
-  echo.display !== undefined
-    ? message.display === echo.display && message.text === echo.text
-    : message.text === echo.text && message.display === undefined;
+  echo.datasets?.length
+    ? // The server appended the datasets' summary to the text and kept what the user typed.
+      message.display === (echo.display ?? echo.text) && message.text.startsWith(echo.text)
+    : echo.display !== undefined
+      ? message.display === echo.display && message.text === echo.text
+      : message.text === echo.text && message.display === undefined;
 
 function applyMessage(
   state: TranscriptState,
@@ -540,6 +553,11 @@ export function prependOlder(
 export function visibleItems(state: TranscriptState): VisibleItem[] {
   const out: VisibleItem[] = [];
   const shown = new Set<string>();
+  /** Cards of `ids`' results, placed right after those rows (outside the foldable rows). */
+  const cards = (ids: string[], key: string) => {
+    const artifacts = ids.flatMap((id) => artifactsOfResult(state.tools[id]?.result));
+    if (artifacts.length) out.push({ kind: "artifacts", key, artifacts });
+  };
   for (const entry of state.entries) {
     if (entry.kind === "assistant") {
       const { calls, ...rest } = entry;
@@ -550,6 +568,7 @@ export function visibleItems(state: TranscriptState): VisibleItem[] {
         shown.add(id);
         out.push({ kind: "tool", key: `t${id}`, tool });
       }
+      cards(calls, `a${entry.key}`);
     } else out.push(entry);
   }
   for (const echo of state.echoes) out.push({ kind: "echo", key: `e${echo.localId}`, echo });
@@ -557,10 +576,12 @@ export function visibleItems(state: TranscriptState): VisibleItem[] {
   if (live) {
     if (live.reasoning)
       out.push({ kind: "think", key: `think-${live.runId}`, text: live.reasoning });
-    for (const id of live.toolIds) {
+    const liveIds = live.toolIds.filter((id) => state.tools[id] && !shown.has(id));
+    for (const id of liveIds) {
       const tool = state.tools[id];
-      if (tool && !shown.has(id)) out.push({ kind: "tool", key: `t${id}`, tool });
+      if (tool) out.push({ kind: "tool", key: `t${id}`, tool });
     }
+    cards(liveIds, `live-a${live.runId}`);
     if (live.text) out.push({ kind: "streaming", key: `live-${live.runId}`, text: live.text });
   }
   return out;

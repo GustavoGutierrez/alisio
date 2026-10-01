@@ -15,6 +15,9 @@ import {
   textResult,
 } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
+import { CapabilityGrants } from "../packages/core/src/analysis/capabilities.ts";
+import { createArtifactPublisher } from "../packages/core/src/artifacts/publisher.ts";
+import { ArtifactStore } from "../packages/core/src/artifacts/store.ts";
 import type { SessionStore } from "../packages/core/src/core/contracts.ts";
 import { ToolRegistry } from "../packages/core/src/core/registry.ts";
 import { AgentRunner } from "../packages/core/src/core/runner.ts";
@@ -69,9 +72,59 @@ const contract: { [K in RunEventType]: Check } = {
     typeof d.isError === "boolean" &&
     num(d.durationMs) &&
     str(d.preview),
-  approval_requested: (d) => str(d.id) && str(d.name) && gated(d.effect) && opt(d.label, str),
+  approval_requested: (d) =>
+    str(d.id) &&
+    str(d.name) &&
+    gated(d.effect) &&
+    opt(d.label, str) &&
+    opt(d.capability, oneOf("analysis.run", "analysis.install")) &&
+    opt(d.install, (v) => {
+      const install = v as Record<string, unknown>;
+      return (
+        record(install) &&
+        oneOf("analysis", "science")(install.extras) &&
+        Array.isArray(install.packages) &&
+        num(install.packageCount) &&
+        num(install.estimatedBytes) &&
+        install.network === true
+      );
+    }),
   approval_resolved: (d) =>
-    str(d.id) && str(d.name) && gated(d.effect) && oneOf("once", "session", "deny")(d.decision),
+    str(d.id) &&
+    str(d.name) &&
+    gated(d.effect) &&
+    oneOf("once", "session", "deny")(d.decision) &&
+    opt(d.capability, oneOf("analysis.run", "analysis.install")) &&
+    opt(d.persisted, (v) => v === true),
+  artifact_published: (d) => {
+    const a = d.artifact as Record<string, unknown> | undefined;
+    return (
+      record(a) &&
+      str(a?.id) &&
+      str(a?.sessionId) &&
+      str(a?.title) &&
+      str(a?.fileName) &&
+      oneOf(
+        "dashboard",
+        "document",
+        "spreadsheet",
+        "image",
+        "data",
+        "code",
+        "archive",
+        "file",
+      )(a?.kind) &&
+      str(a?.mimeType) &&
+      num(a?.bytes) &&
+      num(a?.fileCount) &&
+      typeof a?.previewable === "boolean" &&
+      num(a?.createdAt) &&
+      oneOf("ready", "deleted", "expired")(a?.status) &&
+      str(d.path) &&
+      opt(d.callId, str) &&
+      opt(d.executionId, str)
+    );
+  },
   run_completed: (d) =>
     num(d.tokens) && str(d.text) && opt(d.truncated, (v) => typeof v === "boolean"),
   response_truncated: (d) => num(d.turn) && num(d.maxOutputTokens),
@@ -340,6 +393,146 @@ describe("RunEvent contract (T-02)", () => {
         expect(event.eventId).toMatch(/^\d+$/);
       }
       expect(events.find((e) => e.type === "run_failed")?.runId).toBe("r-fail");
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("types capability approvals and artifact_published", async () => {
+    const fx = await fixture();
+    try {
+      fx.registry.register({
+        name: "make_report",
+        description: "publishes a report",
+        inputSchema: { type: "object", properties: {} },
+        effect: "process",
+        capability: "analysis.run",
+        async execute(_input, ctx) {
+          const ref = await ctx.artifacts?.publishText({ fileName: "r.md", text: "# r" });
+          return textResult(`published ${ref?.id}`);
+        },
+      });
+      const session = fx.store.create(fx.root, "test", "test-model");
+      const { events, onEvent } = recorder();
+      const artifacts = new ArtifactStore({ root: fx.root, db: fx.store.db });
+      const grants = new CapabilityGrants({ db: fx.store.db, rootOf: (id) => fx.store.rootOf(id) });
+      const runner = new AgentRunner({
+        provider: scripted([
+          [
+            {
+              type: "completed",
+              message: assistant("", [{ id: "call-a", name: "make_report", arguments: "{}" }]),
+            },
+          ],
+          [{ type: "completed", message: assistant("Done") }],
+        ]),
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        policy: { write: false, process: false, external: false },
+        approve: async () => "session",
+        capabilities: {
+          granted: (c, s) => grants.granted(c, s),
+          record: (input) => void grants.record({ ...input, workspace: fx.root }),
+          source: "tui",
+        },
+        artifacts: (call, announce) =>
+          createArtifactPublisher(
+            artifacts,
+            { sessionId: call.sessionId, rootSessionId: call.sessionId, workspace: fx.root },
+            announce,
+          ),
+        onEvent,
+      });
+      await runner.run(session.id, "go");
+      for (const event of events)
+        expect(conforms(event), `${event.type} ${JSON.stringify(event.data)}`).toBe(true);
+      const published = events.find((e) => e.type === "artifact_published");
+      expect(published?.data).toMatchObject({ callId: "call-a", artifact: { fileName: "r.md" } });
+      expect(published?.eventId).toBeDefined();
+      expect(events.find((e) => e.type === "approval_resolved")?.data).toMatchObject({
+        capability: "analysis.run",
+        persisted: true,
+      });
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("types the analysis.install approval: packages, size estimate, network, once only", async () => {
+    const fx = await fixture();
+    try {
+      fx.registry.register({
+        name: "needs_packages",
+        description: "asks to install optional packages",
+        inputSchema: { type: "object", properties: {} },
+        effect: "process",
+        capability: "analysis.run",
+        async execute(_input, ctx) {
+          const verdict = await ctx.approveInstall?.({
+            extras: "analysis",
+            packages: ["pandas", "numpy"],
+            packageCount: 32,
+            estimatedBytes: 75 * 1024 * 1024,
+            network: true,
+          });
+          return textResult(`install: ${verdict}`);
+        },
+      });
+      const session = fx.store.create(fx.root, "test", "test-model");
+      const { events, onEvent } = recorder();
+      const grants = new CapabilityGrants({ db: fx.store.db, rootOf: (id) => fx.store.rootOf(id) });
+      const asked: string[] = [];
+      const runner = new AgentRunner({
+        provider: scripted([
+          [
+            {
+              type: "completed",
+              message: assistant("", [{ id: "call-i", name: "needs_packages", arguments: "{}" }]),
+            },
+          ],
+          [{ type: "completed", message: assistant("Done") }],
+        ]),
+        registry: fx.registry,
+        store: fx.store,
+        context: new ProjectContext(fx.root),
+        workspace: fx.root,
+        // Every flag on: none of them may cover an installation.
+        policy: { write: true, process: true, external: true, analysis: true },
+        approve: async (request) => {
+          asked.push(request.capability ?? "effect");
+          return "session";
+        },
+        capabilities: {
+          granted: (c, s) => grants.granted(c, s),
+          record: (input) => void grants.record({ ...input, workspace: fx.root }),
+          source: "web",
+        },
+        onEvent,
+      });
+      await runner.run(session.id, "go");
+      for (const event of events)
+        expect(conforms(event), `${event.type} ${JSON.stringify(event.data)}`).toBe(true);
+      // The run itself is pre-allowed by the flags; the installation still asked, once.
+      expect(asked).toEqual(["analysis.install"]);
+      const requested = events.find(
+        (e) =>
+          e.type === "approval_requested" &&
+          (e.data as { capability?: string }).capability === "analysis.install",
+      );
+      expect(requested?.data).toMatchObject({
+        id: "call-i:install",
+        install: { extras: "analysis", network: true, packageCount: 32 },
+      });
+      const resolved = events.find(
+        (e) =>
+          e.type === "approval_resolved" &&
+          (e.data as { capability?: string }).capability === "analysis.install",
+      );
+      expect(resolved?.data).toMatchObject({ decision: "once" });
+      expect((resolved?.data as { persisted?: boolean }).persisted).toBeUndefined();
+      expect(grants.granted("analysis.install", session.id)).toBe(false);
     } finally {
       await fx.close();
     }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 export function inside(root: string, path: string): boolean {
@@ -46,3 +47,10 @@ export async function findWorkspace(cwd: string): Promise<string> {
     path = dirname(path);
   }
 }
+
+/**
+ * Opaque, stable key of a workspace path: the first 16 hex characters of its sha256. Core names
+ * per-workspace folders with it and the server exposes it as the web `workspaceId`.
+ */
+export const workspaceKey = (path: string): string =>
+  createHash("sha256").update(path).digest("hex").slice(0, 16);

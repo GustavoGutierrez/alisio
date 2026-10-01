@@ -4,6 +4,8 @@ import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
 import { loadOlder, retryEcho, transcript } from "../../store/app.ts";
 import { type VisibleItem, visibleItems } from "../../store/transcript.ts";
+import { ArtifactCards } from "../artifacts/ArtifactCard.tsx";
+import { DatasetChips } from "../artifacts/DatasetChips.tsx";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
 import { ThinkRow, ToolRow } from "./ToolRow.tsx";
@@ -30,6 +32,7 @@ function Item({ item }: { item: VisibleItem }) {
               </span>
             ) : null}
             {item.text}
+            {item.datasets?.length ? <DatasetChips datasets={item.datasets} /> : null}
           </div>
           <div class={styles.bubbleActions}>
             <CopyButton text={() => item.text} label={t("transcript.copyMessage")} />
@@ -48,6 +51,7 @@ function Item({ item }: { item: VisibleItem }) {
               </span>
             ) : null}
             {item.echo.display ?? item.echo.text}
+            {item.echo.datasets?.length ? <DatasetChips datasets={item.echo.datasets} /> : null}
           </div>
           <div class={styles.bubbleActions}>
             {item.echo.state === "failed" ? (
@@ -94,6 +98,8 @@ function Item({ item }: { item: VisibleItem }) {
       return <ThinkRow text={item.text} live />;
     case "tool":
       return <ToolRow tool={item.tool} />;
+    case "artifacts":
+      return <ArtifactCards artifacts={item.artifacts} />;
     case "context":
       return (
         <div class={styles.process}>

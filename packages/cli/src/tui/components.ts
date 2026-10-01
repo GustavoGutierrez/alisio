@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import type { PanelNode, TreeNode, UiBlock } from "@alisio/sdk";
 import {
   type Component,
@@ -13,6 +14,7 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { terminalCapabilities } from "../banner.ts";
+import { artifactLines } from "./artifacts.ts";
 import {
   attachmentCaption,
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -419,6 +421,29 @@ function renderUnknownBlock(block: unknown): string[] {
   return [style.gray(`[ui block: ${kind}]`), ...renderCappedCode(jsonText(block), "json")];
 }
 
+/** Local path of a published artifact (set by the TUI from the artifact store). */
+let artifactPath: ((id: string) => string | undefined) | undefined;
+export function setArtifactPathResolver(resolve: ((id: string) => string | undefined) | undefined) {
+  artifactPath = resolve;
+}
+
+/** The two-line announcement of an `artifact` block (kind, name, size and local path). */
+export function renderArtifactBlock(
+  block: Extract<UiBlock, { kind: "artifact" }>,
+  width: number,
+  unicode: boolean,
+  path?: string,
+): string[] {
+  return artifactLines(block.artifact, {
+    width,
+    unicode,
+    home: homedir(),
+    ...((path ?? artifactPath?.(block.artifact.id))
+      ? { path: path ?? artifactPath?.(block.artifact.id) }
+      : {}),
+  });
+}
+
 /**
  * Renders a `{type:"ui"}` block to styled lines for the given inner width. Blocks come from
  * persisted transcripts too, so anything that does not validate (a kind added by a newer Alisio,
@@ -455,6 +480,8 @@ export function renderUiBlock(block: UiBlock, width: number, unicode: boolean): 
       return renderTestResultsBlock(block, width, unicode);
     case "progress":
       return renderProgressBlock(block, unicode);
+    case "artifact":
+      return renderArtifactBlock(block, width, unicode);
     default:
       return renderUnknownBlock(block);
   }

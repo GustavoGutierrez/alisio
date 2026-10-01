@@ -44,6 +44,46 @@ const server = await serve(async (req) => {
     { headers: { "Content-Type": "text/event-stream" } },
   );
 });
+/**
+ * A fake model for the data tools: inspect a CSV, query the dataset it names, then answer with the
+ * number the query returned (the dataset engine is a child process of the CLI, so this also runs
+ * the compiled binary as its own data engine).
+ */
+let dataRequests = 0;
+const dataServer = await serve(async (req) => {
+  const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
+  dataRequests++;
+  const results = body.messages.filter((m) => m.role === "tool");
+  const call = (name: string, input: unknown) => ({
+    delta: {
+      tool_calls: [
+        {
+          index: 0,
+          id: `d${results.length}`,
+          type: "function",
+          function: { name, arguments: JSON.stringify(input) },
+        },
+      ],
+    },
+    finish_reason: "tool_calls",
+  });
+  const id = /ds_[0-9A-Z]+/.exec(String(results[0]?.content ?? ""))?.[0] ?? "ds_missing";
+  const choice =
+    results.length === 0
+      ? call("data_inspect", { path: "sales.csv" })
+      : results.length === 1
+        ? call("data_query", { datasetId: id, sql: "SELECT sum(revenue) AS total FROM data" })
+        : {
+            delta: {
+              content: `Total revenue ${/total\\+n(\d+)/.exec(JSON.stringify(results[1]?.content))?.[1]}`,
+            },
+            finish_reason: "stop",
+          };
+  return new Response(
+    `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+});
 const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   const [program = "", ...prefix] = command;
   const child = spawn(program, [...prefix, ...args], {
@@ -159,6 +199,58 @@ try {
       },
     }),
   );
+  await writeFile(
+    join(directory, "data-config.json"),
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${dataServer.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+    }),
+  );
+  await writeFile(join(directory, "sales.csv"), "region,revenue\nWest,10\nEast,20\nWest,5\n");
+  const dataOut = await execute([
+    "run",
+    "Inspect sales.csv",
+    "--cwd",
+    directory,
+    "--config",
+    join(directory, "data-config.json"),
+    "--json",
+  ]);
+  const dataEvents = dataOut
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(dataEvents.at(-1).type, "run_completed");
+  assert.equal(dataRequests, 3);
+  const completed = dataEvents.filter((e) => e.type === "tool_completed");
+  assert.equal(completed.length, 2);
+  assert.match(JSON.stringify(dataEvents), /Total revenue 35/);
+  assert.equal(
+    dataEvents.some((e) => e.type === "tool_failed"),
+    false,
+    dataOut,
+  );
+  // The analysis runtime and its retention (phase 4): status reports the mode, the container
+  // settings and the retention defaults; `sweep` runs the janitor over this state folder and
+  // leaves the dataset the run above just used (it was used a moment ago).
+  const analysisStatus = JSON.parse(await execute(["analysis", "status", "--cwd", directory]));
+  assert.equal(analysisStatus.mode, "managed");
+  assert.deepEqual(
+    { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
+    {
+      jobsDays: analysisStatus.retention.jobsDays,
+      intermediateDays: analysisStatus.retention.intermediateDays,
+      artifactsDays: analysisStatus.retention.artifactsDays,
+    },
+  );
+  assert.equal(analysisStatus.oci.engine, "docker");
+  const swept = JSON.parse(await execute(["analysis", "sweep", "--force", "--cwd", directory]));
+  assert.equal(swept.datasetsDeleted, 0);
+  assert.equal(swept.errors, 0);
   const mcpConfig = join(directory, "mcp-config.json");
   await writeFile(
     mcpConfig,
@@ -355,7 +447,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 5);
+  assert.equal(sessions.length, 6);
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {
@@ -445,6 +537,8 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
       runtime: mode,
       checks: [
         "CLI HTTP tool loop",
+        "data_inspect + data_query on a CSV through the data engine process",
+        "alisio analysis status (mode, container settings, retention) and analysis sweep",
         "compatible MCP config list/doctor with fake stdio server and redacted direct env",
         "JSONL output",
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
@@ -463,5 +557,6 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
 } finally {
   await server.close();
+  await dataServer.close();
   await rm(directory, { recursive: true, force: true });
 }

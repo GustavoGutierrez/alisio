@@ -2,6 +2,7 @@ import type { PendingApproval } from "@alisio/sdk";
 import { useEffect, useRef } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { decide, detail } from "../../store/app.ts";
+import { formatSize } from "../../util/artifacts.ts";
 import { toolLabel } from "../../util/tools.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./approval.module.css";
@@ -28,13 +29,20 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
   };
 
   const name = approval.name ? toolLabel(approval.name) : "";
+  const analysis = approval.capability === "analysis.run";
+  // Installing the optional packages: once or deny only (it is never remembered).
+  const install = approval.capability === "analysis.install" ? approval.install : undefined;
   const title =
     approval.kind === "directory"
       ? t("approval.directory")
-      : t("approval.wants", {
-          tool: name || (approval.name ?? ""),
-          effect: t(`approval.effect.${approval.effect ?? "external"}`),
-        });
+      : install
+        ? t("approval.analysisInstall.title")
+        : analysis
+          ? t("approval.analysisRun.title")
+          : t("approval.wants", {
+              tool: name || (approval.name ?? ""),
+              effect: t(`approval.effect.${approval.effect ?? "external"}`),
+            });
   const titleId = `approval-title-${approval.approvalId}`;
   const bodyId = `approval-body-${approval.approvalId}`;
   return (
@@ -59,7 +67,7 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
           const key = event.key.toLowerCase();
           if (key === "d") answer("deny");
           else if (key === "o") answer("once");
-          else if (key === "s") answer("session");
+          else if (key === "s" && !install) answer("session");
           else if (key === "enter") event.preventDefault();
         }}
       >
@@ -84,8 +92,40 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
           {approval.sessionId !== approval.rootSessionId ? (
             <p class={styles.meta}>{t("approval.child")}</p>
           ) : null}
-          <p class={styles.meta}>{approval.directory ?? detail.value?.workspace}</p>
-          {approval.input ? <pre class={styles.input}>{approval.input}</pre> : null}
+          {install ? (
+            <>
+              <p class={styles.warning} role="note">
+                {t("approval.analysisInstall.network")}{" "}
+                {t("approval.analysisInstall.size", {
+                  size: formatSize(install.estimatedBytes),
+                })}
+              </p>
+              <p class={styles.meta}>
+                {t("approval.analysisInstall.packages", { packages: install.packages.join(", ") })}{" "}
+                {t("approval.analysisInstall.dependencies", { count: install.packageCount })}
+              </p>
+              <p class={styles.meta}>
+                {t("approval.analysisInstall.safety")} {t("approval.analysisInstall.once")}
+              </p>
+            </>
+          ) : analysis ? (
+            <>
+              <p class={styles.warning} role="note">
+                {approval.runtime === "oci"
+                  ? `${t("approval.analysisRun.container")} ${t("approval.analysisRun.repo")}`
+                  : `${t("approval.analysisRun.notSandboxed")} ${t("approval.analysisRun.repoManaged")}`}
+              </p>
+              <details class={styles.script}>
+                <summary>{t("approval.analysisRun.script")}</summary>
+                <pre class={styles.input}>{approval.preview ?? approval.input}</pre>
+              </details>
+            </>
+          ) : (
+            <>
+              <p class={styles.meta}>{approval.directory ?? detail.value?.workspace}</p>
+              {approval.input ? <pre class={styles.input}>{approval.input}</pre> : null}
+            </>
+          )}
         </div>
         <div class={styles.actions}>
           <button type="button" class={styles.deny} onClick={() => answer("deny")}>
@@ -93,16 +133,18 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
             <kbd>D</kbd>
           </button>
           <span class={styles.gap} />
-          <button type="button" class={styles.secondary} onClick={() => answer("session")}>
-            {t("approval.session")}
-            <kbd>S</kbd>
-          </button>
+          {install ? null : (
+            <button type="button" class={styles.secondary} onClick={() => answer("session")}>
+              {analysis ? t("approval.allowForSession") : t("approval.session")}
+              <kbd>S</kbd>
+            </button>
+          )}
           <button type="button" class={styles.primary} onClick={() => answer("once")}>
             {t("approval.once")}
             <kbd>O</kbd>
           </button>
         </div>
-        <p class="sr-only">{t("approval.keys")}</p>
+        <p class="sr-only">{t(install ? "approval.keysInstall" : "approval.keys")}</p>
       </div>
     </div>
   );

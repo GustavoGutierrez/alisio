@@ -1,11 +1,14 @@
 import {
   type Attachment,
+  type DatasetRef,
+  type InstallApprover,
   isEphemeralRunEventType,
   type Message,
   type ModelProvider,
   type RunEvent,
   type RunEventDataMap,
   type RunEventType,
+  type ToolCall,
   type ToolDefinition,
   type ToolResult,
   textProjection,
@@ -25,6 +28,8 @@ import {
 } from "./compaction.ts";
 import type {
   ApprovalHandler,
+  ArtifactPublisherFactory,
+  CapabilityGate,
   ContextSource,
   HookFailure,
   Policy,
@@ -73,6 +78,10 @@ export interface RunnerOptions {
   pathAccess?: PathAccess;
   /** Generic hooks (implemented by the plugin host) for compaction and session start. */
   extensions?: RunnerExtensions;
+  /** Persisted capability grants (`analysis.run`); without it capabilities only follow `effect`. */
+  capabilities?: CapabilityGate;
+  /** Artifact publisher of each tool call (`ToolContext.artifacts`). */
+  artifacts?: ArtifactPublisherFactory;
   /**
    * Provider-native tool definitions (for example a hosted `web_search` tool) appended to every
    * request's `tools` alongside the registry's function tools. Opt-in, set once for the whole
@@ -107,6 +116,8 @@ export interface RunOptions {
   display?: string;
   /** Images attached to this turn's user message, sent as vision content parts. */
   attachments?: Attachment[];
+  /** Datasets attached to this turn (UI chips); their text summary is part of the prompt. */
+  datasets?: DatasetRef[];
   /** Extra system instructions for this run (e.g. an agent persona). */
   instructions?: string;
   toolFilter?: (tool: ToolDefinition) => boolean;
@@ -146,7 +157,15 @@ const MAX_INJECT_CHARS = 24_000;
  */
 const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
 const allowed = (policy: Policy, effect: string) =>
-  effect === "read" || effect === "internal" || !!policy[effect as keyof Policy];
+  effect === "read" ||
+  effect === "internal" ||
+  ((effect === "write" || effect === "process" || effect === "external") && !!policy[effect]);
+/** A tool's capability is pre-allowed by the policy alone (`--allow-analysis`). */
+const capabilityAllowed = (policy: Policy, tool: ToolDefinition) =>
+  tool.capability === "analysis.run" && !!policy.analysis;
+/** First 40 lines of a script input, for capability approvals. */
+const scriptPreview = (input: Record<string, unknown>): string | undefined =>
+  typeof input.code === "string" ? input.code.split(/\r?\n/).slice(0, 40).join("\n") : undefined;
 export interface CompactionResult {
   replaced: number;
   before: number;
@@ -155,6 +174,34 @@ export interface CompactionResult {
 }
 /** Typed emitter: payloads are checked against the SDK `RunEventDataMap` contract. */
 type Emit = <T extends RunEventType>(type: T, data: RunEventDataMap[T]) => void;
+/** A parsed tool call (or the reason it could not be parsed). */
+interface PreparedCall {
+  call: ToolCall;
+  tool?: ToolDefinition;
+  input?: Record<string, unknown>;
+  error?: string;
+}
+/** What one tool call needs from the run that issued it. */
+interface CallScope {
+  sessionId: string;
+  runId: string;
+  emit: Emit;
+  signal: AbortSignal;
+  workspace: string;
+  policy: Policy;
+  approvals: boolean;
+  options: RunOptions;
+  /** Refuses a call before its gate (e.g. the context changed, the token budget is spent). */
+  guard?: (effect: string) => void;
+  /** Adjusts the result of an executed call (e.g. pending instructions appended to a read). */
+  amend?: (result: ToolResult, effect: string) => ToolResult;
+}
+/** A short id for a tool call the user started from a UI (alphanumeric, 9 characters). */
+const uiCallId = () => {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+};
 export class AgentRunner {
   /** Sessions with an active run or compaction (one at a time per session). */
   private active = new Map<string, AbortController>();
@@ -212,8 +259,11 @@ export class AgentRunner {
       }
     };
   }
-  /** Tools offered to the model under the current policy (and optional run narrowing). */
-  availableTools(run: RunOptions = {}): ToolDefinition[] {
+  /**
+   * Tools offered to the model under the current policy (and optional run narrowing). With a
+   * session, a capability tool is also offered when that session's root holds a persisted grant.
+   */
+  availableTools(run: RunOptions = {}, sessionId?: string): ToolDefinition[] {
     const o = this.options;
     const policy = run.policy ?? o.policy;
     const approvals = !!o.approve && run.approvals !== false;
@@ -221,6 +271,10 @@ export class AgentRunner {
       if (run.toolFilter && !run.toolFilter(t)) return false;
       const effect = t.effect ?? "external";
       if (allowed(policy, effect)) return true;
+      if (t.capability) {
+        if (capabilityAllowed(policy, t)) return true;
+        if (sessionId && o.capabilities?.granted(t.capability, sessionId)) return true;
+      }
       return approvals && (effect === "write" || effect === "process" || effect === "external");
     });
   }
@@ -469,6 +523,344 @@ export class AgentRunner {
       throw error;
     }
   }
+  /**
+   * Gates and executes one tool call: external-directory paths, the capability/effect gate with
+   * its approval, the call journal, artifact publishing and the result bound. Shared by model
+   * runs and `runToolCall`, so a call started from a UI passes exactly the same gates.
+   */
+  private async executeCall(scope: CallScope, p: PreparedCall): Promise<ToolResult> {
+    const o = this.options;
+    const { sessionId, runId, emit, workspace, policy, approvals, options } = scope;
+    const combined = scope.signal;
+    const pathAccess = o.pathAccess;
+    const { call } = p;
+    let result: ToolResult;
+    const started = Date.now();
+    // `effect` rides along so the TUI can group consecutive calls by capability kind
+    // (read batches, write batches, commands…) without a name heuristic. Additive field.
+    emit("tool_started", {
+      name: call.name,
+      id: call.id,
+      arguments: call.arguments,
+      effect: p.tool?.effect ?? "external",
+    });
+    try {
+      combined.throwIfAborted();
+      if (p.error) throw new Error(p.error);
+      if (!p.tool || !p.input) throw new Error("Invalid tool");
+      const effect = p.tool.effect ?? "external";
+      // External-directory prerequisite: declared paths are resolved (and, outside every
+      // allowed root, approved for the containing directory) BEFORE the effect gate, so a
+      // write still needs its own write policy and a read never hard-throws first. The
+      // resolved map keeps "allow once" scoped to this one call, with no shared mutable
+      // state that parallel read batches could race on.
+      const resolved = new Map<string, string>();
+      if (pathAccess)
+        for (const declared of p.tool.paths?.(p.input) ?? [])
+          if (!resolved.has(declared)) {
+            const target = await pathAccess.resolve(declared, {
+              workspace,
+              session: sessionId,
+              ...(options.label ? { label: options.label } : {}),
+              signal: combined,
+            });
+            // Key both the declared input and its resolved form: a write resolves the
+            // input once, then re-checks the already-absolute path, and neither lookup may
+            // ask a second time for an "allow once" decision.
+            resolved.set(declared, target);
+            resolved.set(target, target);
+          }
+      scope.guard?.(effect);
+      if (options.toolFilter && !options.toolFilter(p.tool))
+        throw new Error(`Tool ${call.name} is not available in this session`);
+      const capability = p.tool.capability;
+      const gate = o.capabilities;
+      if (capability && (allowed(policy, effect) || capabilityAllowed(policy, p.tool))) {
+        // A broad process grant or --allow-analysis: allowed, audited as a flag decision.
+        gate?.record({
+          capability,
+          sessionId,
+          scope: "once",
+          decision: "allow",
+          source: "flag",
+          callId: call.id,
+          runId,
+          ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+        });
+      } else if (capability && gate?.granted(capability, sessionId)) {
+        // A persisted "allow for this session" grant of the root session.
+      } else if (!allowed(policy, effect)) {
+        if (
+          !o.approve ||
+          !approvals ||
+          (effect !== "write" && effect !== "process" && effect !== "external")
+        )
+          throw new Error(`Capability denied: ${capability ?? effect}`);
+        const preview = capability
+          ? (scriptPreview(p.input) ?? (await gate?.preview?.(p.input, sessionId)))
+          : undefined;
+        emit("approval_requested", {
+          id: call.id,
+          name: call.name,
+          effect,
+          ...(options.label ? { label: options.label } : {}),
+          ...(capability ? { capability } : {}),
+        });
+        const decision = await o.approve({
+          call,
+          effect,
+          input: p.input,
+          signal: combined,
+          session: sessionId,
+          ...(options.label ? { label: options.label } : {}),
+          ...(capability ? { capability } : {}),
+          ...(preview !== undefined ? { preview } : {}),
+          ...(capability && gate?.runtime ? { runtime: gate.runtime } : {}),
+        });
+        combined.throwIfAborted();
+        const persisted = !!capability && !!gate && decision === "session";
+        if (capability && gate)
+          gate.record({
+            capability,
+            sessionId,
+            scope: decision === "session" ? "session" : "once",
+            decision: decision === "deny" ? "deny" : "allow",
+            source: gate.source ?? "tui",
+            callId: call.id,
+            runId,
+            ...(options.correlationId !== undefined
+              ? { correlationId: options.correlationId }
+              : {}),
+          });
+        emit("approval_resolved", {
+          id: call.id,
+          name: call.name,
+          effect,
+          decision,
+          ...(capability ? { capability } : {}),
+          ...(persisted ? { persisted: true } : {}),
+        });
+        if (decision === "deny")
+          throw new Error(`Capability ${capability ?? effect} denied by the user for this call`);
+        // A capability grant never widens the effect: only effect approvals do.
+        if (decision === "session" && !capability) policy[effect] = true;
+      }
+      o.store.beginCall(sessionId, call, { runId, effect });
+      const publisher = o.artifacts?.({ sessionId, runId, callId: call.id }, (published) =>
+        emit("artifact_published", {
+          artifact: published.artifact,
+          path: published.path,
+          callId: call.id,
+          ...(published.executionId ? { executionId: published.executionId } : {}),
+        }),
+      );
+      /**
+       * `analysis.install`: always asks, `once` only, and no flag or earlier grant covers it. Where
+       * nobody can be asked (headless, no approval handler) the answer is `deny`.
+       */
+      const approveInstall: InstallApprover = async (install) => {
+        if (!o.approve || !approvals) return "deny";
+        const installCall = { ...call, id: `${call.id}:install` };
+        emit("approval_requested", {
+          id: installCall.id,
+          name: call.name,
+          effect: "process",
+          ...(options.label ? { label: options.label } : {}),
+          capability: "analysis.install",
+          install,
+        });
+        let decision: "once" | "session" | "deny" = "deny";
+        try {
+          decision = await o.approve({
+            call: installCall,
+            effect: "process",
+            input: { extras: install.extras },
+            signal: combined,
+            session: sessionId,
+            ...(options.label ? { label: options.label } : {}),
+            capability: "analysis.install",
+            install,
+          });
+        } finally {
+          combined.throwIfAborted();
+        }
+        // A `session` answer is treated as `once`: an installation permission is never stored.
+        const allowedNow = decision !== "deny";
+        gate?.record({
+          capability: "analysis.install",
+          sessionId,
+          scope: "once",
+          decision: allowedNow ? "allow" : "deny",
+          source: gate.source ?? "tui",
+          callId: call.id,
+          runId,
+          ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+        });
+        emit("approval_resolved", {
+          id: installCall.id,
+          name: call.name,
+          effect: "process",
+          decision: allowedNow ? "once" : "deny",
+          capability: "analysis.install",
+        });
+        return allowedNow ? "once" : "deny";
+      };
+      result = await p.tool.execute(p.input, {
+        signal: combined,
+        workspace,
+        session: sessionId,
+        runId,
+        callId: call.id,
+        ...(publisher ? { artifacts: publisher } : {}),
+        approveInstall,
+        emit: (data) => emit("tool_progress", { id: call.id, data }),
+        ...(options.label ? { label: options.label } : {}),
+        ...(pathAccess
+          ? {
+              resolvePath: (path: string) => {
+                const known = resolved.get(path);
+                return known !== undefined
+                  ? Promise.resolve(known)
+                  : pathAccess.resolve(path, {
+                      workspace,
+                      session: sessionId,
+                      ...(options.label ? { label: options.label } : {}),
+                      signal: combined,
+                    });
+              },
+            }
+          : {}),
+      });
+      // The bound applies to what the model sees (the text projection): display-only
+      // ui/image parts are bounded by their producers and must not push text over it.
+      const projected = textProjection(result);
+      if (JSON.stringify(projected).length > 48_000)
+        result = textResult(
+          `${JSON.stringify(projected).slice(0, 40_000)}\n[tool output truncated]`,
+          result.isError,
+        );
+      result = scope.amend?.(result, effect) ?? result;
+      o.store.endCall(sessionId, call, result);
+    } catch (error) {
+      result = textResult(error instanceof Error ? error.message : String(error), true);
+      // A cancellation after execution may have left effects; journal remains pending.
+      if (!combined.aborted) o.store.endCall(sessionId, call, result);
+    }
+    emit("tool_completed", {
+      id: call.id,
+      name: call.name,
+      isError: result.isError ?? false,
+      durationMs: Date.now() - started,
+      preview: result.content
+        .filter((part) => part.type === "text")
+        .map((c) => c.text)
+        .join("\n")
+        .slice(0, 2_000),
+    });
+    return result;
+  }
+  /**
+   * Runs ONE tool call without a model (spec §20 `runToolCall`): an action the user started from
+   * a UI, such as copying an artifact into the workspace. It is a real run of the session
+   * (`run_started` → `tool_*` → `run_completed`, journaled) and the call passes exactly the gates
+   * of a model call (`write` approval, capabilities, paths). The transcript stays valid for every
+   * provider: a user note (shown as `display`), an assistant message with the call, the tool
+   * result and a short assistant summary.
+   */
+  async runToolCall(
+    sessionId: string,
+    name: string,
+    input: Record<string, unknown>,
+    options: RunOptions & { signal?: AbortSignal } = {},
+  ): Promise<{ runId: string; status: "completed"; result: ToolResult }> {
+    const controller = this.claim(sessionId);
+    const runId = options.runId ?? crypto.randomUUID();
+    const o = this.options,
+      emit = this.emitter(sessionId, { runId, correlationId: options.correlationId });
+    const finish = (status: TerminalRunStatus, error?: string) => {
+      try {
+        o.store.endRun?.(runId, {
+          status,
+          usage: { input: 0, output: 0 },
+          ...(error ? { error } : {}),
+        });
+      } catch {
+        /* A journal write failure cannot invalidate an executed run. */
+      }
+    };
+    const timeout = AbortSignal.timeout(options.timeoutMs ?? o.timeoutMs ?? 300_000);
+    const combined = AbortSignal.any([
+      controller.signal,
+      timeout,
+      ...(options.signal ? [options.signal] : []),
+    ]);
+    const workspace = options.workspace ?? o.workspace;
+    let acquired = false;
+    try {
+      o.store.beginRun?.({
+        id: runId,
+        session: sessionId,
+        status: "running",
+        model: o.store.get(sessionId).model,
+        ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+      });
+      o.store.acquire(sessionId);
+      acquired = true;
+      o.store.reconcile(sessionId);
+      const session = o.store.get(sessionId);
+      if (session.workspace !== workspace) throw new Error("Session workspace mismatch");
+      combined.throwIfAborted();
+      const call: ToolCall = { id: uiCallId(), name, arguments: JSON.stringify(input) };
+      let prepared: PreparedCall;
+      try {
+        prepared = {
+          call,
+          tool: o.registry.get(name),
+          input: o.registry.parse(name, call.arguments),
+        };
+      } catch (error) {
+        prepared = { call, error: String(error) };
+      }
+      const note = `The user ran the ${name} tool from the interface.`;
+      o.store.append(sessionId, { role: "user", text: note, display: options.display ?? note });
+      emit("run_started", { model: session.model });
+      o.store.append(sessionId, { role: "assistant", text: "", calls: [call] });
+      const result = await this.executeCall(
+        {
+          sessionId,
+          runId,
+          emit,
+          signal: combined,
+          workspace,
+          policy: options.policy ?? o.policy,
+          approvals: !!o.approve && options.approvals !== false,
+          options,
+        },
+        prepared,
+      );
+      o.store.append(sessionId, { role: "tool", callId: call.id, result });
+      const first = textProjection(result)
+        .content.map((part) => (part.type === "text" ? part.text : ""))
+        .join(" ")
+        .replace(/\s*\n\s*/g, " ")
+        .trim()
+        .slice(0, 300);
+      const text = `${name} ${result.isError ? "failed" : "finished"}${first ? `: ${first}` : ""}`;
+      o.store.append(sessionId, { role: "assistant", text, calls: [] });
+      emit("run_completed", { tokens: 0, text });
+      finish("completed");
+      return { runId, status: "completed", result };
+    } catch (error) {
+      const cause = combined.aborted ? (combined.reason ?? error) : error;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
+      finish(combined.aborted ? "cancelled" : "failed", message);
+      throw error;
+    } finally {
+      if (acquired) o.store.release(sessionId);
+      this.active.delete(sessionId);
+    }
+  }
   async run(
     sessionId: string,
     prompt: string,
@@ -563,6 +955,7 @@ export class AgentRunner {
         text: prompt,
         ...(options.display ? { display: options.display } : {}),
         ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+        ...(options.datasets?.length ? { datasets: options.datasets } : {}),
       });
       emit("run_started", { model });
       const budget =
@@ -577,7 +970,7 @@ export class AgentRunner {
             o.store.append(sessionId, { role: "user", text: queued });
         let instructions = await withPersona();
         let messages = o.store.messages(sessionId);
-        const tools = this.availableTools(options);
+        const tools = this.availableTools(options, sessionId);
         const toolsText = this.toolsText(tools);
         const chars = () =>
           instructions.length + JSON.stringify(messages).length + toolsText.length;
@@ -734,138 +1127,36 @@ export class AgentRunner {
         const paths = prepared.flatMap((p) => p.tool?.paths?.(p.input ?? {}) ?? []);
         if (paths.length) contextUpdate = await context.beforePaths(paths, sessionId);
         let pendingUpdate = contextUpdate;
-        const execute = async (p: (typeof prepared)[number]): Promise<ToolResult> => {
-          const { call } = p;
-          let result: ToolResult;
-          const started = Date.now();
-          // `effect` rides along so the TUI can group consecutive calls by capability kind
-          // (read batches, write batches, commands…) without a name heuristic. Additive field.
-          emit("tool_started", {
-            name: call.name,
-            id: call.id,
-            arguments: call.arguments,
-            effect: p.tool?.effect ?? "external",
-          });
-          try {
-            combined.throwIfAborted();
-            if (p.error) throw new Error(p.error);
-            if (!p.tool || !p.input) throw new Error("Invalid tool");
-            const effect = p.tool.effect ?? "external";
-            // External-directory prerequisite: declared paths are resolved (and, outside every
-            // allowed root, approved for the containing directory) BEFORE the effect gate, so a
-            // write still needs its own write policy and a read never hard-throws first. The
-            // resolved map keeps "allow once" scoped to this one call, with no shared mutable
-            // state that parallel read batches could race on.
-            const resolved = new Map<string, string>();
-            if (pathAccess)
-              for (const declared of p.tool.paths?.(p.input) ?? [])
-                if (!resolved.has(declared)) {
-                  const target = await pathAccess.resolve(declared, {
-                    workspace,
-                    session: sessionId,
-                    ...(options.label ? { label: options.label } : {}),
-                    signal: combined,
-                  });
-                  // Key both the declared input and its resolved form: a write resolves the
-                  // input once, then re-checks the already-absolute path, and neither lookup may
-                  // ask a second time for an "allow once" decision.
-                  resolved.set(declared, target);
-                  resolved.set(target, target);
-                }
+        const scope: CallScope = {
+          sessionId,
+          runId,
+          emit,
+          signal: combined,
+          workspace,
+          policy,
+          approvals,
+          options,
+          guard: (effect) => {
             if (contextUpdate && effect !== "read")
               throw new Error(
                 `Context changed; reconsider this call before retrying.\n${contextUpdate}`,
               );
             if (tokens >= budget) throw new Error("Token budget exhausted; tool was not executed");
-            if (options.toolFilter && !options.toolFilter(p.tool))
-              throw new Error(`Tool ${call.name} is not available in this session`);
-            if (!allowed(policy, effect)) {
-              if (
-                !o.approve ||
-                !approvals ||
-                (effect !== "write" && effect !== "process" && effect !== "external")
-              )
-                throw new Error(`Capability denied: ${effect}`);
-              emit("approval_requested", {
-                id: call.id,
-                name: call.name,
-                effect,
-                ...(options.label ? { label: options.label } : {}),
-              });
-              const decision = await o.approve({
-                call,
-                effect,
-                input: p.input,
-                signal: combined,
-                session: sessionId,
-                ...(options.label ? { label: options.label } : {}),
-              });
-              combined.throwIfAborted();
-              emit("approval_resolved", { id: call.id, name: call.name, effect, decision });
-              if (decision === "deny")
-                throw new Error(`Capability ${effect} denied by the user for this call`);
-              if (decision === "session") policy[effect] = true;
-            }
-            o.store.beginCall(sessionId, call, { runId, effect });
-            result = await p.tool.execute(p.input, {
-              signal: combined,
-              workspace,
-              session: sessionId,
-              emit: (data) => emit("tool_progress", { id: call.id, data }),
-              ...(options.label ? { label: options.label } : {}),
-              ...(pathAccess
-                ? {
-                    resolvePath: (path: string) => {
-                      const known = resolved.get(path);
-                      return known !== undefined
-                        ? Promise.resolve(known)
-                        : pathAccess.resolve(path, {
-                            workspace,
-                            session: sessionId,
-                            ...(options.label ? { label: options.label } : {}),
-                            signal: combined,
-                          });
-                    },
-                  }
-                : {}),
-            });
-            // The bound applies to what the model sees (the text projection): display-only
-            // ui/image parts are bounded by their producers and must not push text over it.
-            const projected = textProjection(result);
-            if (JSON.stringify(projected).length > 48_000)
-              result = textResult(
-                `${JSON.stringify(projected).slice(0, 40_000)}\n[tool output truncated]`,
-                result.isError,
-              );
-            if (pendingUpdate && effect === "read") {
-              result = {
-                ...result,
-                content: [
-                  ...result.content,
-                  { type: "text", text: `\n<instructions>\n${pendingUpdate}\n</instructions>` },
-                ],
-              };
-              pendingUpdate = undefined;
-            }
-            o.store.endCall(sessionId, call, result);
-          } catch (error) {
-            result = textResult(error instanceof Error ? error.message : String(error), true);
-            // A cancellation after execution may have left effects; journal remains pending.
-            if (!combined.aborted) o.store.endCall(sessionId, call, result);
-          }
-          emit("tool_completed", {
-            id: call.id,
-            name: call.name,
-            isError: result.isError ?? false,
-            durationMs: Date.now() - started,
-            preview: result.content
-              .filter((part) => part.type === "text")
-              .map((c) => c.text)
-              .join("\n")
-              .slice(0, 2_000),
-          });
-          return result;
+          },
+          amend: (result, effect) => {
+            if (!pendingUpdate || effect !== "read") return result;
+            const update = pendingUpdate;
+            pendingUpdate = undefined;
+            return {
+              ...result,
+              content: [
+                ...result.content,
+                { type: "text", text: `\n<instructions>\n${update}\n</instructions>` },
+              ],
+            };
+          },
         };
+        const execute = (p: (typeof prepared)[number]) => this.executeCall(scope, p);
         const results: ToolResult[] = [];
         // Bounded parallel batches for consecutive read or explicitly concurrent tools.
         const parallel = (p: (typeof prepared)[number] | undefined) =>

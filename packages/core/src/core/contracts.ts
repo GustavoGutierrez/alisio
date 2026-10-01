@@ -1,4 +1,13 @@
-import type { CompactionCheckpoint, Message, ToolCall, ToolResult } from "@alisio/sdk";
+import type {
+  AnalysisCapability,
+  ArtifactPublisher,
+  ArtifactRef,
+  CompactionCheckpoint,
+  InstallPreview,
+  Message,
+  ToolCall,
+  ToolResult,
+} from "@alisio/sdk";
 export interface Session {
   id: string;
   workspace: string;
@@ -181,6 +190,11 @@ export interface Policy {
   write: boolean;
   process: boolean;
   external: boolean;
+  /**
+   * Pre-allows the `analysis.run` capability only (`--allow-analysis`); never widens `process`.
+   * Absent means false.
+   */
+  analysis?: boolean;
 }
 export type ApprovalDecision = "once" | "session" | "deny";
 export interface ApprovalRequest {
@@ -192,7 +206,72 @@ export interface ApprovalRequest {
   effect: "write" | "process" | "external";
   input: Record<string, unknown>;
   signal: AbortSignal;
+  /** The approval is for this capability of the tool, not for the whole effect. */
+  capability?: AnalysisCapability;
+  /** Capability approvals: the first 40 lines of the script. */
+  preview?: string;
+  /** Capability approvals: how the code runs (`managed` is not sandboxed). */
+  runtime?: "managed" | "oci";
+  /** `analysis.install`: the packages, the size estimate and the network need (once or deny). */
+  install?: InstallPreview;
 }
+/**
+ * Persisted capability grants as the runner sees them (implemented by `CapabilityGrants`). A
+ * `session` decision is stored for the ROOT session and survives restarts; `once` and `deny`
+ * decisions are audit rows only.
+ */
+export interface CapabilityGate {
+  granted(capability: AnalysisCapability, sessionId: string): boolean;
+  record(input: {
+    capability: AnalysisCapability;
+    sessionId: string;
+    scope: "once" | "session";
+    decision: "allow" | "deny";
+    source: "tui" | "web" | "flag" | "headless-grant";
+    callId?: string;
+    runId?: string;
+    correlationId?: string;
+  }): void;
+  /** Recorded as the source of interactive decisions (`tui` or `web`). */
+  source?: "tui" | "web";
+  /** Runtime mode shown with `analysis.run` approvals (read live: the configuration can change). */
+  runtime?: "managed" | "oci";
+  /**
+   * The script to show in an approval whose input does not carry it (a rerun runs a saved script).
+   * Absent or undefined: the preview is taken from `input.code`.
+   */
+  preview?(input: Record<string, unknown>, sessionId: string): Promise<string | undefined>;
+}
+/** One artifact published during a tool call, with its local path (for `artifact_published`). */
+export interface PublishedArtifactInfo {
+  artifact: ArtifactRef;
+  path: string;
+  warnings: string[];
+  executionId?: string;
+}
+/** The publisher core tools receive; `publishOutputs` publishes a whole staging folder at once. */
+export interface CoreArtifactPublisher extends ArtifactPublisher {
+  publishOutputs(
+    staging: string,
+    options: {
+      executionId: string;
+      title?: string;
+      partial?: boolean;
+      provenance?: Record<string, unknown>;
+    },
+  ): Promise<PublishedArtifactInfo[]>;
+  /** Detailed variant of `publishText` (path and warnings). */
+  publishTextDetailed(input: {
+    fileName: string;
+    title?: string;
+    text: string;
+  }): Promise<PublishedArtifactInfo>;
+}
+/** Creates the publisher of one tool call; `announce` emits `artifact_published`. */
+export type ArtifactPublisherFactory = (
+  call: { sessionId: string; runId: string; callId: string },
+  announce: (published: PublishedArtifactInfo) => void,
+) => CoreArtifactPublisher | undefined;
 /** Optional interactive approval for write/process/external tools not pre-allowed by the Policy. */
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalDecision>;
 export interface HookFailure {

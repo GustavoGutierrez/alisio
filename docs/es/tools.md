@@ -247,6 +247,8 @@ Declare raíces extra de dos formas (se combinan):
 | (ninguno) | Solo lectura y búsqueda en modos headless; en la TUI, `write`/`process`/`external` también se ofrecen y **preguntan siempre** (véase la tabla de verdad abajo) |
 | `--allow-write` | Activa `write_file` y `edit_file` directamente, sin preguntar |
 | `--allow-process` | Activa `run_process`, `shell` y `execute` directamente, sin preguntar |
+| `--allow-analysis` | Activa directamente solo el análisis en Python (`python_run`, capability `analysis.run`); nunca `shell` ni `run_process` |
+| `--python <path>` | Fija el intérprete Python 3.10+ de `python_run` (si no, se descubre automáticamente) |
 | `--allow-external` | Activa `webfetch` y `websearch` directamente, sin preguntar |
 | `--allow-mcp` | Inicia/conecta los servidores MCP configurados y expone sus capacidades |
 | `--allow-agents` | Activa las herramientas de mensajería de Herdr |
@@ -299,6 +301,43 @@ y un `.alisio/config.json` modificado vuelve a preguntar. `alisio trust list`/
 `alisio trust revoke <path>` la inspeccionan o la deshacen. Consulte [Inicio
 rápido](/es/quick-start#configuration-trust-model) para el flujo completo y
 [Configuración](/es/configuration) para el comando `alisio trust`.
+
+## Análisis en Python {#python-analysis}
+
+`python_run`, `artifact_create`, `artifact_list`, `artifact_read` y `artifact_export` publican,
+listan, leen y copian artefactos descargables (`artifact_export` es una herramienta `write`:
+pregunta salvo con `--allow-write`, y `--read-only` la elimina); consulta
+[Análisis en Python y artefactos](/es/analysis). `python_run` declara la **capability**
+`analysis.run`, un permiso más fino dentro del efecto `process`: `--allow-process` (o una
+aprobación de sesión de `process`) la cubre, mientras que `--allow-analysis` y su propia aprobación
+nunca amplían `process`. Su decisión **Permitir en esta sesión** se guarda para la sesión raíz y
+sobrevive a los reinicios, así que también aplica cuando un `alisio resume <id> "prompt"` headless
+continúa esa sesión. Revócala con `/permissions`. Toda decisión queda auditada. `execute` solo
+llega a `python_run` cuando ya está permitido por una flag (nunca a través de un permiso guardado).
+Python administrado no es un sandbox; con `analysis.runtime: "oci"` la misma llamada se ejecuta en un
+contenedor sin acceso a la red (aislamiento con límites, consulta
+[Runtime de contenedor](/es/analysis#oci)).
+
+`python_run { extras: ["analysis"] }` pide los paquetes opcionales de Python. Si no están instalados,
+pide una segunda capability, **`analysis.install`**: siempre pregunta, ofrece solo **Permitir esta
+vez** y **Denegar** (no se guarda ningún permiso), muestra los paquetes, la estimación de descarga y
+que necesita red, y **ninguna flag la cubre** (ni `--allow-process` ni `--allow-analysis`). Una
+ejecución headless no tiene a quién preguntar, así que la llamada falla nombrando el comando opcional
+`alisio analysis setup --extras analysis`. `python_run { rerunOf: "art_…" }` ejecuta de nuevo un
+análisis anterior de la sesión (mismo script, entradas verificadas por hash, artefactos nuevos) tras
+la misma puerta `analysis.run`; consulta [Ejecutar de nuevo](/es/analysis#rerun).
+
+### Datos tabulares {#data-tools}
+
+`data_inspect` y `data_query` (efecto `read`) describen y consultan archivos CSV, TSV, JSON, JSONL y
+XLSX mediante un dataset SQLite por archivo; consulta [Datos tabulares](/es/analysis#data). Nunca
+escriben en el repositorio (la ingesta escribe en la carpeta de estado), así que siguen disponibles
+con `--read-only` y no necesitan ninguna flag. `data_inspect { path }` resuelve la ruta como
+`read_file` (workspace o un directorio extra aprobado); `data_query` ejecuta una sola sentencia
+`SELECT`/`WITH` sobre un dataset de la sesión, limitada a 1 000 filas y a `analysis.data.queryTimeoutMs`.
+Ambas muestran sus tablas con el renderizador de tablas de la terminal.
+`python_run { inputs: [{ "datasetId": … }] }` entrega el dataset a un script. XLSX es el único formato
+que necesita Python 3.10+ (un helper fijo de Alisio con la biblioteca estándar, no código del modelo).
 
 ## No es un sandbox
 

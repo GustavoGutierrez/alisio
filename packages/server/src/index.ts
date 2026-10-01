@@ -6,9 +6,18 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
-import { BlobStore, SQLiteStore, stateHome } from "@alisio/core";
+import {
+  AnalysisJobs,
+  ArtifactStore,
+  BlobStore,
+  CapabilityGrants,
+  SQLiteStore,
+  stateHome,
+} from "@alisio/core";
 import type { ServerFrame } from "@alisio/sdk";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
+import { newSecret } from "./auth/token.ts";
+import { redactViewPath } from "./auth/view-token.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
 import { createNativePicker, type FolderPicker } from "./host/folder-picker.ts";
@@ -21,8 +30,16 @@ import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
 import { registerAgentDefinitionRoutes } from "./routes/agent-definitions.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
+import {
+  registerArtifactViewRoutes,
+  VIEW_PREFIX,
+  viewerBaseHeaders,
+} from "./routes/artifact-view.ts";
+import { registerArtifactRoutes } from "./routes/artifacts.ts";
 import { registerBlobRoutes } from "./routes/blobs.ts";
+import { registerCapabilityRoutes } from "./routes/capabilities.ts";
 import { registerCommandRoutes } from "./routes/commands.ts";
+import { registerDatasetRoutes } from "./routes/datasets.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerFileRoutes } from "./routes/files.ts";
 import { registerFolderRoutes } from "./routes/folders.ts";
@@ -150,6 +167,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     root: dbPath !== ":memory:" ? join(dirname(dbPath), "blobs") : join(stateHome(), "blobs"),
     db: catalog.db,
   });
+  // Artifacts and capability grants of every workspace (same folders and rows the apps write).
+  const stateRoot = dbPath !== ":memory:" ? dirname(dbPath) : stateHome();
+  const artifacts = new ArtifactStore({ root: stateRoot, db: catalog.db });
+  const grants = new CapabilityGrants({ db: catalog.db, rootOf: (id) => catalog.rootOf(id) });
+  const jobs = new AnalysisJobs({ root: stateRoot, db: catalog.db });
+  // The isolated viewer (§14.2) lives outside /api, on its own router, signed per process.
+  const viewRouter = new Router();
+  const viewSecret = newSecret();
+  registerArtifactViewRoutes(viewRouter, { artifacts, secret: viewSecret });
   // Startup reconciliation (RNF-09): runs and child sessions left queued/running by a dead
   // process become interrupted before any client lists them.
   catalog.interruptRuns();
@@ -213,6 +239,14 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       onEvent: (event) => {
         inflight.apply(event);
         hub.publish(event);
+        // A persisted "allow for this session" grant: other tabs refresh their permissions.
+        if (
+          event.type === "approval_resolved" &&
+          (event.data as { persisted?: boolean } | undefined)?.persisted
+        ) {
+          const root = catalog.rootOf(event.sessionId);
+          hub.toSession(root, { t: "capabilities_changed", sessionId: root });
+        }
       },
       ...(approvals
         ? { approve: approvals.handler, approveExternalDirectory: approvals.directoryHandler }
@@ -284,6 +318,26 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerSessionViewRoutes(router, { catalog, sessions });
   registerFileRoutes(router, { workspaces, catalog, sessions });
   registerBlobRoutes(router, { blobs });
+  registerArtifactRoutes(router, {
+    artifacts,
+    sessions,
+    scheduler,
+    jobs,
+    stateRoot,
+    viewSecret,
+  });
+  registerDatasetRoutes(router, {
+    sessions,
+    catalog,
+    artifacts,
+    blobs,
+    toSession: (sessionId, frame) => hub.toSession(sessionId, frame),
+  });
+  registerCapabilityRoutes(router, {
+    grants,
+    sessions,
+    toSession: (sessionId, frame) => hub.toSession(sessionId, frame),
+  });
   registerPromptRoutes(router, { sessions, scheduler });
   registerCommandRoutes(router, { sessions, scheduler, workspaces });
   registerSideQuestionRoutes(router, { sessions });
@@ -313,11 +367,26 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     res.setHeader("X-Request-Id", correlationId);
     const url = new URL(req.url ?? "/", "http://localhost");
     const api = url.pathname === "/api" || url.pathname.startsWith("/api/");
-    securityHeaders(res, assets.csp, api);
+    // View tokens are capabilities: they never reach the logs.
+    const route = redactViewPath(url.pathname);
+    const viewer = url.pathname.startsWith(VIEW_PREFIX);
+    // The viewer replaces the app's headers (it must be framable by the app, and only by it).
+    if (viewer) viewerBaseHeaders(res);
+    else securityHeaders(res, assets.csp, api);
     const method = req.method ?? "GET";
     try {
       if (!guard) throw new HttpError("shutting_down", "Server is not ready");
       guard.checkHost(req);
+      if (viewer) {
+        // No cookie (a sandboxed iframe never sends it) and no Origin check: GET/HEAD only,
+        // authorized by the signed token alone.
+        if (method !== "GET" && method !== "HEAD") throw new HttpError("not_found", "Not found");
+        if (closing) throw new HttpError("shutting_down", "Server is shutting down");
+        const matched = viewRouter.match(method, url.pathname);
+        if (!matched || matched === "method") throw new HttpError("not_found", "Not found");
+        await matched.handler({ req, res, url, params: matched.params, correlationId });
+        return;
+      }
       guard.checkOrigin(req);
       if (!api) {
         if (method !== "GET" && method !== "HEAD") throw new HttpError("not_found", "Not found");
@@ -339,7 +408,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       if (matched === "method") throw new HttpError("not_found", "Method not supported");
       // Every write is JSON (it forces a CORS preflight) except the raw image upload, which
       // checks its own image content types (also non-safelisted, so also preflighted).
-      const upload = method === "POST" && url.pathname === "/api/blobs";
+      const upload =
+        method === "POST" &&
+        (url.pathname === "/api/blobs" || /^\/api\/sessions\/[^/]+\/datasets$/.test(url.pathname));
       if (!["GET", "HEAD", "OPTIONS"].includes(method) && !upload) {
         const type = String(req.headers["content-type"] ?? "")
           .split(";")[0]
@@ -357,7 +428,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       if (status === 500)
         logger.error("request failed", {
           correlationId,
-          route: url.pathname,
+          route,
           error: error instanceof Error ? error.message : String(error),
         });
       if (!res.headersSent) sendJson(res, status, body);
@@ -365,7 +436,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     } finally {
       logger.debug("request", {
         correlationId,
-        route: `${method} ${url.pathname}`,
+        route: `${method} ${route}`,
         status: res.statusCode,
         ms: Date.now() - started,
       });

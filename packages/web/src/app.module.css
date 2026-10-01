@@ -128,3 +128,8 @@
   z-index: 40;
   background: rgb(0 0 0 / 45%);
 }
+
+/* "Expand panel": the artifact panel takes the chat column (the sidebar stays). */
+.app[data-artifact-expanded="true"] > main {
+  display: none;
+}

@@ -807,7 +807,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         }[];
         assert.deepEqual(
           versions.map((v) => v.version),
-          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5, 6],
         );
         // v4 partial unique index (session, request_id) behaves the same on Node and Bun.
         const first = store.beginRun({ id: `run-${i}`, session: "old", requestId: `req-${i}` });
@@ -1082,7 +1082,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         .all() as { version: number }[];
       assert.deepEqual(
         versions.map((v) => v.version),
-        [1, 2, 3, 4, 5, 100],
+        [1, 2, 3, 4, 5, 6, 100],
       );
       mem.close();
     }

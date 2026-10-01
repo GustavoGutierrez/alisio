@@ -106,6 +106,8 @@ description, and `/resume` suggests matching session IDs.
 | `/agents` | Open the active-agent picker: every selectable main-session agent with its description, current/default/read-only markers. Selecting one persists `agents.active`, takes effect from the next prompt, and switches the session model when the agent declares one; see [Active agent and effort](#active-agent-and-effort). With an argument (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) it routes to the subagents plugin's task management, see [Subagents](/subagents#in-the-tui) |
 | `/effort [level]` | Set the reasoning effort for the active model when it advertises `effort.supportedLevels`: no argument opens a picker (the model's default is marked), an argument is validated and persisted (`agents.effort`). The level is sent from the next prompt; see [Active agent and effort](#active-agent-and-effort) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
+| `/artifacts [filter]` | Browse the artifacts of the session (newest first, filterable), then Preview here, Open with default app, Copy path, Reveal in folder, Copy to workspace…, Reveal analysis sources, Details or Delete; see [Artifacts](#artifacts) |
+| `/permissions` | Review the saved permissions of the session (for example Python analysis allowed for this session) and revoke them |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
@@ -522,3 +524,65 @@ nothing is asked and those tools stay disabled. Headless modes never ask. The ti
 spent waiting for an approval counts toward `limits.timeoutMs`. Approvals share the same
 [interactive queue](#ask-user-question) as `ask_user_question`, so a subagent's approval prompt and a
 subagent's question never race each other for the screen. See [Tools & permissions](/tools).
+
+## Artifacts {#artifacts}
+
+Files published by [`python_run` or `artifact_create`](/analysis) are announced under the tool row
+with their kind, name, size and real local path:
+
+```text
+  ▤ Dashboard  sales-dashboard.zip  48 KB
+    ~/.local/state/alisio/artifacts/3f2a…/7c1d…/sales-dashboard--art_01JZ…/files/index.html
+```
+
+Without Unicode the icons are ASCII (`[D]`, `[M]`, `[T]`, `[I]`, `[J]`, `[C]`, `[Z]`, `[F]`) and
+`NO_COLOR` removes the colors. At the end of a turn that published artifacts a dim line reminds you
+of `/artifacts`. Nothing is opened automatically.
+
+`/artifacts [filter]` lists the artifacts of the root session; choose one and pick an action (only
+the ones that apply are offered):
+
+| Action | When | What it does |
+| --- | --- | --- |
+| **Preview here** | Markdown, CSV/TSV, JSON, text and code | A bounded, scrollable preview (below) |
+| **Open with default app** | Always | `xdg-open`, `open` or `explorer.exe`, never through a shell |
+| **Copy path** | Always | Copies the local path (OSC 52 when needed) |
+| **Reveal in folder** | Always | `explorer.exe /select,` on Windows, `open -R` on macOS, the folder on Linux |
+| **Copy to workspace…** | Not with `--read-only` | Asks for a workspace folder and runs `artifact_export`; writing asks first unless `--allow-write` |
+| **Reveal analysis sources** | `python_run` outputs | Opens the job folder (script, logs) of that execution |
+| **Details** | Always | Date, model, provider, runtime, inputs with their hashes, the execution and, for a rerun, the execution it repeats |
+| **Rerun** | `python_run` outputs, when `python_run` is available | Runs the same script on the same inputs as a new execution with new artifacts; it asks like the first run |
+| **Delete** | Ready artifacts | With confirmation |
+
+An artifact whose files were removed by [retention](/analysis#retention) still lists, marked
+`Expired`, and offers only **Details** and **Rerun** (a rerun recreates it while its script is kept).
+
+Esc goes back, a second Esc closes. Over SSH or without a display nothing is launched: Alisio shows
+the path and offers to copy it.
+
+The preview shows Markdown with the chat renderer (first 256 KiB), CSV/TSV as a table (200 rows ×
+20 columns, with a `showing 200 of 12,480 rows · 20 of 31 columns` legend), JSON pretty-printed
+(256 KiB) and text or code with highlighting (2 000 lines); the footer says `truncated` when it was
+cut. ↑/↓, PgUp/PgDn and Home/End scroll, `o` opens with the default app, `c` copies the path and
+Esc or `q` closes. Dashboards, PDFs, images and office files are never drawn in the terminal.
+
+Running Python asks with its own title, `Run Python analysis (managed · not sandboxed)?`, shows the
+first 40 lines of the script and offers **Allow once**, **Allow for this session** (saved for the
+session, also after a restart) and **Deny**; Esc denies. `/permissions` lists saved permissions and
+revokes them. With `analysis.runtime: "oci"` the title says `(container · no network)` instead.
+
+Installing the optional Python packages asks with `Install Python packages (analysis; needs
+network)?`, listing the packages, the download estimate and that nothing is compiled, and offers
+only **Allow once** and **Deny**: this permission is never remembered. `/settings` has a **Data
+analysis** group with the switch, the timeout and the three retention values.
+
+### Data tools {#data}
+
+`data_inspect` and `data_query` results show their tables in the transcript with the same table
+renderer: the schema with type hints and statistics, a sample of rows, or the query result (at most
+1 000 rows, with a `truncated` note). The terminal does not attach files: the model reads a workspace
+file with `data_inspect { path }`, and a path outside the workspace follows the usual directory
+approval. The CSV/TSV preview of `/artifacts` reads files the way ingestion does (`,` `;` TAB or `|`
+delimiters; UTF-8, UTF-16 with a BOM or windows-1252); XLSX is never drawn in the terminal, so
+**Open with default app** is its only action, and the model reads it with `data_inspect`. See
+[Tabular data](/analysis#data).

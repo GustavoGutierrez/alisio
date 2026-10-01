@@ -7,6 +7,7 @@ import { Composer } from "./components/composer/Composer.tsx";
 import { Dock } from "./components/dock/Dock.tsx";
 import { Header } from "./components/header/Header.tsx";
 import { Icon } from "./components/icons.tsx";
+import { Resizer } from "./components/layout/Resizer.tsx";
 import { Sidebar, searchRequest } from "./components/sidebar/Sidebar.tsx";
 import { StatsLine } from "./components/stats/StatsLine.tsx";
 import { TrajectoryTab } from "./components/trajectory/TrajectoryTab.tsx";
@@ -30,7 +31,16 @@ import {
   toast,
   visible,
 } from "./store/app.ts";
-import { dockOpen } from "./store/dock.ts";
+import {
+  currentBounds,
+  narrowScreen,
+  panelExpanded,
+  panelWidth,
+  rightPanel,
+  setPanelWidth,
+  viewport,
+} from "./store/layout.ts";
+import { clampPanelWidth, defaultPanelWidth } from "./util/panel.ts";
 
 function Centered(props: { title: string; body: string; action?: preact.ComponentChildren }) {
   return (
@@ -96,6 +106,62 @@ function LazyBtw() {
   return View ? <View /> : null;
 }
 
+type PanelProps = { width?: number; narrow: boolean; expanded: boolean; inert: boolean };
+
+/** The artifact panel is its own chunk (renderers included), loaded the first time it opens. */
+function LazyArtifactPanel(props: PanelProps) {
+  const [View, setView] = useState<ComponentType<PanelProps> | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("./components/artifacts/ArtifactPanel.tsx").then((m) => {
+      if (alive) setView(() => m.ArtifactPanel);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View {...props} /> : null;
+}
+
+/**
+ * The right slot (ADR-07): the Dock or the artifact panel, never both, behind one resize handle
+ * whose width is shared and persisted. Narrow screens get a sheet (Dock) or a modal dialog
+ * (artifact panel) without the handle.
+ */
+function RightSlot(props: { expanded: boolean }) {
+  const right = rightPanel.value;
+  if (!right) return null;
+  void viewport.value;
+  const bounds = currentBounds();
+  const narrow = narrowScreen.value || !bounds.fits;
+  const reset = defaultPanelWidth(viewport.value);
+  const width = clampPanelWidth(panelWidth.value ?? reset, bounds);
+  const modal = settingsOpen.value || agentsOpen.value || agentPickerOpen.value;
+  return (
+    <>
+      {!narrow && !props.expanded ? (
+        <Resizer
+          width={width}
+          bounds={bounds}
+          reset={reset}
+          controls={right === "artifact" ? "artifact-panel" : "dock-panel"}
+          onChange={setPanelWidth}
+        />
+      ) : null}
+      {right === "dock" ? (
+        <Dock {...(narrow ? {} : { width })} />
+      ) : (
+        <LazyArtifactPanel
+          {...(narrow ? {} : { width })}
+          narrow={narrow}
+          expanded={props.expanded && !narrow}
+          inert={modal}
+        />
+      )}
+    </>
+  );
+}
+
 export function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -116,8 +182,15 @@ export function App() {
 
   const { approvals, interactions } = visible.value;
   const id = currentId.value;
+  // "Expand panel" hides the chat column, except while an approval or a question waits there.
+  const expanded =
+    rightPanel.value === "artifact" &&
+    panelExpanded.value &&
+    !narrowScreen.value &&
+    !approvals.length &&
+    !interactions.length;
   return (
-    <div class={styles.app}>
+    <div class={styles.app} data-artifact-expanded={expanded ? "true" : undefined}>
       <a class="skip" href="#composer-input">
         {t("app.skip")}
       </a>
@@ -169,7 +242,7 @@ export function App() {
           </div>
         )}
       </main>
-      {dockOpen.value && id ? <Dock /> : null}
+      {id ? <RightSlot expanded={expanded} /> : null}
       {btw.value && id ? <LazyBtw /> : null}
       {settingsOpen.value ? <LazySettings /> : null}
       {agentsOpen.value ? <LazyAgents /> : null}

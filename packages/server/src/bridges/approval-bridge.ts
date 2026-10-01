@@ -76,6 +76,10 @@ export class ApprovalBridge {
         effect: request.effect,
         ...(request.label ? { label: request.label } : {}),
         input: pretty(request.input),
+        ...(request.capability ? { capability: request.capability } : {}),
+        ...(request.preview !== undefined ? { preview: request.preview } : {}),
+        ...(request.runtime ? { runtime: request.runtime } : {}),
+        ...(request.install ? { install: request.install } : {}),
       },
       request.signal,
     );

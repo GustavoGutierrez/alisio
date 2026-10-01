@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   AGENT_TEMPLATES,
   type AgentDefinitionInfo,
@@ -15,7 +16,10 @@ import {
   agentModelOptions,
   type ExternalDirectoryRequest,
   generateAgentDraft,
+  NOT_SANDBOXED,
   type SettableSettingKey,
+  toGrantWire,
+  toRef,
 } from "@alisio/core";
 import type {
   AskQuestionsRequest,
@@ -72,6 +76,18 @@ import {
   mainAgentFromRecord,
   resolveActiveAgent,
 } from "./agents.ts";
+import { ArtifactPreview, loadPreview } from "./artifact-preview.ts";
+import {
+  ARTIFACTS_HINT,
+  artifactActions,
+  artifactRow,
+  capabilityApprovalTitle,
+  detailRows,
+  installApprovalDetail,
+  installApprovalTitle,
+  matchArtifact,
+  permissionRow,
+} from "./artifacts.ts";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_IMAGE_BYTES,
@@ -95,12 +111,14 @@ import {
   type HeaderInfo,
   QuestionPanel,
   Switch,
+  setArtifactPathResolver,
   TranscriptSync,
   TreePanel,
 } from "./components.ts";
 import { ConnectInputPrompt } from "./connect-input.ts";
 import { bounded, EXIT_PENDING_CAP_MS, EXIT_SESSION_END_CAP_MS } from "./exit.ts";
 import { BRANCH_REFRESH_MS, createBranchCache } from "./git-branch.ts";
+import { cannotOpenMessage, openPath, revealPath } from "./open-path.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
@@ -637,6 +655,12 @@ export async function runTui(options: TuiOptions): Promise<void> {
     push({ kind: "error", text: e instanceof Error ? e.message : String(e) });
   const info = (text: string) => push({ kind: "info", text });
   let terminalEvent = false;
+  let artifactsThisRun = 0;
+  // Artifact announcements show the real local file (resolved from the store, never the model).
+  setArtifactPathResolver((id) => {
+    const record = app.artifacts.get(id);
+    return record?.status === "ready" ? app.artifacts.localPath(record) : undefined;
+  });
   dispatch = (event) => {
     // The event stream stays text-only (headless/JSONL consumers see the projection); the TUI
     // pulls the persisted rich parts (ui/image) itself so native rendering survives resume.
@@ -658,17 +682,20 @@ export async function runTui(options: TuiOptions): Promise<void> {
       tui.requestRender();
       return;
     }
-    if (
-      [
-        "run_completed",
-        "run_failed",
-        "run_cancelled",
-        "run_turns_exceeded",
-        "compaction_failed",
-      ].includes(event.type)
-    )
-      terminalEvent = true;
+    if (event.type === "artifact_published") artifactsThisRun++;
+    const ended = [
+      "run_completed",
+      "run_failed",
+      "run_cancelled",
+      "run_turns_exceeded",
+      "compaction_failed",
+    ].includes(event.type);
+    if (ended) terminalEvent = true;
     view = reduceEvent(view, event);
+    if (ended && event.type !== "compaction_failed" && artifactsThisRun > 0) {
+      artifactsThisRun = 0;
+      view = addItem(view, { kind: "notice", text: ARTIFACTS_HINT });
+    }
     sync();
   };
   const refreshEstimate = () => {
@@ -730,6 +757,49 @@ export async function runTui(options: TuiOptions): Promise<void> {
           };
           const onAbort = () => finish("deny");
           request.signal.addEventListener("abort", onAbort, { once: true });
+          if (request.capability === "analysis.install" && request.install) {
+            // Installing the optional packages: only once or deny (never stored), with what is
+            // installed, the download estimate and that it needs the network.
+            showPicker(
+              new Picker(
+                `${request.label ? `[${request.label}] ` : ""}${installApprovalTitle(request.install)}`,
+                [
+                  { value: "once", label: "Allow once" },
+                  { value: "deny", label: "Deny" },
+                ],
+                (item) => finish(item.value as ApprovalDecision),
+                () => finish("deny"),
+                false,
+                installApprovalDetail(request.install),
+              ),
+            );
+            return;
+          }
+          if (request.capability) {
+            // A capability (Python analysis): its own title, the script preview and the
+            // not-a-sandbox warning; "for this session" is persisted for the root session.
+            showPicker(
+              new Picker(
+                `${request.label ? `[${request.label}] ` : ""}${capabilityApprovalTitle(request.runtime)}`,
+                [
+                  { value: "once", label: "Allow once" },
+                  { value: "session", label: "Allow for this session" },
+                  { value: "deny", label: "Deny" },
+                ],
+                (item) => finish(item.value as ApprovalDecision),
+                () => finish("deny"),
+                false,
+                [
+                  request.preview ?? "",
+                  "",
+                  request.runtime === "oci"
+                    ? "Runs in a container without network access. Repository files are not modified by this step."
+                    : `${NOT_SANDBOXED} It could change repository files; Alisio itself does not modify them in this step.`,
+                ].join("\n"),
+              ),
+            );
+            return;
+          }
           showPicker(
             new Picker(
               `${request.label ? `[${request.label}] ` : ""}Allow ${request.call.name} (${request.effect}): ${summarizeToolArgs(request.call.name, request.call.arguments)}?`,
@@ -878,6 +948,228 @@ export async function runTui(options: TuiOptions): Promise<void> {
       if (!view.context || view.context.estimated) refreshEstimate();
       tui.requestRender();
     }
+  };
+  /** `/artifacts [filter]`: the root session's artifacts, newest first, then their actions. */
+  const browseArtifacts = (filter: string) => {
+    const all = app.artifacts
+      .list(app.store.rootOf(session), { limit: 500, includeExpired: true })
+      .map(toRef);
+    const shown = filter ? all.filter((artifact) => matchArtifact(artifact, filter)) : all;
+    if (!shown.length)
+      return notice(
+        all.length ? `No artifacts match "${filter}"` : "No artifacts in this session yet.",
+      );
+    const byId = new Map(all.map((artifact) => [artifact.id, artifact]));
+    const now = Date.now();
+    showPicker(
+      new Picker(
+        `Artifacts · ${shown.length}`,
+        shown.map((artifact) => ({ value: artifact.id, label: artifactRow(artifact, now) })),
+        (item) => artifactMenu(item.value, filter),
+        () => closePicker(),
+        true,
+        undefined,
+        (items, text) =>
+          items.filter((item) => {
+            const artifact = byId.get(item.value);
+            return !!artifact && matchArtifact(artifact, text);
+          }),
+      ),
+    );
+  };
+  const artifactMenu = (id: string, filter: string) => {
+    const record = app.artifacts.get(id);
+    if (!record || (record.status !== "ready" && record.status !== "expired")) {
+      closePicker();
+      return notice("This artifact is no longer available.");
+    }
+    const artifact = toRef(record);
+    const path = app.artifacts.localPath(record);
+    const back = () => artifactMenu(id, filter);
+    const copyPath = async () => {
+      const result = await copy(path);
+      closePicker();
+      if (result.ok) tui.flash("Path copied");
+      else notice(`${copyMessage(result)}. Path: ${path}`);
+    };
+    /** Opens (or reveals) a store path; without a desktop, offers to copy it instead. */
+    const launch = async (target: string, reveal: boolean) => {
+      const outcome = await (reveal ? revealPath(target) : openPath(target));
+      if (outcome.ok) return closePicker();
+      // No desktop (SSH, no display) or no opener: nothing was launched; offer the path.
+      return showPicker(
+        new Picker(
+          cannotOpenMessage(target, outcome),
+          [
+            { value: "copy", label: "Copy path" },
+            { value: "close", label: "Close" },
+          ],
+          (choice) =>
+            choice.value === "copy"
+              ? void copy(target).then((result) => {
+                  closePicker();
+                  if (result.ok) tui.flash("Path copied");
+                  else notice(`${copyMessage(result)}. Path: ${target}`);
+                })
+              : closePicker(),
+          () => closePicker(),
+        ),
+      );
+    };
+    // `Copy to workspace…` needs artifact_export (absent under --read-only or with analysis off).
+    const canExport =
+      !options.readOnly && app.registry.list().some((tool) => tool.name === "artifact_export");
+    const job = record.executionId ? app.analysis.jobs.get(record.executionId) : undefined;
+    // `Rerun` runs python_run { rerunOf } (absent under --read-only or with analysis disabled).
+    const canRerun =
+      !options.readOnly && app.registry.list().some((tool) => tool.name === "python_run");
+    showPicker(
+      new Picker(
+        artifact.fileName,
+        artifactActions(artifact, {
+          readOnly: !canExport,
+          sources: !!job,
+          rerun: !!job && canRerun,
+        }),
+        (item) =>
+          void (async () => {
+            if (item.value === "copy") return copyPath();
+            if (item.value === "open" || item.value === "reveal")
+              return launch(path, item.value === "reveal");
+            if (item.value === "preview") {
+              const preview = await loadPreview(artifact, path);
+              return showPicker(
+                new ArtifactPreview(artifact, preview, {
+                  height: () => Math.max(5, (process.stdout.rows ?? 24) - 12),
+                  open: () => void launch(path, false).catch(error),
+                  copy: () => void copyPath().catch(error),
+                  close: back,
+                }),
+              );
+            }
+            if (item.value === "sources" && job)
+              // An explicit user action: the job folder (script, logs, work) of this execution.
+              return launch(join(app.artifacts.root, ...job.relDir.split(/[\\/]/)), false);
+            if (item.value === "details") {
+              const provenance = record.provenance;
+              return showPicker(
+                new Picker(
+                  `Details · ${artifact.fileName}`,
+                  [{ value: "back", label: "Back" }],
+                  back,
+                  back,
+                  false,
+                  detailRows(artifact, provenance)
+                    .map(([label, value]) => `${label}: ${value}`)
+                    .join("\n"),
+                ),
+              );
+            }
+            if (item.value === "rerun") {
+              if (busy) {
+                closePicker();
+                return notice("Wait until the current run finishes, then run the analysis again.");
+              }
+              closePicker();
+              info(`Run the analysis of ${artifact.fileName} again`);
+              // A tool call without the model: the same capability gate as the first run.
+              void task((signal) =>
+                app.runner.runToolCall(
+                  session,
+                  "python_run",
+                  { rerunOf: id },
+                  { signal, display: `Run the analysis of ${artifact.fileName} again` },
+                ),
+              );
+              return;
+            }
+            if (item.value === "export") {
+              if (busy) {
+                closePicker();
+                return notice("Wait until the current run finishes, then copy the artifact.");
+              }
+              return showPicker(
+                new ConnectInputPrompt({
+                  provider: "",
+                  title: `Copy ${artifact.fileName} to the workspace`,
+                  label: "Folder in the workspace",
+                  initial: ".",
+                  secret: false,
+                  placeholder: ".",
+                  hint: "Relative to the workspace. Writing asks first unless --allow-write.",
+                  step: 1,
+                  steps: 1,
+                  onSubmit: (target) => {
+                    closePicker();
+                    info(`Copy ${artifact.fileName} to the workspace (${target.trim() || "."})`);
+                    // A tool call without the model: the write gate (approval) applies as usual.
+                    void task((signal) =>
+                      app.runner.runToolCall(
+                        session,
+                        "artifact_export",
+                        { id, target: target.trim() || "." },
+                        {
+                          signal,
+                          display: `Copy ${artifact.fileName} to the workspace (${target.trim() || "."})`,
+                        },
+                      ),
+                    );
+                  },
+                  onCancel: back,
+                }),
+              );
+            }
+            if (item.value === "delete")
+              return showPicker(
+                new Picker(
+                  `Delete ${artifact.fileName}? This can't be undone.`,
+                  [
+                    { value: "delete", label: "Delete" },
+                    { value: "cancel", label: "Cancel" },
+                  ],
+                  (choice) =>
+                    void (async () => {
+                      if (choice.value !== "delete") return back();
+                      await app.artifacts.delete(id);
+                      closePicker();
+                      notice(`Deleted ${artifact.fileName}`);
+                    })(),
+                  back,
+                ),
+              );
+          })().catch(error),
+        () => browseArtifacts(filter),
+      ),
+    );
+  };
+  /** `/permissions`: persisted grants of the root session; choosing one offers to revoke it. */
+  const managePermissions = () => {
+    const grants = app.capabilityGrants.live(session).map(toGrantWire);
+    if (!grants.length) return notice("No saved permissions in this session.");
+    showPicker(
+      new Picker(
+        "Session permissions",
+        grants.map((grant) => ({ value: grant.id, label: permissionRow(grant) })),
+        (item) =>
+          showPicker(
+            new Picker(
+              `Revoke "${item.label}"?`,
+              [
+                { value: "revoke", label: "Revoke" },
+                { value: "cancel", label: "Cancel" },
+              ],
+              (choice) => {
+                if (choice.value !== "revoke") return managePermissions();
+                app.capabilityGrants.revoke(session, item.value, "tui");
+                closePicker();
+                notice("Permission revoked: the next Python analysis asks again.");
+              },
+              () => managePermissions(),
+            ),
+          ),
+        () => closePicker(),
+      ),
+    );
   };
   const runPrompt = (display: string, prompt: string, persistDisplay?: string) => {
     // Any pending clipboard-pasted images ride along with the very next turn, then are cleared.
@@ -2139,7 +2431,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
           .finally(settle);
         return;
       }
-      const stored = row.id === "limits.timeoutMs" ? Number(value) * 1000 : value;
+      const stored =
+        row.id === "limits.timeoutMs" || row.id === "analysis.limits.timeoutMs"
+          ? Number(value) * 1000
+          : value;
       void app
         // Setting ids are the exact SettableSettingKey paths SETTINGS_DEFINITIONS is built from.
         .updateSetting(row.id as SettableSettingKey, stored)
@@ -2436,6 +2731,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
         }
         case "btw":
           return await sideQuestion(parsed.args);
+        case "artifacts":
+          return browseArtifacts(parsed.args);
+        case "permissions":
+          return managePermissions();
         case "ask": {
           if (!parsed.args) return notice("Usage: /ask <question>");
           return await runPrompt(

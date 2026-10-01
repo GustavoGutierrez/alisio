@@ -13,12 +13,18 @@ import type {
   AgentSaveResult,
   AgentScope,
   AgentTemplateInfo,
+  AnalysisStatus,
   ApiError,
   ApiErrorCode,
+  ArtifactRef,
   BlobRef,
+  CapabilityGrantWire,
   CommandDescriptor,
   CommandOutcome,
   CredentialStatus,
+  DatasetDetailWire,
+  DatasetRef,
+  DatasetRowsPage,
   DirectoryListing,
   FileTreePage,
   FolderPickResult,
@@ -76,6 +82,13 @@ export const newId = (): string =>
 export interface MessagePage {
   items: Array<{ seq: number; message: Message; compacted: boolean }>;
   hasMore: boolean;
+}
+
+/** `GET /api/artifacts/:aid`: the reference plus its files and public provenance. */
+export interface ArtifactDetail extends ArtifactRef {
+  entry?: string;
+  files: Array<{ path: string; bytes: number }>;
+  provenance: Record<string, unknown>;
 }
 
 export class ApiClient {
@@ -184,7 +197,13 @@ export class ApiClient {
     );
   prompt = (
     id: string,
-    body: { requestId: string; text: string; display?: string; attachments?: BlobRef[] },
+    body: {
+      requestId: string;
+      text: string;
+      display?: string;
+      attachments?: BlobRef[];
+      datasets?: string[];
+    },
   ) => this.request<PromptAccepted>("POST", `/api/sessions/${enc(id)}/prompts`, body);
   cancel = (id: string) =>
     this.request<{ cancelled: boolean }>("POST", `/api/sessions/${enc(id)}/cancel`, {});
@@ -220,6 +239,101 @@ export class ApiClient {
       answer,
     });
   exportUrl = (id: string) => `/api/sessions/${enc(id)}/export`;
+  /** Artifacts of a session's root, newest first (including deleted/expired, for cards). */
+  artifacts = (sessionId: string) =>
+    this.request<{ items: ArtifactRef[]; next?: string }>(
+      "GET",
+      `/api/sessions/${enc(sessionId)}/artifacts?limit=200`,
+    );
+  /** One artifact: its reference, entry, file list and public provenance (no paths). */
+  artifact = (id: string) => this.request<ArtifactDetail>("GET", `/api/artifacts/${enc(id)}`);
+  /** A signed, expiring link for the isolated viewer (dashboards and PDFs). */
+  artifactView = (id: string) =>
+    this.request<{ url: string; expiresAt: number }>("POST", `/api/artifacts/${enc(id)}/view`, {});
+  /** Copies an artifact into the workspace as a tool call of its session (the write gate asks). */
+  exportArtifact = (id: string, target: string, overwrite = false) =>
+    this.request<{ runId: string; status: string }>("POST", `/api/artifacts/${enc(id)}/export`, {
+      target,
+      ...(overwrite ? { overwrite: true } : {}),
+    });
+  /** Runs the analysis behind an artifact again (same script and inputs; a new execution). */
+  rerunArtifact = (id: string) =>
+    this.request<{ runId: string; status: string }>("POST", `/api/artifacts/${enc(id)}/rerun`, {});
+  deleteArtifact = (id: string) =>
+    this.request<{ deleted: true }>("DELETE", `/api/artifacts/${enc(id)}`);
+  /** URL of one file of an artifact (panel previews; never HTML inline). */
+  artifactFileUrl = (id: string, path: string) =>
+    `/api/artifacts/${enc(id)}/files/${path.split("/").map(enc).join("/")}`;
+  artifactSourcesUrl = (id: string) => `/api/artifacts/${enc(id)}/sources`;
+  /** The text of one artifact file. */
+  async artifactText(id: string, path: string): Promise<string> {
+    return (await this.raw(this.artifactFileUrl(id, path))).text();
+  }
+  /** Datasets of a session's root, newest first. */
+  datasets = (sessionId: string) =>
+    this.request<{ items: DatasetRef[] }>("GET", `/api/sessions/${enc(sessionId)}/datasets`);
+  /** Schema and statistics of every sheet of a dataset. */
+  dataset = (id: string) => this.request<DatasetDetailWire>("GET", `/api/datasets/${enc(id)}`);
+  /** One keyset-paginated page of a sheet. */
+  datasetRows = (
+    id: string,
+    query: {
+      sheet?: string;
+      after?: string;
+      offset?: number;
+      limit?: number;
+      sort?: string;
+      dir?: "asc" | "desc";
+      filter?: string;
+      column?: string;
+    },
+    signal?: AbortSignal,
+  ) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    return this.request<DatasetRowsPage>(
+      "GET",
+      `/api/datasets/${enc(id)}/rows?${params}`,
+      undefined,
+      signal ? { signal } : {},
+    );
+  };
+  /** The original uploaded file of a dataset (only for datasets uploaded from the web). */
+  datasetDownloadUrl = (id: string) => `/api/datasets/${enc(id)}/download`;
+  /** Ingests a spreadsheet artifact the first time it is opened; `pending` means ask again. */
+  artifactDataset = (id: string) =>
+    this.request<{ dataset: DatasetRef | null; pending: boolean }>(
+      "POST",
+      `/api/artifacts/${enc(id)}/dataset`,
+      {},
+    );
+  /**
+   * Uploads a data file as the raw body. `202` answers `pending` (a `dataset_ready` or
+   * `dataset_failed` frame follows); `200` returns a dataset already ingested in this session.
+   */
+  async uploadDataset(
+    sessionId: string,
+    file: File,
+  ): Promise<{ dataset: DatasetRef | null; pending: boolean }> {
+    const res = await this.raw(`/api/sessions/${enc(sessionId)}/datasets`, {
+      method: "POST",
+      body: file,
+      contentType: "application/octet-stream",
+      headers: { "X-File-Name": encodeURIComponent(file.name) },
+    });
+    return (await res.json()) as { dataset: DatasetRef | null; pending: boolean };
+  }
+  capabilities = (sessionId: string) =>
+    this.request<{ items: CapabilityGrantWire[] }>(
+      "GET",
+      `/api/sessions/${enc(sessionId)}/capabilities`,
+    );
+  revokeCapability = (sessionId: string, grantId: string) =>
+    this.request<{ revoked: true }>(
+      "DELETE",
+      `/api/sessions/${enc(sessionId)}/capabilities/${enc(grantId)}`,
+    );
   events = (id: string, after: number, limit = 1000, types?: string[]) =>
     this.request<{ items: RunEvent[]; next?: string }>(
       "GET",
@@ -298,6 +412,9 @@ export class ApiClient {
     );
   settings = (wid: string) =>
     this.request<SettingsOverview>("GET", `/api/settings?workspace=${enc(wid)}`);
+  /** The state of the data-analysis runtime (Settings → Data analysis). */
+  analysis = (wid: string) =>
+    this.request<AnalysisStatus>("GET", `/api/analysis?workspace=${enc(wid)}`);
   setSetting = (wid: string, key: string, value: string | number | boolean | null) =>
     this.request<{ message: string }>("PATCH", "/api/settings", { workspace: wid, key, value });
   providers = (wid?: string) =>
@@ -351,9 +468,18 @@ export class ApiClient {
   }
 
   /** A GET or binary POST whose successful body the caller reads itself. */
-  async raw(path: string, init: { method?: string; body?: Blob; contentType?: string } = {}) {
+  async raw(
+    path: string,
+    init: {
+      method?: string;
+      body?: Blob;
+      contentType?: string;
+      headers?: Record<string, string>;
+    } = {},
+  ) {
     const headers: Record<string, string> = {
       "X-Request-Id": (this.options.requestId ?? newId)().replace(/[^A-Za-z0-9_-]/g, ""),
+      ...(init.headers ?? {}),
     };
     if (init.contentType) headers["Content-Type"] = init.contentType;
     let res: Response;

@@ -5,8 +5,9 @@
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   min-height: 38px;
 }
 
@@ -150,4 +151,72 @@
 .badgeButton:hover {
   border-color: var(--border-strong);
   color: var(--text);
+}
+
+.permissions {
+  position: relative;
+  display: inline-flex;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  box-shadow: var(--shadow);
+}
+
+.popover:focus {
+  outline: none;
+}
+
+.popoverTitle {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.popoverEmpty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.grants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.grantMeta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.86em;
+}
+
+.revoke {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  cursor: pointer;
+}
+
+.revoke:hover {
+  background: var(--danger-soft);
 }

@@ -21,6 +21,7 @@ const FLAG: Record<keyof Policy, string> = {
   write: "--allow-write",
   process: "--allow-process",
   external: "--allow-external",
+  analysis: "--allow-analysis",
 };
 
 /**
@@ -43,6 +44,9 @@ export function presetInfo(id: PermissionPresetId, ceiling: Ceiling): Permission
     write: wanted.policy.write && ceiling.policy.write,
     process: wanted.policy.process && ceiling.policy.process,
     external: wanted.policy.external && ceiling.policy.external,
+    // `alisio serve --allow-analysis` pre-allows Python analysis where the preset allows
+    // processes (full-access); elsewhere python_run asks.
+    ...(wanted.policy.process && ceiling.policy.analysis ? { analysis: true } : {}),
   };
   if (ceiling.readOnly && id !== "read-only")
     return {

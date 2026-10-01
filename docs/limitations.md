@@ -42,6 +42,41 @@ it is not a statement that all of its release criteria are met.
 
 ## Known limits
 
+- **Python analysis (phases 1–4)**: managed Python is not a sandbox (it runs with your
+  permissions, can read files, use the network and change the repository). The optional container
+  runtime (`analysis.runtime: "oci"`, Docker or Podman, a digest-pinned image) blocks the network,
+  mounts only the job folders and limits memory, CPU and processes, but a container is not a
+  boundary against a kernel or engine vulnerability; it was verified on Linux with Docker only
+  (Podman, Docker Desktop on macOS and Windows are untested) and `--user` is left out on macOS and
+  Windows on the assumption that Docker Desktop maps the file owner. The container image must
+  bring its own packages (the extras environment is not used there). The optional Python extras
+  need the network to install, have no wheel for `science` on Alpine (musl) or on Windows on Arm
+  before Python 3.13 (`analysis` needs 3.12 there), and cannot be installed offline: the failure is
+  clean and the standard library keeps working. Retention runs at most once a day, only while
+  Alisio is running and writable; a dataset's "last use" is the modification time of its file, and
+  the retention values are global only. A rerun uses the inputs copied into the original job
+  (checked by sha256), so it cannot pick up newer versions of a workspace file, and it is refused
+  once retention removed the script. The web artifact panel previews Markdown, dashboards (isolated
+  viewer: no network, no storage, no module scripts or file fonts; Esc inside a dashboard does not
+  reach Alisio; links expire after 10 minutes), images, PDFs (browser viewer without `sandbox`),
+  JSON, text, and spreadsheets (CSV, TSV, XLSX) in the table viewer. Saved "Allow for this session"
+  permissions belong to the root session; `execute` reaches `python_run` only through
+  `--allow-analysis` or `--allow-process`. A separate origin for the viewer, a Node XLSX reader,
+  artifact templates and XLS, ODS and Parquet files were left out (spec §21 lists them as optional).
+  The recommended owner decisions of the spec (§23.2) were adopted pending confirmation. Verified on
+  Linux with Python 3.10 and Docker; Windows and macOS rely on the CI portability job.
+- **Tabular data (phase 3)**: datasets are SQLite files built with `node:sqlite` (still marked
+  experimental in Node 22; the warning is silenced) and read in a separate process, because
+  `node:sqlite` has no `interrupt()`, progress handler or authorizer and a worker thread cannot be
+  stopped inside a native call: a slow `data_query` is stopped by killing that process. `prepare()`
+  ignores text after the first statement, so the single-statement check is lexical. The files have
+  no indexes (they are read-only): sorting and filtering scan the sheet and are disabled above
+  `analysis.data.maxInteractiveRows`; complex analysis belongs in `python_run`. An XLSX needs
+  Python 3.10+ (the standard-library helper; empty rows are skipped and merged cells keep only their
+  top-left value); legacy XLS, ODS and Parquet are not read. Cell text is stored exactly, but the
+  grid cuts cells longer than 4 096 characters and the model sees 2 KiB per cell. A JSON document
+  is parsed in memory up to 50 MiB (use JSON Lines beyond that). Verified on Linux; Windows and
+  macOS rely on the CI portability job.
 - **Runtime**: Node does not load `.env` automatically (Bun does); use environment variables or
   `node --env-file=.env`. Local `.ts` plugins require Bun or Node >= 22.18; npm plugin packages must
   be published as JavaScript. The `alisio-source` export condition is only used in development

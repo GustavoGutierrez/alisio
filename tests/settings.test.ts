@@ -16,6 +16,7 @@ import {
   settingsKeyAction,
   settingsMenuRows,
 } from "../packages/cli/src/tui/settings.ts";
+import { isSettableSettingKey } from "../packages/core/src/index.ts";
 
 const config = (overrides: Partial<typeof defaultConfig> = {}): SettingsMenuInput["config"] => ({
   ...defaultConfig,
@@ -247,15 +248,51 @@ describe("value display and cycling", () => {
   });
 });
 
+describe("data analysis rows", () => {
+  const analysisRows = () => rows().filter((r) => r.category === "Data analysis");
+
+  it("offers exactly the five analysis keys the config accepts", () => {
+    expect(analysisRows().map((r) => r.id)).toEqual([
+      "analysis.enabled",
+      "analysis.limits.timeoutMs",
+      "analysis.retention.jobsDays",
+      "analysis.retention.intermediateDays",
+      "analysis.retention.artifactsDays",
+    ]);
+    for (const row of analysisRows()) expect(isSettableSettingKey(row.id)).toBe(true);
+  });
+
+  it("shows the timeout in seconds and cycles retention through its candidates", () => {
+    const timeout = analysisRows().find((r) => r.id === "analysis.limits.timeoutMs") as SettingRow;
+    expect(timeout.current).toBe(120);
+    expect(cycleSettingValue(timeout, 120)).toBe(300);
+    const jobs = analysisRows().find((r) => r.id === "analysis.retention.jobsDays") as SettingRow;
+    expect(jobs.current).toBe(30);
+    expect(cycleSettingValue(jobs, 30)).toBe(60);
+    expect(cycleSettingValue(jobs, 365)).toBe(0); // wraps; 0 = never delete
+    const artifacts = analysisRows().find(
+      (r) => r.id === "analysis.retention.artifactsDays",
+    ) as SettingRow;
+    expect(artifacts.current).toBe(0);
+  });
+
+  it("cannot be changed under --read-only", () => {
+    for (const row of rows({ readOnly: true }).filter((r) => r.category === "Data analysis"))
+      expect(cycleSettingValue(row, row.current)).toBeUndefined();
+  });
+});
+
 describe("counter", () => {
   it("renders OpenCode-style (n/total)", () => {
-    expect(settingsCounter(rows(), 0)).toBe("(1/18)");
-    expect(settingsCounter(rows(), 17)).toBe("(18/18)");
+    const total = rows().length;
+    expect(settingsCounter(rows(), 0)).toBe(`(1/${total})`);
+    expect(settingsCounter(rows(), total - 1)).toBe(`(${total}/${total})`);
   });
   it("is empty for an empty list and clamps out-of-range selections", () => {
     expect(settingsCounter([], 0)).toBe("");
-    expect(settingsCounter(rows(), 99)).toBe("(18/18)");
-    expect(settingsCounter(rows(), -3)).toBe("(1/18)");
+    const total = rows().length;
+    expect(settingsCounter(rows(), 99)).toBe(`(${total}/${total})`);
+    expect(settingsCounter(rows(), -3)).toBe(`(1/${total})`);
   });
 });
 

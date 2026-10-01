@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 import {
   type AppOptions,
@@ -6,6 +5,7 @@ import {
   findWorkspace,
   resolveTrust,
   type SQLiteStore,
+  workspaceKey,
 } from "@alisio/core";
 import type { WorkspaceInfo } from "@alisio/sdk";
 import { HttpError } from "../http/errors.ts";
@@ -65,8 +65,7 @@ export async function workspaceExists(path: string): Promise<boolean> {
 }
 
 /** Opaque, stable workspace id: a short sha256 of the canonical path (never a path in URLs). */
-export const workspaceId = (path: string): string =>
-  createHash("sha256").update(path).digest("hex").slice(0, 16);
+export const workspaceId = (path: string): string => workspaceKey(path);
 
 /**
  * One lazily created `Application` per workspace (ADR-06), with LRU eviction of idle apps,
@@ -142,6 +141,7 @@ export class WorkspaceHost {
         ...base,
         trustProject: explicit ? base.trustProject : trusted,
         cwd: path,
+        approvalSource: "web",
         ...(this.options.wire?.(id, path) ?? {}),
       });
     } catch (error) {

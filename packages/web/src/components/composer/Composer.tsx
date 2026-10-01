@@ -23,14 +23,21 @@ import {
   submit,
 } from "../../store/app.ts";
 import {
+  ACCEPT,
+  applyDatasetOutcome,
+  applyPolledDatasets,
   canSend,
   checkFile,
+  isDatasetFile,
   type PendingAttachment,
   type Rejection,
+  readyDatasets,
   readyRefs,
   updateAttachment,
 } from "../../store/attachments.ts";
 import { historyStep, matchCommands } from "../../store/composer.ts";
+import { datasetNotices } from "../../store/datasets.ts";
+import { datasetShape } from "../artifacts/DatasetChips.tsx";
 import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
 import styles from "./composer.module.css";
@@ -41,30 +48,62 @@ const PALETTE_ID = "slash-palette";
 function Thumbs(props: { items: PendingAttachment[]; onRemove: (id: string) => void }) {
   return (
     <ul class={styles.thumbs} aria-label={t("composer.attachments")}>
-      {props.items.map((item) => (
-        <li
-          key={item.id}
-          class={styles.thumb}
-          data-status={item.status}
-          title={item.error ?? item.name}
-        >
-          <img src={item.url} alt={item.name} />
-          {item.status === "uploading" ? <span class={`${styles.thumbSpinner} spin`} /> : null}
-          {item.status === "failed" ? (
-            <span class={styles.thumbError} role="alert">
-              {t("composer.uploadFailed")}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            class={styles.thumbRemove}
-            aria-label={t("composer.removeAttachment", { name: item.name })}
-            onClick={() => props.onRemove(item.id)}
+      {props.items.map((item) =>
+        item.kind === "dataset" ? (
+          <li
+            key={item.id}
+            class={styles.dataChip}
+            data-status={item.status}
+            title={
+              item.error ? t("dataset.failed", { name: item.name, error: item.error }) : item.name
+            }
           >
-            <Icon name="x" size={12} />
-          </button>
-        </li>
-      ))}
+            <Icon name="fileTable" size={15} />
+            <span class={styles.dataChipText}>
+              {item.status === "uploading"
+                ? t("dataset.uploading", { name: item.name })
+                : item.status === "failed"
+                  ? t("dataset.failed", { name: item.name, error: item.error ?? "" })
+                  : item.name}
+            </span>
+            {item.status === "ready" && item.dataset ? (
+              <span class={styles.dataChipShape}>{datasetShape(item.dataset)}</span>
+            ) : null}
+            {item.status === "uploading" ? <span class={`${styles.thumbSpinner} spin`} /> : null}
+            <button
+              type="button"
+              class={styles.dataChipRemove}
+              aria-label={t("composer.removeAttachment", { name: item.name })}
+              onClick={() => props.onRemove(item.id)}
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </li>
+        ) : (
+          <li
+            key={item.id}
+            class={styles.thumb}
+            data-status={item.status}
+            title={item.error ?? item.name}
+          >
+            <img src={item.url} alt={item.name} />
+            {item.status === "uploading" ? <span class={`${styles.thumbSpinner} spin`} /> : null}
+            {item.status === "failed" ? (
+              <span class={styles.thumbError} role="alert">
+                {t("composer.uploadFailed")}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              class={styles.thumbRemove}
+              aria-label={t("composer.removeAttachment", { name: item.name })}
+              onClick={() => props.onRemove(item.id)}
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </li>
+        ),
+      )}
     </ul>
   );
 }
@@ -167,13 +206,41 @@ export function Composer() {
   useEffect(() => {
     setText(id ? loadDraft(id) : "");
     setHistoryIndex(undefined);
-    for (const a of current.current) URL.revokeObjectURL(a.url);
+    for (const a of current.current) if (a.url) URL.revokeObjectURL(a.url);
     setAttachments([]);
   }, [id]);
 
   useEffect(() => {
     if (focusComposer.value) area.current?.focus();
   }, [focusComposer.value]);
+
+  // Ingestion results of uploaded data files (frames), applied once each.
+  const seenNotice = useRef(0);
+  useEffect(() => {
+    for (const notice of datasetNotices.value) {
+      if (notice.n <= seenNotice.current) continue;
+      seenNotice.current = notice.n;
+      if (notice.sessionId !== id) continue;
+      const outcome = notice.ready
+        ? { ready: notice.ready }
+        : notice.failed
+          ? { failed: notice.failed }
+          : undefined;
+      if (outcome) setAttachments(applyDatasetOutcome(current.current, outcome));
+    }
+  }, [datasetNotices.value]);
+  // A missed frame (the stream reconnected) must not leave a chip reading forever: poll the list.
+  const reading = attachments.some((a) => a.kind === "dataset" && a.status === "uploading");
+  useEffect(() => {
+    if (!reading || !id) return;
+    const timer = setInterval(() => {
+      api.datasets(id).then(
+        ({ items }) => setAttachments(applyPolledDatasets(current.current, items)),
+        () => undefined,
+      );
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [reading, id]);
 
   // `@path` mentions and other insertions requested by the dock.
   useEffect(() => {
@@ -225,6 +292,37 @@ export function Composer() {
         rejected.add(problem);
         continue;
       }
+      if (isDatasetFile(file) && id) {
+        const dataItem: PendingAttachment = {
+          id: newId(),
+          name: file.name,
+          url: "",
+          bytes: file.size,
+          status: "uploading",
+          kind: "dataset",
+        };
+        next = [...next, dataItem];
+        void api.uploadDataset(id, file).then(
+          (answer) => {
+            // 200: already ingested in this session. 202: a dataset_ready frame follows.
+            if (answer.dataset)
+              setAttachments(
+                updateAttachment(current.current, dataItem.id, {
+                  status: "ready",
+                  dataset: answer.dataset,
+                }),
+              );
+          },
+          (error: unknown) =>
+            setAttachments(
+              updateAttachment(current.current, dataItem.id, {
+                status: "failed",
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            ),
+        );
+        continue;
+      }
       const item: PendingAttachment = {
         id: newId(),
         name: file.name || "image",
@@ -252,7 +350,7 @@ export function Composer() {
 
   const removeAttachment = (attachmentId: string) => {
     const item = current.current.find((a) => a.id === attachmentId);
-    if (item) URL.revokeObjectURL(item.url);
+    if (item?.url) URL.revokeObjectURL(item.url);
     const next = current.current.filter((a) => a.id !== attachmentId);
     current.current = next;
     setAttachments(next);
@@ -263,12 +361,15 @@ export function Composer() {
     if (disabled || !sendable) return;
     const value = text;
     const refs = readyRefs(attachments);
-    const thumbs = attachments.filter((a) => a.status === "ready").map((a) => a.url);
+    const datasets = readyDatasets(attachments);
+    const thumbs = attachments
+      .filter((a) => a.status === "ready" && a.kind !== "dataset")
+      .map((a) => a.url);
     update("");
     setHistoryIndex(undefined);
     current.current = [];
     setAttachments([]);
-    void submit(value, refs.length ? { refs, thumbs } : undefined);
+    void submit(value, refs.length ? { refs, thumbs } : undefined, datasets);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -420,7 +521,7 @@ export function Composer() {
           <input
             ref={files}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
+            accept={ACCEPT}
             multiple
             hidden
             onChange={(event) => {

@@ -53,6 +53,9 @@ const LEGACY_COMMANDS = [
     description: "Ask a side question about the session without adding to the conversation",
     argumentHint: "[question]",
   },
+  // Added with the analysis runtime (phase 1): artifacts and saved permissions.
+  { name: "artifacts", description: "Browse this session's artifacts", argumentHint: "[filter]" },
+  { name: "permissions", description: "Review and revoke this session's saved permissions" },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

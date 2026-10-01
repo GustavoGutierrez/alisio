@@ -69,3 +69,12 @@ The VitePress site lives in `docs/` (`pnpm docs:dev`, `pnpm docs:build`). Englis
       `docs/limitations.md` reflects its current content.
 - [ ] `pnpm docs:build` passes with no dead links (`pnpm docs:check` validates `#anchors` and EN/ES
       parity).
+
+## Generated files
+
+- `packages/core/src/analysis/python/sources.ts` embeds `alisio_runtime/*.py`: regenerate with
+  `node --experimental-strip-types scripts/analysis-runtime-sources.ts`.
+- `packages/core/src/analysis/data/engine-source.ts` embeds the data engine (the modules listed in
+  `scripts/analysis-data-engine-inputs.ts`, bundled with `bun build`): regenerate with
+  `node --experimental-strip-types scripts/analysis-data-engine.ts` after changing any of them.
+  Tests fail when either file is stale.

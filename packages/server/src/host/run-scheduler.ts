@@ -1,4 +1,4 @@
-import type { Attachment } from "@alisio/sdk";
+import type { Attachment, DatasetRef } from "@alisio/sdk";
 import type { Application } from "./workspace-host.ts";
 
 type RunOptions = NonNullable<Parameters<Application["runner"]["run"]>[3]>;
@@ -12,9 +12,16 @@ export interface RunJob {
   text: string;
   correlationId: string;
   /** Built when the run starts, so preset and effort changes while queued apply. */
-  options: () => Omit<RunOptions, "runId" | "correlationId" | "attachments">;
+  options: () => Omit<RunOptions, "runId" | "correlationId" | "attachments" | "datasets">;
   attachments?: Attachment[];
+  /** Datasets attached to the prompt (chips); their summary is already part of `text`. */
+  datasets?: DatasetRef[];
   display?: string;
+  /**
+   * A tool call started from the UI instead of a prompt (`runToolCall`: no model, same gates),
+   * e.g. copying an artifact into the workspace. `text` is ignored for these jobs.
+   */
+  tool?: { name: string; input: Record<string, unknown> };
 }
 
 interface Tracked extends RunJob {
@@ -73,13 +80,22 @@ export class RunScheduler {
     const { runner, store } = job.app;
     let run: Promise<unknown>;
     try {
-      run = runner.run(job.sessionId, job.text, job.controller.signal, {
-        ...job.options(),
-        runId: job.runId,
-        correlationId: job.correlationId,
-        ...(job.attachments?.length ? { attachments: job.attachments } : {}),
-        ...(job.display ? { display: job.display } : {}),
-      });
+      run = job.tool
+        ? runner.runToolCall(job.sessionId, job.tool.name, job.tool.input, {
+            ...job.options(),
+            runId: job.runId,
+            correlationId: job.correlationId,
+            signal: job.controller.signal,
+            ...(job.display ? { display: job.display } : {}),
+          })
+        : runner.run(job.sessionId, job.text, job.controller.signal, {
+            ...job.options(),
+            runId: job.runId,
+            correlationId: job.correlationId,
+            ...(job.attachments?.length ? { attachments: job.attachments } : {}),
+            ...(job.datasets?.length ? { datasets: job.datasets } : {}),
+            ...(job.display ? { display: job.display } : {}),
+          });
     } catch (error) {
       run = Promise.reject(error);
     }

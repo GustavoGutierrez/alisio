@@ -25,7 +25,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
     },
     {
       text: labels.groupFeatures ?? "Features",
-      items: ["context", "agents", "subagents", "compaction", "memory"].map(item),
+      items: ["context", "agents", "subagents", "compaction", "memory", "analysis"].map(item),
     },
     {
       text: labels.groupIntegrations ?? "Integrations",
@@ -61,6 +61,7 @@ const en = {
   subagents: "Subagents",
   compaction: "Context compaction",
   memory: "Persistent memory",
+  analysis: "Python analysis & artifacts",
   plugins: "Writing plugins",
   architecture: "Architecture",
   mcp: "MCP",
@@ -91,6 +92,7 @@ const es = {
   subagents: "Subagentes",
   compaction: "Compactación de contexto",
   memory: "Memoria persistente",
+  analysis: "Análisis en Python y artefactos",
   plugins: "Escribir plugins",
   architecture: "Arquitectura",
   mcp: "MCP",

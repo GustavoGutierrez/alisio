@@ -7,6 +7,7 @@
 import type {
   BlobRef,
   CommandDescriptor,
+  DatasetRef,
   HealthInfo,
   PermissionPresetId,
   ServerFrame,
@@ -27,6 +28,7 @@ import {
   sideQuestionOf,
 } from "./btw.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
+import { pushDatasetNotice } from "./datasets.ts";
 import { errorText } from "./errors.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
 import {
@@ -89,6 +91,16 @@ export const pluginNames = signal<Record<string, string>>({});
 export const btw = signal<BtwState | undefined>(undefined);
 /** The session view tab (RF-10). */
 export const sessionTab = signal<"conversation" | "trajectory">("conversation");
+/** The header's "Session permissions" popover (also opened by `/permissions`). */
+export const permissionsOpen = signal(false);
+/** Bumped by `capabilities_changed` for the open session (permissions are refetched). */
+export const capabilitiesTick = signal(0);
+/** `/artifacts [filter]` from the composer: the panel opens with its switcher. */
+export const artifactsRequest = signal<{ filter: string; at: number } | undefined>(undefined);
+/** The last batch of artifacts announced live (`artifact_published`) for the open session. */
+export const publishedArtifacts = signal<
+  { sessionId: string; artifacts: import("@alisio/sdk").ArtifactRef[] } | undefined
+>(undefined);
 
 export const visible = computed(() => visiblePending(pending.value, transcript.value.session));
 export const sessionStatus = computed(
@@ -215,6 +227,7 @@ function onFrames(frames: ServerFrame[]): void {
   let rewritten = false;
   let catalog = false;
   let durable = false;
+  const published: import("@alisio/sdk").ArtifactRef[] = [];
   const scopes = new Set<string>();
   batch(() => {
     transcript.value = applyFrames(transcript.value, frames);
@@ -225,6 +238,9 @@ function onFrames(frames: ServerFrame[]): void {
       if (frame.t === "session_status") nextSidebar = applySessionStatus(nextSidebar, frame);
       if (frame.t === "approval" && frame.approval.rootSessionId === currentId.value)
         announceAssertive.value = frame.approval.name ?? frame.approval.approvalId;
+      if (frame.t === "capabilities_changed" && frame.sessionId === currentId.value)
+        capabilitiesTick.value++;
+      if (frame.t === "dataset_ready" || frame.t === "dataset_failed") pushDatasetNotice(frame);
       if (frame.t === "catalog_changed") {
         scopes.add(frame.scope);
         if (frame.scope === "commands") catalog = true;
@@ -236,6 +252,10 @@ function onFrames(frames: ServerFrame[]): void {
         if (type === "run_completed" || type === "run_failed" || type === "run_cancelled")
           ended = true;
         if (type === "compaction_completed") rewritten = true;
+        if (type === "artifact_published") {
+          const data = frame.event.data as { artifact?: import("@alisio/sdk").ArtifactRef };
+          if (data.artifact) published.push(data.artifact);
+        }
         if (type === "model_changed") ended = true;
       }
     }
@@ -243,6 +263,9 @@ function onFrames(frames: ServerFrame[]): void {
     sidebar.value = nextSidebar;
   });
   if (durable) eventsTick.value++;
+  const session = currentId.value;
+  if (published.length && session)
+    publishedArtifacts.value = { sessionId: session, artifacts: published };
   if (sidebar.value.stale) void reloadSidebar();
   if (ended) {
     runEnded.value++;
@@ -547,6 +570,7 @@ async function sendPrompt(
   display?: string,
   requestId = newId(),
   images?: { refs: BlobRef[]; thumbs: string[] },
+  datasets?: DatasetRef[],
 ): Promise<void> {
   const id = currentId.value;
   if (!id) return;
@@ -558,6 +582,7 @@ async function sendPrompt(
     text,
     ...(display ? { display } : {}),
     ...(attachments ? { attachments, thumbs: images?.thumbs ?? [] } : {}),
+    ...(datasets?.length ? { datasets } : {}),
   });
   try {
     await api.prompt(id, {
@@ -565,6 +590,7 @@ async function sendPrompt(
       text,
       ...(display ? { display } : {}),
       ...(attachments ? { attachments } : {}),
+      ...(datasets?.length ? { datasets: datasets.map((d) => d.id) } : {}),
     });
   } catch (error) {
     if (currentId.value === id)
@@ -582,6 +608,7 @@ export function retryEcho(localId: string): void {
     echo.display,
     echo.requestId,
     echo.attachments ? { refs: echo.attachments, thumbs: echo.thumbs ?? [] } : undefined,
+    echo.datasets,
   );
 }
 
@@ -592,12 +619,29 @@ export function retryEcho(localId: string): void {
 export async function submit(
   text: string,
   images?: { refs: BlobRef[]; thumbs: string[] },
+  datasets?: DatasetRef[],
 ): Promise<void> {
   const id = currentId.value;
-  if (!id || (!text.trim() && !images?.refs.length)) return;
+  if (!id || (!text.trim() && !images?.refs.length && !datasets?.length)) return;
   if (text.trim()) remember(text);
-  if (images?.refs.length) return sendPrompt(text, undefined, newId(), images);
+  if (images?.refs.length || datasets?.length)
+    // Data alone is a request: ask the model to look at it.
+    return sendPrompt(
+      text.trim() || !datasets?.length ? text : t("dataset.defaultPrompt"),
+      undefined,
+      newId(),
+      images,
+      datasets,
+    );
   const slash = parseSlash(text);
+  if (slash?.name === "permissions") {
+    permissionsOpen.value = true;
+    return;
+  }
+  if (slash?.name === "artifacts") {
+    artifactsRequest.value = { filter: slash.args ?? "", at: Date.now() };
+    return;
+  }
   if (slash?.name === "agents" && !slash.args) {
     // `/agents` alone opens the agent picker; `/agents <verb>` still runs the command.
     agentPickerOpen.value = true;

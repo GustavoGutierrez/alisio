@@ -141,6 +141,35 @@ export function registerCommandRoutes(
         });
       }
       if (descriptor.name === "help") return { output: helpText(catalog.list("web")) };
+      if (descriptor.name === "permissions") {
+        // Web clients open the permissions popover instead; API callers get the list as text.
+        const live = opened.app.capabilityGrants.live(session.id);
+        return {
+          output: live.length
+            ? live
+                .map(
+                  (g) =>
+                    `- ${g.capability} · allowed for this session · since ${new Date(g.createdAt).toISOString()} (${g.source})`,
+                )
+                .join("\n")
+            : "No saved permissions in this session.",
+          tone: "notice",
+        };
+      }
+      if (descriptor.name === "artifacts") {
+        // Web clients open the artifact panel instead; API callers get the list as text.
+        const records = opened.app.artifacts.list(sessions.rootOf(session.id), { limit: 100 });
+        const filter = args.toLowerCase();
+        const shown = records.filter((r) =>
+          `${r.fileName} ${r.title} ${r.kind}`.toLowerCase().includes(filter),
+        );
+        return {
+          output: shown.length
+            ? shown.map((r) => `- ${r.fileName} (${r.kind}, ${r.bytes} bytes, ${r.id})`).join("\n")
+            : "No artifacts in this session yet.",
+          tone: "notice",
+        };
+      }
       if (descriptor.name === "ask") {
         if (!args) throw new Error("Usage: /ask <question>");
         return { prompt: { text: askPrompt(args), display } };

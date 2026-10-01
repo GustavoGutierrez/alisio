@@ -109,6 +109,8 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulte [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del plugin de subagentes, consulte [Subagentes](/es/subagents#in-the-tui) |
 | `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
+| `/artifacts [filter]` | Recorre los artefactos de la sesión (los más recientes primero, con filtro) y ofrece Vista previa aquí, Abrir con la aplicación predeterminada, Copiar ruta, Mostrar en la carpeta, Copiar al workspace…, Mostrar fuentes del análisis, Detalles o Eliminar; consulta [Artefactos](#artifacts) |
+| `/permissions` | Revisa los permisos guardados de la sesión (por ejemplo, análisis en Python permitido en esta sesión) y los revoca |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
@@ -551,3 +553,68 @@ preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeo
 aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
 que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte
 [Herramientas y permisos](/es/tools).
+
+## Artefactos {#artifacts}
+
+Los archivos que publican [`python_run` o `artifact_create`](/es/analysis) se anuncian debajo de la
+fila de la herramienta con su tipo, nombre, tamaño y ruta local real:
+
+```text
+  ▤ Dashboard  sales-dashboard.zip  48 KB
+    ~/.local/state/alisio/artifacts/3f2a…/7c1d…/sales-dashboard--art_01JZ…/files/index.html
+```
+
+Sin Unicode los iconos son ASCII (`[D]`, `[M]`, `[T]`, `[I]`, `[J]`, `[C]`, `[Z]`, `[F]`) y
+`NO_COLOR` quita los colores. Al terminar un turno que publicó artefactos, una línea tenue te
+recuerda `/artifacts`. Nada se abre automáticamente.
+
+`/artifacts [filter]` lista los artefactos de la sesión raíz; elige uno y después una acción (solo
+se ofrecen las que aplican):
+
+| Acción | Cuándo | Qué hace |
+| --- | --- | --- |
+| **Preview here** | Markdown, CSV/TSV, JSON, texto y código | Una vista previa acotada y desplazable (abajo) |
+| **Open with default app** | Siempre | `xdg-open`, `open` o `explorer.exe`, nunca a través de un shell |
+| **Copy path** | Siempre | Copia la ruta local (OSC 52 cuando hace falta) |
+| **Reveal in folder** | Siempre | `explorer.exe /select,` en Windows, `open -R` en macOS, la carpeta en Linux |
+| **Copy to workspace…** | No con `--read-only` | Pide una carpeta del workspace y ejecuta `artifact_export`; escribir pregunta antes salvo con `--allow-write` |
+| **Reveal analysis sources** | Salidas de `python_run` | Abre la carpeta del trabajo (script, logs) de esa ejecución |
+| **Details** | Siempre | Fecha, modelo, proveedor, runtime, entradas con sus hashes, la ejecución y, en una repetición, la ejecución que repite |
+| **Rerun** | Salidas de `python_run`, cuando `python_run` está disponible | Ejecuta el mismo script con las mismas entradas como una ejecución nueva con artefactos nuevos; pregunta como la primera vez |
+| **Delete** | Artefactos listos | Con confirmación |
+
+Un artefacto cuyos archivos eliminó la [retención](/es/analysis#retention) sigue apareciendo en la
+lista, marcado como `Expired`, y ofrece solo **Details** y **Rerun** (una repetición lo recrea
+mientras se conserve su script).
+
+Esc vuelve atrás y un segundo Esc cierra. Por SSH o sin pantalla no se lanza nada: Alisio muestra la
+ruta y ofrece copiarla.
+
+La vista previa muestra Markdown con el renderer del chat (primeros 256 KiB), CSV/TSV como tabla
+(200 filas × 20 columnas, con la leyenda `showing 200 of 12,480 rows · 20 of 31 columns`), JSON con
+formato (256 KiB) y texto o código con resaltado (2 000 líneas); el pie dice `truncated` cuando se
+recortó. ↑/↓, RePág/AvPág e Inicio/Fin desplazan, `o` abre con la aplicación predeterminada, `c`
+copia la ruta y Esc o `q` cierran. Los dashboards, PDF, imágenes y documentos de oficina nunca se
+dibujan en la terminal.
+
+Ejecutar Python pregunta con su propio título, `Run Python analysis (managed · not sandboxed)?`,
+muestra las primeras 40 líneas del script y ofrece **Allow once**, **Allow for this session**
+(guardado para la sesión, también tras reiniciar) y **Deny**; Esc deniega. `/permissions` lista los
+permisos guardados y los revoca. Con `analysis.runtime: "oci"` el título dice
+`(container · no network)`.
+
+Instalar los paquetes opcionales de Python pregunta con `Install Python packages (analysis; needs
+network)?`, listando los paquetes, la estimación de descarga y que no se compila nada, y ofrece solo
+**Allow once** y **Deny**: este permiso nunca se recuerda. `/settings` tiene un grupo **Data
+analysis** con el interruptor, el tiempo máximo y los tres valores de retención.
+
+### Herramientas de datos {#data}
+
+Los resultados de `data_inspect` y `data_query` muestran sus tablas en la transcripción con el mismo
+renderizador de tablas: el esquema con pistas de tipo y estadísticas, una muestra de filas o el
+resultado de la consulta (como máximo 1 000 filas, con una nota `truncated`). La terminal no adjunta
+archivos: el modelo lee un archivo del workspace con `data_inspect { path }`, y una ruta fuera del
+workspace sigue la aprobación de directorios habitual. La vista previa de CSV/TSV de `/artifacts` lee
+los archivos como la ingesta (delimitadores `,` `;` TAB o `|`; UTF-8, UTF-16 con BOM o windows-1252);
+XLSX nunca se dibuja en la terminal, así que **Open with default app** es su única acción, y el modelo
+lo lee con `data_inspect`. Consulta [Datos tabulares](/es/analysis#data).

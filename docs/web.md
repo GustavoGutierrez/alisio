@@ -38,7 +38,7 @@ permissions. Press `Ctrl+C` (or send `SIGTERM`) to stop the server; a second `Ct
 | `--max-runs <n>` | `4` | Runs executing at once across all sessions; more wait in a queue |
 
 The global flags apply too. The permission flags (`--allow-write`, `--allow-process`,
-`--allow-external`, `--allow-mcp`, `--read-only`) are the **ceiling** of every web session: the
+`--allow-analysis`, `--allow-external`, `--allow-mcp`, `--read-only`) are the **ceiling** of every web session: the
 browser can narrow them per session but never go beyond them. `--trust-project` and `--config`
 apply to every workspace the server opens, like in the terminal. `--db` selects the shared session
 database. Set `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) to control the JSON
@@ -266,6 +266,100 @@ the preset:
 "Allow for session" in an approval widens only that session, never the other sessions of the same
 workspace.
 
+### Python analysis and artifacts {#artifacts}
+
+Files published by [Python analysis](/analysis) appear as cards under the tool rows of the turn
+that produced them: kind icon, file name, kind label and an always-visible download button. On
+hover or keyboard focus a previewable card says **Open file** instead of its kind; a card that
+cannot be previewed (DOCX, ZIP, unknown files, files over the preview limit) never says it,
+and clicking it downloads. Cards survive reloads (they come from the stored tool results) and show
+**Deleted** or **Expired** when the artifact is gone, or **Unavailable** with **Retry** when
+opening it failed.
+
+Opening a card shows the **artifact panel** on the right of the chat, in the same slot as the files
+panel (opening one closes the other):
+
+- **Title menu**: switches between the session's artifacts (newest first, a filter above eight,
+  arrows, Enter, Esc and type-to-jump; artifacts published meanwhile get a dot and never steal the
+  view), then **Open in new tab** (dashboards and PDFs), **Expand panel**, **Download analysis
+  sources** (for `python_run` outputs), **Copy to workspace…**, **Details**, **Run again** (for
+  `python_run` outputs) and **Delete**. An expired artifact stays in the list marked **Expired**; opening
+  it offers only **Details** and **Run again**.
+- **Download**, **Full screen** and **Close** on the right; Close returns the focus to the card.
+- **Resize** with the handle between the chat and the panel (shared with the files panel): drag,
+  double click to reset, or focus it and use ←/→ (16 px, 64 px with Shift), Home/End and Enter. The
+  width is remembered per browser; the chat keeps at least 360 px.
+- **Previews**: Markdown with the chat renderer (relative images resolve inside the artifact),
+  HTML dashboards in the isolated viewer, images with Fit/100 %, PDFs in the browser's own viewer,
+  JSON with the JSON renderer, CSV, TSV and XLSX in the [table viewer](#tables), and code and text
+  with the code renderer. Anything else,
+  or anything larger than its limit, shows the reason and a **Download** button.
+- Below 900 px the panel is a full-screen dialog. **Esc** closes the open menu first, then the
+  panel. Settings and Agents open over the panel, which stays loaded behind them.
+- **Copy to workspace…** asks for a folder and runs the `artifact_export` tool in the session: the
+  usual write approval applies, and the copied files appear in **Changes**. `/artifacts [filter]`
+  opens the panel with its menu.
+
+Dashboards run in an iframe with `sandbox="allow-scripts allow-downloads"` (never
+`allow-same-origin`), served from `/artifact-view/<token>/…` with a signed link that expires after
+10 minutes. Its Content-Security-Policy forbids every connection (`connect-src 'none'`) and adds the
+`sandbox` directive, so the page has an opaque origin: it cannot read the cookie, the Alisio page,
+`localStorage` or the network, also when opened in a new tab. Data must be embedded in the HTML.
+
+Running Python asks in the approval panel with the title **Run Python analysis?**, the warning that
+managed Python is not a sandbox and the first 40 lines of the script; **S** (**Allow for this
+session**) saves the permission for the session. The key button in the header opens **Session
+permissions**, which lists saved permissions with **Revoke**; `/permissions` opens it too. Other
+tabs refresh when a permission is saved or revoked. `alisio serve --allow-analysis` allows Python
+without asking in sessions whose preset allows processes (`full-access`); elsewhere it asks.
+
+**Run again** repeats the analysis as a new execution with new artifacts (the old ones stay). It is a
+`python_run { rerunOf }` call of the session, so the permission above applies and the approval shows
+the saved script; **Details** names the execution a rerun repeats. Installing the optional Python
+packages asks with **Install Python packages?**, the package list, the download estimate and that it
+needs the network, and offers only **Allow once** and **Deny** (`S` does nothing: it is never saved).
+
+### Settings → Data analysis {#analysis-settings}
+
+The **Data analysis** page of Settings shows the runtime read only (mode, the Python found or how to
+install it for your system, the optional packages, the container engine and image, and the reminder
+that managed Python is not a sandbox) and edits the switch (`analysis.enabled`), the execution
+timeout and the three retention values. Changes are validated by the server, written to the global
+configuration file and shown with when the last cleanup ran. `runtime` and `oci.*` are not editable
+here. See [Configuration](/configuration#analysis).
+
+### Tables and attached data {#tables}
+
+The composer's `+` button (and drag and drop) accepts data files next to images: CSV, TSV, JSON,
+JSONL and XLSX. A file is uploaded as the raw body of `POST /api/sessions/:sid/datasets`, kept in the
+content-addressed blob store and ingested in the background into a SQLite dataset (see
+[Tabular data](/analysis#data)). The chip says **Reading sales.csv…** while the server works; the
+server keeps answering (health, heartbeat) while it does, because ingestion runs in a separate
+process. When the `dataset_ready` frame arrives the chip shows the size of the table; a
+`dataset_failed` frame (unsupported file, over `analysis.data.maxUploadBytes` or `maxRows`, XLSX
+without Python) turns it into an error with the reason. Sending the message adds a bounded summary
+(schema, five rows, statistics; at most 4 KB) to what the model reads, while the conversation shows
+what you typed with the chips; a chip opens the table in the right panel. Data alone sends a default
+request to look at it.
+
+The **table viewer** (`SpreadsheetView`) also opens spreadsheet artifacts (CSV, TSV, XLSX), which are
+ingested the first time they are previewed:
+
+- Fixed 28 px rows and a window of rows and columns, so a million-row sheet scrolls smoothly. Pages
+  of 200 rows come from the keyset-paginated rows API (`rowid` cursors) through a cache of 20 pages:
+  scrolling or sorting never repeats or skips a row. Jumping to a row works at any position without
+  sorting; while sorted or filtered it reaches the first 100 000 rows, and farther rows load by
+  scrolling.
+- Click a header to sort (ascending, descending, none; `aria-sort`), type in the filter box (a
+  column, or every column up to 100 000 rows; a substring match), pick a sheet in a workbook, and
+  resize columns by dragging the handle on a header's edge, or with **Alt**+←/→ (Shift for larger
+  steps) on a focused header. Sorting and filtering are off above
+  `analysis.data.maxInteractiveRows` (1 000 000) with a notice: the file has no indexes.
+- `role="grid"` with row and column counts and indexes, one tab stop (arrows, Home/End,
+  PgUp/PgDn, Ctrl+Home/End move between cells; ↑ from the first row reaches the header).
+  **Ctrl/Cmd+C** copies the cell and **Ctrl/Cmd+Shift+C** the row (also a toolbar button); **Download
+  original** is in the toolbar.
+
 ## API and events
 
 The browser talks to JSON routes under `/api` and to one Server-Sent Events stream per tab:
@@ -283,9 +377,18 @@ GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/s
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
+GET  /api/sessions/:sid/artifacts      GET /api/artifacts/:aid       GET /api/artifacts/:aid/download
+GET  /api/artifacts/:aid/files/*       POST /api/artifacts/:aid/view  POST /api/artifacts/:aid/export {target, overwrite?}
+GET  /api/artifacts/:aid/sources?logs=1   DELETE /api/artifacts/:aid
+GET  /artifact-view/:token/*           isolated viewer (signed link, no cookie)
+GET  /api/sessions/:sid/capabilities   DELETE /api/sessions/:sid/capabilities/:gid
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
+POST /api/sessions/:sid/datasets       raw data file, X-File-Name header → 202 {pending} | 200 {dataset}
+GET  /api/sessions/:sid/datasets       GET /api/datasets/:did        GET /api/datasets/:did/download
+GET  /api/datasets/:did/rows?sheet=&after=&offset=&limit=&sort=&dir=&filter=&column=
+POST /api/artifacts/:aid/dataset       ingest a spreadsheet artifact on first preview
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
@@ -296,6 +399,9 @@ GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, p
 PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
 POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Dataset uploads end with a `dataset_ready` or `dataset_failed` frame to the session's stream. Data
+errors use the codes `dataset_unsupported` (415), `query_rejected` (400) and `query_timeout` (408).
 
 Management changes send a `catalog_changed` frame (`commands`, `plugins`, `skills`, `mcp`,
 `models` or `agents`) to every stream, so other tabs refresh. Activating a profile answers
@@ -324,6 +430,14 @@ protocol version is reported by `/api/health` and in the stream's first frame.
   symbolic links are listed but never followed (even when they point inside the workspace), and
   `.gitignore` filtering needs `git` on `PATH`. **Changes** only knows files written through
   `write_file` and `edit_file`; files a shell command changed appear in `git status`, not there.
+- Artifact previews: **Esc** pressed inside a dashboard never reaches Alisio (use **Close**);
+  dashboards cannot use the network, `localStorage`, module scripts or web fonts from files (fonts
+  must be inline `data:` URLs); a view link expires after 10 minutes (reopening renews it); PDFs use
+  the browser's viewer without `sandbox` and fall back to a download where there is none.
+  Downloads of multi-file artifacts are ZIP archives.
+- Tables: sorting and filtering scan the sheet (the dataset file has no indexes), so they are off
+  above `analysis.data.maxInteractiveRows`; cells longer than 4 096 characters are cut in the grid
+  (the dataset keeps them whole); an XLSX needs Python 3.10+ to be read.
 - Uploaded images are stored once per content hash next to the session database and are not
   deleted automatically.
 - Rich renderers need JavaScript chunks the page loads on demand: Mermaid is large (a few hundred

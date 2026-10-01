@@ -62,6 +62,79 @@ export {
 } from "./agents/service.ts";
 export { AGENT_TEMPLATES, agentTemplate } from "./agents/templates.ts";
 export {
+  CapabilityGrants,
+  type GrantRecord,
+  type GrantSource,
+  toGrantWire,
+} from "./analysis/capabilities.ts";
+export { CsvParser, decodeTextBytes, detectDelimiter } from "./analysis/data/csv.ts";
+export {
+  type DatasetLimits,
+  type DatasetRecord,
+  DatasetService,
+  DEFAULT_DATASET_LIMITS,
+  datasetFormat,
+  PageParamError,
+  toDatasetRef,
+  XLSX_REMEDY,
+} from "./analysis/data/datasets.ts";
+export {
+  DataEngine,
+  DataError,
+  type DataErrorCode,
+} from "./analysis/data/engine-client.ts";
+export { guardSql } from "./analysis/data/sql-guard.ts";
+export {
+  detectHintHost,
+  type HintHost,
+  type InstallHints,
+  installHintsMarkdown,
+  installHintsText,
+  parseOsRelease,
+  pythonInstallHints,
+} from "./analysis/install-hints.ts";
+export {
+  AnalysisJanitor,
+  type RetentionPolicy,
+  SWEEP_INTERVAL_MS,
+  type SweepReport,
+} from "./analysis/janitor.ts";
+export {
+  AnalysisJobs,
+  type ExecutionDetails,
+  type ExecutionStatus,
+  type JobPaths,
+} from "./analysis/jobs.ts";
+export {
+  containerName,
+  type OciDeps,
+  type OciEngine,
+  OciRuntime,
+  type OciSettings,
+  type OciStatus,
+  ociRunArgs,
+  parseDigests,
+} from "./analysis/oci.ts";
+export {
+  AnalysisRerun,
+  type RerunPlan,
+  type RerunPreparation,
+} from "./analysis/rerun.ts";
+export {
+  AnalysisRuntimeManager,
+  type DiscoveryDeps,
+  type Extras,
+  ExtrasInstallError,
+  type InstallStep,
+  installPreview,
+  type PythonCandidate,
+  type PythonResolution,
+  type RuntimeState,
+  setupCommand,
+  venvInterpreter,
+} from "./analysis/runtime-manager.ts";
+export { analysisStatus } from "./analysis/status.ts";
+export {
   type AppOptions,
   type BuiltinContext,
   type BuiltinPlugin,
@@ -70,6 +143,27 @@ export {
   type PluginCatalogEntry,
   type PluginCatalogStatus,
 } from "./application.ts";
+export {
+  classifyArtifact,
+  extensionOf,
+  fileType as artifactFileType,
+  isPreviewable,
+  KIND_LABELS,
+  viewerContentType,
+} from "./artifacts/kinds.ts";
+export { createArtifactPublisher } from "./artifacts/publisher.ts";
+export {
+  type ArtifactFile,
+  type ArtifactLimits,
+  type ArtifactOwner,
+  type ArtifactRecord,
+  ArtifactRejected,
+  ArtifactStore,
+  type PublishedArtifact,
+  readHead as readArtifactHead,
+  slugify as artifactSlug,
+  toRef,
+} from "./artifacts/store.ts";
 export {
   BUILTIN_COMMANDS,
   type BuiltinCommand,
@@ -91,6 +185,7 @@ export {
   loadConfig,
   loadConfigWithProvenance,
   type McpServerSource,
+  OCI_IMAGE_PATTERN,
   overridesSavedProviderProfile,
   type SettableSettingInfo,
   type SettableSettingKey,
@@ -121,14 +216,18 @@ export type {
   ApprovalDecision,
   ApprovalHandler,
   ApprovalRequest,
+  ArtifactPublisherFactory,
   BeginRunInput,
+  CapabilityGate,
   ContextSource,
+  CoreArtifactPublisher,
   EndRunInput,
   EventPage,
   HookFailure,
   MessagePage,
   PageOptions,
   Policy,
+  PublishedArtifactInfo,
   RunnerExtensions,
   RunRecord,
   RunStatus,
@@ -224,16 +323,23 @@ export {
   type PathAccessOptions,
   type ResolvePathOptions,
 } from "./runtime/access.ts";
-export { BlobStore, type BlobStoreOptions } from "./runtime/blobs.ts";
+export { BlobStore, type BlobStoreOptions, BlobTooLarge } from "./runtime/blobs.ts";
 export { clipLines, unifiedPatch } from "./runtime/diff.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
+export { newId, ulid } from "./runtime/ids.ts";
 export {
   defaultGlobalRoots,
   isPathSpec,
   PLUGIN_KEYWORD,
   resolvePluginSpec,
 } from "./runtime/modules.ts";
-export { findWorkspace, inside, outsideRootsMessage, safePath } from "./runtime/paths.ts";
+export {
+  findWorkspace,
+  inside,
+  outsideRootsMessage,
+  safePath,
+  workspaceKey,
+} from "./runtime/paths.ts";
 export {
   isMissingCommand,
   type ProcessResult,
@@ -242,6 +348,7 @@ export {
 } from "./runtime/process.ts";
 export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
+export { crc32, writeZip, type ZipEntry, type ZipSink } from "./runtime/zip.ts";
 export { ChildSessions, type ChildSessionsOptions } from "./sessions/children.ts";
 export {
   formatSideQuestion,
@@ -278,6 +385,8 @@ export {
   visibleWidth,
   welcomeSection,
 } from "./startup/index.ts";
+export { formatBytes, NOT_SANDBOXED } from "./tools/analysis.ts";
+export { ARTIFACT_READ_MAX, exportedPaths } from "./tools/artifacts.ts";
 export { hash, objectSchema, registerStandard } from "./tools/standard.ts";
 export {
   getTrust,

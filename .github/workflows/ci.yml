@@ -31,6 +31,81 @@ jobs:
       # The built CLI under plain Node against a local fake provider.
       - run: pnpm test:cli
       - run: pnpm pack:check
+  portability:
+    name: Portability (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pnpm install --frozen-lockfile
+      # Python discovery, paths, open-path, ZIP, the artifact store, python_run and the tabular data
+      # engine (CSV parser, ingestion, read-only queries and their time limit in a killable process,
+      # paging, XLSX through the Python helper); the real-Python cases run because setup-python puts
+      # an interpreter on PATH.
+      - run: >-
+          pnpm exec vitest run tests/analysis-runtime-discovery.test.ts
+          tests/analysis-install-hints.test.ts tests/open-path.test.ts tests/zip-writer.test.ts
+          tests/artifact-kinds.test.ts tests/artifact-store.test.ts tests/analysis-python-run.test.ts
+          tests/analysis-data-engine-sources.test.ts tests/data-csv-parser.test.ts
+          tests/data-sql-guard.test.ts tests/data-ingest.test.ts tests/data-query.test.ts
+          tests/data-rows.test.ts tests/data-xlsx.test.ts tests/data-tools.test.ts
+      # Phase 4: the container runtime (the exact `run` arguments with Windows and macOS paths, a
+      # fake container CLI for cancel/timeout; the cases that need a real Docker or Podman and a
+      # digest-pinned Python image are skipped here), the extras (a fake pip), rerun, retention
+      # and the configuration (global-only keys, three-level settings).
+      - run: >-
+          pnpm exec vitest run tests/analysis-config.test.ts tests/analysis-oci.test.ts
+          tests/analysis-extras.test.ts tests/analysis-rerun.test.ts tests/analysis-janitor.test.ts
+          tests/analysis-application.test.ts
+      # The wheels of the optional extras for this runner's own platform (the other platforms
+      # are checked from Linux in the extras-wheels job).
+      - run: >-
+          node --experimental-strip-types --disable-warning=ExperimentalWarning
+          scripts/analysis-extras-wheels.ts
+          --platform ${{ matrix.os == 'windows-latest' && 'windows-x64' || 'macos-arm64' }}
+          --python python
+  extras-wheels:
+    # Every package of the optional extras must have a wheel (nothing is compiled) on the
+    # platforms Alisio supports. `pip download --platform` runs on Linux for all of them.
+    name: Extras wheels (${{ matrix.platform }}, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+        platform: [linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64]
+        include:
+          # Known limits, verified: Windows on Arm lacks wheels for `science` before Python 3.13
+          # and for everything before 3.11; Alpine (musl) has no scikit-learn wheels.
+          - { python: "3.12", platform: linux-musl-x64, extras: analysis }
+          - { python: "3.12", platform: windows-arm64, extras: analysis }
+          - { python: "3.13", platform: windows-arm64, extras: both }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          node --experimental-strip-types --disable-warning=ExperimentalWarning
+          scripts/analysis-extras-wheels.ts --platform ${{ matrix.platform }}
+          --python python --extras ${{ matrix.extras || 'both' }}
   binary:
     name: Standalone binary (Bun)
     runs-on: ubuntu-latest

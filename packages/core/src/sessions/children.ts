@@ -194,6 +194,10 @@ export class ChildSessions implements SessionsAPI {
             write: caps.write,
             process: caps.process,
             external: root.external && !caps.readOnly,
+            // --allow-analysis carries to children whose process permission is not narrowed.
+            ...(root.analysis && !caps.readOnly && (spec.permission?.process ?? "allow") === "allow"
+              ? { analysis: true }
+              : {}),
           },
           approvals: caps.approvals,
           label: this.label(id),

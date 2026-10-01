@@ -12,6 +12,15 @@ import type {
   RunEvent,
 } from "@alisio/sdk";
 import { AgentDefinitionService } from "./agents/service.ts";
+import { CapabilityGrants } from "./analysis/capabilities.ts";
+import { DatasetService } from "./analysis/data/datasets.ts";
+import { AnalysisJanitor } from "./analysis/janitor.ts";
+import { AnalysisJobs } from "./analysis/jobs.ts";
+import { OciRuntime } from "./analysis/oci.ts";
+import { AnalysisRerun } from "./analysis/rerun.ts";
+import { AnalysisRuntimeManager } from "./analysis/runtime-manager.ts";
+import { createArtifactPublisher } from "./artifacts/publisher.ts";
+import { ArtifactStore } from "./artifacts/store.ts";
 import {
   configFile,
   configHome,
@@ -89,6 +98,18 @@ export interface AppOptions {
   disablePlugins?: string[];
   /** Interactive approval for write/process tools; ignored in read-only mode. */
   approve?: ApprovalHandler;
+  /** Pre-allow the `analysis.run` capability only (`--allow-analysis`); `--read-only` wins. */
+  allowAnalysis?: boolean;
+  /** `--python <path>`: the interpreter for `python_run` (no discovery). */
+  python?: string;
+  /** Embedders and tests: a ready Python runtime manager instead of the default one. */
+  analysisRuntime?: AnalysisRuntimeManager;
+  /** Embedders and tests: replaces the container engine collaborators (a fake CLI). */
+  analysisOci?: Partial<import("./analysis/oci.ts").OciDeps>;
+  /** Delay before the first background retention sweep (default 30 s; tests use a short one). */
+  analysisSweepDelayMs?: number;
+  /** Recorded as the source of interactive capability decisions (default `tui`). */
+  approvalSource?: "tui" | "web";
   /**
    * Interactive approval for a tool path outside the workspace and every declared extra root,
    * scoped to the containing directory (allow once / session / deny); ignored in read-only mode.
@@ -420,6 +441,105 @@ export async function createApplication(options: AppOptions = {}) {
       },
       pathAccess,
     );
+    // Python analysis and artifacts live next to the session database (like attachment blobs).
+    const stateRoot = options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
+    const artifacts = new ArtifactStore({
+      root: stateRoot,
+      db: store.db,
+      limits: {
+        maxFiles: config.analysis.limits.maxFiles,
+        maxFileBytes: config.analysis.limits.maxFileBytes,
+        maxOutputBytes: config.analysis.limits.maxOutputBytes,
+      },
+    });
+    const capabilityGrants = new CapabilityGrants({
+      db: store.db,
+      rootOf: (id) => store.rootOf(id),
+    });
+    const analysisRuntime =
+      options.analysisRuntime ??
+      new AnalysisRuntimeManager({
+        stateDir: stateRoot,
+        ...(options.python ? { python: options.python } : {}),
+      });
+    const analysisJobs = new AnalysisJobs({ root: stateRoot, db: store.db });
+    // Container mode (`analysis.runtime: "oci"`): read from the live config on every call.
+    let ociRuntime: { key: string; runtime: OciRuntime } | undefined;
+    const oci = {
+      mode: () => config.analysis.runtime,
+      runtime: () => {
+        const key = JSON.stringify(config.analysis.oci);
+        if (ociRuntime?.key !== key)
+          ociRuntime = {
+            key,
+            runtime: new OciRuntime({ ...config.analysis.oci }, options.analysisOci),
+          };
+        return ociRuntime.runtime;
+      },
+    };
+    // Tabular datasets (one SQLite file each); XLSX needs the discovered Python.
+    const datasets = new DatasetService({
+      root: stateRoot,
+      db: store.db,
+      limits: config.analysis.data,
+      python: analysisRuntime,
+    });
+    const analysisRerun = new AnalysisRerun({ jobs: analysisJobs, store: artifacts, datasets });
+    // Retention: a sweep at most every 24 h, launched in the background after the start.
+    const janitor = new AnalysisJanitor({
+      root: stateRoot,
+      db: store.db,
+      artifacts,
+      datasets,
+      blobs,
+      retention: () => config.analysis.retention,
+      ...(options.analysisSweepDelayMs !== undefined
+        ? { initialDelayMs: options.analysisSweepDelayMs }
+        : {}),
+    });
+    // R4: nothing is registered with analysis disabled or under --read-only. Startup only looks
+    // for candidate interpreters with `stat`; no process is launched until the first call.
+    const analysisEnabled = config.analysis.enabled && !options.readOnly;
+    if (analysisEnabled) {
+      const [candidates, active] = await Promise.all([
+        analysisRuntime.candidates(),
+        analysisRuntime.activeRuntime(),
+      ]);
+      const { registerAnalysisTools } = await import("./tools/analysis.ts");
+      registerAnalysisTools(registry, {
+        store: artifacts,
+        jobs: analysisJobs,
+        runtime: analysisRuntime,
+        datasets,
+        oci,
+        rerun: analysisRerun,
+        rootOf: (id) => store.rootOf(id),
+        // Read live: a changed `analysis.limits.*` setting applies to the next call.
+        limits: {
+          get timeoutMs() {
+            return config.analysis.limits.timeoutMs;
+          },
+          get maxLogBytes() {
+            return config.analysis.limits.maxLogBytes;
+          },
+        },
+        startup: { candidates: candidates.length > 0, extras: active?.extras ?? [] },
+      });
+      const { registerArtifactTools } = await import("./tools/artifacts.ts");
+      registerArtifactTools(registry, { store: artifacts, rootOf: (id) => store.rootOf(id) });
+    }
+    // Data tools only read (effect `read`): they stay available under --read-only.
+    if (config.analysis.enabled) {
+      const { registerDataTools } = await import("./tools/data.ts");
+      registerDataTools(registry, { datasets, rootOf: (id) => store.rootOf(id) });
+    }
+    const sessionWorkspace = (sessionId: string) => {
+      try {
+        return store.get(sessionId).workspace;
+      } catch {
+        return workspace;
+      }
+    };
     const { registerPluginInstallTool } = await import("./plugins/install.ts");
     registerPluginInstallTool(registry, { readOnly: !!options.readOnly });
     if ((options.allowMcp || mcpAllow) && !options.readOnly) mcp.register();
@@ -667,9 +787,10 @@ export async function createApplication(options: AppOptions = {}) {
       const target = await resolveModel(request.model, request.signal);
       return completeText(await runtimeFor(target), { ...request, model: target.model.id });
     });
-    const runtimePolicy = {
+    const runtimePolicy: import("./core/contracts.ts").Policy = {
       write: !!options.allowWrite && !options.readOnly,
       process: !!options.allowProcess && !options.readOnly,
+      ...(options.allowAnalysis && !options.readOnly ? { analysis: true } : {}),
       external:
         !options.readOnly &&
         (!!options.allowExternal ||
@@ -678,6 +799,18 @@ export async function createApplication(options: AppOptions = {}) {
           !!options.allowAgents ||
           plugins.externalCount > 0 ||
           registry.list().some((t) => t.name.startsWith("p_"))),
+    };
+    /** Model and provider of a session, for the provenance of its artifacts. */
+    const provenanceOf = (sessionId: string): Record<string, unknown> => {
+      try {
+        const session = store.get(sessionId);
+        return {
+          ...(session.model ? { model: session.model } : {}),
+          ...(session.provider ? { provider: session.provider } : {}),
+        };
+      } catch {
+        return {};
+      }
     };
     const runner = new AgentRunner({
       provider,
@@ -693,6 +826,39 @@ export async function createApplication(options: AppOptions = {}) {
       contextWindow,
       ...(options.approve && !options.readOnly ? { approve: options.approve } : {}),
       pathAccess,
+      ...(analysisEnabled
+        ? {
+            capabilities: {
+              granted: (capability, sessionId) => capabilityGrants.granted(capability, sessionId),
+              record: (input) => {
+                capabilityGrants.record({ ...input, workspace: sessionWorkspace(input.sessionId) });
+              },
+              source: options.approvalSource ?? "tui",
+              get runtime() {
+                return config.analysis.runtime;
+              },
+              // A rerun's approval shows the saved script (the input carries only its reference).
+              preview: async (input: Record<string, unknown>, sessionId: string) =>
+                typeof input.rerunOf === "string"
+                  ? analysisRerun.script(input.rerunOf, store.rootOf(sessionId))
+                  : undefined,
+            },
+          }
+        : {}),
+      artifacts: (call, announce) =>
+        createArtifactPublisher(
+          artifacts,
+          {
+            sessionId: call.sessionId,
+            rootSessionId: store.rootOf(call.sessionId),
+            workspace: sessionWorkspace(call.sessionId),
+            runId: call.runId,
+            callId: call.callId,
+            // Public provenance of what produced the artifact (no paths, no keys).
+            provenance: provenanceOf(call.sessionId),
+          },
+          announce,
+        ),
       ...(config.websearch.provider === "native"
         ? { nativeTools: [{ type: config.websearch.nativeToolType }] }
         : {}),
@@ -780,6 +946,8 @@ export async function createApplication(options: AppOptions = {}) {
         }
       }
     }
+    // Retention runs in the background (unreferenced timer); never for in-memory test databases.
+    if (analysisEnabled && options.db !== ":memory:") janitor.start();
     return {
       workspace,
       pathAccess,
@@ -789,6 +957,24 @@ export async function createApplication(options: AppOptions = {}) {
       store,
       /** Uploaded attachment bytes; resolve a `BlobRef` with `blobs.attachment(ref)` before a run. */
       blobs,
+      /** Published artifacts of every session (folders under `<state>/artifacts`). */
+      artifacts,
+      /** Persisted capability grants (`analysis.run`) and their audit rows. */
+      capabilityGrants,
+      /** Python discovery and job folders of `python_run`; `enabled` is false under --read-only. */
+      analysis: {
+        enabled: analysisEnabled,
+        runtime: analysisRuntime,
+        jobs: analysisJobs,
+        /** Container runtime of the current configuration (status, pull); mode `managed` ignores it. */
+        oci,
+        rerun: analysisRerun,
+        janitor,
+      },
+      /** Keys a project layer set that only the user layer decides (ignored on load). */
+      configDiagnostics: configProvenance.ignored ?? [],
+      /** Tabular datasets of every session (ingestion, read-only queries, pages). */
+      datasets,
       registry,
       context,
       skills,
@@ -1022,6 +1208,29 @@ export async function createApplication(options: AppOptions = {}) {
                 ? { active: config.agents.active }
                 : { ...config.agents, effort: String(value) };
             break;
+          case "analysis.enabled":
+            // Tools are registered when the application starts: the change applies to the next
+            // application (a restart; the web recycles the workspace application).
+            config.analysis = { ...config.analysis, enabled: value === true };
+            break;
+          case "analysis.limits.timeoutMs":
+            // Read live by python_run on its next call.
+            config.analysis = {
+              ...config.analysis,
+              limits: { ...config.analysis.limits, timeoutMs: Number(value) },
+            };
+            break;
+          case "analysis.retention.jobsDays":
+          case "analysis.retention.intermediateDays":
+          case "analysis.retention.artifactsDays": {
+            // Read by the next sweep.
+            const leaf = key.slice("analysis.retention.".length);
+            config.analysis = {
+              ...config.analysis,
+              retention: { ...config.analysis.retention, [leaf]: Number(value) },
+            };
+            break;
+          }
           case "websearch.provider":
             // Mutated in place (same object identity) so the tool chain's per-call
             // `websearchCtx.config` sees the new provider on the very next search call.
@@ -1193,6 +1402,8 @@ export async function createApplication(options: AppOptions = {}) {
         const capped = (work: Promise<unknown>) =>
           Promise.race([work.catch(() => {}), delay(TEARDOWN_STAGE_TIMEOUT_MS)]);
         try {
+          janitor.stop();
+          datasets?.close();
           await capped(Promise.allSettled([herdr.close(), mcp.close()]));
         } finally {
           try {

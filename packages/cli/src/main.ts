@@ -38,6 +38,11 @@ program
   .option("--api-mode <mode>", "chat or responses")
   .option("--allow-write", "Allow file writes")
   .option("--allow-process", "Allow arbitrary subprocesses; not sandboxed")
+  .option(
+    "--allow-analysis",
+    "Allow Python analysis (python_run) without asking; not sandboxed, never allows shell",
+  )
+  .option("--python <path>", "Python 3.10+ interpreter for python_run (default: discovered)")
   .option("--allow-external", "Allow network tools: webfetch, websearch and provider-native search")
   .option("--allow-mcp", "Allow configured MCP servers and remote tool calls")
   .option("--allow-agents", "Allow messaging neighboring agents through Herdr")
@@ -130,7 +135,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     const trusted = await withProjectTrust(opts);
     return runTui({ ...trusted, ...(sessionId ? { session: sessionId } : {}) });
   }
-  const { createApplication } = await import("@alisio/core");
+  const { createApplication, formatBytes, KIND_LABELS } = await import("@alisio/core");
   const app = await createApplication({
     ...(await cliDefaults()),
     ...opts,
@@ -140,8 +145,14 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         process.stdout.write(String((event.data as { delta: string }).delta));
       else if (event.type === "tool_started")
         process.stderr.write(`\n→ ${(event.data as { name: string }).name}\n`);
+      else if (event.type === "artifact_published") process.stderr.write(artifactLine(event));
     },
   });
+  /** `artifact: Dashboard site.zip (48 KB) → /abs/path` (nothing is opened automatically). */
+  function artifactLine(event: import("@alisio/sdk").RunEvent): string {
+    const data = event.data as import("@alisio/sdk").RunEventDataMap["artifact_published"];
+    return `artifact: ${KIND_LABELS[data.artifact.kind] ?? "File"} ${data.artifact.fileName} (${formatBytes(data.artifact.bytes)}) → ${data.path}\n`;
+  }
   for (const failure of app.mcpStartupFailures()) process.stderr.write(`[startup] ${failure}\n`);
   // The ACTIVE agent (built-in `build`/`plan` or a main-capable definition) drives the main
   // session here too: its system prompt is appended and a read-only agent narrows the run. The
@@ -379,7 +390,31 @@ program.command("doctor").action(async (_opts, cmd) => {
         : config.provider.auth === "none" || !!process.env[config.provider.apiKeyEnv],
     },
   };
-  console.log(JSON.stringify(status, null, 2));
+  const { analysisState } = await import("./analysis.ts");
+  const analysisInfo = await analysisState(o);
+  const { hints: _hints, ...pythonInfo } = analysisInfo.status.python as Record<string, unknown>;
+  console.log(
+    JSON.stringify(
+      {
+        ...status,
+        python: { mode: analysisInfo.status.mode, ...pythonInfo },
+        analysis: {
+          mode: analysisInfo.status.mode,
+          oci: analysisInfo.status.oci,
+          limits: analysisInfo.status.limits,
+          retention: analysisInfo.status.retention,
+          ...(analysisInfo.ignored.length ? { ignored: analysisInfo.ignored } : {}),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  if (analysisInfo.guidance) process.stderr.write(`\n${analysisInfo.guidance}\n`);
+  for (const key of provenance.ignored ?? [])
+    process.stderr.write(
+      `\nIgnored ${key} from the project configuration: only your user configuration decides it.\n`,
+    );
   if (!status.ripgrep)
     process.stderr.write(
       `\nWarning: ripgrep (rg) is not installed; search_text and list_files will not work. ${RIPGREP_INSTALL_HINT}\n`,
@@ -390,6 +425,38 @@ program.command("doctor").action(async (_opts, cmd) => {
         "before starting a real conversation (it will otherwise fail on the first turn).",
     );
 });
+const analysis = program
+  .command("analysis")
+  .description("Python analysis runtime (python_run): status, optional extras and containers");
+analysis
+  .command("status")
+  .description("Show the runtime: Python, extras, container engine, limits and retention")
+  .action(async (_opts, cmd) => {
+    const { printAnalysisStatus } = await import("./analysis.ts");
+    await printAnalysisStatus(options(cmd));
+  });
+analysis
+  .command("setup")
+  .description(
+    "Optional: install hash-locked Python extras (--extras) or pull the container image (--oci). " +
+      "python_run never needs this for the standard library.",
+  )
+  .option("--extras <set>", "analysis (pandas, numpy, matplotlib…) or science (adds scipy…)")
+  .option("--oci", "Pull the container image once and verify its digest (Docker or Podman)")
+  .option("--image <name>", "With --oci: the image to pull (default: analysis.oci.image)")
+  .action(async (flags: { extras?: string; oci?: boolean; image?: string }, cmd) => {
+    const { setupExtras, setupOci } = await import("./analysis.ts");
+    if (flags.oci) return setupOci(options(cmd), flags.image);
+    return setupExtras(options(cmd), flags.extras);
+  });
+analysis
+  .command("sweep")
+  .description("Run the retention sweep now (it also runs by itself at most once a day)")
+  .option("--force", "Ignore the once-a-day mark")
+  .action(async (flags: { force?: boolean }, cmd) => {
+    const { sweep } = await import("./analysis.ts");
+    await sweep(options(cmd), !!flags.force);
+  });
 const trust = program.command("trust").description("Inspect or revoke per-directory project trust");
 trust.command("list").action(async () => {
   const { listTrust } = await import("@alisio/core");

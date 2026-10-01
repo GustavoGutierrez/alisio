@@ -37,6 +37,25 @@ function sqlite(): Sqlite {
 const plain = (row: unknown) =>
   row === undefined || row === null ? undefined : { ...(row as Record<string, unknown>) };
 
+/** Opens an existing database file read-only (no directory or file is created). */
+export function openReadOnlyDatabase(path: string): SqlDatabase {
+  const db = new (sqlite().DatabaseSync)(path, { readOnly: true });
+  db.exec("PRAGMA query_only=ON;");
+  return {
+    exec: (sql) => db.exec(sql),
+    prepare(sql) {
+      const raw = db.prepare(sql);
+      return {
+        run: (...params: SqlValue[]) => raw.run(...params),
+        get: (...params: SqlValue[]) => plain(raw.get(...params)),
+        all: (...params: SqlValue[]) => raw.all(...params).map((r) => ({ ...r })),
+      };
+    },
+    transaction: <T>(fn: () => T): T => fn(),
+    close: () => db.close(),
+  };
+}
+
 export function openDatabase(path: string): SqlDatabase {
   const memory = path === ":memory:";
   const fresh = !memory && !existsSync(path);

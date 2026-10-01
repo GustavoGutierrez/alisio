@@ -232,6 +232,10 @@ export function renderUiBlockText(block: UiBlock): string {
           (step) => `- [${step.status}] ${step.label}${step.detail ? ` (${step.detail})` : ""}`,
         ),
       ].join("\n");
+    case "artifact": {
+      const a = block.artifact;
+      return `[artifact: ${a.fileName} · ${a.kind} · ${a.bytes} bytes · ${a.id}${a.partial ? " · partial" : ""}${a.status !== "ready" ? ` · ${a.status}` : ""}]`;
+    }
     default: {
       // A kind this build does not know (e.g. persisted by a newer Alisio): keep it readable.
       const kind = String((block as { kind?: unknown }).kind ?? "unknown");

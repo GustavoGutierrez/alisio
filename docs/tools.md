@@ -227,6 +227,8 @@ or `additionalDirectories`. See [Permission flags](#permission-flags).
 | (none) | Read and search tools only in headless modes; in the TUI, `write`/`process`/`external` are also offered and **ask every time** (see the truth table below) |
 | `--allow-write` | Enables `write_file` and `edit_file` outright, no asking |
 | `--allow-process` | Enables `run_process`, `shell` and `execute` outright, no asking |
+| `--allow-analysis` | Enables only Python analysis (`python_run`, capability `analysis.run`) outright; never `shell` or `run_process` |
+| `--python <path>` | Pins the Python 3.10+ interpreter of `python_run` (otherwise discovered automatically) |
 | `--allow-external` | Enables `webfetch` and `websearch` outright, no asking |
 | `--allow-mcp` | Starts/connects configured MCP servers and exposes their capabilities |
 | `--allow-agents` | Enables Herdr messaging tools |
@@ -276,6 +278,40 @@ asks once per directory before doing that; the decision persists and a changed `
 asks again. `alisio trust list`/`alisio trust revoke <path>` inspect or undo it. See [Quick
 start](/quick-start#configuration-trust-model) for the full flow and [Configuration](/configuration)
 for the `alisio trust` command.
+
+## Python analysis {#python-analysis}
+
+`python_run`, `artifact_create`, `artifact_list`, `artifact_read` and `artifact_export` publish,
+list, read and copy downloadable artifacts (`artifact_export` is a `write` tool: it asks unless
+`--allow-write`, and `--read-only` removes it); see [Python analysis and artifacts](/analysis). `python_run` declares the **capability**
+`analysis.run`, a finer permission inside the `process` effect: `--allow-process` (or a session
+approval of `process`) covers it, `--allow-analysis` and its own approval never widen `process`.
+Its **Allow for this session** decision is saved for the root session and survives restarts, so it
+also applies when a headless `alisio resume <id> "prompt"` continues that session. Revoke it with
+`/permissions`. Every decision is audited. `execute` reaches `python_run` only when it is already
+allowed by a flag (never through a saved grant). Managed Python is not a sandbox; with
+`analysis.runtime: "oci"` the same call runs in a container without network access (isolation with
+limits, see [Container runtime](/analysis#oci)).
+
+`python_run { extras: ["analysis"] }` asks for the optional Python packages. When they are not
+installed it asks for a second capability, **`analysis.install`**: it always asks, offers only
+**Allow once** and **Deny** (no permission is stored), shows the packages, the download estimate and
+that it needs the network, and **no flag covers it** (not `--allow-process`, not `--allow-analysis`).
+A headless run has nobody to ask, so the call fails naming the optional command
+`alisio analysis setup --extras analysis`. `python_run { rerunOf: "art_…" }` runs an earlier analysis
+of the session again (same script, inputs verified by hash, new artifacts) behind the same
+`analysis.run` gate; see [Rerun](/analysis#rerun).
+
+### Tabular data {#data-tools}
+
+`data_inspect` and `data_query` (effect `read`) describe and query CSV, TSV, JSON, JSONL and XLSX
+files through one SQLite dataset per file; see [Tabular data](/analysis#data). They never write to
+the repository (ingestion writes under the state folder), so they stay available with `--read-only`
+and need no flag. `data_inspect { path }` resolves the path like `read_file` (workspace, or an
+approved extra directory); `data_query` runs a single `SELECT`/`WITH` on a dataset of the session,
+limited to 1 000 rows and `analysis.data.queryTimeoutMs`. Both show their tables with the terminal's
+table renderer. `python_run { inputs: [{ "datasetId": … }] }` hands the dataset to a script. XLSX is
+the one format that needs Python 3.10+ (a fixed, standard-library helper of Alisio, not model code).
 
 ## Not a sandbox
 

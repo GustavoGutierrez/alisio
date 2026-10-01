@@ -4,8 +4,8 @@
  * identity, so a streaming message only re-renders its open tail (spec §10.5).
  */
 import type { Token, Tokens } from "marked";
-import { Component, type ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { Component, type ComponentChildren, createContext } from "preact";
+import { useContext, useRef } from "preact/hooks";
 import { RendererHost } from "../renderers/RendererHost.tsx";
 import { detail } from "../store/app.ts";
 import { openInDock } from "../store/dock.ts";
@@ -42,12 +42,23 @@ export const decodeEntities = (text: string): string =>
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
+/**
+ * Where a Markdown document lives. The transcript (default) never fetches images and opens
+ * workspace paths in the Dock; an artifact preview resolves relative images inside the artifact
+ * (`image`) and has no workspace links (`workspaceLinks: false`).
+ */
+export const MarkdownScope = createContext<{
+  image?: (href: string) => string | undefined;
+  workspaceLinks?: boolean;
+}>({});
+
 function inline(tokens: Token[] | undefined): ComponentChildren {
   if (!tokens) return null;
   return tokens.map((token, i) => <Inline key={i} token={token} />);
 }
 
 function Inline({ token }: { token: Token }): ComponentChildren {
+  const scope = useContext(MarkdownScope);
   switch (token.type) {
     case "text":
     case "escape": {
@@ -78,7 +89,10 @@ function Inline({ token }: { token: Token }): ComponentChildren {
           </a>
         );
       // Workspace paths open in the dock; unsafe schemes stay plain text.
-      if (workspaceRelative(detail.value?.workspace, link.href) !== undefined)
+      if (
+        scope.workspaceLinks !== false &&
+        workspaceRelative(detail.value?.workspace, link.href) !== undefined
+      )
         return (
           <button
             type="button"
@@ -97,6 +111,8 @@ function Inline({ token }: { token: Token }): ComponentChildren {
     }
     case "image": {
       const image = token as Tokens.Image;
+      const local = scope.image?.(image.href);
+      if (local) return <img class={styles.image} src={local} alt={image.text} loading="lazy" />;
       return SAFE_LINK.test(image.href) ? (
         <a href={image.href} target="_blank" rel="noopener noreferrer">
           {image.text || image.href}

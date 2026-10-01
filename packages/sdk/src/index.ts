@@ -67,7 +67,144 @@ export type UiBlock =
       suites: Array<{ name: string; file?: string; cases: TestCaseResult[] }>;
     }
   /** A checklist of steps with their current status. */
-  | { kind: "progress"; title?: string; steps: ProgressStep[] };
+  | { kind: "progress"; title?: string; steps: ProgressStep[] }
+  /** A published, downloadable artifact (`ToolContext.artifacts`). Text surfaces show one line. */
+  | { kind: "artifact"; artifact: ArtifactRef };
+/** Kind of a published artifact; decides the icon, the label and the renderer. */
+export type ArtifactKind =
+  | "dashboard"
+  | "document"
+  | "spreadsheet"
+  | "image"
+  | "data"
+  | "code"
+  | "archive"
+  | "file";
+/** Public reference to a published artifact. Never carries absolute paths. */
+export interface ArtifactRef {
+  /** `art_<ULID>`. */
+  id: string;
+  /** Root session that owns the artifact. */
+  sessionId: string;
+  title: string;
+  /** Download name, e.g. `report.md`, or `site.zip` for a multi-file artifact. */
+  fileName: string;
+  kind: ArtifactKind;
+  mimeType: string;
+  bytes: number;
+  /** More than 1 for multi-file dashboards. */
+  fileCount: number;
+  /** Decided by the host from the artifact kind and size. */
+  previewable: boolean;
+  createdAt: number;
+  /** Published from a failed execution (`publishOnError`). */
+  partial?: boolean;
+  status: "ready" | "deleted" | "expired";
+}
+/** Input of `ArtifactPublisher.publish`: files already written by the caller. */
+export interface ArtifactPublishInput {
+  /** Absolute path of a file or a directory owned by the caller. */
+  source: string;
+  title?: string;
+  /** Entry file for a directory; defaults to `index.html` when present. */
+  entry?: string;
+}
+/** Publishes caller-owned files as downloadable artifacts of the current session. */
+export interface ArtifactPublisher {
+  /** Validates, copies and registers; throws with a user-readable message on rejection. */
+  publish(input: ArtifactPublishInput): Promise<ArtifactRef>;
+  /** Creates a single-file artifact from text the tool already holds. */
+  publishText(input: { fileName: string; title?: string; text: string }): Promise<ArtifactRef>;
+}
+/** Finer-grained permissions inside an effect (closed union; extended additively). */
+export type AnalysisCapability = "analysis.run" | "analysis.install";
+
+/**
+ * What an `analysis.install` approval shows (phase 4): the optional Python packages that would be
+ * installed, an estimate of the download and that it needs the network. Always asks, only `once`.
+ */
+export interface InstallPreview {
+  extras: "analysis" | "science";
+  /** Top-level packages, e.g. `pandas`, `numpy`. */
+  packages: string[];
+  /** Pinned distributions in the lockfile (the packages plus their dependencies). */
+  packageCount: number;
+  /** Rough download size (wheels only); an estimate, not a measurement. */
+  estimatedBytes: number;
+  network: true;
+}
+/** What a tool asks the host to approve before installing packages (capability `analysis.install`). */
+export type InstallApprover = (request: InstallPreview) => Promise<"once" | "deny">;
+/** A persisted capability decision as exposed by the web API. */
+export interface CapabilityGrantWire {
+  id: string;
+  capability: AnalysisCapability;
+  sessionId: string;
+  scope: "once" | "session";
+  decision: "allow" | "deny";
+  source: "tui" | "web" | "flag" | "headless-grant";
+  createdAt: number;
+  revokedAt?: number;
+}
+/** Tabular formats the data tools ingest into one SQLite file per dataset. */
+export type DatasetFormat = "csv" | "tsv" | "json" | "jsonl" | "xlsx";
+/** A dataset (a CSV/TSV/JSON/JSONL/XLSX file ingested into SQLite). Never carries paths. */
+export interface DatasetRef {
+  /** `ds_<ULID>`. */
+  id: string;
+  /** Original file name. */
+  name: string;
+  format: DatasetFormat;
+  bytes: number;
+  sha256: string;
+  sheets: Array<{ name: string; table: string; rows: number; columns: number }>;
+}
+/** Column of a dataset table with the statistics computed at ingestion. */
+export interface DatasetColumnWire {
+  name: string;
+  /** Original header text. */
+  label: string;
+  /** A hint (`integer`, `real`, `date`, `boolean`, `text`); values are stored without conversion. */
+  type: string;
+  nulls: number;
+  distinct: number;
+  distinctExact: boolean;
+  min?: string;
+  max?: string;
+  mean?: number;
+  textFallbacks: number;
+  top: Array<{ value: string; count: number }>;
+}
+/** `GET /api/datasets/:did`: the dataset with the schema and statistics of every sheet. */
+export interface DatasetDetailWire extends DatasetRef {
+  ingestVersion: number;
+  encoding?: string;
+  delimiter?: string;
+  sheetDetails: Array<{
+    name: string;
+    table: string;
+    rows: number;
+    columns: DatasetColumnWire[];
+  }>;
+  /** Sorting and filtering are disabled above this many rows (`analysis.data.maxInteractiveRows`). */
+  maxInteractiveRows: number;
+}
+/** `GET /api/datasets/:did/rows`: one page of a sheet (keyset-paginated). */
+export interface DatasetRowsPage {
+  columns: Array<{ name: string; label: string; type: string }>;
+  /** Cell values as stored: numbers stay numbers, everything else is text, empty cells are null. */
+  rows: Array<Array<string | number | null>>;
+  /** 1-based position of the first row in the (unfiltered, unsorted) sheet, per row. */
+  rowids: number[];
+  /** Opaque cursor for the next page; absent on the last page. */
+  next?: string;
+  /** Rows in the sheet. */
+  total: number;
+  /** Rows matching the filter (first page only). */
+  matched?: number;
+  /** Sorting and filtering were ignored because the sheet exceeds `maxInteractiveRows`. */
+  interactive: boolean;
+}
 /** One case of a `{ kind: "test-results" }` UI block. */
 export interface TestCaseResult {
   name: string;
@@ -100,6 +237,7 @@ export const UI_BLOCK_KINDS = [
   "json",
   "test-results",
   "progress",
+  "artifact",
 ] as const satisfies readonly UiBlock["kind"][];
 export interface ToolResult {
   content: Array<
@@ -132,7 +270,15 @@ export type Message =
    * `summary` marks injected context (e.g. a compaction checkpoint); `display` is what UIs show
    * instead of `text` (e.g. `/init` for an expanded prompt template). Providers ignore both.
    */
-  | { role: "user"; text: string; summary?: boolean; display?: string; attachments?: Attachment[] }
+  | {
+      role: "user";
+      text: string;
+      summary?: boolean;
+      display?: string;
+      attachments?: Attachment[];
+      /** Datasets attached to this prompt (UI chips); the model sees their text summary in `text`. */
+      datasets?: DatasetRef[];
+    }
   | {
       role: "assistant";
       text: string;
@@ -275,6 +421,17 @@ export interface ToolContext {
    * do not inject this fall back to the workspace-only `safePath` policy.
    */
   resolvePath?: (path: string) => Promise<string>;
+  /** Run and tool call that issued this execution, when run by the agent loop. */
+  runId?: string;
+  callId?: string;
+  /** Present when the host has an artifact store for this session (built-in tools only in v1). */
+  artifacts?: ArtifactPublisher;
+  /**
+   * Asks the user to approve installing the optional Python packages (capability
+   * `analysis.install`; built-in tools only). Resolves `deny` where nobody can be asked
+   * (headless, `--read-only`), because no flag grants an installation.
+   */
+  approveInstall?: InstallApprover;
 }
 export interface ToolDefinition {
   name: string;
@@ -285,6 +442,11 @@ export interface ToolDefinition {
   /** May run concurrently with other read/concurrent calls of the same turn (e.g. delegation). */
   concurrent?: boolean;
   paths?: (input: Record<string, unknown>) => string[];
+  /**
+   * Finer-grained permission inside `effect`: a broad grant of `effect` covers it, a grant of the
+   * capability never widens `effect`. Honored for built-in tools only (ignored for plugins in v1).
+   */
+  capability?: AnalysisCapability;
   execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }
 /**
@@ -348,12 +510,29 @@ export interface RunEventDataMap {
     name: string;
     effect: "write" | "process" | "external";
     label?: string;
+    /** The approval is for this capability (not the whole effect). */
+    capability?: AnalysisCapability;
+    /** `analysis.install` approvals: the packages, the size estimate and the network need. */
+    install?: InstallPreview;
   };
   approval_resolved: {
     id: string;
     name: string;
     effect: "write" | "process" | "external";
     decision: "once" | "session" | "deny";
+    capability?: AnalysisCapability;
+    /** A `session` capability decision was stored and survives restarts. */
+    persisted?: boolean;
+  };
+  /**
+   * A tool published an artifact. `path` is the absolute local path of the file (or the entry of a
+   * multi-file artifact) for local consumers (TUI, JSONL); web clients ignore it.
+   */
+  artifact_published: {
+    artifact: ArtifactRef;
+    path: string;
+    callId?: string;
+    executionId?: string;
   };
   run_completed: { tokens: number; text: string; truncated?: boolean };
   response_truncated: { turn: number; maxOutputTokens: number };
@@ -919,6 +1098,14 @@ export interface PendingApproval {
   /** Pretty-printed tool input, truncated to 4 KB. */
   input: string;
   expiresAt?: number;
+  /** The approval is for this capability (for example running Python), not the whole effect. */
+  capability?: AnalysisCapability;
+  /** A short preview for capability approvals (the first 40 lines of the script). */
+  preview?: string;
+  /** Capability approvals: `managed` (not sandboxed) or `oci` (container). */
+  runtime?: "managed" | "oci";
+  /** `analysis.install` approvals: only `once` and `deny` are offered. */
+  install?: InstallPreview;
 }
 /** A plugin UI request (`ui.select` / `ui.askQuestions`) waiting for a web client. */
 export interface PendingInteraction {
@@ -1000,7 +1187,13 @@ export type ServerFrame =
       workspaceId: string;
       scope: "commands" | "plugins" | "skills" | "mcp" | "models" | "agents";
     }
-  | { t: "resync"; sessionId?: string; reason: "overflow" | "gap" | "server_restart" };
+  | { t: "resync"; sessionId?: string; reason: "overflow" | "gap" | "server_restart" }
+  /** A persisted capability grant of this root session was added or revoked. */
+  | { t: "capabilities_changed"; sessionId: string }
+  /** A dataset uploaded from the web finished ingesting (root session). */
+  | { t: "dataset_ready"; sessionId: string; dataset: DatasetRef }
+  /** A dataset upload could not be ingested. */
+  | { t: "dataset_failed"; sessionId: string; name: string; error: string };
 export type ApiErrorCode =
   | "unauthorized"
   | "forbidden_origin"
@@ -1037,6 +1230,18 @@ export type ApiErrorCode =
   | "permission_denied"
   /** The request was cancelled before it finished, e.g. a `/btw` side question (409). */
   | "cancelled"
+  /** The artifact does not exist or belongs to another session (404). */
+  | "artifact_not_found"
+  /** The artifact exceeds a size limit for this operation (413). */
+  | "artifact_too_large"
+  /** No usable Python runtime (503). */
+  | "runtime_unavailable"
+  /** The file is not a supported dataset, or needs a runtime that is missing (415/503 body code). */
+  | "dataset_unsupported"
+  /** A data query was rejected by the read-only guard (400). */
+  | "query_rejected"
+  /** A data query exceeded `analysis.data.queryTimeoutMs` (408). */
+  | "query_timeout"
   | "internal";
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {
@@ -1237,6 +1442,55 @@ export interface McpServerWire {
   capabilities: string[];
   counts: { tools: number; resources: number; prompts: number };
   diagnostic?: string;
+}
+/**
+ * `GET /api/analysis`: the state of the data-analysis runtime for Settings (read only). Never
+ * carries a script or a repository path; interpreter paths are the user's own.
+ */
+export interface AnalysisStatus {
+  /** `analysis.enabled` and not `--read-only`: python_run is registered. */
+  enabled: boolean;
+  readOnly: boolean;
+  mode: "managed" | "oci";
+  /** The discovered (or `--python`) interpreter and the extras environment. */
+  python:
+    | {
+        found: true;
+        path: string;
+        version: string;
+        source: string;
+        extras: string[];
+        runtimeVersion?: string;
+      }
+    | {
+        found: false;
+        reason: string;
+        /** Installation guidance for this system (commands are shown, never run). */
+        hints: {
+          system: string;
+          heading?: string;
+          primary: string;
+          alternatives: string[];
+          notes: string[];
+        };
+      };
+  /** Container settings; `available` is probed only when the mode is `oci` or an image is set. */
+  oci: {
+    engine: "docker" | "podman";
+    image?: string;
+    memoryMb: number;
+    cpus: number;
+    available?: boolean;
+    version?: string;
+    reason?: string;
+  };
+  limits: { timeoutMs: number };
+  retention: {
+    jobsDays: number;
+    intermediateDays: number;
+    artifactsDays: number;
+    lastSweep?: number;
+  };
 }
 /** `GET /api/mcp`: the workspace's MCP runtime permission and servers. */
 export interface McpOverview {

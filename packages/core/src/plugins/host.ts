@@ -18,6 +18,7 @@ import type {
   RunEvent,
   SelectRequest,
   SessionInfo,
+  ToolContext,
 } from "@alisio/sdk";
 import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
@@ -238,12 +239,24 @@ export class PluginHost implements RunnerExtensions {
         register: (tool) => {
           const registered = builtin
             ? tool
-            : {
-                ...tool,
-                name: `${pluginPrefix(plugin.id)}_${tool.name}`,
-                // Only built-ins may claim the always-allowed internal effect.
-                ...(tool.effect === "internal" ? { effect: "external" as const } : {}),
-              };
+            : (() => {
+                // Only built-ins may claim the always-allowed internal effect, a capability
+                // (finer than the effect) or the artifact publisher (decision D12, v1).
+                const { capability: _capability, ...rest } = tool;
+                return {
+                  ...rest,
+                  name: `${pluginPrefix(plugin.id)}_${tool.name}`,
+                  ...(tool.effect === "internal" ? { effect: "external" as const } : {}),
+                  execute: (input: Record<string, unknown>, context: ToolContext) => {
+                    const {
+                      artifacts: _artifacts,
+                      approveInstall: _install,
+                      ...narrowed
+                    } = context;
+                    return tool.execute(input, narrowed);
+                  },
+                };
+              })();
           const unregister = this.registry.register(registered);
           this.toolOwners.set(registered.name, plugin.id);
           return track(() => {

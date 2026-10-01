@@ -80,6 +80,13 @@ const serversSchema = <T extends z.ZodType>(value: T) =>
           message: "MCP server names may contain only letters, numbers, dot, underscore and dash",
         });
   });
+/**
+ * A container image reference pinned by digest. Anchored at the start with a letter or digit so a
+ * value can never be read as an option by the container CLI.
+ */
+export const OCI_IMAGE_PATTERN = /^[a-zA-Z0-9][^\s@]*@sha256:[a-f0-9]{64}$/;
+/** Analysis keys only the user (global) layer decides; a project layer cannot set them. */
+const GLOBAL_ONLY_ANALYSIS = ["runtime", "oci", "retention"] as const;
 const configObjectSchema = z
   .object({
     schemaVersion: z.literal(1).default(1),
@@ -187,6 +194,127 @@ const configObjectSchema = z
         maxContextChars: 800000,
         maxOutputTokens: 16384,
       })),
+    /**
+     * Python analysis and downloadable artifacts. `enabled: false` registers none of the
+     * analysis tools. The interpreter is discovered automatically (or pinned with `--python`).
+     */
+    analysis: z
+      .object({
+        enabled: z.boolean().default(true),
+        /**
+         * Where `python_run` executes. `managed` is the discovered Python (not a sandbox); `oci`
+         * is a Docker or Podman container started from a pinned image. GLOBAL ONLY: a project
+         * layer cannot choose the runtime or the image (it is ignored with a diagnostic).
+         */
+        runtime: z.enum(["managed", "oci"]).default("managed"),
+        /** Container runtime settings (global only). Used when `runtime` is `oci`. */
+        oci: z
+          .object({
+            engine: z.enum(["docker", "podman"]).default("docker"),
+            /** `name@sha256:<digest>`: an image without a digest is rejected at load time. */
+            image: z
+              .string()
+              .regex(
+                OCI_IMAGE_PATTERN,
+                "analysis.oci.image must be pinned by digest: <name>@sha256:<64 hex characters>",
+              )
+              .optional(),
+            memoryMb: z.number().int().min(256).max(65_536).default(2048),
+            cpus: z.number().min(0.5).max(64).default(2),
+          })
+          .strict()
+          .default(() => ({ engine: "docker" as const, memoryMb: 2048, cpus: 2 })),
+        limits: z
+          .object({
+            /** Default and maximum run time of one python_run call. */
+            timeoutMs: z.number().int().min(1000).max(900_000).default(120_000),
+            /** Files published by one execution. */
+            maxFiles: z.number().int().min(1).max(1000).default(200),
+            maxFileBytes: z
+              .number()
+              .int()
+              .positive()
+              .default(100 * 1024 * 1024),
+            /** Total bytes published by one execution. */
+            maxOutputBytes: z
+              .number()
+              .int()
+              .positive()
+              .default(500 * 1024 * 1024),
+            /** Size cap of each stdout/stderr log of a job. */
+            maxLogBytes: z
+              .number()
+              .int()
+              .positive()
+              .default(10 * 1024 * 1024),
+          })
+          .strict()
+          .default(() => ({
+            timeoutMs: 120_000,
+            maxFiles: 200,
+            maxFileBytes: 100 * 1024 * 1024,
+            maxOutputBytes: 500 * 1024 * 1024,
+            maxLogBytes: 10 * 1024 * 1024,
+          })),
+        /** Tabular data (CSV, TSV, JSON, JSONL, XLSX) ingested into one SQLite file per dataset. */
+        data: z
+          .object({
+            /** Largest file ingested (an upload or a workspace file). */
+            maxUploadBytes: z
+              .number()
+              .int()
+              .positive()
+              .default(200 * 1024 * 1024),
+            /** Rows per sheet; a larger file stops the ingestion and leaves no dataset. */
+            maxRows: z.number().int().positive().default(5_000_000),
+            /** Time limit of one `data_query` statement; the engine process is killed past it. */
+            queryTimeoutMs: z.number().int().min(100).max(60_000).default(5000),
+            /** Sorting and filtering are disabled above this many rows (the file has no indexes). */
+            maxInteractiveRows: z.number().int().positive().default(1_000_000),
+          })
+          .strict()
+          .default(() => ({
+            maxUploadBytes: 200 * 1024 * 1024,
+            maxRows: 5_000_000,
+            queryTimeoutMs: 5000,
+            maxInteractiveRows: 1_000_000,
+          })),
+        /**
+         * Retention of analysis data (`0` disables the automatic deletion of that class). Global
+         * only: one sweep covers every workspace, so a project layer cannot shorten it.
+         */
+        retention: z
+          .object({
+            /** Logs and staging of a job; its script and inputs once no artifact is `ready`. */
+            jobsDays: z.number().int().min(0).max(3650).default(30),
+            /** The scratch folder (`work/`) of a job. */
+            intermediateDays: z.number().int().min(0).max(3650).default(7),
+            /** Artifacts older than this become `expired` (folder deleted, row kept). 0 = keep. */
+            artifactsDays: z.number().int().min(0).max(3650).default(0),
+          })
+          .strict()
+          .default(() => ({ jobsDays: 30, intermediateDays: 7, artifactsDays: 0 })),
+      })
+      .strict()
+      .default(() => ({
+        enabled: true,
+        runtime: "managed" as const,
+        oci: { engine: "docker" as const, memoryMb: 2048, cpus: 2 },
+        retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
+        limits: {
+          timeoutMs: 120_000,
+          maxFiles: 200,
+          maxFileBytes: 100 * 1024 * 1024,
+          maxOutputBytes: 500 * 1024 * 1024,
+          maxLogBytes: 10 * 1024 * 1024,
+        },
+        data: {
+          maxUploadBytes: 200 * 1024 * 1024,
+          maxRows: 5_000_000,
+          queryTimeoutMs: 5000,
+          maxInteractiveRows: 1_000_000,
+        },
+      })),
     tui: z
       .object({
         /** Horizontal padding (columns) around the editor input box. Editor-only. */
@@ -257,6 +385,8 @@ export interface ConfigProvenance {
     kind: "project" | "explicit";
     hasLegacyProvider: boolean;
   };
+  /** Keys a project or explicit layer set that only the global layer may decide (ignored). */
+  ignored?: string[];
 }
 export interface ConfigLoadResult {
   config: LoadedConfig;
@@ -379,7 +509,14 @@ export async function loadConfigWithProvenance(
         } as McpServerSource,
       ]),
     );
-    return { config, keys: new Set(Object.keys(object)), sources };
+    const analysisRaw =
+      object.analysis && typeof object.analysis === "object" && !Array.isArray(object.analysis)
+        ? (object.analysis as Record<string, unknown>)
+        : {};
+    const ignored = GLOBAL_ONLY_ANALYSIS.filter((key) => key in analysisRaw).map(
+      (key) => `analysis.${key}`,
+    );
+    return { config, keys: new Set(Object.keys(object)), sources, ignored, file };
   };
   const global = await parseLayer(globalFile, "global");
   // Skill activation is deliberately project-local; never carry a similarly named global field
@@ -390,8 +527,10 @@ export async function loadConfigWithProvenance(
   // Parsed `provider.model` of the selected layer itself (before env/CLI overrides), used to
   // decide whether its legacy root `provider` is usable against a saved `/connect` profile.
   let selectedLegacyModel = "";
+  let ignoredKeys: string[] = [];
   if (selectedFile && selectedFile !== globalFile) {
     const selected = await parseLayer(selectedFile, options.file ? "explicit" : "project");
+    ignoredKeys = selected.ignored;
     selectedLegacyModel = selected.config.provider.model;
     const overlaid = { ...config };
     for (const key of selected.keys) {
@@ -435,6 +574,17 @@ export async function loadConfigWithProvenance(
         overlaid.builtinPlugins = { ...overlaid.builtinPlugins, ...selected.config.builtinPlugins };
         continue;
       }
+      if (key === "analysis") {
+        // `runtime`, `oci` and `retention` are global-only (a repository must not pick the binary
+        // that runs scripts, nor shorten the retention of every workspace's data).
+        overlaid.analysis = {
+          ...selected.config.analysis,
+          runtime: global.config.analysis.runtime,
+          oci: global.config.analysis.oci,
+          retention: global.config.analysis.retention,
+        };
+        continue;
+      }
       (overlaid as unknown as Record<string, unknown>)[key] = (
         selected.config as unknown as Record<string, unknown>
       )[key];
@@ -474,6 +624,7 @@ export async function loadConfigWithProvenance(
             },
           }
         : {}),
+      ...(ignoredKeys.length ? { ignored: ignoredKeys } : {}),
     },
   };
 }
@@ -596,7 +747,10 @@ const SETTABLE_SECTIONS = {
   tui: configObjectSchema.shape.tui.removeDefault(),
   websearch: configObjectSchema.shape.websearch.removeDefault(),
   agents: configObjectSchema.shape.agents.removeDefault(),
+  analysis: configObjectSchema.shape.analysis.removeDefault(),
 } as const;
+const ANALYSIS_LIMITS = SETTABLE_SECTIONS.analysis.shape.limits.removeDefault();
+const ANALYSIS_RETENTION = SETTABLE_SECTIONS.analysis.shape.retention.removeDefault();
 const SETTABLE_KEYS = {
   "compaction.auto": SETTABLE_SECTIONS.compaction.shape.auto,
   "compaction.threshold": SETTABLE_SECTIONS.compaction.shape.threshold,
@@ -615,6 +769,11 @@ const SETTABLE_KEYS = {
   "websearch.provider": SETTABLE_SECTIONS.websearch.shape.provider,
   "agents.active": SETTABLE_SECTIONS.agents.shape.active,
   "agents.effort": SETTABLE_SECTIONS.agents.shape.effort,
+  "analysis.enabled": SETTABLE_SECTIONS.analysis.shape.enabled,
+  "analysis.limits.timeoutMs": ANALYSIS_LIMITS.shape.timeoutMs,
+  "analysis.retention.jobsDays": ANALYSIS_RETENTION.shape.jobsDays,
+  "analysis.retention.intermediateDays": ANALYSIS_RETENTION.shape.intermediateDays,
+  "analysis.retention.artifactsDays": ANALYSIS_RETENTION.shape.artifactsDays,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {
@@ -687,12 +846,23 @@ export async function setConfigValue(input: {
       throw new Error("Global Alisio configuration must be a JSON object");
     raw = existing as Record<string, unknown>;
   }
-  const [section, leaf] = input.key.split(".") as [string, string];
-  const container =
-    raw[section] && typeof raw[section] === "object" && !Array.isArray(raw[section])
-      ? (raw[section] as Record<string, unknown>)
-      : {};
-  raw[section] = { ...container, [leaf]: parsed.data };
+  // Keys are `section.leaf` or `section.group.leaf`: every object on the path keeps its other fields.
+  const path = input.key.split(".");
+  const setPath = (target: Record<string, unknown>, depth: number): Record<string, unknown> => {
+    const name = path[depth] as string;
+    if (depth === path.length - 1) return { ...target, [name]: parsed.data };
+    const child = target[name];
+    return {
+      ...target,
+      [name]: setPath(
+        child && typeof child === "object" && !Array.isArray(child)
+          ? (child as Record<string, unknown>)
+          : {},
+        depth + 1,
+      ),
+    };
+  };
+  raw = setPath(raw, 0);
   raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;

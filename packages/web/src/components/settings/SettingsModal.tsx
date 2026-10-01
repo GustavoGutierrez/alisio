@@ -10,6 +10,7 @@ import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import { AboutPage } from "./AboutPage.tsx";
 import { AgentsPage } from "./AgentsPage.tsx";
+import { AnalysisPage } from "./AnalysisPage.tsx";
 import { AppearancePage } from "./AppearancePage.tsx";
 import { GeneralPage } from "./GeneralPage.tsx";
 import { McpPage } from "./McpPage.tsx";
@@ -19,7 +20,16 @@ import { SkillsPage } from "./SkillsPage.tsx";
 import styles from "./settings.module.css";
 import { settingsWorkspace, useLoad } from "./shared.tsx";
 
-type Page = "general" | "models" | "plugins" | "skills" | "mcp" | "agents" | "appearance" | "about";
+type Page =
+  | "general"
+  | "models"
+  | "plugins"
+  | "skills"
+  | "mcp"
+  | "agents"
+  | "analysis"
+  | "appearance"
+  | "about";
 
 const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "general", icon: "settings" },
@@ -28,6 +38,7 @@ const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "skills", icon: "book" },
   { id: "mcp", icon: "plug" },
   { id: "agents", icon: "users" },
+  { id: "analysis", icon: "fileChart" },
   { id: "appearance", icon: "palette" },
   { id: "about", icon: "info" },
 ];
@@ -169,6 +180,8 @@ export function SettingsModal() {
             <McpPage />
           ) : page === "agents" ? (
             <AgentsPage />
+          ) : page === "analysis" ? (
+            <AnalysisPage />
           ) : page === "appearance" ? (
             <AppearancePage />
           ) : (

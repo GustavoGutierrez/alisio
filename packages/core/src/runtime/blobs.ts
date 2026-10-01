@@ -10,17 +10,26 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync,
+  createWriteStream,
   existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
 import type { Attachment, BlobRef, SqlDatabase } from "@alisio/sdk";
 
 const HASH = /^[0-9a-f]{64}$/;
+/** A streamed blob exceeded its size limit. */
+export class BlobTooLarge extends Error {
+  constructor(readonly limit: number) {
+    super(`The upload exceeds ${limit} bytes`);
+  }
+}
 export interface BlobStoreOptions {
   /** Directory that holds `sha256/…` (by default `<state home>/blobs`). */
   root: string;
@@ -78,6 +87,84 @@ export class BlobStore {
       ...(row?.width != null ? { width: Number(row.width) } : {}),
       ...(row?.height != null ? { height: Number(row.height) } : {}),
     };
+  }
+  /**
+   * Stores a byte stream (an upload too large to hold in memory, e.g. a dataset) once per content
+   * hash, hashing while it writes. Fails with `BlobTooLarge` as soon as `maxBytes` is exceeded and
+   * leaves nothing behind. The stored type is the declared one; images stay the only blobs that
+   * `attachment()` and the blob route serve.
+   */
+  async putStream(
+    stream: AsyncIterable<Uint8Array>,
+    mimeType: string,
+    options: { maxBytes: number },
+  ): Promise<BlobRef> {
+    const mime = mimeType.trim();
+    if (!mime || mime.length > 255) throw new Error("A blob needs a MIME type");
+    const dir = join(this.options.root, "sha256");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const temp = join(dir, `.tmp-${randomUUID()}`);
+    const hash = createHash("sha256");
+    let size = 0;
+    try {
+      await pipeline(
+        stream,
+        async function* (source: AsyncIterable<Uint8Array>) {
+          for await (const chunk of source) {
+            size += chunk.byteLength;
+            if (size > options.maxBytes) throw new BlobTooLarge(options.maxBytes);
+            hash.update(chunk);
+            yield chunk;
+          }
+        },
+        createWriteStream(temp, { mode: 0o600, flags: "wx" }),
+      );
+      const digest = hash.digest("hex");
+      const file = this.path(digest);
+      const fileDir = join(dir, digest.slice(0, 2));
+      mkdirSync(fileDir, { recursive: true, mode: 0o700 });
+      chmodSync(fileDir, 0o700);
+      if (existsSync(file)) rmSync(temp, { force: true });
+      else renameSync(temp, file);
+      this.options.db
+        .prepare(
+          "INSERT OR IGNORE INTO blobs(hash,mime,size,width,height,created_at) VALUES(?,?,?,?,?,?)",
+        )
+        .run(digest, mime, statSync(file).size, null, null, Date.now());
+      const row = this.row(digest);
+      return { hash: digest, mimeType: row?.mime ?? mime, bytes: statSync(file).size };
+    } catch (error) {
+      rmSync(temp, { force: true });
+      throw error;
+    }
+  }
+  /**
+   * Retention: deletes the bytes and the row of a blob that is not an image (an uploaded dataset
+   * original). Images are referenced by messages and are never removed here. Returns the freed
+   * bytes (0 when the blob is unknown, an image or already gone).
+   */
+  removeUpload(hash: string): number {
+    if (!HASH.test(hash)) return 0;
+    const row = this.row(hash);
+    if (row?.mime.startsWith("image/")) return 0;
+    const file = this.path(hash);
+    let size = 0;
+    try {
+      size = statSync(file).size;
+      rmSync(file, { force: true });
+    } catch {
+      /* Already gone. */
+    }
+    this.options.db.prepare("DELETE FROM blobs WHERE hash=?").run(hash);
+    return size;
+  }
+  /** Hashes of non-image blobs created before `cutoff` (epoch ms): uploaded dataset originals. */
+  uploadsBefore(cutoff: number): string[] {
+    return (
+      this.options.db
+        .prepare("SELECT hash FROM blobs WHERE mime NOT LIKE 'image/%' AND created_at<?")
+        .all(cutoff) as Array<{ hash: string }>
+    ).map((r) => r.hash);
   }
   get(hash: string): { bytes: Buffer; mimeType: string } | undefined {
     if (!HASH.test(hash)) return undefined;

@@ -52,6 +52,7 @@ export class SessionService {
         write: !readOnly && !!base.allowWrite,
         process: !readOnly && !!base.allowProcess,
         external: !readOnly && (!!base.allowExternal || !!base.allowMcp || !!base.allowAgents),
+        ...(!readOnly && base.allowAnalysis ? { analysis: true } : {}),
       },
       approvals: !readOnly,
       readOnly,

@@ -61,6 +61,22 @@ const samples: { [K in UiBlock["kind"]]: Extract<UiBlock, { kind: K }> } = {
       { label: "cleanup", status: "cancelled" },
     ],
   },
+  artifact: {
+    kind: "artifact",
+    artifact: {
+      id: "art_01JZ",
+      sessionId: "s",
+      title: "Report",
+      fileName: "report.md",
+      kind: "document",
+      mimeType: "text/markdown; charset=utf-8",
+      bytes: 2048,
+      fileCount: 1,
+      previewable: true,
+      createdAt: 1,
+      status: "ready",
+    },
+  },
 };
 
 const NEW_KINDS = [
@@ -71,6 +87,7 @@ const NEW_KINDS = [
   "json",
   "test-results",
   "progress",
+  "artifact",
 ] as const satisfies readonly UiBlock["kind"][];
 
 describe("UI_BLOCK_KINDS (SDK)", () => {
@@ -164,6 +181,14 @@ describe("TUI fallbacks for new UiBlock kinds (T-03)", () => {
     const ascii = visible(renderUiBlock(samples.progress, 80, false));
     expect(ascii).not.toMatch(/[✓●○✗]/);
     expect(ascii).toContain("build");
+  });
+
+  it("announces an artifact on one line with its kind, name and size (ASCII without unicode)", () => {
+    expect(visible(renderUiBlock(samples.artifact, 80, true))).toContain(
+      "Document  report.md  2 KB",
+    );
+    expect(visible(renderUiBlock(samples.artifact, 80, false))).toContain("[M] Document");
+    expect(isUiBlock({ kind: "artifact", artifact: { id: 1 } })).toBe(false);
   });
 
   it("falls back to text for an unknown kind instead of throwing", () => {

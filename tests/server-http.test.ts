@@ -52,3 +52,29 @@ describe("server http foundation", () => {
     });
   });
 });
+
+describe("router trailing wildcard", () => {
+  it("captures the rest of the path in params['*'] and keeps exact routes exact", async () => {
+    const { Router } = await import("../packages/server/src/http/router.ts");
+    const router = new Router();
+    const files = () => ({ body: "files" });
+    const one = () => ({ body: "one" });
+    router.get("/api/artifacts/:aid/files/*", files);
+    router.get("/api/artifacts/:aid", one);
+    const matched = router.match("GET", "/api/artifacts/art_1/files/assets/app%20v2.js");
+    expect(matched).toMatchObject({
+      handler: files,
+      params: { aid: "art_1", "*": "assets/app v2.js" },
+    });
+    // Decoding happens per segment: an encoded slash never creates a segment.
+    expect(router.match("GET", "/api/artifacts/a/files/x%2Fy")).toMatchObject({
+      params: { "*": "x/y" },
+    });
+    // The wildcard needs at least one segment, and other methods only match the path.
+    expect(router.match("GET", "/api/artifacts/a/files")).toBeUndefined();
+    expect(router.match("POST", "/api/artifacts/a/files/x")).toBe("method");
+    expect(router.match("GET", "/api/artifacts/a")).toMatchObject({ handler: one });
+    // A malformed escape does not match (404) instead of throwing.
+    expect(router.match("GET", "/api/artifacts/a/files/%E0%A4%A")).toBeUndefined();
+  });
+});

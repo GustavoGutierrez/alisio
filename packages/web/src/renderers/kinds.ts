@@ -20,6 +20,7 @@ export const LAZY_KINDS = [
   "progress",
   "mermaid",
   "math",
+  "artifact",
 ] as const;
 
 export const RENDERER_KINDS = [

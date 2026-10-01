@@ -40,7 +40,7 @@ agente con sus permisos. Pulse `Ctrl+C` (o envíe `SIGTERM`) para detener el ser
 | `--max-runs <n>` | `4` | Ejecuciones simultáneas entre todas las sesiones; las demás esperan en cola |
 
 También se aplican los flags globales. Los flags de permisos (`--allow-write`, `--allow-process`,
-`--allow-external`, `--allow-mcp`, `--read-only`) son el **techo** de toda sesión web: el navegador
+`--allow-analysis`, `--allow-external`, `--allow-mcp`, `--read-only`) son el **techo** de toda sesión web: el navegador
 puede estrecharlos por sesión, pero nunca superarlos. `--trust-project` y `--config` se aplican a
 cada workspace que abre el servidor, igual que en la terminal. `--db` elige la base de datos de
 sesiones compartida. Defina `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) para
@@ -285,6 +285,108 @@ preguntando, sea cual sea el preset:
 "Permitir para la sesión" en una aprobación amplía solo esa sesión, nunca las demás sesiones del
 mismo workspace.
 
+### Análisis en Python y artefactos {#artifacts}
+
+Los archivos que publica el [análisis en Python](/es/analysis) aparecen como tarjetas debajo de las
+filas de herramientas del turno que los produjo: icono del tipo, nombre del archivo, etiqueta del
+tipo y un botón de descarga siempre visible. Con el puntero encima o el foco del teclado, una
+tarjeta previsualizable dice **Abrir archivo** en lugar de su tipo; una tarjeta que no se puede
+previsualizar (DOCX, ZIP, archivos desconocidos o por encima del límite) nunca lo dice, y el
+clic la descarga. Las tarjetas sobreviven a las recargas (salen de los resultados de herramienta
+guardados) y muestran **Eliminado** o **Caducado** cuando el artefacto ya no existe, o **No
+disponible** con **Reintentar** cuando no se pudo abrir.
+
+Abrir una tarjeta muestra el **panel de artefactos** a la derecha del chat, en la misma ranura que el
+panel de archivos (abrir uno cierra el otro):
+
+- **Menú del título**: cambia entre los artefactos de la sesión (los más recientes primero, con
+  filtro a partir de ocho, flechas, Enter, Esc y escritura para saltar; los publicados mientras
+  tanto llevan un punto y nunca cambian la vista), y después **Abrir en una pestaña nueva**
+  (dashboards y PDF), **Expandir panel**, **Descargar fuentes del análisis** (salidas de
+  `python_run`), **Copiar al workspace…**, **Detalles**, **Ejecutar de nuevo** (salidas de
+  `python_run`) y **Eliminar**. Un artefacto caducado sigue en la lista marcado como **Caducado**;
+  al abrirlo solo ofrece **Detalles** y **Ejecutar de nuevo**.
+- **Descargar**, **Pantalla completa** y **Cerrar** a la derecha; Cerrar devuelve el foco a la
+  tarjeta.
+- **Redimensionar** con el asa entre el chat y el panel (compartida con el panel de archivos):
+  arrastrar, doble clic para restablecer, o enfocarla y usar ←/→ (16 px, 64 px con Shift),
+  Inicio/Fin y Enter. El ancho se recuerda por navegador; el chat conserva al menos 360 px.
+- **Vistas previas**: Markdown con el renderer del chat (las imágenes relativas se resuelven dentro
+  del artefacto), dashboards HTML en el visor aislado, imágenes con Ajustar/100 %, PDF en el visor
+  del propio navegador, JSON con el renderer de JSON, CSV, TSV y XLSX en el [visor de tablas](#tables), y código y texto
+  con el renderer de código. Cualquier otro tipo, o lo que supere su límite, muestra el motivo y un botón **Descargar**.
+- Por debajo de 900 px el panel es un diálogo a pantalla completa. **Esc** cierra primero el menú
+  abierto y después el panel. Ajustes y Agentes se abren encima del panel, que sigue cargado detrás.
+- **Copiar al workspace…** pide una carpeta y ejecuta la herramienta `artifact_export` en la sesión:
+  se aplica la aprobación de escritura habitual y los archivos copiados aparecen en **Cambios**.
+  `/artifacts [filtro]` abre el panel con su menú.
+
+Los dashboards se ejecutan en un iframe con `sandbox="allow-scripts allow-downloads"` (nunca
+`allow-same-origin`), servido desde `/artifact-view/<token>/…` con un enlace firmado que caduca a
+los 10 minutos. Su Content-Security-Policy prohíbe toda conexión (`connect-src 'none'`) y añade la
+directiva `sandbox`, así que la página tiene un origen opaco: no puede leer la cookie, la página de
+Alisio, `localStorage` ni la red, tampoco al abrirla en una pestaña nueva. Los datos deben ir
+incrustados en el HTML.
+
+Ejecutar Python pregunta en el panel de aprobación con el título **¿Ejecutar análisis en Python?**,
+la advertencia de que Python administrado no es un sandbox y las primeras 40 líneas del script;
+**S** (**Permitir en esta sesión**) guarda el permiso para la sesión. El botón de llave de la
+cabecera abre **Permisos de la sesión**, que lista los permisos guardados con **Revocar**;
+`/permissions` también lo abre. Las demás pestañas se actualizan cuando se guarda o revoca un
+permiso. `alisio serve --allow-analysis` permite Python sin preguntar en las sesiones cuyo preset
+permite procesos (`full-access`); en las demás pregunta.
+
+**Ejecutar de nuevo** repite el análisis como una ejecución nueva con artefactos nuevos (los
+antiguos se conservan). Es una llamada `python_run { rerunOf }` de la sesión, así que se aplica el
+permiso anterior y la aprobación muestra el script guardado; **Detalles** nombra la ejecución que
+repite una repetición. Instalar los paquetes opcionales de Python pregunta con **¿Instalar paquetes
+de Python?**, la lista de paquetes, la estimación de descarga y que necesita red, y ofrece solo
+**Permitir esta vez** y **Denegar** (`S` no hace nada: nunca se guarda).
+
+### Ajustes → Análisis de datos {#analysis-settings}
+
+La página **Análisis de datos** de Ajustes muestra el runtime en solo lectura (modo, el Python
+encontrado o cómo instalarlo en tu sistema, los paquetes opcionales, el motor e imagen de contenedor
+y el recordatorio de que Python administrado no es un sandbox) y edita el interruptor
+(`analysis.enabled`), el tiempo máximo de ejecución y los tres valores de retención. El servidor
+valida los cambios, se escriben en el archivo de configuración global y se muestra cuándo fue la
+última limpieza. `runtime` y `oci.*` no se editan aquí. Consulta
+[Configuración](/es/configuration#analysis).
+
+### Tablas y datos adjuntos {#tables}
+
+El botón `+` del compositor (y arrastrar y soltar) acepta archivos de datos junto a las imágenes:
+CSV, TSV, JSON, JSONL y XLSX. Un archivo se sube como cuerpo crudo de
+`POST /api/sessions/:sid/datasets`, se guarda en el almacén de blobs por contenido y se ingiere en
+segundo plano en un dataset SQLite (consulta [Datos tabulares](/es/analysis#data)). El chip dice
+**Leyendo sales.csv…** mientras el servidor trabaja; el servidor sigue respondiendo (salud, latido)
+porque la ingesta se ejecuta en un proceso aparte. Cuando llega el frame `dataset_ready`, el chip
+muestra el tamaño de la tabla; un frame `dataset_failed` (archivo no admitido, por encima de
+`analysis.data.maxUploadBytes` o `maxRows`, XLSX sin Python) lo convierte en un error con el motivo.
+Al enviar el mensaje, el modelo recibe además un resumen acotado (esquema, cinco filas, estadísticas;
+como máximo 4 KB), mientras que la conversación muestra lo que escribiste con los chips; un chip abre
+la tabla en el panel derecho. Si solo envías datos, se manda una petición por defecto para que los
+revise.
+
+El **visor de tablas** (`SpreadsheetView`) también abre artefactos de hoja de cálculo (CSV, TSV, XLSX),
+que se ingieren la primera vez que se previsualizan:
+
+- Filas de 28 px fijos y una ventana de filas y columnas, así que una hoja de un millón de filas se
+  desplaza con fluidez. Las páginas de 200 filas salen de la API de filas con paginación por clave
+  (cursores de `rowid`) mediante una caché de 20 páginas: desplazarse u ordenar nunca repite ni se
+  salta una fila. El salto a una fila funciona en cualquier posición sin orden; con orden o filtro
+  llega a las primeras 100 000 filas, y las más lejanas se cargan al desplazarse.
+- Haz clic en un encabezado para ordenar (ascendente, descendente, ninguno; `aria-sort`), escribe en
+  el cuadro de filtro (una columna, o todas hasta 100 000 filas; coincidencia por subcadena), elige
+  una hoja en un libro y cambia el ancho de las columnas arrastrando el asa del borde de un
+  encabezado, o con **Alt**+←/→ (Mayús para pasos mayores) sobre un encabezado enfocado. El orden y el
+  filtro se desactivan por encima de `analysis.data.maxInteractiveRows` (1 000 000) con un aviso: el
+  archivo no tiene índices.
+- `role="grid"` con recuentos e índices de filas y columnas, una sola parada de tabulador (las flechas,
+  Inicio/Fin, RePág/AvPág y Ctrl+Inicio/Fin se mueven entre celdas; ↑ desde la primera fila llega al
+  encabezado). **Ctrl/Cmd+C** copia la celda y **Ctrl/Cmd+Mayús+C** la fila (también hay un botón en
+  la barra); **Descargar el original** está en la barra.
+
 ## API y eventos
 
 El navegador habla con rutas JSON bajo `/api` y con un único stream de Server-Sent Events por
@@ -303,9 +405,18 @@ GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/s
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
+GET  /api/sessions/:sid/artifacts      GET /api/artifacts/:aid       GET /api/artifacts/:aid/download
+GET  /api/artifacts/:aid/files/*       POST /api/artifacts/:aid/view  POST /api/artifacts/:aid/export {target, overwrite?}
+GET  /api/artifacts/:aid/sources?logs=1   DELETE /api/artifacts/:aid
+GET  /artifact-view/:token/*           isolated viewer (signed link, no cookie)
+GET  /api/sessions/:sid/capabilities   DELETE /api/sessions/:sid/capabilities/:gid
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
+POST /api/sessions/:sid/datasets       raw data file, X-File-Name header → 202 {pending} | 200 {dataset}
+GET  /api/sessions/:sid/datasets       GET /api/datasets/:did        GET /api/datasets/:did/download
+GET  /api/datasets/:did/rows?sheet=&after=&offset=&limit=&sort=&dir=&filter=&column=
+POST /api/artifacts/:aid/dataset       ingest a spreadsheet artifact on first preview
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
@@ -316,6 +427,10 @@ GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, p
 PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
 POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Las subidas de datasets terminan con un frame `dataset_ready` o `dataset_failed` en el stream de la
+sesión. Los errores de datos usan los códigos `dataset_unsupported` (415), `query_rejected` (400) y
+`query_timeout` (408).
 
 Los cambios de gestión envían un frame `catalog_changed` (`commands`, `plugins`, `skills`, `mcp`,
 `models` o `agents`) a todos los streams, para que otras pestañas se actualicen. Activar un perfil
@@ -347,6 +462,15 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
   workspace) y el filtrado por `.gitignore` necesita `git` en el `PATH`. **Cambios** solo conoce los
   archivos escritos con `write_file` y `edit_file`; los que cambia un comando de shell aparecen en
   `git status`, no ahí.
+- Vistas previas de artefactos: **Esc** pulsado dentro de un dashboard nunca llega a Alisio (usa
+  **Cerrar**); los dashboards no pueden usar la red, `localStorage`, scripts de módulo ni fuentes
+  web desde archivos (las fuentes deben ser URL `data:` en línea); un enlace de visualización
+  caduca a los 10 minutos (al reabrir se renueva); los PDF usan el visor del navegador sin `sandbox`
+  y pasan a descarga donde no lo hay. Las descargas de artefactos multiarchivo son archivos ZIP.
+- Tablas: ordenar y filtrar recorren la hoja (el archivo del dataset no tiene índices), así que se
+  desactivan por encima de `analysis.data.maxInteractiveRows`; las celdas de más de 4 096 caracteres
+  se cortan en la cuadrícula (el dataset las conserva enteras); un XLSX necesita Python 3.10+ para
+  leerse.
 - Las imágenes subidas se guardan una vez por hash de contenido junto a la base de datos de
   sesiones y no se borran automáticamente.
 - Los renderizadores ricos necesitan fragmentos de JavaScript que la página carga a demanda:

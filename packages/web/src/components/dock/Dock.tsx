@@ -174,7 +174,8 @@ function jsonOf(text: string): unknown {
 }
 
 /** The right dock (RF-12): Files, Changes and Preview of the open session's workspace. */
-export function Dock() {
+/** `width`: the shared right-slot width (px) when the Dock sits beside the chat. */
+export function Dock(props: { width?: number } = {}) {
   const session = detail.value;
   const tab = dockTab.value;
   const state = preview.value;
@@ -190,7 +191,12 @@ export function Dock() {
     if (dockTab.value === "changes") void loadChanges();
   }, [runEnded.value]);
   return (
-    <aside class={styles.dock} aria-label={t("dock.label")}>
+    <aside
+      id="dock-panel"
+      class={styles.dock}
+      aria-label={t("dock.label")}
+      style={props.width ? { width: `${props.width}px` } : undefined}
+    >
       <div class={styles.head}>
         <div class={styles.tabs} role="tablist">
           {TABS.map((id) => (

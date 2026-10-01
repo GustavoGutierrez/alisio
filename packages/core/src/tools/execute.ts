@@ -43,7 +43,9 @@ export interface ExecuteDeps {
   timeoutMs?: number;
 }
 const allowedEffect = (policy: Policy, effect: string) =>
-  effect === "read" || effect === "internal" || !!policy[effect as keyof Policy];
+  effect === "read" ||
+  effect === "internal" ||
+  ((effect === "write" || effect === "process" || effect === "external") && !!policy[effect]);
 
 export async function runExecute(code: string, deps: ExecuteDeps): Promise<unknown> {
   let calls = 0;
@@ -62,7 +64,11 @@ export async function runExecute(code: string, deps: ExecuteDeps): Promise<unkno
       throw new Error(`callTool: exceeded the limit of ${MAX_NESTED_CALLS} nested tool calls`);
     const tool = deps.registry.get(name); // throws "Unknown tool: <name>" when absent
     const effect = tool.effect ?? "external";
-    if (!allowedEffect(deps.policy, effect))
+    // A capability tool is reachable only when already allowed (never through a persisted grant).
+    if (
+      !allowedEffect(deps.policy, effect) &&
+      !(tool.capability === "analysis.run" && deps.policy.analysis)
+    )
       throw new Error(
         `callTool: capability denied for "${name}" (effect: ${effect}); execute cannot request ` +
           "new approvals, only use capabilities already allowed for this session",

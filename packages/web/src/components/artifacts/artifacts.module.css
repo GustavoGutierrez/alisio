@@ -1,0 +1,163 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  max-width: 520px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 10px);
+  background: var(--surface);
+}
+
+.card[data-compact="true"] {
+  margin: 4px 0;
+}
+
+.card[data-state="deleted"],
+.card[data-state="expired"] {
+  opacity: 0.6;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main[aria-disabled="true"],
+.main:disabled {
+  cursor: default;
+}
+
+.main:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--hover);
+}
+
+.main:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Resting label and "Open file" share one grid cell: swapping them never moves the layout. */
+.subtitle {
+  display: grid;
+  min-height: 1.3em;
+  color: var(--muted);
+  font-size: 0.86em;
+}
+
+.rest,
+.hover {
+  grid-area: 1 / 1;
+  transition: opacity 120ms ease;
+}
+
+.hover {
+  opacity: 0;
+  color: var(--accent);
+}
+
+.main:hover .hover,
+.main:focus-visible .hover {
+  opacity: 1;
+}
+
+.main:hover .rest:has(+ .hover),
+.main:focus-visible .rest:has(+ .hover) {
+  opacity: 0;
+}
+
+.skeleton {
+  width: 72px;
+  height: 0.9em;
+  margin-top: 0.2em;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.download {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-right: 8px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.download:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.download:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest,
+  .hover {
+    transition: none;
+  }
+}
+
+.error {
+  color: var(--danger);
+}
+
+.errorRow {
+  display: flex;
+  align-items: center;
+}
+
+.retry {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85em;
+}
+
+.retry:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}

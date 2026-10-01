@@ -139,6 +139,82 @@ export class SQLiteStore implements SessionStore {
           this.db.exec("ALTER TABLE workspaces ADD COLUMN archived_at INTEGER");
         this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(5)");
       });
+    if (!has(6))
+      this.db.transaction(() => {
+        // v6 (additive): Python analysis executions, published artifacts, persisted capability
+        // grants (audit included) and tabular datasets (used from the data phase on).
+        this.db.exec(`CREATE TABLE IF NOT EXISTS analysis_executions(
+            id TEXT PRIMARY KEY,
+            session TEXT NOT NULL,
+            root_session TEXT NOT NULL,
+            workspace TEXT NOT NULL,
+            run_id TEXT, call_id TEXT,
+            runtime TEXT NOT NULL CHECK(runtime IN ('managed','oci')),
+            status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled','timed_out')),
+            script_sha256 TEXT NOT NULL,
+            exit_code INTEGER, error TEXT,
+            rel_dir TEXT NOT NULL,
+            rerun_of TEXT,
+            created_at INTEGER NOT NULL, ended_at INTEGER);
+          CREATE INDEX IF NOT EXISTS analysis_executions_session
+            ON analysis_executions(root_session, created_at);
+          CREATE TABLE IF NOT EXISTS artifacts(
+            id TEXT PRIMARY KEY,
+            session TEXT NOT NULL, root_session TEXT NOT NULL, workspace TEXT NOT NULL,
+            run_id TEXT, call_id TEXT,
+            execution_id TEXT REFERENCES analysis_executions(id),
+            source_path TEXT,
+            title TEXT NOT NULL, file_name TEXT NOT NULL,
+            kind TEXT NOT NULL, mime TEXT NOT NULL,
+            bytes INTEGER NOT NULL, file_count INTEGER NOT NULL DEFAULT 1,
+            sha256 TEXT NOT NULL, entry TEXT,
+            rel_dir TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('ready','deleted','expired')),
+            provenance TEXT NOT NULL,
+            created_at INTEGER NOT NULL, deleted_at INTEGER,
+            UNIQUE(execution_id, source_path));
+          CREATE INDEX IF NOT EXISTS artifacts_session ON artifacts(root_session, created_at);
+          CREATE TABLE IF NOT EXISTS capability_grants(
+            id TEXT PRIMARY KEY,
+            capability TEXT NOT NULL,
+            session TEXT NOT NULL,
+            workspace TEXT NOT NULL,
+            scope TEXT NOT NULL CHECK(scope IN ('once','session')),
+            decision TEXT NOT NULL CHECK(decision IN ('allow','deny')),
+            source TEXT NOT NULL CHECK(source IN ('tui','web','flag','headless-grant')),
+            call_id TEXT, run_id TEXT, correlation_id TEXT,
+            created_at INTEGER NOT NULL,
+            revoked_at INTEGER, revoked_by TEXT);
+          CREATE INDEX IF NOT EXISTS capability_grants_lookup
+            ON capability_grants(capability, session, scope, decision, revoked_at);
+          CREATE TABLE IF NOT EXISTS datasets(
+            id TEXT PRIMARY KEY,
+            session TEXT NOT NULL, root_session TEXT NOT NULL,
+            name TEXT NOT NULL, format TEXT NOT NULL,
+            sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
+            blob_hash TEXT,
+            source_path TEXT,
+            db_rel_path TEXT NOT NULL,
+            ingest_version INTEGER NOT NULL,
+            sheets TEXT NOT NULL,
+            created_at INTEGER NOT NULL);
+          INSERT OR IGNORE INTO schema_migrations VALUES(6);`);
+      });
+  }
+  /**
+   * The root of a session (itself for roots), following `parent_id`. Unknown ids are their own
+   * root, so callers never throw on a session another process has not written yet.
+   */
+  rootOf(id: string): string {
+    let current = id;
+    for (let depth = 0; depth < 32; depth++) {
+      const row = this.db.prepare("SELECT parent_id FROM sessions WHERE id=?").get(current) as
+        | { parent_id: string | null }
+        | undefined;
+      if (!row?.parent_id) return current;
+      current = row.parent_id;
+    }
+    return current;
   }
   create(workspace: string, provider: string, model: string): Session {
     const id = crypto.randomUUID();

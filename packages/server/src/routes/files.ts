@@ -6,7 +6,14 @@
  */
 import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { basename, extname, relative, resolve, sep } from "node:path";
-import { clipLines, inside, type SQLiteStore, safePath, unifiedPatch } from "@alisio/core";
+import {
+  clipLines,
+  exportedPaths,
+  inside,
+  type SQLiteStore,
+  safePath,
+  unifiedPatch,
+} from "@alisio/core";
 import type { FileEntry, FileTreePage, SessionChange, UiBlock } from "@alisio/sdk";
 import { gitIgnored, gitRoot, gitStatus, runGit } from "../host/git.ts";
 import type { SessionService } from "../host/sessions.ts";
@@ -245,20 +252,28 @@ export function registerFileRoutes(
           for (const call of message.calls) {
             const meta = wanted.get(call.id);
             if (!meta) continue;
-            let path: unknown;
-            try {
-              path = (JSON.parse(call.arguments) as Record<string, unknown>).path;
-            } catch {
-              continue;
+            const paths: string[] = [];
+            if (call.name === "artifact_export")
+              // A copied artifact can write several files: its result lists them.
+              paths.push(...exportedPaths(catalog.callResult(id, call.id)));
+            else {
+              let path: unknown;
+              try {
+                path = (JSON.parse(call.arguments) as Record<string, unknown>).path;
+              } catch {
+                continue;
+              }
+              if (typeof path === "string" && path) paths.push(path);
             }
-            if (typeof path !== "string" || !path) continue;
-            const absolute = resolve(workspace, path);
-            if (!inside(workspace, absolute)) continue;
-            const rel = toPosix(relative(workspace, absolute));
-            const at = meta.startedAt ?? 0;
-            const prev = latest.get(rel);
-            if (!prev || at >= prev.at)
-              latest.set(rel, { ...(meta.runId ? { runId: meta.runId } : {}), at });
+            for (const path of paths) {
+              const absolute = resolve(workspace, path);
+              if (!inside(workspace, absolute)) continue;
+              const rel = toPosix(relative(workspace, absolute));
+              const at = meta.startedAt ?? 0;
+              const prev = latest.get(rel);
+              if (!prev || at >= prev.at)
+                latest.set(rel, { ...(meta.runId ? { runId: meta.runId } : {}), at });
+            }
           }
         }
         const last = page.items.at(-1);

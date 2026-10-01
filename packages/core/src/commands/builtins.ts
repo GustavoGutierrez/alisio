@@ -117,6 +117,19 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "core",
   },
   {
+    name: "artifacts",
+    description: "Browse this session's artifacts",
+    argumentHint: "[filter]",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
+    name: "permissions",
+    description: "Review and revoke this session's saved permissions",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
     name: "exit",
     description: "Exit Alisio",
     aliases: ["quit"],

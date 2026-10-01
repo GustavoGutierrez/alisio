@@ -127,3 +127,9 @@ h6.heading {
   text-underline-offset: 2px;
   cursor: pointer;
 }
+
+/* Images resolved inside an artifact (never in the transcript, which does not fetch images). */
+.image {
+  max-width: 100%;
+  height: auto;
+}
