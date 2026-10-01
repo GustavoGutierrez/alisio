@@ -40,6 +40,33 @@ features:
     details: An MCP client (stdio and Streamable HTTP) with lazy, consent-gated connections, plus a Herdr report integration.
 ---
 
+## Install
+
+Pick your package manager and copy the command:
+
+::: code-group
+
+```sh [npm]
+npm i -g @alisio/alisio-code
+```
+
+```sh [pnpm]
+pnpm add -g @alisio/alisio-code
+```
+
+```sh [yarn]
+yarn global add @alisio/alisio-code
+```
+
+```sh [bun]
+bun add -g @alisio/alisio-code
+```
+
+:::
+
+This installs the `alisio` command. It needs Node.js **>= 22.16** or Bun **>= 1.4.2**; see
+[Installation](/installation) for the standalone binary, which needs neither.
+
 ## What is Alisio?
 
 <img data-component="brand-banner" src="/assets/banner.png" alt="Alisio — coding-agent harness" width="1447" height="680" />

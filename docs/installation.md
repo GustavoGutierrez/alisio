@@ -28,6 +28,10 @@ npm i -g @alisio/alisio-code
 pnpm add -g @alisio/alisio-code
 ```
 
+```sh [yarn]
+yarn global add @alisio/alisio-code
+```
+
 ```sh [bun]
 bun add -g @alisio/alisio-code
 ```
