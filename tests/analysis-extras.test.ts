@@ -34,9 +34,11 @@ async function manager(
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const bin = join(root, "bin");
   await mkdir(bin, { recursive: true });
-  const python = join(bin, "python3");
+  // Windows discovery looks names up through PATHEXT, so the stand-ins need an executable suffix.
+  const exe = process.platform === "win32" ? ".exe" : "";
+  const python = join(bin, `python3${exe}`);
   await writeFile(python, "");
-  if (options.uv) await writeFile(join(bin, "uv"), "");
+  if (options.uv) await writeFile(join(bin, `uv${exe}`), "");
   const steps: Array<{ command: string; args: string[] }> = [];
   const install: InstallStep = async (command, args) => {
     steps.push({ command, args });
@@ -106,7 +108,7 @@ describe("installExtras (fake pip)", () => {
   it("uses uv with --require-hashes and --only-binary when uv is installed", async () => {
     const m = await manager(() => ({ exitCode: 0 }), { uv: true });
     await m.manager.installExtras("science", { signal: signal() });
-    const uvSteps = m.steps.filter((s) => s.command.endsWith("uv"));
+    const uvSteps = m.steps.filter((s) => /[\\/]uv(\.exe)?$/.test(s.command));
     expect(uvSteps).toHaveLength(2);
     expect(uvSteps[0]?.args.slice(0, 1)).toEqual(["venv"]);
     expect(uvSteps[1]?.args).toEqual(
