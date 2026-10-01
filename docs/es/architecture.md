@@ -101,7 +101,22 @@ modelo permanece en silencio hasta `limits.firstTokenTimeoutMs`, el runner reenv
 hasta `limits.firstTokenRetries` veces (por defecto 1) y emite `request_retry` (`attempt`, `of`,
 `reason: "first_token_timeout"`, `afterMs`); un reintento no es un turno, no añade nada a la sesión y
 solo ocurre mientras no llegó nada de la petición, de modo que los ids de llamadas a herramientas y la
-sesión persistida siguen consistentes. `attempts` cuenta los envíos de la petición que finalmente falló. Una detención del usuario sigue siendo
+sesión persistida siguen consistentes. `attempts` cuenta los envíos de la petición que finalmente falló.
+El presupuesto de tokens de salida de cada petición se resuelve para el modelo de esa petición: gana un `limits.maxOutputTokens` explícito (o un valor por ejecución), si no el `maxOutputTokens` del catálogo del modelo con tope de 65536, si no 16384; `response_truncated` y el fallo `output_truncated` llevan el valor efectivo y su `source` (`user`, `model`, `default`).
+Una respuesta cortada por el presupuesto de tokens de salida antes de ser útil (motivo de fin `length`, es
+decir un mensaje `completed` con `truncated: true`, sin texto ni llamada a herramienta, o con una
+llamada cuyos argumentos no son un JSON completo; o un fallo del proveedor con
+`code: "output_truncated"`, el `OutputTruncatedError` tipado de `@alisio/sdk`, o el texto heredado de
+plugins antiguos) se recupera hasta `limits.truncationRecoveries` veces (por defecto 2). El runner
+descarta las llamadas cortadas (nunca se ejecutan ni se persisten, así que toda llamada guardada
+conserva su resultado), conserva el texto visible como un mensaje normal del asistente, emite
+`truncation_recovery` (`attempt`, `of`, `reason`: `tool_call_cut` o `empty_response`,
+`maxOutputTokens`, `effort` si se bajó) y vuelve a pedir el mismo turno con un aviso de continuación
+transitorio que nunca se guarda; no es un turno y no toca `maxTurns`. Al agotar las recuperaciones,
+`run_failed` lleva `code: "output_truncated"` y un objeto `truncation` (`attempts`,
+`maxOutputTokens`, `model`) con un mensaje legible. Las llamadas completas de una respuesta cortada
+siguen ejecutándose, y una respuesta cortada con texto útil y sin llamadas termina con
+`response_truncated`. Una detención del usuario sigue siendo
 `run_cancelled`. `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk` tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
 runner contra ellos.
 

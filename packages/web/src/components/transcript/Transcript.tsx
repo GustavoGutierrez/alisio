@@ -84,7 +84,10 @@ function Item({ item }: { item: VisibleItem }) {
           {item.truncated ? (
             <p class={styles.notice} data-tone="warning">
               <Icon name="alert" size={14} />
-              {t("notice.response_truncated", { maxOutputTokens: "—" })}
+              {t("notice.response_truncated", {
+                maxOutputTokens: "—",
+                source: t("limitSource.unknown"),
+              })}
             </p>
           ) : null}
         </div>
@@ -120,7 +123,15 @@ function Item({ item }: { item: VisibleItem }) {
       return (
         <p class={styles.notice} data-tone={item.tone}>
           <Icon name={item.tone === "info" ? "info" : "alert"} size={14} />
-          {t(`notice.${item.code}` as Parameters<typeof t>[0], item.params)}
+          {t(
+            `notice.${item.code}` as Parameters<typeof t>[0],
+            item.params.source
+              ? {
+                  ...item.params,
+                  source: t(`limitSource.${item.params.source}` as Parameters<typeof t>[0]),
+                }
+              : item.params,
+          )}
         </p>
       );
     case "note":

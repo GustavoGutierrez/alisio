@@ -118,6 +118,29 @@ describe("TUI silent-request retry", () => {
   });
 });
 
+describe("TUI output-truncation recovery", () => {
+  const recovery = ev("truncation_recovery", 5_000, {
+    attempt: 1,
+    of: 2,
+    reason: "empty_response",
+    maxOutputTokens: 16384,
+  });
+  it("shows the recovery in the footer until the new request produces output", () => {
+    const recovering = play([ev("run_started", 0), recovery]);
+    expect(runPhase(recovering)).toEqual({
+      label: "the response was cut off; retrying in smaller steps (1/2)",
+      silentByDesign: false,
+    });
+    expect(
+      runPhase(reduceEvent(recovering, ev("reasoning_delta", 6_000, { delta: "x" }))).label,
+    ).toBe("thinking");
+  });
+  it("forgets the recovery when the run ends", () => {
+    const ended = reduceEvent(play([ev("run_started", 0), recovery]), ev("run_failed", 6_000, {}));
+    expect(ended.recovery).toBeUndefined();
+  });
+});
+
 describe("TUI quiet detection with a fake clock", () => {
   const view = play([ev("run_started", 0), ev("reasoning_delta", 1_000, { delta: "x" })]);
   it("is zero until the quiet threshold and then reports the silence", () => {

@@ -132,6 +132,7 @@ export const en = {
   "run.phase.writing": "Writing the answer…",
   "run.phase.compacting": "Compacting context…",
   "run.phase.retrying": "The model did not respond; retrying ({attempt}/{of})…",
+  "run.phase.recovering": "The response was cut off; retrying in smaller steps ({attempt}/{of})…",
   "run.phase.approval": "Waiting for your approval: {name}",
   "run.phase.python": "Running Python…",
   "run.phase.pythonWith": "Running Python ({detail})…",
@@ -170,6 +171,8 @@ export const en = {
     "{who} sent nothing within {seconds} s of the request, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs.",
   "notice.run_timeout_first_token_retried":
     "{who} did not respond after {attempts} attempts of {seconds} s each, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs; limits.firstTokenRetries sets how many times a silent request is sent again.",
+  "notice.run_output_truncated":
+    "The response of {who} was cut off {attempts} time(s) by the output-token limit ({maxOutputTokens} tokens, {source}) before it produced a usable response, so the run was stopped. Raise limits.maxOutputTokens (/settings or the config file), lower the reasoning effort (/effort), or ask for the result in smaller parts.",
   "transcript.sending": "Sending…",
   "transcript.notSent": "Not sent: {error}",
   "transcript.images": "{count} image(s)",
@@ -188,7 +191,12 @@ export const en = {
   "notice.run_failed": "The run failed: {error}",
   "notice.run_cancelled": "The run was stopped",
   "notice.run_turns_exceeded": "Stopped after {turns} turns (turn limit)",
-  "notice.response_truncated": "The answer hit the output limit ({maxOutputTokens} tokens)",
+  "notice.response_truncated":
+    "The answer hit the output limit ({maxOutputTokens} tokens, {source})",
+  "limitSource.user": "set by you",
+  "limitSource.model": "from the model catalog",
+  "limitSource.default": "default",
+  "limitSource.unknown": "current limit",
   "notice.model_changed": "Model changed from {previous} to {model}",
   "notice.compaction_completed": "History compacted: ~{before} → ~{after} tokens",
   "notice.compaction_failed": "Compaction failed: {error}",

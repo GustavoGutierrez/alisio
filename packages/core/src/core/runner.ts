@@ -37,11 +37,21 @@ import type {
   SessionStore,
   TerminalRunStatus,
 } from "./contracts.ts";
+import { type OutputLimit, resolveMaxOutputTokens } from "./output-limit.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
+import {
+  incompleteCalls,
+  isOutputTruncationError,
+  lowerEffort,
+  RunTruncationError,
+  TRUNCATION_NOTICE,
+} from "./truncation.ts";
 
 /** Pause before a silent request is sent again; short, and cut off by a stop or the run limit. */
 const FIRST_TOKEN_RETRY_PAUSE_MS = 250;
+/** Pause before a cut-off turn is requested again; short, and cut off by a stop or the run limit. */
+const TRUNCATION_RETRY_PAUSE_MS = 100;
 function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
@@ -80,8 +90,30 @@ export interface RunnerOptions {
   firstTokenTimeoutMs?: number;
   /** See `RunnerSettingsPatch.firstTokenRetries`. */
   firstTokenRetries?: number;
+  /** See `RunnerSettingsPatch.truncationRecoveries`. */
+  truncationRecoveries?: number;
+  /**
+   * Reasoning effort levels a model advertises (`ModelInfo.effort`), when known. Lets a recovery
+   * from an exhausted reasoning budget request one level lower; without it effort is unchanged.
+   */
+  effortLevels?: (
+    model: string,
+  ) => { supportedLevels: string[]; defaultLevel?: string } | undefined;
   maxContextChars?: number;
+  /**
+   * Output-token budget the USER set (`limits.maxOutputTokens`). Left unset, the budget of each
+   * request is the model's declared maximum (`modelOutputLimit`, capped), else
+   * `fallbackMaxOutputTokens`. See `resolveMaxOutputTokens`.
+   */
   maxOutputTokens?: number;
+  /**
+   * The maximum output a model's catalog declares (`ModelInfo.maxOutputTokens`), when known.
+   * May be async (a catalog still loading); a failure counts as unknown. Called for the model
+   * of every request, so a model switch changes the budget.
+   */
+  modelOutputLimit?: (model: string) => number | undefined | Promise<number | undefined>;
+  /** Budget when neither the user nor the catalog says anything (4096 for bare embedders). */
+  fallbackMaxOutputTokens?: number;
   maxTokens?: number;
   onEvent?: (event: RunEvent) => void;
   readConcurrency?: number;
@@ -137,6 +169,11 @@ export interface RunnerSettingsPatch {
    * received for the request.
    */
   firstTokenRetries?: number;
+  /**
+   * How many times a turn is requested again after the response was cut off by the output-token
+   * limit before it was usable. `0` or unset disables it. A recovery is not a turn.
+   */
+  truncationRecoveries?: number;
 }
 /**
  * Per-run overrides used by embedders and child sessions. Callers must only NARROW: `policy`
@@ -168,6 +205,8 @@ export interface RunOptions {
   firstTokenTimeoutMs?: number;
   /** Silent-request retries for this run; beats the runner-level `firstTokenRetries`. */
   firstTokenRetries?: number;
+  /** Output-truncation recoveries for this run; beats the runner-level `truncationRecoveries`. */
+  truncationRecoveries?: number;
   /** Reasoning effort level for this run; beats the runner-level default when set. */
   reasoningEffort?: string;
   /** Run id to use for this run's events (e.g. preassigned by an embedder); a UUID otherwise. */
@@ -411,10 +450,20 @@ export class AgentRunner {
       instructions: await o.context.instructions(sessionId),
       messages: o.store.messages(sessionId),
       maxContextChars: o.maxContextChars ?? 800_000,
-      maxOutputTokens: o.maxOutputTokens ?? 4096,
+      maxOutputTokens: (await this.outputLimit(session.model)).value,
       timeoutMs: o.timeoutMs ?? 300_000,
       ...(o.reasoningEffort ? { reasoningEffort: o.reasoningEffort } : {}),
     };
+  }
+  /** The output-token budget for `model`: user value, else catalog maximum, else fallback. */
+  private async outputLimit(model: string, perRun?: number): Promise<OutputLimit> {
+    const o = this.options;
+    const declared = await Promise.resolve(o.modelOutputLimit?.(model)).catch(() => undefined);
+    return resolveMaxOutputTokens({
+      explicit: perRun ?? o.maxOutputTokens,
+      declared,
+      fallback: o.fallbackMaxOutputTokens ?? 4096,
+    });
   }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {
@@ -940,6 +989,15 @@ export class AgentRunner {
     const firstTokenMs = options.firstTokenTimeoutMs ?? o.firstTokenTimeoutMs ?? 0;
     const firstTokenRetries =
       firstTokenMs > 0 ? Math.max(0, options.firstTokenRetries ?? o.firstTokenRetries ?? 0) : 0;
+    const truncationRecoveries = Math.max(
+      0,
+      options.truncationRecoveries ?? o.truncationRecoveries ?? 0,
+    );
+    /** Responses of this run cut off by the output limit (the first plus every recovery). */
+    let truncations = 0;
+    /** Continuation notice and lowered effort for the request that follows a cut-off response. */
+    let recoveryNotice: string | undefined;
+    let recoveryEffort: string | undefined;
     const runStartedAt = Date.now();
     const timeout = AbortSignal.timeout(runTimeoutMs);
     const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
@@ -1099,9 +1157,20 @@ export class AgentRunner {
         // Providers only ever see the text projection of tool results: ui/image parts are a
         // display-only extension of the persisted transcript and never reach a model prompt
         // (raw image bytes included). The store keeps the rich parts for TUI replay.
-        const providerMessages = messages.map((m) =>
+        const providerMessages: Message[] = messages.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
+        // After a cut-off response the request carries a transient continuation notice (never
+        // persisted: the stored transcript only ever holds what the model really answered).
+        if (recoveryNotice) providerMessages.push({ role: "user", text: recoveryNotice });
+        const requestEffort = recoveryEffort ?? options.reasoningEffort ?? o.reasoningEffort;
+        recoveryNotice = undefined;
+        recoveryEffort = undefined;
+        // Resolved for the model of THIS request (a catalog may still be loading on the first).
+        const outputLimit = await this.outputLimit(model, options.maxOutputTokens);
+        combined.throwIfAborted();
+        /** The provider threw the "cut off by the output limit" signal instead of completing. */
+        let cutByError = false;
         let requested = Date.now();
         let firstDelta: number | undefined;
         stage = "waiting_model";
@@ -1133,14 +1202,12 @@ export class AgentRunner {
               instructions,
               messages: providerMessages,
               tools,
-              maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
+              maxOutputTokens: outputLimit.value,
               signal: firstTokenMs > 0 ? AbortSignal.any([combined, silent.signal]) : combined,
               model,
               sessionId,
               ...(o.nativeTools?.length ? { nativeTools: o.nativeTools } : {}),
-              ...((options.reasoningEffort ?? o.reasoningEffort)
-                ? { reasoningEffort: options.reasoningEffort ?? o.reasoningEffort }
-                : {}),
+              ...(requestEffort ? { reasoningEffort: requestEffort } : {}),
             })) {
               combined.throwIfAborted();
               stopSilentTimer();
@@ -1170,7 +1237,14 @@ export class AgentRunner {
             !combined.aborted &&
             silentAttempts <= firstTokenRetries;
           if (!silentFailure) {
-            if (failure !== undefined) throw failure;
+            if (failure !== undefined) {
+              // A response cut off before anything usable is recovered like a truncated one.
+              if (!completion && !combined.aborted && isOutputTruncationError(failure)) {
+                cutByError = true;
+                break;
+              }
+              throw failure;
+            }
             break;
           }
           // Do not start an attempt the whole-run limit could not let finish.
@@ -1192,6 +1266,54 @@ export class AgentRunner {
           stage = "waiting_model";
         }
         stage = "other";
+        // A response cut off by the output limit that cannot be used as it is: no visible text
+        // and no tool call, or a tool call whose arguments are incomplete. Complete calls of a
+        // cut response, and a cut response with usable text, keep their normal handling below.
+        let cut: "tool_call_cut" | "empty_response" | undefined;
+        if (cutByError) cut = "empty_response";
+        else if (!completion) throw new Error("Provider stream ended without a completed response");
+        else if (truncated) {
+          if (incompleteCalls(completion.calls)) cut = "tool_call_cut";
+          else if (!completion.text.trim() && !completion.calls.length) cut = "empty_response";
+        }
+        if (cut) {
+          const maxOutputTokens = outputLimit.value;
+          truncations++;
+          // Visible text is kept as a normal assistant message; the cut calls are discarded:
+          // never executed, never persisted (they would have no result), no provider data.
+          const keep = completion?.text ?? "";
+          if (keep.trim()) {
+            o.store.append(sessionId, { role: "assistant", text: keep, calls: [] });
+            lastText = keep;
+          }
+          if (truncations > truncationRecoveries)
+            throw new RunTruncationError({
+              attempts: truncations,
+              maxOutputTokens,
+              source: outputLimit.source,
+              ...(modelId ? { model: modelId } : {}),
+            });
+          // Reasoning exhausted the budget (nothing at all came out): ask for less of it once.
+          const levels = o.effortLevels?.(model);
+          const lowered =
+            truncations === 1 && cut === "empty_response"
+              ? lowerEffort(requestEffort ?? levels?.defaultLevel, levels?.supportedLevels)
+              : undefined;
+          emit("truncation_recovery", {
+            attempt: truncations,
+            of: truncationRecoveries,
+            reason: cut,
+            maxOutputTokens,
+            ...(lowered ? { effort: lowered } : {}),
+          });
+          recoveryNotice = TRUNCATION_NOTICE;
+          recoveryEffort = lowered;
+          await abortableDelay(TRUNCATION_RETRY_PAUSE_MS, combined);
+          combined.throwIfAborted();
+          // The recovery is not a turn.
+          turn--;
+          continue;
+        }
         if (!completion) throw new Error("Provider stream ended without a completed response");
         const durationMs = Date.now() - requested;
         const ids = completion.calls.map((c) => c.id);
@@ -1228,7 +1350,8 @@ export class AgentRunner {
             // The adapter kept a usable answer, but the token budget cut it off.
             emit("response_truncated", {
               turn: turn + 1,
-              maxOutputTokens: options.maxOutputTokens ?? o.maxOutputTokens ?? 4096,
+              maxOutputTokens: outputLimit.value,
+              source: outputLimit.source,
             });
             final.truncated = true;
           }
@@ -1341,6 +1464,15 @@ export class AgentRunner {
         emit("run_failed", { error: failure.message, code: "timeout", timeout: failure.info });
         finish("failed", failure.message);
         throw failure;
+      }
+      if (error instanceof RunTruncationError) {
+        emit("run_failed", {
+          error: error.message,
+          code: "output_truncated",
+          truncation: error.info,
+        });
+        finish("failed", error.message);
+        throw error;
       }
       // On cancellation report the abort reason, not the transport's secondary error.
       const cause = combined.aborted ? (combined.reason ?? error) : error;

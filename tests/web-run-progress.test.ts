@@ -374,3 +374,52 @@ describe("timeout failures in the transcript", () => {
     expect(run({ error: "t", code: "timeout" })).toMatchObject({ code: "run_failed" });
   });
 });
+
+describe("output-truncation recovery phase and failure notice", () => {
+  const recovery = event("truncation_recovery", {
+    attempt: 1,
+    of: 2,
+    reason: "tool_call_cut",
+    maxOutputTokens: 16384,
+  });
+  const phaseAt = (steps: Array<[number, ServerFrame]>) => {
+    const state = play(steps);
+    return state ? describePhase(state) : undefined;
+  };
+  const start: [number, ServerFrame] = [0, event("run_started", { model: "m" })];
+
+  it("shows the recovery until the new request produces something", () => {
+    expect(phaseAt([start, [5_000, recovery]])).toEqual({ kind: "recovering", attempt: 1, of: 2 });
+    expect(phaseAt([start, [5_000, recovery], [6_000, delta({ reasoning: "hmm" })]])).toEqual({
+      kind: "thinking",
+    });
+    expect(
+      phaseAt([start, [5_000, recovery], [6_000, event("tool_started", { id: "c", name: "x" })]]),
+    ).toMatchObject({ kind: "tool" });
+  });
+
+  it("has an English and a Spanish status line", async () => {
+    const { en } = await import("../packages/web/src/i18n/en.ts");
+    const { es } = await import("../packages/web/src/i18n/es.ts");
+    expect(en["run.phase.recovering"]).toContain("cut off");
+    expect(es["run.phase.recovering"]).toContain("{attempt}/{of}");
+    expect(es["notice.run_output_truncated"]).toContain("{maxOutputTokens}");
+  });
+
+  it("turns the output_truncated failure into a localizable notice naming the model", () => {
+    const notice = visibleItems(
+      applyFrame(
+        emptyTranscript(SID),
+        event("run_failed", {
+          error: "english text",
+          code: "output_truncated",
+          truncation: { attempts: 3, maxOutputTokens: 16384, model: "deepseek-flash" },
+        }),
+      ),
+    ).find((i) => i.kind === "notice");
+    expect(notice).toMatchObject({
+      code: "run_output_truncated",
+      params: { who: "deepseek-flash", attempts: "3", maxOutputTokens: "16384" },
+    });
+  });
+});

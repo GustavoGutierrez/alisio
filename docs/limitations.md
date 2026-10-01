@@ -288,6 +288,13 @@ message when the summary produced nothing usable, and uses `compaction.maxOutput
 loop budget; the TUI shows the warning notice and the `partial` marker (event-reduction Vitest);
 and the config schema accepts the new field with its default.
 
+Since the truncation recovery (`limits.truncationRecoveries`) the built-in OpenAI-compatible
+adapter no longer throws when a cut response has no text or a partial tool call: it yields
+`completed` with `truncated: true` and the runner recovers (see the architecture page). The
+DeepSeek, OpenCode Console and OpenCode Go plugin adapters live in other repositories and keep
+throwing the generic error on empty text; the runner recognises it by its message and recovers
+the same way. Verified with mocked providers only; no live model was cut off.
+
 The coherent context metric was verified with mocked providers (Vitest, no network): the runner
 auto-compacts on the char-budget fallback when the window is unknown, does NOT compact early when a
 large window is known (the DeepSeek ~1M-window vs 800k-char mismatch), compacts at `window ×

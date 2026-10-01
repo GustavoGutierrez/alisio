@@ -165,11 +165,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (finish !== "stop" && finish !== "tool_calls" && finish !== "length")
       throw new Error(`Provider response incomplete: ${finish ?? "stream ended"}`);
     const completed = [...calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => c);
-    if (completed.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
-    if (finish === "length" && !text.trim())
-      throw new Error(
-        "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
-      );
+    // A response cut by the output limit is reported as it is (`truncated: true`), even when it
+    // has no text or its tool calls are partial: the host decides whether to recover, and never
+    // executes a call whose arguments are incomplete.
+    if (finish !== "length" && completed.some((c) => !c.id || !c.name))
+      throw new Error("Incomplete tool call");
     yield {
       type: "completed",
       message: {
@@ -245,11 +245,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           .filter((x) => x.type === "output_text")
           .map((x) => x.text)
           .join("");
-        if (!text.trim())
-          throw new Error(
-            "Provider response cut off by max output tokens before any usable content; raise limits.maxOutputTokens (/settings → Agent max output tokens)",
-          );
-        if (calls.some((c) => !c.id || !c.name)) throw new Error("Incomplete tool call");
+        // Reported as truncated even when empty or with partial calls: the host recovers.
         yield {
           type: "completed",
           message: { role: "assistant", text, calls, providerData: r.output, truncated: true },

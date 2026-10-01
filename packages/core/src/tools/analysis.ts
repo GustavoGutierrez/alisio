@@ -189,6 +189,7 @@ function pythonRunDescription(deps: AnalysisToolDeps): string {
     "data_inspect) to $ALISIO_INPUT_DIR/<name>.sqlite: alisio_runtime.datasets.open(name) returns a",
     "read-only sqlite3 connection (table `data` or `s_<sheet>`). HTML is shown offline: embed data and scripts",
     "inline (no fetch, no CDN). Nothing is published when the script fails unless publishOnError.",
+    "Keep each call's code short: the model's output is capped per response, so split large scripts or dashboards into several calls or files.",
     "To run an earlier analysis again unchanged (same script, inputs checked by hash, new artifacts) pass rerunOf: an artifact or execution id of this session, instead of code.",
     container ? CONTAINER_NOTE : NOT_SANDBOXED,
     ...(deps.startup.candidates || container

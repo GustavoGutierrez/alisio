@@ -494,6 +494,17 @@ export interface RunTimeoutInfo {
    */
   attempts?: number;
 }
+/** What a `run_failed` event with `code: "output_truncated"` says about the limit that cut it. */
+export interface RunTruncationInfo {
+  /** How many responses were cut off (the first plus every recovery). */
+  attempts: number;
+  /** The output-token budget of the cut requests (the effective one, see `source`). */
+  maxOutputTokens: number;
+  /** Where that budget came from: the user, the model's catalog, or the default. */
+  source?: "user" | "model" | "default";
+  /** The model whose responses were cut. */
+  model?: string;
+}
 /**
  * Payload of each event type the core emits today, keyed by `RunEvent.type`. Additive: new
  * types and new optional fields may appear; existing fields keep their meaning.
@@ -557,7 +568,15 @@ export interface RunEventDataMap {
     executionId?: string;
   };
   run_completed: { tokens: number; text: string; truncated?: boolean };
-  response_truncated: { turn: number; maxOutputTokens: number };
+  /**
+   * `maxOutputTokens` is the effective budget of the cut request; `source` says whether it was
+   * set by the user, taken from the model's catalog, or the default.
+   */
+  response_truncated: {
+    turn: number;
+    maxOutputTokens: number;
+    source?: "user" | "model" | "default";
+  };
   /**
    * A model request stayed completely silent for `limits.firstTokenTimeoutMs` and the same
    * request is sent again (no new turn, nothing appended to the session). `attempt` is the
@@ -565,13 +584,35 @@ export interface RunEventDataMap {
    * `afterMs` how long the aborted request had been silent.
    */
   request_retry: { attempt: number; of: number; reason: "first_token_timeout"; afterMs: number };
+  /**
+   * A model response was cut off by the output-token limit before it was usable (no text and no
+   * tool call, or a tool call whose arguments are incomplete) and the same turn is requested
+   * again with a short continuation notice. The truncated tool calls were discarded, never
+   * executed or persisted, and the retry is not a turn. `attempt` is the recovery about to start
+   * (1-based), `of` the recoveries allowed (`limits.truncationRecoveries`), `reason` what was
+   * lost, and `effort` the lowered reasoning effort of that request, when one was applied.
+   */
+  truncation_recovery: {
+    attempt: number;
+    of: number;
+    reason: "tool_call_cut" | "empty_response";
+    maxOutputTokens: number;
+    effort?: string;
+  };
   run_turns_exceeded: { turns: number; maxTurns: number };
   /**
    * The run failed. `error` is always a human-readable message. `code: "timeout"` (with `timeout`)
-   * marks a run stopped by a time limit instead of a provider or tool error; both fields are
-   * additive and absent for every other failure.
+   * marks a run stopped by a time limit instead of a provider or tool error;
+   * `code: "output_truncated"` (with `truncation`) a run whose responses kept being cut off by
+   * the output-token limit after the allowed recoveries. These fields are additive and absent
+   * for every other failure.
    */
-  run_failed: { error: string; code?: "timeout"; timeout?: RunTimeoutInfo };
+  run_failed: {
+    error: string;
+    code?: "timeout" | "output_truncated";
+    timeout?: RunTimeoutInfo;
+    truncation?: RunTruncationInfo;
+  };
   run_cancelled: { error: string };
   model_changed: { model: string; previous: string };
   compaction_started: { reason: "manual" | "auto"; before: number; messages: number };
@@ -1725,6 +1766,22 @@ export interface ApiError {
 }
 export function definePlugin<T extends Plugin>(plugin: T): T {
   return plugin;
+}
+/** `OutputTruncatedError.code`: a provider's reply was cut off by the output-token limit. */
+export const OUTPUT_TRUNCATED_CODE = "output_truncated";
+/**
+ * A provider that cannot yield a usable `completed` message because the output-token limit cut
+ * the response before anything usable existed (no text and no complete tool call) throws this,
+ * so the host can recover instead of failing the run. Hosts match on `code` (not `instanceof`),
+ * because a plugin may bundle its own copy of this package. Prefer yielding `completed` with
+ * `truncated: true` whenever the partial message is representable.
+ */
+export class OutputTruncatedError extends Error {
+  readonly code = OUTPUT_TRUNCATED_CODE;
+  constructor(message = "The response was cut off by the output-token limit.") {
+    super(message);
+    this.name = "OutputTruncatedError";
+  }
 }
 export const textResult = (text: string, isError = false): ToolResult => ({
   content: [{ type: "text", text }],

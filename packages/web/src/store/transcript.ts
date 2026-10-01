@@ -344,6 +344,30 @@ const notice = (
  * the limit and what to do; any other failure (or a payload without the details) keeps the
  * plain `run_failed` notice with the server's English text.
  */
+/** Where an output limit came from; older events carry none. */
+const limitSource = (value: unknown): string =>
+  value === "user" || value === "model" || value === "default" ? value : "unknown";
+
+function truncationNotice(
+  data: Record<string, unknown>,
+): { code: string; params: Record<string, string> } | undefined {
+  if (data.code !== "output_truncated") return undefined;
+  const info = data.truncation as
+    | { attempts?: number; maxOutputTokens?: number; model?: string; source?: string }
+    | undefined;
+  // The message names the model; without it the server's plain English text is the true one.
+  if (!info || typeof info.maxOutputTokens !== "number" || !info.model) return undefined;
+  return {
+    code: "run_output_truncated",
+    params: {
+      who: info.model,
+      attempts: String(info.attempts ?? 1),
+      maxOutputTokens: String(info.maxOutputTokens),
+      source: limitSource(info.source),
+    },
+  };
+}
+
 function timeoutNotice(
   data: Record<string, unknown>,
 ): { code: string; params: Record<string, string> } | undefined {
@@ -431,7 +455,7 @@ function applyEvent(state: TranscriptState, event: RunEvent): TranscriptState {
     case "run_completed":
       return bump(next, { live: undefined });
     case "run_failed": {
-      const timeout = timeoutNotice(data);
+      const timeout = timeoutNotice(data) ?? truncationNotice(data);
       return {
         ...(timeout
           ? withNotice(timeout.code, "error", timeout.params)
@@ -446,6 +470,7 @@ function applyEvent(state: TranscriptState, event: RunEvent): TranscriptState {
     case "response_truncated":
       return withNotice("response_truncated", "warning", {
         maxOutputTokens: str(data.maxOutputTokens),
+        source: limitSource(data.source),
       });
     case "model_changed":
       return withNotice("model_changed", "info", {

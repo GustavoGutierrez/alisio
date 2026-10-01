@@ -757,10 +757,13 @@ describe("event reduction", () => {
 
   it("shows a visible notice when a response was cut by max output tokens", () => {
     let s = initialViewState("m1");
-    s = reduceEvent(s, ev("response_truncated", { turn: 1, maxOutputTokens: 4096 }));
+    s = reduceEvent(
+      s,
+      ev("response_truncated", { turn: 1, maxOutputTokens: 4096, source: "model" }),
+    );
     expect(s.items.at(-1)).toEqual({
       kind: "notice",
-      text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.",
+      text: "Response cut by max output tokens (4096 tokens, from the model catalog) — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.",
     });
   });
 

@@ -83,7 +83,7 @@ doing, taken only from the events and streamed output the page has received: *Wa
 model…*, *Thinking…*, *Writing the answer…*, *Reading your data (sales.csv)…*, *Running Python
 (analysis.py)…*, *Publishing the artifact (dashboard.html)…*, *Running* `<tool>`*…*, *Compacting
 context…*, *The model did not respond; retrying (1/1)…* (while a silent request is being sent
-again, see `limits.firstTokenRetries`), or *Waiting for your approval / your answer* (those two never count as a stall). Next
+again, see `limits.firstTokenRetries`), *The response was cut off; retrying in smaller steps (1/2)…* (the output-token limit cut the response and the turn is requested again, see `limits.truncationRecoveries`), or *Waiting for your approval / your answer* (those two never count as a stall). Next
 to it are the run's elapsed time, the time in the current step and when something last arrived
 (*last update 3 s ago*). If nothing arrives for 15 s the line says how long the run has been quiet
 and shows **Stop**; after 60 s it says plainly *No response from the model for 60 s* (or *No output

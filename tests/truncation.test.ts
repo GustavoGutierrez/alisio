@@ -68,12 +68,16 @@ describe("chat completions: finish_reason length", () => {
     ]);
   });
 
-  it("throws on length with empty text", async () => {
+  it("reports length with empty text as a truncated completion instead of throwing", async () => {
     const provider = openAICompatible(client([{ ...chatChunk("", "length") }]));
-    await expect(collect(provider, "fixture")).rejects.toThrow(/max output tokens/);
+    const events = await collect(provider, "fixture");
+    expect(events.at(-1)).toEqual({
+      type: "completed",
+      message: { role: "assistant", text: "", calls: [], truncated: true },
+    });
   });
 
-  it("throws on length with a partial (unfinished) tool call", async () => {
+  it("reports a partial (unfinished) tool call on length as truncated and leaves it to the host", async () => {
     const provider = openAICompatible(
       client([
         {
@@ -85,6 +89,27 @@ describe("chat completions: finish_reason length", () => {
                 tool_calls: [{ index: 0, id: "c1", function: { arguments: '{"x":' } }],
               },
               finish_reason: "length",
+            },
+          ],
+        },
+      ]),
+    );
+    const events = await collect(provider, "fixture");
+    expect(events.at(-1)).toMatchObject({
+      type: "completed",
+      message: { truncated: true, calls: [{ id: "c1", name: "", arguments: '{"x":' }] },
+    });
+  });
+
+  it("still throws on an incomplete tool call when the model did not hit the length limit", async () => {
+    const provider = openAICompatible(
+      client([
+        {
+          choices: [
+            {
+              index: 0,
+              delta: { tool_calls: [{ index: 0, id: "c1", function: { arguments: "{}" } }] },
+              finish_reason: "tool_calls",
             },
           ],
         },

@@ -2,7 +2,7 @@
  * Pure presentation logic for the TUI: formatting, command parsing and the reduction of
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
-import { CommandCatalog } from "@alisio/core";
+import { CommandCatalog, describeOutputLimitSource } from "@alisio/core";
 import type { Message, ModelInfo, RunEvent, ToolResult, TreeNode, UiBlock } from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
@@ -750,6 +750,8 @@ export interface ViewState {
   compacting: boolean;
   /** The runner is sending a silent request again (`request_retry`); cleared by any output. */
   retry?: { attempt: number; of: number };
+  /** The response was cut by the output limit and is requested again (`truncation_recovery`). */
+  recovery?: { attempt: number; of: number };
   model: string;
   /** Context size in tokens: provider-reported, or estimated (`~`). */
   context?: { used: number; estimated: boolean };
@@ -855,7 +857,7 @@ export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
     event.type === "run_cancelled" ||
     event.type === "run_turns_exceeded";
   if (terminal) {
-    const { lastEventAt: _ended, retry: _retry, ...rest } = next;
+    const { lastEventAt: _ended, retry: _retry, recovery: _recovery, ...rest } = next;
     return rest;
   }
   return { ...next, lastEventAt: Date.parse(event.timestamp) || Date.now() };
@@ -889,6 +891,11 @@ export function runPhase(view: ViewState): RunPhase {
   if (view.retry)
     return {
       label: `the model did not respond; retrying (${view.retry.attempt}/${view.retry.of})`,
+      silentByDesign: false,
+    };
+  if (view.recovery)
+    return {
+      label: `the response was cut off; retrying in smaller steps (${view.recovery.attempt}/${view.recovery.of})`,
       silentByDesign: false,
     };
   const tool = view.items.findLast(
@@ -937,8 +944,8 @@ const RETRY_ENDERS = new Set([
   "compaction_started",
 ]);
 function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
-  if (state.retry && RETRY_ENDERS.has(event.type)) {
-    const { retry: _retry, ...rest } = state;
+  if ((state.retry || state.recovery) && RETRY_ENDERS.has(event.type)) {
+    const { retry: _retry, recovery: _recovery, ...rest } = state;
     return reduceEventItems(rest, event);
   }
   const d = (event.data ?? {}) as Record<string, unknown>;
@@ -1048,6 +1055,8 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
       }
       return ended;
     }
+    case "truncation_recovery":
+      return { ...state, recovery: { attempt: Number(d.attempt) || 1, of: Number(d.of) || 1 } };
     case "request_retry":
       return { ...state, retry: { attempt: Number(d.attempt) || 1, of: Number(d.of) || 1 } };
     case "compaction_started":
@@ -1101,7 +1110,11 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
     case "response_truncated":
       return addItem(state, {
         kind: "notice",
-        text: "Response cut by max output tokens — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.",
+        text: `Response cut by max output tokens${
+          typeof d.maxOutputTokens === "number"
+            ? ` (${d.maxOutputTokens} tokens, ${describeOutputLimitSource(d.source as "user" | "model" | "default" | undefined)})`
+            : ""
+        } — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.`,
       });
     case "model_changed":
       return {

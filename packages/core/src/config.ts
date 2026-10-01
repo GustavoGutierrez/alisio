@@ -192,12 +192,23 @@ const configObjectSchema = z
          * disables the retry. Never counts as a turn.
          */
         firstTokenRetries: z.number().int().min(0).max(3).default(1),
+        /**
+         * How many times a turn is requested again after the model's response was cut off by
+         * `maxOutputTokens` before it was usable (no text and no tool call, or a tool call with
+         * incomplete arguments). The truncated calls are never executed. 0 disables the
+         * recovery. Never counts as a turn.
+         */
+        truncationRecoveries: z.number().int().min(0).max(5).default(2),
         maxContextChars: z.number().int().positive().default(800000),
         /**
-         * Per-call output token budget for one agent turn. 4096 starves reasoning-heavy models,
-         * which can spend the whole budget on `reasoning_content` before any usable text arrives.
+         * Per-call output token budget for one agent turn. Deliberately WITHOUT a schema default:
+         * when unset, the budget of each request is the model catalog's declared maximum (capped
+         * at 65536) or 16384 (see `core/output-limit.ts`), so "set by the user" stays
+         * distinguishable from "defaulted". A value set here always wins. 4096 starves
+         * reasoning-heavy models, which can spend the whole budget on `reasoning_content`
+         * before any usable text arrives.
          */
-        maxOutputTokens: z.number().int().positive().default(16384),
+        maxOutputTokens: z.number().int().positive().optional(),
         /** Cumulative tokens per run; default is proportional to the context window. */
         maxTokens: z.number().int().positive().optional(),
       })
@@ -206,8 +217,8 @@ const configObjectSchema = z
         timeoutMs: 600000,
         firstTokenTimeoutMs: 90000,
         firstTokenRetries: 1,
+        truncationRecoveries: 2,
         maxContextChars: 800000,
-        maxOutputTokens: 16384,
       })),
     /**
      * Python analysis and downloadable artifacts. `enabled: false` registers none of the
@@ -779,6 +790,7 @@ const SETTABLE_KEYS = {
   "limits.timeoutMs": SETTABLE_SECTIONS.limits.shape.timeoutMs,
   "limits.firstTokenTimeoutMs": SETTABLE_SECTIONS.limits.shape.firstTokenTimeoutMs,
   "limits.firstTokenRetries": SETTABLE_SECTIONS.limits.shape.firstTokenRetries,
+  "limits.truncationRecoveries": SETTABLE_SECTIONS.limits.shape.truncationRecoveries,
   "pluginHooks.timeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.timeoutMs,
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
   "tui.contentPaddingX": SETTABLE_SECTIONS.tui.shape.contentPaddingX,

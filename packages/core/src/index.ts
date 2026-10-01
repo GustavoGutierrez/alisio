@@ -237,6 +237,14 @@ export type {
   TerminalRunStatus,
   ToolCallMeta,
 } from "./core/contracts.ts";
+export {
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  describeOutputLimitSource,
+  MAX_AUTO_OUTPUT_TOKENS,
+  type OutputLimit,
+  type OutputLimitSource,
+  resolveMaxOutputTokens,
+} from "./core/output-limit.ts";
 export { ToolRegistry } from "./core/registry.ts";
 export {
   AgentRunner,

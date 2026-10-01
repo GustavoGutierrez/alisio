@@ -37,6 +37,11 @@ export interface RunProgress {
    * cleared by the first thing the retried request produces, or by the end of the turn.
    */
   retry?: { attempt: number; of: number };
+  /**
+   * The response was cut off by the output limit and the turn is requested again in smaller
+   * steps (`truncation_recovery`); cleared like `retry`.
+   */
+  recovery?: { attempt: number; of: number };
   /** Identity of the phase shown; `phaseSince` restarts when it changes. */
   phaseKey: string;
   phaseSince: number;
@@ -50,6 +55,7 @@ export type Phase =
   | { kind: "writing" }
   | { kind: "compacting" }
   | { kind: "retrying"; attempt: number; of: number }
+  | { kind: "recovering"; attempt: number; of: number }
   | { kind: "approval"; name: string }
   | { kind: "tool"; name: string; category: ToolCategory; summary: string };
 
@@ -121,6 +127,7 @@ export function describePhase(progress: RunProgress): Phase {
     };
   if (progress.compacting) return { kind: "compacting" };
   if (progress.retry) return { kind: "retrying", ...progress.retry };
+  if (progress.recovery) return { kind: "recovering", ...progress.recovery };
   return { kind: progress.stream };
 }
 
@@ -130,12 +137,15 @@ const keyOf = (progress: Omit<RunProgress, "phaseKey" | "phaseSince">): string =
   const tool = progress.tools.at(-1);
   if (tool) return `tool:${tool.id}`;
   if (progress.compacting) return "compacting";
+  if (progress.recovery) return `recovery:${progress.recovery.attempt}`;
   return progress.retry ? `retry:${progress.retry.attempt}` : progress.stream;
 };
 
 /** The same progress without a pending retry (anything the retried request produced ends it). */
-const settled = <T extends { retry?: RunProgress["retry"] }>(progress: T): Omit<T, "retry"> => {
-  const { retry: _retry, ...rest } = progress;
+const settled = <T extends { retry?: RunProgress["retry"]; recovery?: RunProgress["recovery"] }>(
+  progress: T,
+): Omit<T, "retry" | "recovery"> => {
+  const { retry: _retry, recovery: _recovery, ...rest } = progress;
   return rest;
 };
 
@@ -282,6 +292,16 @@ export function applyProgress(
           ...touched,
           stream: "waiting",
           retry: { attempt: Number(data.attempt) || 1, of: Number(data.of) || 1 },
+        },
+        current,
+        now,
+      );
+    case "truncation_recovery":
+      return settle(
+        {
+          ...settled(touched),
+          stream: "waiting",
+          recovery: { attempt: Number(data.attempt) || 1, of: Number(data.of) || 1 },
         },
         current,
         now,

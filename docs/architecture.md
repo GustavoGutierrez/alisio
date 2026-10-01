@@ -96,7 +96,21 @@ sentence. When a model request stays silent until `limits.firstTokenTimeoutMs` t
 same request again up to `limits.firstTokenRetries` times (default 1) and emits `request_retry`
 (`attempt`, `of`, `reason: "first_token_timeout"`, `afterMs`); a retry is not a turn, appends nothing
 to the session and only happens while nothing was received for the request, so tool call IDs and the
-persisted session stay consistent. `attempts` counts the sends of the request that finally failed. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
+persisted session stay consistent. `attempts` counts the sends of the request that finally failed.
+The output-token budget of each request is resolved for the model of that request: an explicit `limits.maxOutputTokens` (or per-run value) wins, else the model catalog's `maxOutputTokens` capped at 65536, else 16384; `response_truncated` and the `output_truncated` failure carry the effective value and its `source` (`user`, `model`, `default`).
+A response cut off by the output-token budget before it is usable (finish reason `length`, that is a
+`completed` message with `truncated: true`, with no text and no tool call, or with a tool call whose
+arguments are not complete JSON; or a provider failure carrying `code: "output_truncated"`, the typed
+`OutputTruncatedError` of `@alisio/sdk`, or the legacy text of older plugins) is recovered up to
+`limits.truncationRecoveries` times (default 2). The runner discards the cut calls (never executed,
+never persisted, so every stored tool call keeps its result), keeps visible text as a normal
+assistant message, emits `truncation_recovery` (`attempt`, `of`, `reason`: `tool_call_cut` or
+`empty_response`, `maxOutputTokens`, `effort` when lowered) and requests the same turn again with a
+transient continuation notice that is never stored; it is not a turn and does not touch `maxTurns`.
+When the recoveries are exhausted `run_failed` carries `code: "output_truncated"` and a `truncation`
+object (`attempts`, `maxOutputTokens`, `model`) with a readable message. Complete tool calls of a
+cut response still run, and a cut response with usable text and no calls completes with
+`response_truncated`. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
 emits; `tests/run-events-contract.test.ts` checks the runner against them.
 
 ## Session database (v4) {#session-database}

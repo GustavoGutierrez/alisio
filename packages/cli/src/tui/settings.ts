@@ -52,7 +52,13 @@ export const WEBSEARCH_PROVIDERS = [
 export interface SettingsConfigView {
   compaction: { auto: boolean; threshold: number; keepTurns: number; maxOutputTokens: number };
   context: { claudeMdFallback: boolean; maxBytes: number };
-  limits: { maxTurns: number; maxOutputTokens: number; maxContextChars: number; timeoutMs: number };
+  limits: {
+    maxTurns: number;
+    /** Only present when the user set it; unset means "the model's declared limit, else 16384". */
+    maxOutputTokens?: number | undefined;
+    maxContextChars: number;
+    timeoutMs: number;
+  };
   tui: { paddingX: number; contentPaddingX: number; skillSlashCommands: boolean };
   mcp: { allow?: boolean };
   websearch: { provider?: (typeof WEBSEARCH_PROVIDERS)[number] };
@@ -76,7 +82,7 @@ export interface SettingsMenuInput {
 export const defaultConfig: SettingsConfigView = {
   compaction: { auto: true, threshold: 0.85, keepTurns: 2, maxOutputTokens: 16_000 },
   context: { claudeMdFallback: false, maxBytes: 32 * 1024 },
-  limits: { maxTurns: 100, maxOutputTokens: 16_384, maxContextChars: 800_000, timeoutMs: 300_000 },
+  limits: { maxTurns: 100, maxContextChars: 800_000, timeoutMs: 300_000 },
   tui: { paddingX: 1, contentPaddingX: 2, skillSlashCommands: true },
   mcp: { allow: false },
   websearch: { provider: undefined },
@@ -209,10 +215,11 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     label: "Agent max output tokens",
     category: "Limits",
     valueType: "number",
-    values: [1_024, 2_048, 4_096, 8_192, 16_384],
-    read: (config) => config.limits.maxOutputTokens,
+    values: [1_024, 2_048, 4_096, 8_192, 16_384, 32_768, 65_536],
+    // Unset: each request uses the model's declared limit (capped at 65536), else 16384.
+    read: (config) => config.limits.maxOutputTokens ?? 16_384,
     description:
-      "Per-call output token budget for agent turns. A cut response shows a notice suggesting a higher value. Applied from the next run.",
+      "Per-call output token budget for agent turns. While you leave it unchanged, each request uses the output limit the model's catalog declares (capped at 65536), or 16384 when it declares none; a value set here always wins. A cut response shows a notice suggesting a higher value. Applied from the next run.",
   },
   {
     id: "limits.maxContextChars",

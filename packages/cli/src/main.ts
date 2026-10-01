@@ -148,6 +148,11 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         process.stderr.write(
           `\nThe model did not respond; retrying (${retry.attempt}/${retry.of})…\n`,
         );
+      } else if (event.type === "truncation_recovery") {
+        const recovery = event.data as import("@alisio/sdk").RunEventDataMap["truncation_recovery"];
+        process.stderr.write(
+          `\nThe response was cut off by the output limit; retrying in smaller steps (${recovery.attempt}/${recovery.of})…\n`,
+        );
       } else if (event.type === "tool_started")
         process.stderr.write(`\n→ ${(event.data as { name: string }).name}\n`);
       else if (event.type === "artifact_published") process.stderr.write(artifactLine(event));
@@ -338,8 +343,10 @@ program
   });
 program.command("doctor").action(async (_opts, cmd) => {
   const {
+    DEFAULT_MAX_OUTPUT_TOKENS,
     findWorkspace,
     loadConfigWithProvenance,
+    MAX_AUTO_OUTPUT_TOKENS,
     overridesSavedProviderProfile,
     ProviderSettingsStore,
     RIPGREP_INSTALL_HINT,
@@ -372,6 +379,15 @@ program.command("doctor").action(async (_opts, cmd) => {
     workspace,
     git: (await which("git")) ?? null,
     ripgrep: (await which("rg")) ?? null,
+    // The per-request output budget is resolved when a run starts, from the model's catalog;
+    // doctor does not contact the provider, so it reports what the configuration decides.
+    outputTokens:
+      config.limits.maxOutputTokens !== undefined
+        ? { limit: config.limits.maxOutputTokens, source: "set by you (limits.maxOutputTokens)" }
+        : {
+            limit: null,
+            source: `the model catalog's declared limit (capped at ${MAX_AUTO_OUTPUT_TOKENS}), else ${DEFAULT_MAX_OUTPUT_TOKENS}`,
+          },
     provider: {
       id: useSaved ? saved.profile.provider : "openai-compatible",
       baseURL: useSaved ? saved.profile.values.baseURL : config.provider.baseURL,

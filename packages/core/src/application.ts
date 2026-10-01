@@ -36,6 +36,7 @@ import {
 } from "./config.ts";
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
+import { DEFAULT_MAX_OUTPUT_TOKENS } from "./core/output-limit.ts";
 import { ToolRegistry } from "./core/registry.ts";
 import { AgentRunner, type CompactionSettings, type RunnerSettingsPatch } from "./core/runner.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
@@ -812,6 +813,37 @@ export async function createApplication(options: AppOptions = {}) {
         return {};
       }
     };
+    /**
+     * The maximum output a model's catalog declares (`ModelInfo.maxOutputTokens`), for the budget
+     * of each request. Looks in the active provider's catalog first (loading it once, bounded, if
+     * the first request comes before it); then in the catalogs of the configured profiles that
+     * were already listed, taking the smallest declaration when several providers list the same
+     * model id so a derived budget never exceeds any of them. Unknown stays unknown.
+     */
+    const declaredOutputLimit = async (model: string): Promise<number | undefined> => {
+      if (!models.has(model)) {
+        const loading = ensureModels();
+        if (loading) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([
+            loading.catch(() => undefined),
+            new Promise<void>((resolve) => {
+              timer = setTimeout(resolve, 2_000);
+            }),
+          ]);
+          if (timer) clearTimeout(timer);
+        }
+      }
+      const own = models.get(model)?.maxOutputTokens;
+      if (own !== undefined) return own;
+      const declared = catalogCache
+        ? availableProviderModels(catalogCache.value)
+            .filter((entry) => entry.model.id === model)
+            .map((entry) => entry.model.maxOutputTokens)
+            .filter((value): value is number => typeof value === "number" && value > 0)
+        : [];
+      return declared.length ? Math.min(...declared) : undefined;
+    };
     const runner = new AgentRunner({
       provider,
       providerFor,
@@ -824,6 +856,13 @@ export async function createApplication(options: AppOptions = {}) {
       compaction: config.compaction,
       extensions: plugins,
       contextWindow,
+      modelOutputLimit: declaredOutputLimit,
+      fallbackMaxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+      effortLevels: (model: string) => {
+        const known = models.get(model)?.effort;
+        if (!known) void ensureModels();
+        return known;
+      },
       ...(options.approve && !options.readOnly ? { approve: options.approve } : {}),
       pathAccess,
       ...(analysisEnabled
@@ -1181,6 +1220,7 @@ export async function createApplication(options: AppOptions = {}) {
           case "limits.maxContextChars":
           case "limits.firstTokenTimeoutMs":
           case "limits.firstTokenRetries":
+          case "limits.truncationRecoveries":
           case "limits.timeoutMs": {
             const patch = limitLeaf(key.slice("limits.".length));
             config.limits = { ...config.limits, ...patch };

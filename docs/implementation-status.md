@@ -1739,6 +1739,57 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   `tests/server-inflight.test.ts`. Verificado a mano en Chromium con `alisio serve` y un proveedor
   falso: fases en orden (esperando, pensando, aprobación, Python, esperando, redactando), silencio a
   15 s y 60 s, Detener, y el mensaje de tiempo agotado en EN y ES.
+- Decisión del propietario (2026-10-01): recuperación automática de una respuesta cortada por
+  `limits.maxOutputTokens` (caso real: DeepSeek V4.1 Flash con `@alisio/plugin-deepseek` 0.1.1 al
+  pedir un dashboard; el razonamiento o el `arguments` de una llamada `python_run` larga agotaron los
+  16384 tokens y la ejecución fallaba con «cut off by max output tokens before any usable content»).
+  Nueva clave `limits.truncationRecoveries` (entero 0 a 5, por defecto `2`; `0` la desactiva).
+  Detección en el núcleo, sin depender del proveedor: mensaje `completed` con `truncated: true` y
+  (a) sin texto ni llamadas, o (b) alguna llamada con id/nombre vacío o `arguments` que no son un
+  objeto JSON completo (argumentos vacíos solo cuentan en la última llamada); un fallo del proveedor
+  con `code: "output_truncated"` (nuevo `OutputTruncatedError` aditivo en `@alisio/sdk`) o, por
+  **compatibilidad** con plugins que no podemos cambiar, cuyo mensaje contiene «cut off by max output
+  tokens before any usable content» (la única coincidencia de texto vive en
+  `packages/core/src/core/truncation.ts`, `isOutputTruncationError`). Las llamadas válidas y
+  completas de una respuesta cortada no se descartan (siguen ejecutándose, como antes); si UNA llamada
+  está cortada se descartan TODAS (y los `providerData` del mensaje). Una respuesta cortada con texto
+  útil y sin llamadas conserva el comportamiento anterior (`response_truncated`). Recuperación: las
+  llamadas cortadas nunca se ejecutan ni se persisten (los ids siguen consistentes); el texto visible
+  se guarda como mensaje normal del asistente; el aviso de continuación (en inglés) se añade solo a la
+  petición siguiente y no se persiste (la UI web mostraría un mensaje `summary` como «compactado»);
+  no consume `maxTurns` ni emite `turn_completed`; no se sube `maxOutputTokens`. En la primera
+  recuperación de una respuesta vacía se baja un nivel el esfuerzo de razonamiento solo para esa
+  petición, si el catálogo del modelo (`ModelInfo.effort.supportedLevels`) permite ordenar los niveles
+  (nombres conocidos `none…max`); con el error heredado no se sabe si fue razonamiento o una llamada
+  larga, y se trata como respuesta vacía. Agotadas las recuperaciones: `run_failed` con
+  `code: "output_truncated"` y `truncation { attempts, maxOutputTokens, model }`, mensaje legible
+  (web localizada EN/ES). Evento aditivo `truncation_recovery`. `python_run` añade una frase que
+  pide código corto por llamada. El adaptador OpenAI-compatible (chat y responses) ya no lanza error
+  ante `length` sin texto: devuelve `completed` con `truncated: true`. Pruebas:
+  `tests/truncation-recovery.test.ts`, `tests/truncation.test.ts`, `tests/web-run-progress.test.ts`,
+  `tests/tui-run-phase.test.ts`, `tests/config-layers.test.ts`. No cableado: el adaptador
+  `@alisio/plugin-deepseek` (otro repositorio) sigue lanzando el error genérico (se recupera por la
+  coincidencia heredada) y no distingue razonamiento de llamada cortada; las llamadas de resumen de compactación y de subagentes no usan esta recuperación.
+- Decisión del propietario (2026-10-01): el presupuesto de tokens de salida efectivo sale del
+  catálogo del modelo. `limits.maxOutputTokens` ya no tiene valor por defecto en el esquema (se
+  distingue «fijado por el usuario» de «por defecto»); lo que se consume es
+  `resolveMaxOutputTokens` (`packages/core/src/core/output-limit.ts`): un valor explícito (cualquier
+  capa de configuración, `/settings`, el selector web u opción por ejecución) siempre gana, incluso
+  por encima del máximo declarado (no se recorta ni se reintenta; si el proveedor lo rechaza, el
+  error actual no cambia); si no, `min(ModelInfo.maxOutputTokens, 65536)`; si no, 16384. Se
+  resuelve para el modelo de cada petición (cambios de modelo o de agente se notan en la siguiente
+  ejecución) y el valor y su origen (`user`, `model`, `default`) aparecen en `response_truncated`,
+  en `run_failed { code: "output_truncated" }`, en el aviso web y TUI y en `alisio doctor`. El
+  catálogo es el del proveedor activo (`GET /models`; DeepSeek lo informa con `max_output_tokens`,
+  hasta 393216 en V4.1 Flash, que queda en 65536); la primera petición espera hasta 2 s a un
+  catálogo que aún se carga, y los catálogos de otros perfiles solo se consultan si ya estaban
+  listados (se toma el menor valor declarado). Los subagentes siguen con su valor por ejecución
+  (`maxOutputTokensPerChild`, 16384), la compactación con `compaction.maxOutputTokens`, y las
+  preguntas laterales (`/btw`) y los hijos sin presupuesto propio heredan el valor efectivo. Límites:
+  el adaptador OpenAI-compatible integrado no lee un máximo de salida de `GET /models` (solo la
+  ventana de contexto), así que ahí aplica 16384 salvo que se fije el valor; el valor efectivo no se
+  muestra en `/settings` (la fila muestra 16384 mientras no esté fijado); el aviso web localizado
+  nombra el origen en EN/ES. Pruebas: `tests/output-limit.test.ts`, `tests/config-layers.test.ts`.
 - No verificado: lectores de pantalla reales, Firefox y Safari, la TUI en un terminal real, y la
   detección de `: keep-alive`: el plugin `@alisio/plugin-deepseek` (repositorio aparte) tendría que
   envolver `fetch` y emitir un evento de latido; no se inventó esa señal.

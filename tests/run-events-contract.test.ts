@@ -131,6 +131,12 @@ const contract: { [K in RunEventType]: Check } = {
   run_turns_exceeded: (d) => num(d.turns) && num(d.maxTurns),
   request_retry: (d) =>
     num(d.attempt) && num(d.of) && d.reason === "first_token_timeout" && num(d.afterMs),
+  truncation_recovery: (d) =>
+    num(d.attempt) &&
+    num(d.of) &&
+    oneOf("tool_call_cut", "empty_response")(d.reason) &&
+    num(d.maxOutputTokens) &&
+    opt(d.effort, str),
   run_failed: (d) => str(d.error),
   run_cancelled: (d) => str(d.error),
   model_changed: (d) => str(d.model) && str(d.previous),

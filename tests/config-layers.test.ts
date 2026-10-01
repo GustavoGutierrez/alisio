@@ -8,8 +8,10 @@ import {
   loadConfig,
   loadConfigWithProvenance,
   McpConnector,
+  setConfigValue,
   setGlobalMcpAllow,
   setMcpServerEnabled,
+  settableSettings,
   ToolRegistry,
 } from "../packages/core/src/index.ts";
 
@@ -335,6 +337,16 @@ describe("run time limits", () => {
     expect(limits.timeoutMs).toBe(600_000);
     expect(limits.firstTokenTimeoutMs).toBe(90_000);
     expect(limits.firstTokenRetries).toBe(1);
+  });
+
+  it("recovers a response cut off by the output limit twice by default, 0 to 5 allowed", () => {
+    expect(configSchema.parse({}).limits.truncationRecoveries).toBe(2);
+    const parse = (n: number) => configSchema.safeParse({ limits: { truncationRecoveries: n } });
+    expect(parse(0).success).toBe(true);
+    expect(parse(5).success).toBe(true);
+    expect(parse(6).success).toBe(false);
+    expect(parse(-1).success).toBe(false);
+    expect(parse(1.5).success).toBe(false);
   });
 
   it("accepts 0 to 3 silent-request retries and rejects more", () => {
@@ -677,8 +689,34 @@ describe("token budgets in configuration", () => {
   it("defaults compaction.maxOutputTokens independently of limits.maxOutputTokens", () => {
     const parsed = configSchema.parse({});
     expect(parsed.compaction.maxOutputTokens).toBe(16_000);
-    expect(parsed.limits.maxOutputTokens).toBe(16_384);
+    // Unset on purpose (it used to default to 16384 in the schema): the budget of each request is
+    // the model catalog's declared limit, else 16384, resolved where it is consumed.
+    expect(parsed.limits.maxOutputTokens).toBeUndefined();
     expect(parsed.limits.maxTurns).toBe(100);
+  });
+
+  it("keeps an explicit limits.maxOutputTokens from any layer, and none when no layer sets it", async () => {
+    const { global, workspace } = await fixture();
+    expect((await loadConfig(workspace)).limits.maxOutputTokens).toBeUndefined();
+    await json(join(global, "config.json"), { limits: { maxOutputTokens: 20_000 } });
+    expect((await loadConfig(workspace)).limits.maxOutputTokens).toBe(20_000);
+    await json(join(workspace, ".alisio", "config.json"), { limits: { maxOutputTokens: 9_000 } });
+    expect((await loadConfig(workspace, { trustProject: true })).limits.maxOutputTokens).toBe(
+      9_000,
+    );
+  });
+
+  it("round-trips limits.maxOutputTokens through the settings writer, and clearing it unsets it", async () => {
+    const { workspace } = await fixture();
+    expect(settableSettings().find((s) => s.key === "limits.maxOutputTokens")).toEqual({
+      key: "limits.maxOutputTokens",
+      kind: "number",
+    });
+    await setConfigValue({ key: "limits.maxOutputTokens", value: 32_768 });
+    expect((await loadConfig(workspace)).limits.maxOutputTokens).toBe(32_768);
+    await expect(setConfigValue({ key: "limits.maxOutputTokens", value: 0 })).rejects.toThrow();
+    await setConfigValue({ key: "limits.maxOutputTokens", value: undefined });
+    expect((await loadConfig(workspace)).limits.maxOutputTokens).toBeUndefined();
   });
 
   it("accepts explicit values and rejects non-positive budgets", () => {
