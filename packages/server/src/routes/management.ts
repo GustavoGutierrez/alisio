@@ -10,11 +10,13 @@ import {
   CommandCatalog,
   configFile,
   configHome,
+  hashProjectConfig,
   isSettableSettingKey,
   type McpServerInfo,
   type PluginCatalogEntry,
   pluginPrefix,
   resolveActiveAgent,
+  setTrust,
   settableSettings,
 } from "@alisio/core";
 import type {
@@ -58,7 +60,7 @@ export async function workspaceApp(
 }
 
 const UNTRUSTED =
-  "Trust this workspace from the terminal (run alisio in it) to manage its plugins here";
+  "Trust this workspace (sidebar workspace menu, or run alisio in it) to manage its plugins here";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -333,6 +335,37 @@ export function registerManagementRoutes(
         }),
       ),
     };
+  });
+
+  // ---- Workspace trust ----------------------------------------------------------------------
+  /**
+   * Grants (or withdraws) project trust from the web: the same persisted, per-directory decision
+   * the terminal prompt stores (`trust.json`, bound to the `.alisio/config.json` hash), so a
+   * changed config file is never trusted silently. Trust lets the workspace load its project
+   * config, plugins (executable code), agents, skills and prompts; the request must carry an
+   * explicit confirmation. The workspace application is reopened so the decision applies now.
+   */
+  router.post("/api/workspaces/:wid/trust", async ({ req, params }) => {
+    const input = validate<{ trusted: boolean; confirmed: boolean }>(await readJson(req), {
+      trusted: { check: is.boolean(), required: true },
+      confirmed: { check: (v) => v === true, required: true },
+    });
+    if (ctx.base.readOnly)
+      throw new HttpError("capability_ceiling", "Trust changes are unavailable under --read-only");
+    if (ctx.base.trustProject || ctx.base.config)
+      throw new HttpError(
+        "not_manageable",
+        "Trust is fixed for this server by --trust-project/--config",
+      );
+    const id = params.wid ?? "";
+    const path = await ctx.workspaces.pathOf(id);
+    if (!path) throw new HttpError("not_found", "Workspace not found");
+    if (ctx.scheduler.busyWorkspace(id))
+      throw new HttpError("runs_active", "Wait for the workspace's runs to finish, then retry");
+    await setTrust(path, input.trusted, await hashProjectConfig(path));
+    if (ctx.workspaces.get(id)) await recycler.request(id);
+    else recycler.announce(id, ["plugins", "commands", "skills", "agents", "mcp"]);
+    return { body: await ctx.workspaces.info(path) };
   });
 
   // ---- Settings -----------------------------------------------------------------------------

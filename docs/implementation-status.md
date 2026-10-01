@@ -15,7 +15,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
-  de razonamiento; servidor web (`alisio serve`).
+  de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
+  (`alisio serve`).
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -23,11 +24,11 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
-  comandos; servidor web).
+  comandos; agentes del usuario; servidor web).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
-  Herdr; agente activo y effort; servidor web.
+  Herdr; agente activo y effort; agentes del usuario; servidor web.
 
 ## Implementado
 
@@ -445,6 +446,100 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   descartan primero las piezas de menor prioridad. Lógica de diseño pura y probada
   (`identityParts`/`fitIdentityParts`).
 
+### Agentes del usuario (ventana Agentes y `/agents`)
+
+- Almacenamiento portable y compartido con otras herramientas: un archivo Markdown por agente con
+  frontmatter YAML, en dos ámbitos: proyecto `<workspace>/.agents/agents/<id>.md` y global
+  `~/.agents/agents/<id>.md` (`os.homedir()`). El frontmatter sigue la convención de subagentes
+  de Claude Code/OpenCode (`name` = id en minúsculas con guiones, `description`, `model`, `tools`
+  opcional, `mode: all` al crear); el cuerpo son las instrucciones (prompt de sistema). Los
+  ajustes propios de Alisio viven bajo una sola clave `alisio:` que las demás herramientas ignoran
+  (`displayName`, `reasoning.effort`, `reasoning.summary`, `text.format.type`, `text.verbosity`,
+  `createdAt`, `updatedAt`). La edición usa el modelo de documento de `yaml`: claves desconocidas y
+  comentarios escritos por otra herramienta se conservan; solo se tocan las claves de Alisio. La
+  escritura es atómica (archivo temporal + `rename`). Servicio compartido en el núcleo:
+  `AgentDefinitionService` (`app.agentDefinitions`), usado por el servidor web y la TUI.
+- Almacenamiento previo de Alisio: se LEEN ambos, sin migración. El descubrimiento del plugin de
+  subagentes sigue leyendo `.alisio/agents`, `<config>/agents`, `.claude/agents`,
+  `.opencode/agent(s)` y los demás orígenes de siempre, y ahora también `~/.agents/agents` (orden:
+  proyecto `.alisio/agents` > proyecto `.agents/agents` > compatibles > `<config>/agents` >
+  `~/.agents/agents` > `~/.claude/agents`…). El gestor de agentes solo ESCRIBE y lista los dos
+  ámbitos `.agents/agents`.
+- Listado: une los dos ámbitos con insignia Proyecto/Global; si el mismo id existe en ambos, el de
+  proyecto prevalece y se marca "Reemplaza al global" (y el global "Reemplazado por el de
+  proyecto"). Al crear se elige el ámbito: Proyecto por defecto con un workspace abierto; Global
+  sin workspace. Mover un agente entre ámbitos no está implementado.
+- Recarga en caliente: tras crear, editar o borrar, el servicio pide al registro de agentes del
+  plugin de subagentes que vuelva a descubrir los archivos (verbo `/agents reload`, también
+  disponible a mano), y comprueba que la ruta guardada esté cargada (estado `definitions` del
+  plugin). La respuesta lleva `live`: `true` solo si el proceso en ejecución ya la usa. En el
+  servidor web se recarga cada workspace abierto y se emite `catalog_changed` (`agents`) para que
+  los clientes refresquen. Sin el plugin de subagentes, con un workspace no confiable (proyecto) o
+  si otro origen de mayor prioridad tapa el archivo, `live` es `false` y la web muestra "Agente
+  guardado. Reinicia Alisio para usarlo." (la TUI imprime el aviso equivalente). No hay vigilante
+  de archivos: los cambios hechos fuera de Alisio se recogen al abrir la lista de agentes (web y
+  `/agents` en la TUI) o con `/agents reload`.
+- Confianza desde la web: un workspace no confiable guarda los agentes de proyecto pero no los
+  carga; el editor y el menú ⋯ del workspace ofrecen "Confiar en este workspace…" (ver Servidor
+  web). Si el workspace se confió antes de tener recursos de proyecto, al guardar su primer agente
+  de proyecto se reabre la aplicación y el agente queda cargado (`live: true`); si no, el workspace
+  pasa a mostrarse como no confiable en la barra lateral.
+- Plantillas compartidas en el núcleo (`AGENT_TEMPLATES`, servidas por `GET /api/agents/templates`
+  y usadas por la TUI): Code Reviewer, Test Writer, Refactoring Assistant, Documentation Writer,
+  Security Auditor, Bug Triage & Debugger, Migration Assistant, Research Agent, Customer Support
+  Agent, DevOps Assistant, Meeting Assistant y Analytics Agent (sin duplicados), cada una con
+  instrucciones y ajustes por defecto.
+- Creación asistida: una llamada sin herramientas del modelo ACTIVO (`app.provider`, vía
+  `completeText`) escribe o refina nombre, descripción, instrucciones y ajustes sugeridos. Guía de
+  autoría: si existe una skill descubierta llamada `create-agent` (o `agent-creator`) se usa su
+  cuerpo; si no, la skill incluida `bundled:create-agent` (`packages/core/src/agents/create-agent-skill.ts`:
+  rol, objetivo, alcance, uso de herramientas, restricciones, formato de salida, ejemplos). En el
+  repositorio no había ninguna skill de ese tipo (solo `alisio-publish`), así que se usa la
+  incluida. La respuesta indica `guidance` y `generatedBy`.
+- Capacidades: derivadas solo de los metadatos del catálogo (`ModelInfo.effort.supportedLevels`,
+  `inputModalities`/`modalities`, `capabilities` con claves como `reasoning`, `tools`,
+  `structured_outputs`, `verbosity`). Un `false` explícito oculta/deshabilita la opción. Si el
+  proveedor no declara nada (caso habitual del `GET /models` OpenAI-compatible), se ofrece todo de
+  forma permisiva (`known: false`, la UI lo indica). Al cambiar de modelo los ajustes no
+  soportados se eliminan o se sustituyen (`fitAgentSettings`).
+- Web: entrada "Agentes" justo encima de "Ajustes" en la barra lateral (y su icono en la barra
+  contraída). Reutiliza el armazón del modal de Ajustes. Lista "Tus agentes" + "Plantillas";
+  editor con migas `Agentes › Nuevo agente/<nombre>`, pestañas Configuración/Sesiones, dos
+  columnas (una en pantallas estrechas): definición (nombre, descripción, instrucciones, ámbito),
+  modelo (lista real de `GET /api/agents/models` con etiquetas de capacidad), formato de texto,
+  esfuerzo, verbosidad y resumen según capacidades; botón "Guardar" activo solo con nombre
+  válido, modelo y cambios sin guardar. Columna derecha: petición `curl` a la API propia de
+  Alisio (`POST /api/agents`, `PUT /api/agents/:id`) con números de línea, resaltado y copiar, y
+  los pasos de inicio marcados con estado real (definición guardada, workspace, sesión con el
+  agente, sesión con título = hubo un mensaje); se descartan con × (guardado en `localStorage`
+  con try/catch). "Crear con Alisio" muestra el diálogo "Construyendo con Alisio" (progreso
+  indeterminado, tiempo transcurrido, Cancelar que aborta la petición y la llamada al modelo); un
+  error se muestra sin tocar el formulario. Un agente nuevo generado se guarda y se ofrece
+  "Probarlo en un chat nuevo" (por defecto) o "Seguir en el editor". Pestaña Sesiones: sesiones
+  con ese agente (`GET /api/sessions?agent=<id>`) y botón para iniciar una.
+- Comandos y cambio de agente: cada agente cargado (integrados, proyecto, global) es el comando
+  `/agent:<id>`; el espacio de nombres `agent:` evita colisiones con comandos integrados, de
+  plugins, plantillas y `skill:<id>` (si una fuente de mayor prioridad ya tiene ese nombre exacto,
+  el comando del agente se omite). En la web, `/agents` sin argumentos abre un selector con
+  búsqueda (subcadena en id, nombre y descripción), insignia Proyecto/Global/Integrado, el actual
+  marcado y `build` como vuelta al agente predeterminado; la insignia del agente en la cabecera
+  abre el mismo selector. La activación guarda el agente en la sesión y se aplica desde el
+  SIGUIENTE mensaje (nunca a mitad de una ejecución): instrucciones, modo de solo lectura y
+  esfuerzo por defecto. El modelo del agente se aplica en la misma sesión solo si pertenece al
+  proveedor de la sesión; si no, el chat conserva su modelo y lo dice ("inicia un chat nuevo con
+  el agente"). Precedencia del esfuerzo: el de la sesión (web) o `/effort` (TUI) gana; si no, el
+  del agente.
+- TUI: `/agents` abre el selector (filtro por subcadena en nombre y descripción, insignias,
+  actual, predeterminado) con las acciones "+ Crear agente…" y "✎ Gestionar…"; `/agents new
+  [descripción]` (con descripción: creación asistida directa), `/agents templates`,
+  `/agents manage`, `/agents edit|delete <id> [project|global]`; el resto de verbos (`list`,
+  `defs`, `reload`, `open`, `cancel`…) siguen yendo al plugin de subagentes. El editor es una
+  lista de campos (ámbito al crear, nombre, descripción, instrucciones —una línea, `\n` para saltos—,
+  modelo de la lista configurada, esfuerzo/resumen/verbosidad/formato según capacidades,
+  "✦ Refinar con Alisio", guardar, cerrar). "Construyendo con Alisio" se muestra en la línea de
+  pistas y Esc lo cancela. Tras crear: "▶ Probarlo en una sesión nueva" (por defecto) o seguir en
+  el editor. `/agent:<id>` activa un agente (como el selector, a nivel global `agents.active`).
+
 ### Preguntar al usuario (ask_user_question)
 
 - Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
@@ -541,8 +636,12 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (`ALISIO_LOG_LEVEL`).
 - `WorkspaceHost`: una `Application` por workspace (raíz git del `realpath`), creada al usarse,
   desalojo LRU al llegar a `--max-workspaces`, `503 workspace_limit` si todos están ocupados, cierre
-  tras 10 minutos de inactividad y confianza leída del almacén de confianza de la terminal (la web
-  nunca la concede). Un workspace conocido cuya carpeta ya no existe (o no es accesible) responde
+  tras 10 minutos de inactividad y confianza leída del almacén de confianza de la terminal. La web también
+  puede concederla o retirarla (`POST /api/workspaces/:wid/trust` con `confirmed: true`, desde el
+  menú ⋯ del workspace o el editor de Agentes, tras una confirmación que explica lo que se
+  desbloquea): guarda la misma decisión que la pregunta de la terminal (`trust.json`, ligada al hash
+  de `.alisio/config.json`) y reabre la aplicación del workspace; se rechaza con ejecuciones activas
+  (`409 runs_active`), con `--read-only` y con `--trust-project`/`--config`. Un workspace conocido cuya carpeta ya no existe (o no es accesible) responde
   `404 workspace_missing` al abrirse (crear sesión, prompts, archivos) en lugar de un 500, y
   `GET /api/workspaces` lo marca con `exists: false`; la web lo atenúa y desactiva sus sesiones
   nuevas. Verificado con tests de `WorkspaceHost` y de rutas; no se vigila el disco en vivo (el
@@ -1199,6 +1298,31 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `/effort` (sí su lógica pura y las piezas de estado), ni el envío efectivo del effort contra la
   API real de DeepSeek (sí el cuerpo de la petición contra el servidor de pruebas).
 
+## Agentes del usuario: alcance de la verificación
+
+- Vitest: `tests/agent-definitions.test.ts` (validación, ids, archivo Markdown legible por el
+  parser de subagentes sin avisos, conservación de claves y comentarios ajenos, archivos
+  inválidos, mezcla de ámbitos con reemplazo, `live` con registro falso, recarga real con la
+  aplicación y el plugin de subagentes —el agente aparece y desaparece sin reiniciar— y aviso de
+  reinicio sin plugin, capacidades y ajuste, borradores y plantillas);
+  `tests/server-agents.test.ts` (CRUD HTTP en ambos ámbitos, `/api/agents` y `/api/commands`
+  reflejan el agente al momento, validación, `--read-only`, `live: false` sin plugin, modelos,
+  borrador con la guía incluida y con una skill `create-agent` descubierta, crear → sesión nueva
+  con el agente y sus instrucciones/effort en la siguiente petición, `/agent:<id>` y vuelta a
+  `build`, filtro `?agent=`, confianza desde la web con confirmación —los agentes de proyecto se
+  cargan y se descargan al retirarla—, primer agente de un workspace confiado sin recursos y
+  rechazo con `--read-only`); `tests/tui-agent-manager.test.ts` (verbos de `/agents`, filas e
+  insignias del selector, filtro, filas del editor según capacidades, ajuste al guardar,
+  instrucciones en una línea, registro de `/agent:<id>` y regla de colisión en el catálogo);
+  `tests/web-agents.test.ts` (formulario, guardar solo con cambios válidos, ajuste por
+  capacidades, `curl` de la API propia, resaltado, pasos de inicio, filtro e insignias del
+  selector, cliente API con cancelación y paridad de i18n).
+- Verificado a mano en navegador (Playwright contra `alisio serve` aislado): entrada Agentes
+  encima de Ajustes, lista con plantillas, editor a dos columnas con el panel de configuración y
+  los pasos, y aviso de workspace no confiable.
+- No verificado: la generación con un modelo real (solo con proveedor de prueba), la interacción
+  visual completa de la TUI en pseudo-terminal (sí su lógica pura) y Windows/macOS.
+
 ## Rutas externas y aprobación de directorios: alcance de la verificación
 
 - Vitest: `tests/external-paths.test.ts` (unidad de `PathAccess`: dentro del workspace, raíz extra
@@ -1392,6 +1516,30 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   `node --env-file=.env`. Los plugins `.ts` locales requieren Bun o Node >=22.18; los paquetes
   npm de plugins deben publicarse en JavaScript. La condición de export `alisio-source` solo
   se usa en desarrollo dentro del monorepo y no se publica.
+
+### Agentes del usuario
+
+- Solo se escriben y listan los ámbitos `.agents/agents` (proyecto y global); los agentes en
+  `.alisio/agents`, `<config>/agents`, `.claude/agents` u `.opencode/agent(s)` se siguen cargando
+  pero no se editan desde la ventana Agentes ni desde `/agents manage`. No se puede mover un
+  agente entre ámbitos.
+- `reasoning.summary`, `text.format.type` y `text.verbosity` se guardan y se muestran, pero el
+  contrato `ModelProvider.stream` aún no tiene campos para ellos: no se envían al proveedor.
+  `reasoning.effort` sí se aplica (como effort por defecto del agente) y el modelo del agente se
+  usa al iniciar un chat con él.
+- La descripción de la herramienta `task` (lista de `subagent_type` anunciados al modelo) se fija
+  al arrancar: un agente nuevo se puede delegar en cuanto se recarga, pero el modelo solo lo ve
+  anunciado tras reiniciar. Las tareas de subagentes en curso conservan su definición.
+- El estado publicado por el plugin de subagentes (`mainAgents`, `definitions`) es global en la
+  base de datos, no por workspace: con varios workspaces abiertos en `alisio serve`, el último en
+  recargarse define el catálogo (limitación previa; tras cada escritura se recarga el workspace
+  que escribió en último lugar).
+- Sin vigilante de archivos; las ediciones externas se recogen al abrir la lista o con
+  `/agents reload`.
+- Las instrucciones en la TUI se editan en una línea (`\n` para saltos); para textos largos use
+  "✦ Refinar con Alisio", la web o un editor externo.
+- En la web, activar un agente cuyo modelo es de otro proveedor no cambia el modelo de ese chat
+  (lo indica); "Probarlo en un chat nuevo" sí lo usa si los perfiles configurados lo resuelven.
 
 ### Subagentes
 

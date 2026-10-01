@@ -59,6 +59,8 @@ export class ConnectInputPrompt implements Component {
       hint?: string;
       step: number;
       steps: number;
+      /** Dialog title (default `Connect · <provider>`). */
+      title?: string;
       onSubmit: (value: string) => void;
       onCancel: () => void;
     },
@@ -117,7 +119,7 @@ export class ConnectInputPrompt implements Component {
     return [
       truncateToWidth(style.cyan(`┌${rule}┐`), width),
       truncateToWidth(
-        `│ ${style.bold(`Connect · ${this.options.provider}`)} ${style.dim(`(${this.options.step}/${this.options.steps})`)}`,
+        `│ ${style.bold(this.options.title ?? `Connect · ${this.options.provider}`)}${this.options.title && this.options.steps <= 1 ? "" : ` ${style.dim(`(${this.options.step}/${this.options.steps})`)}`}`,
         width,
       ),
       truncateToWidth(`│ ${style.brightCyan("❯")} ${style.bold(this.options.label)}`, width),

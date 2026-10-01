@@ -234,9 +234,14 @@ for a folder in the best way the server supports:
    for remote access (`--allow-remote`), because a dialog or folder listing would show the server
    machine rather than yours.
 
-The web never grants project trust. A directory whose `.alisio` configuration you have not trusted
-from the terminal opens without its project resources (plugins, skills, prompts, configuration) and
-is marked untrusted. Run `alisio` in that directory to answer the trust prompt.
+A directory you have not trusted opens without its project resources (configuration, plugins,
+agents, skills, prompts) and is marked untrusted. Trust it from its **⋯** menu in the sidebar
+(**Trust this workspace…**) or from the [Agents](/agents) editor, after a confirmation that explains
+what trust unlocks; or run `alisio` in that directory to answer the terminal prompt. Both store the
+same decision, bound to the content of `.alisio/config.json`: if that file changes, the workspace
+is untrusted again until you confirm. The workspace reopens so the change applies at once (it is
+refused while its runs are active, under `--read-only`, and when `--trust-project`/`--config` fix
+trust for the server). **Stop trusting this workspace…** withdraws it.
 
 ## Sessions, runs and permissions
 

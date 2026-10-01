@@ -53,6 +53,18 @@ it is not a statement that all of its release criteria are met.
   configuration is not a hidden catalog. Catalog discovery is cached for up to 15 seconds per
   process.
 - **License**: MIT.
+- **User agents**: only the `.agents/agents` scopes (project and global) are written and listed by
+  the Agents window and `/agents manage`; agents in `.alisio/agents`, `<config>/agents`,
+  `.claude/agents` or `.opencode/agent(s)` still load but are not edited there, and agents cannot be
+  moved between scopes. `reasoning.summary`, `text.format.type` and `text.verbosity` are stored and
+  shown but not sent to providers yet (the `ModelProvider.stream` contract has no fields for them);
+  `reasoning.effort` applies as the agent's default effort. The `task` tool's advertised subagent
+  list is fixed at startup: a new agent can be delegated to right after the reload, but the model
+  only sees it advertised after a restart. The subagents plugin's published state is global to the
+  database, so with several workspaces open in `alisio serve` the last one reloaded defines the
+  catalog. There is no file watcher: outside edits are picked up when the agents list opens or with
+  `/agents reload`. TUI instructions are edited on one line (`\n` for line breaks). Activating an
+  agent whose model belongs to another provider keeps the chat's model (and says so).
 - **Memory**: search uses the trigram tokenizer, so terms shorter than 3 characters are ignored. No
   semantic search. The automatic end-of-session summary only runs in the TUI (not in headless `run`)
   and is bounded by `pluginHooks.sessionEndTimeoutMs`; if it expires, exit continues without a
@@ -191,6 +203,10 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
 - **v4 persistence, blobs and command catalog** — v3 → v4 migration, run journal, blob store, TUI
   command parity.
+- **User agents** — `.agents/agents` CRUD, foreign-key round-trip, hot-reload with the real
+  subagents plugin and the restart notice without it, HTTP API, drafts with the bundled and a
+  discovered `create-agent` skill, create → new session, `/agent:<id>` activation and its collision
+  rule, TUI manager logic and the web Agents state; the web window was checked in Chromium.
 - **Web server (`alisio serve`)** — auth, workspaces, prompts, SSE, approvals, commands, models,
   context, export and shutdown against a real server on an ephemeral port; zero-overhead startup
   traced under Node; serve smoke in the Node CLI and the Bun binary. The web UI's reducers, SSE

@@ -25,6 +25,8 @@ export interface AgentDefinition {
   hidden: boolean;
   background: boolean;
   skills?: string[];
+  /** Default reasoning effort (`alisio.reasoning.effort`, written by the Alisio agent manager). */
+  effort?: string;
   /** builtin | cli | project | convention | compat | user | plugin:<id> */
   source: string;
   path?: string;
@@ -46,6 +48,8 @@ const KNOWN = new Set([
   "background",
   "skills",
   "readOnly",
+  // Alisio-only settings written by the agent manager (other harnesses ignore this key).
+  "alisio",
   // Compat keys accepted silently.
   "temperature",
   "top_p",
@@ -157,6 +161,9 @@ export function parseAgentDefinition(
   if (front.readOnly === true) definition.readOnly = true;
   const skills = list(front.skills);
   if (skills) definition.skills = skills;
+  const effort = (front.alisio as { reasoning?: { effort?: unknown } } | undefined)?.reasoning
+    ?.effort;
+  if (typeof effort === "string" && /^[a-z][a-z_-]{0,19}$/.test(effort)) definition.effort = effort;
   return { definition, warnings };
 }
 
@@ -241,8 +248,9 @@ export interface CliAgent {
 }
 /**
  * Discovery, first match wins by name: CLI `--agents` > project `.alisio/agents` >
- * `.agents/agents` (speculative convention) > compat `.claude/agents`, `.opencode/agent(s)`
- * > user `<config>/agents`, `~/.claude/agents`, `~/.config/opencode/agent(s)` > plugin
+ * `.agents/agents` (shared convention, written by the Alisio agent manager) > compat
+ * `.claude/agents`, `.opencode/agent(s)` > user `<config>/agents`, `~/.agents/agents`,
+ * `~/.claude/agents`, `~/.config/opencode/agent(s)` > plugin
  * directories (namespaced `plugin:name`) > built-ins. Project sources require trust.
  */
 export async function discoverAgents(options: {
@@ -284,6 +292,7 @@ export async function discoverAgents(options: {
     { dir: join(options.workspace, ".opencode", "agent"), source: "compat", project: true },
     { dir: join(options.workspace, ".opencode", "agents"), source: "compat", project: true },
     { dir: join(options.configHome, "agents"), source: "user", project: false },
+    { dir: join(options.home, ".agents", "agents"), source: "user", project: false },
     { dir: join(options.home, ".claude", "agents"), source: "user", project: false },
     { dir: join(options.home, ".config", "opencode", "agent"), source: "user", project: false },
     { dir: join(options.home, ".config", "opencode", "agents"), source: "user", project: false },

@@ -182,7 +182,12 @@ export class SessionService {
     return {
       policy: agent.policy ? { ...agent.policy } : policy,
       approvals: agent.approvals ?? approvals,
-      ...(typeof effort === "string" ? { reasoningEffort: effort } : {}),
+      // The session's own effort wins; otherwise the agent's default (`alisio.reasoning.effort`).
+      ...(typeof effort === "string"
+        ? { reasoningEffort: effort }
+        : agent.reasoningEffort
+          ? { reasoningEffort: agent.reasoningEffort }
+          : {}),
       ...(agent.instructions ? { instructions: agent.instructions } : {}),
     };
   }

@@ -34,6 +34,8 @@ features:
     details: A built-in persistent memory plugin backed by SQLite and FTS5 that survives sessions and projects.
   - title: Typed plugin SDK
     details: Tools, commands, events, context, compaction and session hooks, model completions and a SQLite storage port.
+  - title: Agents
+    details: Create agents with the active model, from templates or by hand, store them as portable Markdown in .agents/agents and switch with /agents or /agent:&lt;id&gt; in the web UI and the TUI.
   - title: Subagents
     details: Delegate to specialized agents in child sessions, with a live agent tree, parallel git worktrees and cascade cancellation.
   - title: MCP and Herdr
@@ -102,6 +104,7 @@ It includes:
 - An interactive TUI and a headless CLI (`alisio run`, JSONL events, session resume).
 - Local tools for reading, searching, editing, running processes and Git, gated by explicit permissions.
 - Context compaction and a built-in persistent memory plugin.
+- [Agents](/agents): model-assisted creation, templates, project/global `.agents/agents` files and switching from the web UI and the TUI.
 - Subagents: delegation to specialized agents in child sessions, with a live agent tree.
 - Hierarchical [`AGENTS.md` instructions and Agent Skills](/context).
 - An MCP client (stdio and Streamable HTTP) and a Herdr integration.

@@ -67,6 +67,10 @@ export const announceAssertive = signal("");
 /** Ticks every 30 s so relative times refresh. */
 export const now = signal(Date.now());
 export const settingsOpen = signal(false);
+/** The Agents window (list/editor), opened from the sidebar above Settings. */
+export const agentsOpen = signal(false);
+/** The `/agents` quick picker of the open chat. */
+export const agentPickerOpen = signal(false);
 export const mobileSidebar = signal(false);
 /** Asks the composer to take focus (e.g. after an approval is answered). */
 export const focusComposer = signal(0);
@@ -454,6 +458,80 @@ export async function patchCurrent(
   }
 }
 
+/**
+ * Activates `agentId` in the open chat through `/agent:<id>` (stored on the session, applied from
+ * its next prompt; the agent's model only when it belongs to the session's provider).
+ */
+export async function activateAgent(agentId: string): Promise<void> {
+  const id = currentId.value;
+  if (!id) return;
+  try {
+    const outcome = await api.command(id, { requestId: newId(), name: `agent:${agentId}` });
+    if (outcome.output) transcript.value = addLocalNote(transcript.value, outcome.output);
+    void refreshDetail();
+    if (outcome.effects?.includes("model")) {
+      void refreshModels();
+      void refreshContext();
+    }
+  } catch (error) {
+    showToast(errorText(error));
+  }
+}
+
+/**
+ * Starts a NEW chat in `workspace` with `agentId` active ("Try it"). The agent's model is used
+ * when the configured profiles can resolve it; otherwise the chat starts on the current model.
+ */
+export async function startSessionWithAgent(
+  workspace: string,
+  agentId: string,
+  model?: string,
+): Promise<boolean> {
+  try {
+    let created: SessionDetail;
+    try {
+      created = await api.createSession({ workspace, agent: agentId, ...(model ? { model } : {}) });
+    } catch (error) {
+      if (!model || !(error instanceof ApiRequestError) || error.code !== "validation_failed")
+        throw error;
+      created = await api.createSession({ workspace, agent: agentId });
+      showToast(t("agentsWin.modelFallback", { model }));
+    }
+    sidebar.value = upsertSession(sidebar.value, created);
+    await openSession(created.id);
+    focusComposer.value++;
+    return true;
+  } catch (error) {
+    showToast(errorText(error));
+    return false;
+  }
+}
+
+/**
+ * Trusts (or stops trusting) a workspace after an explicit confirmation that says what trust
+ * unlocks. The server persists the same decision as the terminal prompt and reopens the
+ * workspace so its project config, plugins, agents, skills and prompts load (or unload).
+ */
+export async function setWorkspaceTrust(
+  workspace: { id: string; path: string },
+  trusted: boolean,
+): Promise<boolean> {
+  const question = trusted
+    ? t("trust.confirm", { path: workspace.path })
+    : t("trust.confirmRevoke", { path: workspace.path });
+  if (!window.confirm(question)) return false;
+  try {
+    const info = await api.trustWorkspace(workspace.id, trusted);
+    sidebar.value = upsertWorkspace(sidebar.value, info);
+    showToast(t(info.trusted ? "trust.granted" : "trust.revoked"));
+    if (detail.value?.workspaceId === workspace.id) void refreshCommands();
+    return true;
+  } catch (error) {
+    showToast(errorText(error));
+    return false;
+  }
+}
+
 export const setPreset = (preset: PermissionPresetId) => patchCurrent({ preset });
 export const setModel = (model: string) => patchCurrent({ model });
 export const setEffort = (effort: string | null) => patchCurrent({ effort });
@@ -520,6 +598,11 @@ export async function submit(
   if (text.trim()) remember(text);
   if (images?.refs.length) return sendPrompt(text, undefined, newId(), images);
   const slash = parseSlash(text);
+  if (slash?.name === "agents" && !slash.args) {
+    // `/agents` alone opens the agent picker; `/agents <verb>` still runs the command.
+    agentPickerOpen.value = true;
+    return;
+  }
   const known = slash
     ? commands.value.find(
         (c) => c.name === slash.name || c.aliases?.includes(slash.name.toLowerCase()),

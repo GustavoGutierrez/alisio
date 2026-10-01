@@ -35,6 +35,9 @@ extend it without touching the core.
   files) that never splits tool calls from their results.
 - **Persistent memory**: SQLite FTS5 observations, topic-key upserts, memory-aware compaction and
   session summaries, shipped as the disableable `@alisio/plugin-memory`.
+- **Agents**: create agents with the active model's help (or from templates), stored as portable
+  Markdown in `.agents/agents` (project) or `~/.agents/agents` (global), reloaded without a restart
+  and switched with `/agents` or `/agent:<id>` in the web UI and the TUI.
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned

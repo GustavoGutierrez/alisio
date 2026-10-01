@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import {
+  agentPickerOpen,
   api,
   detail,
   mobileSidebar,
@@ -75,10 +76,17 @@ export function Header() {
           </h1>
         )}
         {session ? (
-          <span class={styles.badge}>
+          <button
+            type="button"
+            class={`${styles.badge} ${styles.badgeButton}`}
+            title={t("agentsWin.activeBadge", { name: session.agent ?? "build" })}
+            onClick={() => {
+              agentPickerOpen.value = true;
+            }}
+          >
             <Icon name="shield" size={13} />
             {session.agent ?? "build"} · {t(`preset.${session.preset}`)}
-          </span>
+          </button>
         ) : null}
         <span class={styles.spacer} />
         {session ? (

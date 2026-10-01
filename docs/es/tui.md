@@ -114,6 +114,11 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
 | `/agents …` | Gestión heredada de tareas de subagentes (plugin integrado): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; sigue disponible con un argumento como arriba — consulte [Subagentes](/es/subagents#in-the-tui) |
+| `/agents new [descripción]` | Crea un agente en `.agents/agents` (proyecto o global). Con una descripción, el modelo activo redacta las instrucciones de inmediato ("Building with Alisio", Esc cancela); al terminar Alisio ofrece probarlo en una sesión nueva. Consulte [Agentes](/es/agents#terminal-agents) |
+| `/agents templates` | Crea un agente a partir de una plantilla (Code Reviewer, Test Writer, Security Auditor, …). Consulte [Agentes](/es/agents) |
+| `/agents manage` | Edita, activa, prueba o elimina agentes guardados; `/agents edit <id> [project\|global]` y `/agents delete <id> [project\|global]` van directo a uno |
+| `/agents reload` | Vuelve a descubrir archivos de agentes cambiados fuera de Alisio |
+| `/agent:<id>` | Activa un agente cargado desde el siguiente prompt; hay un comando por agente cargado y el prefijo `agent:` nunca colisiona con otros comandos |
 
 `/init` es una plantilla de prompt que genera o actualiza `AGENTS.md` a partir del repositorio; no
 tiene relación con el comando `alisio setup`, que solo genera un `.alisio/config.json` de ejemplo.

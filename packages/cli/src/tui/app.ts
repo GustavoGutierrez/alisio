@@ -1,10 +1,21 @@
 import { homedir } from "node:os";
-import type {
-  AppOptions,
-  ApprovalDecision,
-  ApprovalRequest,
-  ExternalDirectoryRequest,
-  SettableSettingKey,
+import {
+  AGENT_TEMPLATES,
+  type AgentDefinitionInfo,
+  type AgentDraft,
+  type AgentModelOption,
+  type AppOptions,
+  type ApprovalDecision,
+  type ApprovalRequest,
+  agentAuthoringGuidance,
+  agentCommandDescriptors,
+  agentIdFromCommand,
+  agentModelCapabilities,
+  agentModelLabels,
+  agentModelOptions,
+  type ExternalDirectoryRequest,
+  generateAgentDraft,
+  type SettableSettingKey,
 } from "@alisio/core";
 import type {
   AskQuestionsRequest,
@@ -35,9 +46,27 @@ import {
 } from "@earendil-works/pi-tui";
 import { loadVersion } from "../version.ts";
 import {
+  AGENT_PICKER_ACTIONS,
+  type AgentField,
+  type AgentForm,
+  agentEditorRows,
+  agentFieldChoices,
+  agentFieldSupported,
+  agentPickerRows,
+  applyDraft,
+  decodeMultiline,
+  emptyAgentForm,
+  encodeMultiline,
+  filterAgentRows,
+  formErrors,
+  formFromDefinition,
+  formFromTemplate,
+  formToInput,
+  parseAgentsArgs,
+} from "./agent-manager.ts";
+import {
   type ActiveAgent,
   activeAgentCatalog,
-  agentPickerItems,
   agentRunOptions,
   type MainCapableAgentRecord,
   mainAgentFromRecord,
@@ -147,6 +176,8 @@ export class Picker implements Component {
     private readonly onCancelPick: () => void,
     private filterable = false,
     private detail?: string,
+    /** Custom filter (default: value prefix, keeping group headers). */
+    private readonly match?: (items: SelectItem[], filter: string) => SelectItem[],
   ) {
     this.allItems = items;
     this.maxVisible = Math.min(
@@ -164,7 +195,11 @@ export class Picker implements Component {
   /** (Re)builds the SelectList over the filtered display sequence; selection starts on a row. */
   private resetList(): void {
     this.items = Picker.displayItems(
-      this.filter ? visibleGroupedItems(this.allItems, this.filter) : this.allItems,
+      this.filter
+        ? this.match
+          ? this.match(this.allItems, this.filter)
+          : visibleGroupedItems(this.allItems, this.filter)
+        : this.allItems,
     );
     this.list = new SelectList(this.items, this.maxVisible, selectListTheme);
     this.list.onSelect = (item) => {
@@ -854,7 +889,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // read-only agent narrows the run to reads (no approvals). The persisted reasoning effort is
     // resolved against the ACTIVE model and sent when the model advertises supported levels.
     const agent = currentAgent();
-    const effort = currentEffort();
+    // An explicit /effort wins; otherwise the agent's own default effort (agentRunOptions) is kept.
+    const effort = app.config.agents.effort || !agent.effort ? currentEffort() : undefined;
     return task((signal) =>
       app.runner.run(session, prompt, signal, {
         ...agentRunOptions(agent),
@@ -910,6 +946,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     hint?: string;
     step: number;
     steps: number;
+    title?: string;
   }): Promise<string | undefined> =>
     new Promise((resolve) => {
       showPicker(
@@ -1449,17 +1486,27 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const openAgentsPicker = () => {
     const agents = mainAgents();
     const current = currentAgent();
+    const rows = [...AGENT_PICKER_ACTIONS, ...agentPickerRows(agents, current.id, agentRoots())];
     showPicker(
       new Picker(
-        "Active agent",
-        agentPickerItems(agents, current.id),
+        "Agents",
+        rows,
         (item) => {
+          if (item.value === "__agents:new") {
+            closePicker();
+            return void newAgentFlow().catch(error);
+          }
+          if (item.value === "__agents:manage") {
+            closePicker();
+            return void manageAgents().catch(error);
+          }
           const agent = agents.find((candidate) => candidate.id === item.value);
           if (agent) void applyActiveAgent(agent);
         },
         closePicker,
         true,
-        "Changing the active agent takes effect from the next prompt; the current session is kept unless the agent declares a different model.",
+        "Type to search by name or description. Selecting an agent activates it from the next prompt; build (default) returns to the default Alisio agent.",
+        (items, filter) => filterAgentRows(items, filter),
       ),
     );
   };
@@ -1500,6 +1547,476 @@ export async function runTui(options: TuiOptions): Promise<void> {
         error(cause);
       }
     })();
+  };
+  // ---- Agent manager: project/global `.agents/agents` files (shared core service) ----------
+  const agentRoots = () => ({ workspace: app.workspace, home: homedir() });
+  let agentModels: AgentModelOption[] | undefined;
+  /** Configured models with capabilities (cached per process; the running model always listed). */
+  const loadAgentModels = async (): Promise<AgentModelOption[]> => {
+    if (agentModels) return agentModels;
+    let options: AgentModelOption[] = [];
+    try {
+      options = agentModelOptions(await app.listAvailableModels(), {
+        ...(app.providerInfo?.profileName ? { profile: app.providerInfo.profileName } : {}),
+        ...(app.providerInfo?.id ? { provider: app.providerInfo.id } : {}),
+        model: view.model,
+      });
+    } catch {
+      /* configured catalogs unavailable: offer the running model only */
+    }
+    if (!options.some((option) => option.active)) {
+      const capabilities = agentModelCapabilities(
+        modelCatalog.get(view.model) ?? { id: view.model },
+      );
+      options.unshift({
+        reference: view.model,
+        provider: app.provider.id,
+        profile: app.providerInfo?.profileName ?? "",
+        providerName: app.providers.get(activeProvider?.id ?? "")?.name ?? app.provider.id,
+        id: view.model,
+        active: true,
+        capabilities,
+        labels: agentModelLabels(capabilities),
+      });
+    }
+    agentModels = options;
+    return options;
+  };
+  const capabilitiesOf = (models: AgentModelOption[], reference: string) =>
+    models.find((m) => m.reference === reference || m.id === reference)?.capabilities ??
+    agentModelCapabilities(undefined);
+  const defaultAgentModel = (models: AgentModelOption[]) =>
+    models.find((m) => m.active)?.reference ?? view.model;
+  /**
+   * "Building with Alisio": one tool-less call of the ACTIVE model writes (or refines) the agent
+   * with the authoring guidance (a discovered `create-agent` skill, else the bundled one). Runs as
+   * a task, so Esc cancels it; failures are reported and leave the form untouched.
+   */
+  const buildWithAlisio = async (
+    description: string,
+    base?: AgentForm,
+  ): Promise<AgentDraft | undefined> => {
+    let draft: AgentDraft | undefined;
+    flashHint("◐ Building with Alisio… writing the agent instructions · Esc to cancel", 180_000);
+    await task(async (signal) => {
+      draft = await generateAgentDraft(app.provider, description, {
+        signal,
+        guidance: await agentAuthoringGuidance(app.skills),
+        ...(base
+          ? {
+              base: {
+                name: base.name,
+                description: base.description,
+                instructions: base.instructions,
+              },
+            }
+          : {}),
+      });
+    });
+    flashHint(
+      draft
+        ? `Draft by ${draft.generatedBy} (${draft.guidance}). Review it, then save.`
+        : "Building with Alisio stopped; nothing was changed.",
+      5000,
+    );
+    return draft;
+  };
+  /** Saves a form; reports honestly whether the running registry already uses the change. */
+  const saveAgentForm = async (form: AgentForm, models: AgentModelOption[]) => {
+    const input = formToInput(form, capabilitiesOf(models, form.model));
+    const change = form.id
+      ? await app.agentDefinitions.update(form.scope, form.id, input)
+      : await app.agentDefinitions.create(form.scope, input);
+    editor.setAutocompleteProvider(buildSlashCompletionProvider());
+    notice(
+      change.live
+        ? `Agent ${change.result.name} saved to ${change.result.path} and available now: /agent:${change.result.id}.`
+        : `Agent ${change.result.name} saved to ${change.result.path}. Restart Alisio to use it${form.scope === "project" ? " (project agents also need a trusted workspace)" : ""}.`,
+    );
+    return change;
+  };
+  /** Starts a fresh session with `id` as the active agent (the "Try it" action). */
+  const tryAgentInNewSession = async (id: string) => {
+    const agent = mainAgents().find((candidate) => candidate.id === id);
+    if (!agent)
+      return notice(`Agent ${id} is not loaded in this process; restart Alisio to try it.`);
+    await endSession("clear");
+    await app.updateSetting("agents.active", agent.id);
+    let created: Awaited<ReturnType<typeof app.switchModel>>;
+    if (agent.model && agent.model !== view.model)
+      created = await app.switchModel(agent.model).catch(() => undefined);
+    if (created) {
+      activeProvider = app.providerInfo;
+      modelList = undefined;
+      session = created.id;
+      reset(initialViewState(created.model));
+    } else {
+      session = app.store.create(app.workspace, app.provider.id, view.model).id;
+      reset(initialViewState(view.model));
+    }
+    notice(`New session ${session} with agent ${agent.name}. Type a prompt to try it.`);
+    void app.herdr.report("idle", session);
+    refreshEffort();
+    refreshEstimate();
+  };
+  /** After the first save: try the agent in a new session (default) or keep editing. */
+  const offerTryAgent = async (form: AgentForm, models: AgentModelOption[], live: boolean) => {
+    const choice = await askChoice(
+      `Agent ${form.name} created`,
+      live
+        ? [
+            { value: "try", label: "▶ Try it in a new session", description: "Default" },
+            { value: "stay", label: "Stay in editor" },
+          ]
+        : [{ value: "stay", label: "Stay in editor", description: "Restart Alisio to try it" }],
+    );
+    if (choice === "try" && form.id) return tryAgentInNewSession(form.id);
+    if (choice === "stay") return openAgentEditor(form, models, form);
+  };
+  /** The editor: one picker row per field; each edit returns to it. Esc closes. */
+  const openAgentEditor = async (
+    initial: AgentForm,
+    models: AgentModelOption[],
+    saved?: AgentForm,
+  ): Promise<void> => {
+    let form = initial;
+    let baseline = saved ? JSON.stringify(saved) : undefined;
+    const show = () => {
+      const capabilities = capabilitiesOf(models, form.model);
+      const dirty = baseline === undefined || JSON.stringify(form) !== baseline;
+      showPicker(
+        new Picker(
+          form.id ? `Agents › ${form.name}` : "Agents › New agent",
+          agentEditorRows(form, capabilities, {
+            creating: !form.id,
+            scopes: app.agentDefinitions.scopes,
+            dirty,
+          }),
+          (item) => {
+            closePicker();
+            void edit(item.value as AgentField, dirty).catch((cause) => {
+              error(cause);
+              show();
+            });
+          },
+          closePicker,
+          false,
+          `${form.scope === "project" ? "Project" : "Global"} scope · ${shortenPath(app.agentDefinitions.dir(form.scope), homedir())}`,
+        ),
+      );
+    };
+    const input = (label: string, initialValue: string, placeholder: string, hint?: string) =>
+      askInput({
+        provider: "agent",
+        title: form.id ? `Agents › ${form.name}` : "Agents › New agent",
+        label,
+        initial: initialValue,
+        placeholder,
+        ...(hint ? { hint } : {}),
+        step: 1,
+        steps: 1,
+      });
+    const edit = async (field: AgentField, dirty: boolean): Promise<void> => {
+      const capabilities = capabilitiesOf(models, form.model);
+      switch (field) {
+        case "scope": {
+          const scope = await askChoice(
+            "Scope",
+            app.agentDefinitions.scopes.map((value) => ({
+              value,
+              label: value === "project" ? "Project" : "Global",
+              description: app.agentDefinitions.dir(value),
+            })),
+          );
+          if (scope === "project" || scope === "global") form = { ...form, scope };
+          break;
+        }
+        case "name": {
+          const value = await input("Name", form.name, "New agent");
+          if (value !== undefined) form = { ...form, name: value.trim() };
+          break;
+        }
+        case "description": {
+          const value = await input(
+            "Description",
+            form.description,
+            "One sentence: what this agent does",
+          );
+          if (value !== undefined) form = { ...form, description: value.trim() };
+          break;
+        }
+        case "instructions": {
+          const value = await input(
+            "Instructions",
+            encodeMultiline(form.instructions),
+            "Describe desired model behavior (tone, tool usage, response style)",
+            "Type \\n for a new line. ✦ Refine with Alisio writes them for you.",
+          );
+          if (value !== undefined) form = { ...form, instructions: decodeMultiline(value) };
+          break;
+        }
+        case "model": {
+          const value = await askChoice(
+            "Model",
+            models.map((m) => ({
+              value: m.reference,
+              label: `${m.name ?? m.id} · ${m.providerName}${m.active ? " (active)" : ""}${m.reference === form.model ? " ✓" : ""}`,
+              description: m.labels.join(" · ") || "capabilities not declared by the provider",
+            })),
+          );
+          if (value) {
+            const fitted = formToInput({ ...form, model: value }, capabilitiesOf(models, value));
+            form = {
+              ...form,
+              model: value,
+              reasoning: { ...(fitted.reasoning ?? {}) },
+              text: {
+                ...(fitted.text?.format ? { format: fitted.text.format.type } : {}),
+                ...(fitted.text?.verbosity ? { verbosity: fitted.text.verbosity } : {}),
+              },
+            };
+          }
+          break;
+        }
+        case "effort":
+        case "summary":
+        case "verbosity":
+        case "format": {
+          if (field !== "format" && !agentFieldSupported(field, capabilities)) {
+            flashHint(`${form.model} does not support this setting.`);
+            break;
+          }
+          const value = await askChoice(field, agentFieldChoices(field, capabilities));
+          if (value === undefined) break;
+          const clear = value === "!clear" ? undefined : value;
+          if (field === "effort")
+            form = { ...form, reasoning: { ...form.reasoning, effort: clear } };
+          if (field === "summary")
+            form = {
+              ...form,
+              reasoning: { ...form.reasoning, summary: clear as AgentForm["reasoning"]["summary"] },
+            };
+          if (field === "verbosity")
+            form = {
+              ...form,
+              text: { ...form.text, verbosity: clear as AgentForm["text"]["verbosity"] },
+            };
+          if (field === "format")
+            form = {
+              ...form,
+              text: { ...form.text, format: clear as AgentForm["text"]["format"] },
+            };
+          break;
+        }
+        case "refine": {
+          const changes = await input(
+            "What should change? (optional)",
+            "",
+            "e.g. focus on security, answer in Spanish",
+          );
+          if (changes === undefined) break;
+          const draft = await buildWithAlisio(changes, form);
+          if (draft) form = applyDraft(form, draft);
+          break;
+        }
+        case "save": {
+          const errors = formErrors(form);
+          if (errors.length) {
+            flashHint(errors.join("; "), 5000);
+            break;
+          }
+          if (!dirty) {
+            flashHint("No unsaved changes");
+            break;
+          }
+          const creating = !form.id;
+          const change = await saveAgentForm(form, models);
+          form = { ...form, id: change.result.id, name: change.result.name };
+          baseline = JSON.stringify(form);
+          if (creating) return offerTryAgent(form, models, change.live);
+          break;
+        }
+        case "cancel": {
+          if (dirty) {
+            const discard = await askChoice("Discard unsaved changes?", [
+              { value: "keep", label: "Keep editing" },
+              { value: "discard", label: "Discard and close" },
+            ]);
+            if (discard === "discard") return;
+            break;
+          }
+          return;
+        }
+      }
+      show();
+    };
+    show();
+  };
+  /** `/agents new [description]`: assisted (with a description), template or blank. */
+  const newAgentFlow = async (description?: string) => {
+    const models = await loadAgentModels();
+    const blank = emptyAgentForm(app.agentDefinitions.defaultScope, defaultAgentModel(models));
+    let mode = description ? "assisted" : undefined;
+    if (!mode)
+      mode = await askChoice("Agents › New agent", [
+        {
+          value: "assisted",
+          label: "✦ Describe it — Alisio writes the agent",
+          description: "The active model drafts the name, instructions and settings",
+        },
+        { value: "template", label: "From a template…" },
+        { value: "blank", label: "Blank agent" },
+      ]);
+    if (mode === "template") return chooseAgentTemplate();
+    if (mode === "blank") return openAgentEditor(blank, models);
+    if (mode !== "assisted") return;
+    const text =
+      description ??
+      (await askInput({
+        provider: "agent",
+        title: "Agents › New agent",
+        label: "Describe the agent you want",
+        initial: "",
+        placeholder: "e.g. reviews pull requests for security issues",
+        step: 1,
+        steps: 1,
+      }));
+    if (!text?.trim()) return;
+    const draft = await buildWithAlisio(text);
+    if (!draft) return;
+    const form = applyDraft(blank, draft);
+    if (formErrors(form).length) return openAgentEditor(form, models);
+    const change = await saveAgentForm(form, models);
+    return offerTryAgent({ ...form, id: change.result.id }, models, change.live);
+  };
+  /** `/agents templates`: pick a template, then customize it (and optionally refine it). */
+  const chooseAgentTemplate = async () => {
+    const models = await loadAgentModels();
+    showPicker(
+      new Picker(
+        "Agents › Templates",
+        AGENT_TEMPLATES.map((template) => ({
+          value: template.id,
+          label: template.name,
+          description: template.description,
+        })),
+        (item) => {
+          closePicker();
+          const template = AGENT_TEMPLATES.find((candidate) => candidate.id === item.value);
+          if (template)
+            void openAgentEditor(
+              formFromTemplate(
+                template,
+                app.agentDefinitions.defaultScope,
+                defaultAgentModel(models),
+              ),
+              models,
+            ).catch(error);
+        },
+        closePicker,
+        true,
+        "Type to search. The template opens in the editor; ✦ Refine with Alisio adapts it to your changes.",
+        (items, filter) => filterAgentRows(items, filter),
+      ),
+    );
+  };
+  /** `/agents manage`: saved project/global agents → edit, activate, try or delete. */
+  const manageAgents = async () => {
+    const list = await app.agentDefinitions.list();
+    if (!list.length) return notice("No saved agents yet. Create one with /agents new.");
+    showPicker(
+      new Picker(
+        "Agents › Saved agents",
+        list.map((a) => ({
+          value: `${a.scope}:${a.id}`,
+          label: `${a.name} [${a.scope === "project" ? "Project" : "Global"}]${a.overridesGlobal ? " overrides global" : ""}${a.overriddenByProject ? " (overridden by project)" : ""}`,
+          description: [a.description, a.model].filter(Boolean).join(" · "),
+        })),
+        (item) => {
+          closePicker();
+          const found = list.find((a) => `${a.scope}:${a.id}` === item.value);
+          if (found) void agentActions(found).catch(error);
+        },
+        closePicker,
+        true,
+        `Project: ${app.agentDefinitions.scopes.includes("project") ? app.agentDefinitions.dir("project") : "—"} · Global: ${app.agentDefinitions.dir("global")}`,
+        (items, filter) => filterAgentRows(items, filter),
+      ),
+    );
+  };
+  const agentActions = async (definition: AgentDefinitionInfo) => {
+    const action = await askChoice(`${definition.name} [${definition.scope}]`, [
+      { value: "edit", label: "Edit" },
+      { value: "activate", label: "Activate in this session", description: "From the next prompt" },
+      { value: "try", label: "Try it in a new session" },
+      { value: "delete", label: "Delete", description: definition.path },
+    ]);
+    if (action === "edit") {
+      const form = formFromDefinition(definition);
+      return openAgentEditor(form, await loadAgentModels(), form);
+    }
+    if (action === "try") return tryAgentInNewSession(definition.id);
+    if (action === "activate") {
+      const agent = mainAgents().find((candidate) => candidate.id === definition.id);
+      if (!agent) return notice(`Agent ${definition.id} is not loaded; restart Alisio to use it.`);
+      return applyActiveAgent(agent);
+    }
+    if (action === "delete") {
+      const confirm = await askChoice(`Delete ${definition.path}?`, [
+        { value: "no", label: "Keep it" },
+        { value: "yes", label: "Delete the file" },
+      ]);
+      if (confirm !== "yes") return;
+      const change = await app.agentDefinitions.delete(definition.scope, definition.id);
+      editor.setAutocompleteProvider(buildSlashCompletionProvider());
+      notice(
+        change.live
+          ? `Deleted agent ${definition.name}; it is no longer offered.`
+          : `Deleted ${definition.path}. Restart Alisio to drop it from the running agents.`,
+      );
+    }
+  };
+  /** Routes `/agents [verb]`: TUI manager verbs, else the subagents plugin's verbs. */
+  const agentsCommand = async (args: string, raw: string): Promise<unknown> => {
+    const command = parseAgentsArgs(args);
+    if (command.kind === "plugin") {
+      const handler = app.plugins.commands.get("agents");
+      if (!handler) return error("Subagent task management needs the Subagents plugin.");
+      const output = await handler(command.args, { sessionId: session });
+      if (/^reload\b/.test(command.args))
+        editor.setAutocompleteProvider(buildSlashCompletionProvider());
+      return info(output);
+    }
+    if (busy) {
+      editor.setText(raw);
+      flashHint("A turn is running: wait for it to finish before managing agents");
+      return;
+    }
+    switch (command.kind) {
+      case "picker":
+        // Pick up files edited outside Alisio before listing.
+        await app.agentDefinitions.reload();
+        return openAgentsPicker();
+      case "new":
+        return newAgentFlow(command.description);
+      case "templates":
+        return chooseAgentTemplate();
+      case "manage":
+        return manageAgents();
+      case "edit":
+      case "delete": {
+        const list = await app.agentDefinitions.list();
+        const found =
+          list.find((a) => a.id === command.id && (!command.scope || a.scope === command.scope)) ??
+          undefined;
+        if (!found) return error(`No saved agent ${command.id}. See /agents manage.`);
+        if (command.kind === "edit") {
+          const form = formFromDefinition(found);
+          return openAgentEditor(form, await loadAgentModels(), form);
+        }
+        return agentActions(found);
+      }
+    }
   };
   /**
    * `/effort [level]`: without an argument, a picker over the ACTIVE model's advertised effort
@@ -1867,6 +2384,19 @@ export async function runTui(options: TuiOptions): Promise<void> {
         if (!handler) return error(`Unknown plugin command: ${command ?? ""}`);
         return info(await handler(rest.join(" ")));
       }
+      const agentId = agentIdFromCommand(parsed.name);
+      if (agentId) {
+        // `/agent:<id>`: activates a loaded agent from the next prompt (as the /agents picker).
+        if (busy) {
+          editor.setText(raw);
+          flashHint("A turn is running: wait for it to finish before switching the active agent");
+          return;
+        }
+        const agent = mainAgents().find((candidate) => candidate.id === agentId);
+        if (!agent)
+          return error(`Unknown agent ${agentId}. Open /agents to see the loaded agents.`);
+        return applyActiveAgent(agent);
+      }
       switch (name) {
         case "help":
           return info(helpReport());
@@ -1919,22 +2449,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
               `first; call the tool right away.`,
           );
         }
-        case "agents": {
-          // The subagents plugin registers its own built-in `/agents` command for subagent task
-          // management (list/open/cancel/kill/resume/merge/discard/defs). With arguments, route
-          // to it verbatim (still available while a turn runs, exactly as before); without
-          // arguments, this opens the ACTIVE-agent picker.
-          if (parsed.args) {
-            const handler = app.plugins.commands.get("agents");
-            if (handler) return info(await handler(parsed.args, { sessionId: session }));
-          }
-          if (busy) {
-            editor.setText(raw);
-            flashHint("A turn is running: wait for it to finish before switching the active agent");
-            return;
-          }
-          return openAgentsPicker();
-        }
+        case "agents":
+          // TUI manager verbs (picker, new, templates, manage, edit, delete); other verbs go to the
+          // subagents plugin's own `/agents` command (list/open/cancel/kill/resume/merge/discard/
+          // defs/reload), still available while a turn runs.
+          return await agentsCommand(parsed.args, raw);
         case "effort":
           if (busy) {
             editor.setText(raw);
@@ -2006,6 +2525,11 @@ export async function runTui(options: TuiOptions): Promise<void> {
           description: c.description ?? `plugin ${c.plugin}`,
           ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}),
         })),
+      // `/agent:<id>` for every loaded agent (namespaced: never collides with other commands).
+      ...agentCommandDescriptors(mainAgents()).map((d) => ({
+        name: d.name,
+        description: d.description,
+      })),
     ];
     return new CombinedAutocompleteProvider(
       slashCompletionCommands(

@@ -38,6 +38,8 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
 
   router.get("/api/sessions", ({ url }) => {
     const workspace = url.searchParams.get("workspace");
+    // `?agent=<id>`: sessions started with (or switched to) that agent.
+    const agent = url.searchParams.get("agent");
     const q = url.searchParams.get("q")?.trim().toLowerCase();
     const archived = url.searchParams.get("archived") ?? "false";
     if (!["true", "false", "all"].includes(archived))
@@ -48,6 +50,7 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
     const offset = queryInt(url, "cursor", 0) ?? 0;
     const rows = catalog
       .list()
+      .filter((session) => !agent || session.options?.agent === agent)
       .map((session) => sessions.summary(session))
       .filter(
         (s) =>

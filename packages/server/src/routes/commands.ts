@@ -1,5 +1,6 @@
-import { CommandCatalog } from "@alisio/core";
+import { agentIdFromCommand, CommandCatalog } from "@alisio/core";
 import type { CommandDescriptor, CommandOutcome } from "@alisio/sdk";
+import { activateSessionAgent } from "../host/agents.ts";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { SessionService } from "../host/sessions.ts";
 import type { OpenWorkspace, WorkspaceHost } from "../host/workspace-host.ts";
@@ -129,6 +130,15 @@ export function registerCommandRoutes(
       if (descriptor.source === "skill") {
         const skill = await opened.app.skills.load(descriptor.name.slice("skill:".length));
         return { prompt: { text: `${skill}\n\nUser request: ${args}`, display } };
+      }
+      if (descriptor.source === "agent") {
+        // `/agent:<id>`: stored on the session, applied from its next run.
+        const id = agentIdFromCommand(descriptor.name);
+        if (!id) throw new HttpError("unknown_command", `Unknown command /${name}`);
+        return activateSessionAgent(opened, session, id, {
+          setAgent: (agent) => sessions.setOptions(session.id, { agent }),
+          busy,
+        });
       }
       if (descriptor.name === "help") return { output: helpText(catalog.list("web")) };
       if (descriptor.name === "ask") {

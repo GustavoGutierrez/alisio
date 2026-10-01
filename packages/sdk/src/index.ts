@@ -936,7 +936,7 @@ export interface CommandDescriptor {
   description: string;
   aliases?: string[];
   argumentHint?: string;
-  source: "builtin" | "plugin" | "prompt" | "skill";
+  source: "builtin" | "plugin" | "prompt" | "skill" | "agent";
   /** Plugin id or resource owner, when not built in. */
   owner?: string;
   surfaces: Array<"tui" | "web" | "api">;
@@ -1317,6 +1317,116 @@ export interface ProviderModelsInfo {
   configuredModel: string;
   models: ModelInfo[];
   unavailable: boolean;
+}
+/** Output format of an agent's answers (`text.format.type`). */
+export type AgentTextFormatType = "text" | "json_object" | "json_schema";
+/** Reasoning summary preference of an agent (`reasoning.summary`). */
+export type AgentReasoningSummary = "auto" | "none" | "concise" | "detailed";
+/** Answer verbosity preference of an agent (`text.verbosity`). */
+export type AgentVerbosity = "low" | "medium" | "high";
+/**
+ * Where a user agent file lives: `project` is `<workspace>/.agents/agents/<id>.md`, `global` is
+ * `~/.agents/agents/<id>.md`. A project agent overrides a global one with the same id.
+ */
+export type AgentScope = "project" | "global";
+/** Body of `POST /api/agents` and `PUT /api/agents/:id`: a user agent definition. */
+export interface AgentDefinitionInput {
+  /** Display name; the stable id is derived from it once, on creation. */
+  name: string;
+  description?: string;
+  /** System prompt appended to the session instructions when the agent is active. */
+  instructions?: string;
+  /** Model selector (`provider/model` or an unambiguous model id). */
+  model: string;
+  reasoning?: { effort?: string; summary?: AgentReasoningSummary };
+  text?: { format?: { type: AgentTextFormatType }; verbosity?: AgentVerbosity };
+}
+/** A stored user agent definition (`GET /api/agents/definitions`). Times are epoch ms. */
+export interface AgentDefinitionInfo extends AgentDefinitionInput {
+  /** File slug: the frontmatter `name` other harnesses use as the agent identifier. */
+  id: string;
+  scope: AgentScope;
+  description: string;
+  instructions: string;
+  /** Absolute path of the Markdown file. */
+  path: string;
+  createdAt: number;
+  updatedAt: number;
+  /** A project agent that takes precedence over the global agent with the same id. */
+  overridesGlobal?: boolean;
+  /** A global agent hidden by the project agent with the same id. */
+  overriddenByProject?: boolean;
+}
+/**
+ * Answer of agent writes. `live`: the running Alisio already uses the change (its agent registry
+ * reloaded and loaded the file); false means it is saved but needs a restart (or a trusted
+ * workspace / the subagents plugin) before sessions can use it.
+ */
+export interface AgentSaveResult {
+  agent: AgentDefinitionInfo;
+  live: boolean;
+}
+/** `GET /api/agents/definitions`: both scopes merged, plus where new agents go by default. */
+export interface AgentDefinitionsOverview {
+  agents: AgentDefinitionInfo[];
+  scopes: AgentScope[];
+  defaultScope: AgentScope;
+  /** Directory of each available scope. */
+  dirs: Partial<Record<AgentScope, string>>;
+  /** Project agents load only in trusted workspaces. */
+  trusted: boolean;
+}
+/** A predefined starting point for a new agent (`GET /api/agents/templates`). */
+export interface AgentTemplateInfo {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  reasoning?: { effort?: string; summary?: AgentReasoningSummary };
+  text?: { format?: { type: AgentTextFormatType }; verbosity?: AgentVerbosity };
+}
+/** What a model supports for the agent editor, derived from its catalog metadata. */
+export interface AgentModelCapabilities {
+  /** The catalog declared any capability metadata; otherwise every option is offered. */
+  known: boolean;
+  reasoning: boolean;
+  /** Reasoning effort levels to offer (empty when reasoning is unsupported). */
+  effortLevels: string[];
+  defaultEffort?: string;
+  summary: boolean;
+  verbosity: boolean;
+  textFormats: AgentTextFormatType[];
+  /** Declared tool calling support; absent when unknown. */
+  tools?: boolean;
+  /** Declared image input support; absent when unknown. */
+  vision?: boolean;
+}
+/** A configured model the agent editor can select (`GET /api/agents/models`). */
+export interface AgentModelOption {
+  /** Canonical selector `<provider>/<model>`. */
+  reference: string;
+  provider: string;
+  profile: string;
+  providerName: string;
+  id: string;
+  name?: string;
+  /** The workspace application runs this model right now. */
+  active: boolean;
+  capabilities: AgentModelCapabilities;
+  /** Short capability labels such as "Reasoning", "Tools", "Vision". */
+  labels: string[];
+}
+/** Answer of `POST /api/agents/draft`: a definition drafted by the active model. */
+export interface AgentDraft {
+  name: string;
+  description: string;
+  instructions: string;
+  reasoning?: { effort?: string; summary?: AgentReasoningSummary };
+  text?: { format?: { type: AgentTextFormatType }; verbosity?: AgentVerbosity };
+  /** The model that wrote the draft. */
+  generatedBy: string;
+  /** Authoring guidance used: `skill:<name>` (a discovered skill) or `bundled:create-agent`. */
+  guidance: string;
 }
 /** Body of every non-2xx web API response. */
 export interface ApiError {

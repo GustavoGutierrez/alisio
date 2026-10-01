@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { locale, t } from "../../i18n/index.ts";
 import {
   addWorkspace,
+  agentsOpen,
   currentId,
   mobileSidebar,
   newSession,
@@ -15,6 +16,7 @@ import {
   picking,
   pickWorkspace,
   settingsOpen,
+  setWorkspaceTrust,
   sidebar,
 } from "../../store/app.ts";
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
@@ -143,6 +145,17 @@ export function Sidebar() {
           <Icon name="plusCircle" size={18} />
         </button>
         <span class={styles.spacer} />
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label={t("sidebar.agents")}
+          title={t("sidebar.agents")}
+          onClick={() => {
+            agentsOpen.value = true;
+          }}
+        >
+          <Icon name="users" size={18} />
+        </button>
         <button
           type="button"
           class="icon-btn"
@@ -356,14 +369,27 @@ export function Sidebar() {
                           id: "archive",
                           label: archivedWs ? t("workspace.unarchive") : t("workspace.archive"),
                         },
+                        ...(missing
+                          ? []
+                          : [
+                              {
+                                id: "trust",
+                                label: group.workspace.trusted
+                                  ? t("trust.revoke")
+                                  : t("trust.grant"),
+                                description: t("trust.menuHint"),
+                              },
+                            ]),
                       ],
                       onSelect: (action) =>
-                        void patchWorkspace(
-                          group.workspace.id,
-                          action === "pin"
-                            ? { pinned: !group.workspace.pinned }
-                            : { archived: !archivedWs },
-                        ),
+                        action === "trust"
+                          ? void setWorkspaceTrust(group.workspace, !group.workspace.trusted)
+                          : void patchWorkspace(
+                              group.workspace.id,
+                              action === "pin"
+                                ? { pinned: !group.workspace.pinned }
+                                : { archived: !archivedWs },
+                            ),
                     },
                   ]}
                 >
@@ -406,6 +432,16 @@ export function Sidebar() {
       <button
         type="button"
         class={styles.settings}
+        onClick={() => {
+          agentsOpen.value = true;
+        }}
+      >
+        <Icon name="users" size={17} />
+        {t("sidebar.agents")}
+      </button>
+      <button
+        type="button"
+        class={`${styles.settings} ${styles.settingsBelow}`}
         onClick={() => {
           settingsOpen.value = true;
         }}

@@ -25,7 +25,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
     },
     {
       text: labels.groupFeatures ?? "Features",
-      items: ["context", "subagents", "compaction", "memory"].map(item),
+      items: ["context", "agents", "subagents", "compaction", "memory"].map(item),
     },
     {
       text: labels.groupIntegrations ?? "Integrations",
@@ -57,6 +57,7 @@ const en = {
   tools: "Tools & permissions",
   "tool-validation": "Tool validation",
   context: "Context & AGENTS.md",
+  agents: "Agents",
   subagents: "Subagents",
   compaction: "Context compaction",
   memory: "Persistent memory",
@@ -86,6 +87,7 @@ const es = {
   tools: "Herramientas y permisos",
   "tool-validation": "Validación de herramientas",
   context: "Contexto y AGENTS.md",
+  agents: "Agentes",
   subagents: "Subagentes",
   compaction: "Compactación de contexto",
   memory: "Memoria persistente",

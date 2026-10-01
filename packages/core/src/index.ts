@@ -2,9 +2,13 @@
 export * from "@alisio/sdk";
 export {
   type ActiveAgent,
+  AGENT_COMMAND_PREFIX,
   type AgentPickerItem,
   activeAgentCatalog,
   agentCatalogFromState,
+  agentCommandDescriptors,
+  agentCommandName,
+  agentIdFromCommand,
   agentPickerItems,
   agentRunOptions,
   BUILTIN_AGENTS,
@@ -13,6 +17,50 @@ export {
   mainAgentFromRecord,
   resolveActiveAgent,
 } from "./agents/active.ts";
+export {
+  agentModelCapabilities,
+  agentModelLabels,
+  agentModelOptions,
+  DEFAULT_EFFORT_LEVELS,
+  fitAgentSettings,
+} from "./agents/capabilities.ts";
+export {
+  AGENT_AUTHORING_SKILL_NAMES,
+  CREATE_AGENT_SKILL,
+} from "./agents/create-agent-skill.ts";
+export {
+  AGENT_ID_PATTERN,
+  AGENT_LIMITS,
+  AGENT_REASONING_SUMMARIES,
+  AGENT_TEXT_FORMATS,
+  AGENT_VERBOSITIES,
+  type AgentFieldError,
+  AgentNotFoundError,
+  AgentScopeStore,
+  agentIdFromName,
+  agentScopeDir,
+  parseAgentFile,
+  RESERVED_AGENT_IDS,
+  slugify,
+  validateAgentDefinitionInput,
+} from "./agents/definitions.ts";
+export {
+  AGENT_DRAFT_INSTRUCTIONS,
+  AGENT_DRAFT_MAX_DESCRIPTION,
+  type AgentAuthoringGuidance,
+  agentAuthoringGuidance,
+  agentDraftRequest,
+  generateAgentDraft,
+  parseAgentDraft,
+} from "./agents/draft.ts";
+export {
+  type AgentChange,
+  AgentDefinitionService,
+  type AgentDefinitionServiceOptions,
+  type AgentRegistry,
+  mergeAgentScopes,
+} from "./agents/service.ts";
+export { AGENT_TEMPLATES, agentTemplate } from "./agents/templates.ts";
 export {
   type AppOptions,
   type BuiltinContext,

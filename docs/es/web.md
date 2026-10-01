@@ -251,10 +251,15 @@ pide una carpeta de la mejor forma que admita el servidor:
    escucha para acceso remoto (`--allow-remote`), porque un diálogo o un listado de carpetas
    mostraría la máquina del servidor y no la suya.
 
-La web nunca concede confianza de proyecto. Un directorio cuya configuración `.alisio` no haya
-aceptado desde la terminal se abre sin sus recursos de proyecto (plugins, skills, prompts,
-configuración) y se marca como no confiable. Ejecute `alisio` en ese directorio para responder a la
-pregunta de confianza.
+Un directorio en el que no haya confiado se abre sin sus recursos de proyecto (configuración,
+plugins, agentes, skills, prompts) y se marca como no confiable. Confíe en él desde su menú **⋯** de
+la barra lateral (**Confiar en este workspace…**) o desde el editor de [Agentes](/es/agents), tras
+una confirmación que explica lo que desbloquea la confianza; o ejecute `alisio` en ese directorio
+para responder a la pregunta de la terminal. Ambos guardan la misma decisión, ligada al contenido de
+`.alisio/config.json`: si ese archivo cambia, el workspace vuelve a no ser de confianza hasta que lo
+confirme. El workspace se reabre para que el cambio se aplique al momento (se rechaza mientras tenga
+ejecuciones activas, con `--read-only` y cuando `--trust-project`/`--config` fijan la confianza del
+servidor). **Dejar de confiar en este workspace…** la retira.
 
 ## Sesiones, ejecuciones y permisos
 

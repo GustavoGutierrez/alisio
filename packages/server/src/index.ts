@@ -19,6 +19,7 @@ import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
+import { registerAgentDefinitionRoutes } from "./routes/agent-definitions.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
 import { registerBlobRoutes } from "./routes/blobs.ts";
 import { registerCommandRoutes } from "./routes/commands.ts";
@@ -295,6 +296,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   };
   recycler = new WorkspaceRecycler(management);
   registerManagementRoutes(router, management, recycler);
+  registerAgentDefinitionRoutes(router, management, recycler);
   registerProviderRoutes(router, management, recycler);
   registerEventRoutes(router, {
     hub,

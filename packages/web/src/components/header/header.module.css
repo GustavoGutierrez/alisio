@@ -140,3 +140,14 @@
     display: none;
   }
 }
+
+/* The agent badge opens the `/agents` picker. */
+.badgeButton {
+  background: none;
+  cursor: pointer;
+}
+
+.badgeButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}

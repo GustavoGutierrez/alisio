@@ -4,7 +4,15 @@
  * send by themselves). Failures become `ApiRequestError` with the server's error code.
  */
 import type {
+  AgentDefinitionInfo,
+  AgentDefinitionInput,
+  AgentDefinitionsOverview,
+  AgentDraft,
   AgentInfo,
+  AgentModelOption,
+  AgentSaveResult,
+  AgentScope,
+  AgentTemplateInfo,
   ApiError,
   ApiErrorCode,
   BlobRef,
@@ -130,6 +138,12 @@ export class ApiClient {
     id: string,
     patch: Partial<{ label: string | null; pinned: boolean; archived: boolean }>,
   ) => this.request<WorkspaceInfo>("PATCH", `/api/workspaces/${enc(id)}`, patch);
+  /** Grants or withdraws project trust (the caller must have asked the user to confirm). */
+  trustWorkspace = (id: string, trusted: boolean) =>
+    this.request<WorkspaceInfo>("POST", `/api/workspaces/${enc(id)}/trust`, {
+      trusted,
+      confirmed: true,
+    });
   /** Opens the native folder dialog on the server's desktop and waits for the user. */
   pickFolder = (start?: string) =>
     this.request<FolderPickResult>("POST", "/api/workspaces/pick", start ? { start } : {});
@@ -144,8 +158,12 @@ export class ApiClient {
       "GET",
       `/api/sessions?archived=${query.archived ?? "false"}&limit=${query.limit ?? 200}`,
     );
-  createSession = (body: { workspace: string; preset?: PermissionPresetId; model?: string }) =>
-    this.request<SessionDetail>("POST", "/api/sessions", body);
+  createSession = (body: {
+    workspace: string;
+    preset?: PermissionPresetId;
+    model?: string;
+    agent?: string;
+  }) => this.request<SessionDetail>("POST", "/api/sessions", body);
   session = (id: string) => this.request<SessionDetail>("GET", `/api/sessions/${enc(id)}`);
   patchSession = (
     id: string,
@@ -238,6 +256,46 @@ export class ApiClient {
       ...(remember ? { remember } : {}),
     });
   agents = (wid: string) => this.request<AgentInfo[]>("GET", `/api/agents?workspace=${enc(wid)}`);
+  // ---- Agent definitions (`.agents/agents` files; project scope needs a workspace).
+  agentDefinitions = (wid?: string) =>
+    this.request<AgentDefinitionsOverview>(
+      "GET",
+      `/api/agents/definitions${wid ? `?workspace=${enc(wid)}` : ""}`,
+    );
+  agentTemplates = () => this.request<AgentTemplateInfo[]>("GET", "/api/agents/templates");
+  agentModels = (wid: string) =>
+    this.request<AgentModelOption[]>("GET", `/api/agents/models?workspace=${enc(wid)}`);
+  createAgent = (body: AgentDefinitionInput & { workspace?: string; scope: AgentScope }) =>
+    this.request<AgentSaveResult>("POST", "/api/agents", body);
+  updateAgent = (
+    id: string,
+    body: AgentDefinitionInput & { workspace?: string; scope: AgentScope },
+  ) => this.request<AgentSaveResult>("PUT", `/api/agents/${enc(id)}`, body);
+  deleteAgent = (id: string, scope: AgentScope, wid?: string) =>
+    this.request<{ deleted: boolean; live: boolean }>(
+      "DELETE",
+      `/api/agents/${enc(id)}?scope=${scope}${wid ? `&workspace=${enc(wid)}` : ""}`,
+    );
+  agentDefinition = (id: string, scope: AgentScope, wid?: string) =>
+    this.request<AgentDefinitionInfo>(
+      "GET",
+      `/api/agents/${enc(id)}?scope=${scope}${wid ? `&workspace=${enc(wid)}` : ""}`,
+    );
+  /** The active model drafts (or refines `base`); abort `signal` to cancel the model call. */
+  draftAgent = (
+    body: {
+      workspace: string;
+      description?: string;
+      base?: { name?: string; description?: string; instructions?: string };
+    },
+    signal?: AbortSignal,
+  ) => this.request<AgentDraft>("POST", "/api/agents/draft", body, signal ? { signal } : {});
+  /** Sessions started with (or switched to) an agent. */
+  agentSessions = (agent: string) =>
+    this.request<{ items: SessionSummary[] }>(
+      "GET",
+      `/api/sessions?agent=${enc(agent)}&archived=all&limit=50`,
+    );
   settings = (wid: string) =>
     this.request<SettingsOverview>("GET", `/api/settings?workspace=${enc(wid)}`);
   setSetting = (wid: string, key: string, value: string | number | boolean | null) =>

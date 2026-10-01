@@ -11,6 +11,7 @@ import type {
   ResolvedProviderModel,
   RunEvent,
 } from "@alisio/sdk";
+import { AgentDefinitionService } from "./agents/service.ts";
 import {
   configFile,
   configHome,
@@ -1042,6 +1043,35 @@ export async function createApplication(options: AppOptions = {}) {
       runner,
       /** `/btw` side questions: tool-less answers about a session outside its conversation. */
       sideQuestions: new SideQuestions({ runner, state: store }),
+      /**
+       * User agent files (`<workspace>/.agents/agents`, `~/.agents/agents`). Every write asks the
+       * subagents plugin (the runtime agent registry) to rediscover through its `/agents reload`
+       * verb and reports whether the saved file is loaded; without the plugin nothing reloads.
+       */
+      agentDefinitions: new AgentDefinitionService({
+        workspace,
+        home: homedir(),
+        registry: {
+          async reload() {
+            const handler = plugins.commands.get("agents");
+            if (!handler) return false;
+            await handler("reload");
+            return Array.isArray(plugins.pluginState("subagents", "definitions"));
+          },
+          loadedPaths() {
+            let state: unknown;
+            try {
+              state = plugins.pluginState("subagents", "definitions");
+            } catch {
+              return undefined;
+            }
+            if (!Array.isArray(state)) return undefined;
+            return state
+              .map((entry) => (entry as { path?: unknown })?.path)
+              .filter((path): path is string => typeof path === "string");
+          },
+        },
+      }),
       herdr,
       contextWindow,
       /** Effective context budget + compaction point shared by the runner and the TUI bar. */

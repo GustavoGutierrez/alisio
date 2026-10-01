@@ -13,6 +13,8 @@ import { TrajectoryTab } from "./components/trajectory/TrajectoryTab.tsx";
 import { Transcript } from "./components/transcript/Transcript.tsx";
 import { t } from "./i18n/index.ts";
 import {
+  agentPickerOpen,
+  agentsOpen,
   announceAssertive,
   announcePolite,
   auth,
@@ -58,6 +60,24 @@ function LazySettings() {
       alive = false;
     };
   }, []);
+  return View ? <View /> : null;
+}
+
+/** The Agents window and the `/agents` picker are their own chunks, loaded on first open. */
+function LazyAgents(props: { picker?: boolean }) {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    const load = props.picker
+      ? import("./components/agents/AgentPicker.tsx").then((m) => m.AgentPicker)
+      : import("./components/agents/AgentsModal.tsx").then((m) => m.AgentsModal);
+    void load.then((view) => {
+      if (alive) setView(() => view);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [props.picker]);
   return View ? <View /> : null;
 }
 
@@ -152,6 +172,8 @@ export function App() {
       {dockOpen.value && id ? <Dock /> : null}
       {btw.value && id ? <LazyBtw /> : null}
       {settingsOpen.value ? <LazySettings /> : null}
+      {agentsOpen.value ? <LazyAgents /> : null}
+      {agentPickerOpen.value ? <LazyAgents picker /> : null}
       {toast.value ? (
         <div class={styles.toast} role="status">
           {toast.value}

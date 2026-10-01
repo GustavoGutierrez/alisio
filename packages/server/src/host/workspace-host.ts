@@ -70,8 +70,8 @@ export const workspaceId = (path: string): string =>
 
 /**
  * One lazily created `Application` per workspace (ADR-06), with LRU eviction of idle apps,
- * a cap on open apps and trust resolved from the terminal's trust store (the web never grants
- * trust). All apps share the same session database (WAL).
+ * a cap on open apps and trust resolved from the shared trust store (granted by the terminal
+ * prompt or by an explicitly confirmed web request). All apps share the same session database.
  */
 export class WorkspaceHost {
   private open = new Map<string, OpenWorkspace>();

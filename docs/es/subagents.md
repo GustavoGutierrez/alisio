@@ -83,9 +83,9 @@ Gana la primera definición con un nombre dado; las ocultadas se informan en `/a
 | --- | --- | --- | --- |
 | 1 | CLI | `--agents <json>` | Alisio |
 | 2 | Proyecto | `.alisio/agents/` | Formato de Alisio |
-| 3 | Convención | `.agents/agents/` | Convención especulativa, todavía sin adopción relevante |
+| 3 | Convención | `.agents/agents/` | Convención compartida; la escribe el gestor de [Agentes](/es/agents) (ámbito de proyecto) |
 | 4 | Compatibilidad | `.claude/agents/`, `.opencode/agent/`, `.opencode/agents/` | Leídos con compatibilidad con Claude Code y opencode |
-| 5 | Usuario | `<config home>/agents/`, `~/.claude/agents/`, `~/.config/opencode/agent/`, `~/.config/opencode/agents/` | Definiciones personales |
+| 5 | Usuario | `<config home>/agents/`, `~/.agents/agents/` (gestor de Agentes, ámbito global), `~/.claude/agents/`, `~/.config/opencode/agent/`, `~/.config/opencode/agents/` | Definiciones personales |
 | 6 | Plugins | Directorios registrados con `api.resources.agents(dir)` | Con espacio de nombres `plugin:name` |
 | 7 | Integrados | `general`, `explore`, `plan` | Siempre disponibles |
 
@@ -213,6 +213,7 @@ sus tokens y un resumen en vivo de una línea. La sangría muestra padre → hij
 | `/agents resume <id> [message]` | Reanuda en segundo plano una tarea terminada o cancelada |
 | `/agents merge <id>` | Fusiona la rama del worktree de una tarea (`--no-ff`) y elimina el worktree |
 | `/agents discard <id>` | Elimina el worktree y la rama de una tarea |
+| `/agents reload` | Vuelve a descubrir las definiciones de agentes sin reiniciar (el gestor de [Agentes](/es/agents) lo ejecuta tras cada guardado) |
 | `/agents defs` | Lista las definiciones de agentes, sus orígenes y advertencias |
 
 Los IDs admiten un prefijo único.

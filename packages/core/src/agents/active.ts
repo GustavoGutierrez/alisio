@@ -9,6 +9,8 @@
  * agent only when it is marked main-capable (`mode: primary|all`), which the subagents plugin
  * publishes for the host to read.
  */
+import type { CommandDescriptor } from "@alisio/sdk";
+
 export interface ActiveAgent {
   /** Stable id, also the persisted `agents.active` value. */
   id: string;
@@ -20,6 +22,10 @@ export interface ActiveAgent {
   model?: string;
   /** Read-only agents run with write/process/external tools disabled and approvals off. */
   readOnly?: boolean;
+  /** Default reasoning effort (`alisio.reasoning.effort`); an explicit session/user effort wins. */
+  effort?: string;
+  /** Definition file of a contributed agent (shows its Project/Global scope). */
+  path?: string;
   /** Product built-ins are shown as built-in and never shadowed by contributed definitions. */
   source: "builtin" | "user" | "plugin";
 }
@@ -63,6 +69,7 @@ export interface MainCapableAgentRecord {
   prompt: string;
   model?: string;
   readOnly?: boolean;
+  effort?: string;
   source: string;
   path?: string;
 }
@@ -77,6 +84,8 @@ export function mainAgentFromRecord(record: MainCapableAgentRecord): ActiveAgent
     ...(record.prompt ? { instructions: record.prompt } : {}),
     ...(record.model ? { model: record.model } : {}),
     ...(record.readOnly ? { readOnly: true } : {}),
+    ...(typeof record.effort === "string" && record.effort ? { effort: record.effort } : {}),
+    ...(typeof record.path === "string" && record.path ? { path: record.path } : {}),
     ...(source.startsWith("plugin:")
       ? ({ source: "plugin" } as const)
       : ({ source: "user" } as const)),
@@ -126,10 +135,12 @@ export function agentRunOptions(agent: ActiveAgent | undefined): {
   instructions?: string;
   policy?: { write: false; process: false; external: false };
   approvals?: false;
+  reasoningEffort?: string;
 } {
   if (!agent) return {};
   return {
     ...(agent.instructions ? { instructions: agent.instructions } : {}),
+    ...(agent.effort ? { reasoningEffort: agent.effort } : {}),
     ...(agent.readOnly
       ? {
           policy: { write: false as const, process: false as const, external: false as const },
@@ -137,6 +148,48 @@ export function agentRunOptions(agent: ActiveAgent | undefined): {
         }
       : {}),
   };
+}
+
+/**
+ * Every loaded agent is also a slash command `/agent:<id>` that activates it. The `agent:`
+ * namespace keeps these commands from ever colliding with built-ins, plugin commands, prompt
+ * templates or `skill:<id>` entries; when a higher-precedence source already owns the exact name
+ * (e.g. a plugin with id `agent`), the agent command is skipped.
+ */
+export const AGENT_COMMAND_PREFIX = "agent:";
+const COMMAND_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+export const agentCommandName = (id: string): string => `${AGENT_COMMAND_PREFIX}${id}`;
+
+/** The agent id a `/agent:<id>` command names, or undefined for any other command. */
+export function agentIdFromCommand(name: string): string | undefined {
+  if (!name.startsWith(AGENT_COMMAND_PREFIX)) return undefined;
+  const id = name.slice(AGENT_COMMAND_PREFIX.length);
+  return COMMAND_SAFE_ID.test(id) ? id : undefined;
+}
+
+/** `/agent:<id>` descriptors for `agents`, skipping names already in `taken`. */
+export function agentCommandDescriptors(
+  agents: ActiveAgent[],
+  taken: ReadonlySet<string> = new Set(),
+): CommandDescriptor[] {
+  const out: CommandDescriptor[] = [];
+  const seen = new Set(taken);
+  for (const agent of agents) {
+    if (!COMMAND_SAFE_ID.test(agent.id)) continue;
+    const name = agentCommandName(agent.id);
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({
+      name,
+      description: `Activate the ${agent.name} agent${agent.id === DEFAULT_AGENT_ID ? " (default)" : ""}: ${agent.description}`,
+      source: "agent",
+      owner: agent.source,
+      surfaces: ["tui", "web", "api"],
+      execution: "surface",
+    });
+  }
+  return out;
 }
 
 export interface AgentPickerItem {

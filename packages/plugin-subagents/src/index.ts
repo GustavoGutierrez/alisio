@@ -16,6 +16,8 @@ export { SubagentManager } from "./manager.ts";
 
 /** Plugin-state key under which the plugin publishes main-session-capable (mode primary/all) agents. */
 export const MAIN_AGENTS_STATE_KEY = "mainAgents";
+/** Plugin-state key listing every loaded definition (name, mode, source, path). */
+export const DEFINITIONS_STATE_KEY = "definitions";
 
 export interface SubagentsPluginContext {
   workspace: string;
@@ -57,32 +59,49 @@ export function createSubagentsPlugin(
     version: loadVersion(import.meta.url),
     apiVersion: 1,
     async setup(api) {
-      const found = await discoverAgents({
-        workspace: context.workspace,
-        home: context.home,
-        configHome: context.configHome,
-        trusted: context.trusted,
-        cli: config.agents,
-        plugins: api.resources.list("agents"),
-      });
-      warnings = found.warnings;
-      // Publish the main-session-capable definitions (mode `primary`/`all`) for the TUI's `/agents`
-      // picker. The host reads them through `pluginState`, so the TUI never imports this package.
-      // Only the fields the ACTIVE agent needs are persisted; prompts stay bounded.
-      api.state.set(
-        MAIN_AGENTS_STATE_KEY,
-        [...found.agents.values()]
-          .filter((a) => a.mode !== "subagent" && !a.hidden)
-          .map((a) => ({
+      /**
+       * Discovers the definitions and publishes them: the main-session-capable ones (mode
+       * `primary`/`all`) for the host's ACTIVE-agent catalog, and every loaded file path so the
+       * host can tell whether a just-saved agent file is live. The host reads both through
+       * `pluginState`, so it never imports this package. Prompts stay bounded.
+       */
+      const load = async () => {
+        const found = await discoverAgents({
+          workspace: context.workspace,
+          home: context.home,
+          configHome: context.configHome,
+          trusted: context.trusted,
+          cli: config.agents,
+          plugins: api.resources.list("agents"),
+        });
+        warnings = found.warnings;
+        api.state.set(
+          MAIN_AGENTS_STATE_KEY,
+          [...found.agents.values()]
+            .filter((a) => a.mode !== "subagent" && !a.hidden)
+            .map((a) => ({
+              name: a.name,
+              description: a.description,
+              prompt: a.prompt.slice(0, 24_000),
+              ...(a.model ? { model: a.model } : {}),
+              ...(a.readOnly ? { readOnly: true } : {}),
+              ...(a.effort ? { effort: a.effort } : {}),
+              source: a.source,
+              ...(a.path ? { path: a.path } : {}),
+            })),
+        );
+        api.state.set(
+          DEFINITIONS_STATE_KEY,
+          [...found.agents.values()].map((a) => ({
             name: a.name,
-            description: a.description,
-            prompt: a.prompt.slice(0, 24_000),
-            ...(a.model ? { model: a.model } : {}),
-            ...(a.readOnly ? { readOnly: true } : {}),
+            mode: a.mode,
             source: a.source,
             ...(a.path ? { path: a.path } : {}),
           })),
-      );
+        );
+        return found;
+      };
+      const found = await load();
       const m = new SubagentManager(api, config, context, found.agents);
       manager = m;
       const status = () => {
@@ -92,7 +111,7 @@ export function createSubagentsPlugin(
         api.ui.status(
           "agents",
           running || queued ? `agents ${running}▶${queued ? ` ${queued}⧗` : ""}` : undefined,
-          `${all.length} subagent task(s) this process · ${running} running · ${queued} queued · ${found.agents.size} definitions`,
+          `${all.length} subagent task(s) this process · ${running} running · ${queued} queued · ${m.agents.size} definitions`,
         );
       };
       m.refresh = status;
@@ -246,6 +265,16 @@ export function createSubagentsPlugin(
                   "`/agents open|cancel|kill|resume <id>` · `/agents merge|discard <id>` (worktrees) · `/agents defs`",
                 ].join("\n");
               }
+              case "reload": {
+                // Hot-reload after agent files change (the host calls this after each save).
+                // Running tasks keep their definition; new delegations and the ACTIVE-agent
+                // catalog use the rediscovered set. The `task` tool's description (its list of
+                // advertised subagent types) is fixed at startup.
+                const reloaded = await load();
+                m.agents = reloaded.agents;
+                status();
+                return `Reloaded ${reloaded.agents.size} agent definitions${reloaded.warnings.length ? ` (${reloaded.warnings.length} warnings, see /agents defs)` : ""}.`;
+              }
               case "defs":
                 return [
                   "**Agent definitions**",
@@ -300,7 +329,7 @@ export function createSubagentsPlugin(
                 return `Discarded ${wt.branch} and removed its worktree.`;
               }
               default:
-                return "Usage: /agents [list|defs|open|cancel|kill|resume|merge|discard] [id]";
+                return "Usage: /agents [list|defs|reload|open|cancel|kill|resume|merge|discard] [id]";
             }
           } catch (error) {
             return `Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -308,7 +337,7 @@ export function createSubagentsPlugin(
         },
         {
           description: "List and manage subagents (open, cancel, resume, merge, discard, defs)",
-          argumentHint: "[open|cancel|kill|resume|merge|discard|defs] [id]",
+          argumentHint: "[open|cancel|kill|resume|merge|discard|defs|reload] [id]",
         },
       );
       status();

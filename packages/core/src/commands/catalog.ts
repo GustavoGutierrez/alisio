@@ -5,7 +5,11 @@
  * changes show up without rebuilding it.
  */
 import type { CommandDescriptor, ToolDefinition } from "@alisio/sdk";
-import { agentCatalogFromState, resolveActiveAgent } from "../agents/active.ts";
+import {
+  agentCatalogFromState,
+  agentCommandDescriptors,
+  resolveActiveAgent,
+} from "../agents/active.ts";
 import type { PluginCatalogEntry } from "../application.ts";
 import type { SessionStore } from "../core/contracts.ts";
 import type { AgentRunner } from "../core/runner.ts";
@@ -330,6 +334,17 @@ export class CommandCatalog {
           surfaces: [...ALL],
           execution: "surface",
         });
+    // `/agent:<id>` activates a loaded agent (built-ins, project and global agent files).
+    if (host?.plugins) {
+      let state: unknown;
+      try {
+        state = host.plugins.pluginState?.("subagents", "mainAgents");
+      } catch {
+        /* agent contributions are best-effort */
+      }
+      for (const descriptor of agentCommandDescriptors(agentCatalogFromState(state), taken))
+        push(descriptor);
+    }
     return surface ? out.filter((c) => c.surfaces.includes(surface)) : out;
   }
   /** A command by name or alias (built-in names and aliases are case-insensitive). */

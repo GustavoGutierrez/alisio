@@ -81,9 +81,9 @@ The first definition with a given name wins; shadowed ones are reported by `/age
 | --- | --- | --- | --- |
 | 1 | CLI | `--agents <json>` | Alisio |
 | 2 | Project | `.alisio/agents/` | Alisio format |
-| 3 | Convention | `.agents/agents/` | Speculative convention with no major adoption yet |
+| 3 | Convention | `.agents/agents/` | Shared convention; written by the [Agents](/agents) manager (project scope) |
 | 4 | Compatibility | `.claude/agents/`, `.opencode/agent/`, `.opencode/agents/` | Read with Claude Code and opencode compatibility |
-| 5 | User | `<config home>/agents/`, `~/.claude/agents/`, `~/.config/opencode/agent/`, `~/.config/opencode/agents/` | Personal definitions |
+| 5 | User | `<config home>/agents/`, `~/.agents/agents/` (Agents manager, global scope), `~/.claude/agents/`, `~/.config/opencode/agent/`, `~/.config/opencode/agents/` | Personal definitions |
 | 6 | Plugins | Directories registered with `api.resources.agents(dir)` | Namespaced as `plugin:name` |
 | 7 | Built-in | `general`, `explore`, `plan` | Always available |
 
@@ -211,6 +211,7 @@ keys.
 | `/agents resume <id> [message]` | Resume a finished or cancelled task in the background |
 | `/agents merge <id>` | Merge a task's worktree branch (`--no-ff`) and remove the worktree |
 | `/agents discard <id>` | Remove a task's worktree and branch |
+| `/agents reload` | Rediscover agent definitions without restarting (the [Agents](/agents) manager runs it after every save) |
 | `/agents defs` | List agent definitions, their sources and warnings |
 
 IDs accept a unique prefix.

@@ -343,6 +343,11 @@
   background: var(--hover);
 }
 
+/* Settings sits right under Agents (same menu). */
+.settingsBelow {
+  margin-top: 0;
+}
+
 .spacer {
   flex: 1;
 }

@@ -6,3 +6,4 @@ dist/
 coverage/
 .atl/
 packages/core/probe.mjs
+.playwright-mcp/*
