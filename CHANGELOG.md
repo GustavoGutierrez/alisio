@@ -4,6 +4,13 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.1.1] - 2026-10-03
+
+### Fixed
+
+- The web UI no longer scrolls the page and leaves a blank gap under the interface while a reply is streaming: the app now always fills the window exactly and only its inner panels scroll.
+- The Alisio version is shown in the web UI: **Settings → About** and, discreetly, the bottom of the sidebar.
+
 ## [0.1.0] - 2026-10-02
 
 The first stable release. Until 1.0.0 the usual 0.x rules apply: fixes ship as 0.1.x and a new

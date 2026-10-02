@@ -567,6 +567,9 @@ export const es: Record<MessageKey, string> = {
   "appearance.lead": "Cómo se ve la interfaz en este navegador.",
   "about.description":
     "Alisio es un entorno para agentes de programación que se conecta a endpoints compatibles con OpenAI y se ejecuta en la terminal o el navegador, con núcleo propio en TypeScript y herramientas, plugins y skills extensibles.",
+  "about.version": "Alisio {version}",
+  "about.versionUnknown": "Versión no disponible",
+  "about.versionTitle": "Versión de Alisio {version}",
   "about.repository": "Ver el repositorio en GitHub",
   "about.repositoryLabel": "Ver el repositorio de Alisio en GitHub (se abre en una pestaña nueva)",
   "config.open": "Abrir archivo de configuración",

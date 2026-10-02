@@ -6,7 +6,7 @@
  * Usage: node --experimental-strip-types scripts/install-smoke.ts
  */
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
@@ -79,6 +79,43 @@ const server = createServer(async (req, res) => {
 await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 const registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
 const prefix = join(work, "prefix");
+/** Starts the installed `alisio serve` on a free port and returns its `/api/health` payload. */
+async function serveHealth(bin: string, home: string): Promise<{ version?: string }> {
+  const child = spawn(bin, ["serve", "--no-open", "--port", "0"], {
+    cwd: work,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      ALISIO_CONFIG_HOME: join(home, "config"),
+      ALISIO_STATE_HOME: join(home, "state"),
+      HERDR_ENV: "0",
+    },
+  });
+  try {
+    const origin = await new Promise<string>((done, fail) => {
+      let out = "";
+      let err = "";
+      const timer = setTimeout(() => fail(new Error(`serve did not start: ${err}`)), 30_000);
+      child.stderr.on("data", (chunk: Buffer) => {
+        err += chunk.toString();
+      });
+      child.stdout.on("data", (chunk: Buffer) => {
+        out += chunk.toString();
+        const match = /(http:\/\/127\.0\.0\.1:\d+)\/\?token=/.exec(out);
+        if (!match?.[1]) return;
+        clearTimeout(timer);
+        done(match[1]);
+      });
+      child.on("error", fail);
+    });
+    const response = await fetch(`${origin}/api/health`);
+    assert.equal(response.status, 200);
+    return (await response.json()) as { version?: string };
+  } finally {
+    child.kill("SIGTERM");
+  }
+}
 try {
   // Must be asynchronous: the registry above is served by this same process.
   await execFileAsync(
@@ -100,6 +137,9 @@ try {
   const help = execFileSync(bin, ["--help"]).toString();
   assert.match(help, /Usage: alisio/);
   assert.match(help, /--disable-plugin/);
+  assert.equal(execFileSync(bin, ["--version"]).toString().trim(), manifestVersion);
+  const health = await serveHealth(bin, join(work, "serve"));
+  assert.equal(health.version, manifestVersion, "the installed web UI reports the package version");
   const installed = readdirSync(
     join(prefix, "lib", "node_modules", "@alisio", "alisio-code", "node_modules", "@alisio"),
   );

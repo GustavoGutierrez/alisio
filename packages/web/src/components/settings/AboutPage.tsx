@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.ts";
+import { appVersion } from "../../store/app.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./settings.module.css";
 import { PageIntro } from "./shared.tsx";
@@ -16,6 +17,11 @@ export function AboutPage() {
         width={320}
         height={150}
       />
+      <p class={styles.aboutVersion}>
+        {appVersion.value
+          ? t("about.version", { version: appVersion.value })
+          : t("about.versionUnknown")}
+      </p>
       <p class={styles.aboutDescription}>{t("about.description")}</p>
       <p class={styles.aboutAttribution}>Gustavo Gutiérrez · Bogotá, Colombia</p>
       <a

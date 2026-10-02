@@ -275,6 +275,8 @@ button.processHead:hover,
 }
 
 .runStatus {
+  /* Its screen-reader live region is absolutely positioned: keep it inside the scroller. */
+  position: relative;
   margin: 12px 0;
   color: var(--muted);
   font-size: 14px;

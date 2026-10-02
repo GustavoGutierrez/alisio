@@ -196,7 +196,8 @@ ninguna):
 
 **Abrir archivo de configuración** (arriba a la derecha) muestra el archivo de configuración
 efectivo del workspace, su archivo de ajustes de usuario y el de perfiles de proveedor, cada uno con
-un botón de copiar. El servidor nunca abre un editor.
+un botón de copiar. El servidor nunca abre un editor. La versión de Alisio (la del servidor, la que imprime `alisio --version`) se
+muestra en **Ajustes → Acerca de** y, de forma discreta, al pie de la barra lateral.
 
 Las credenciales son de solo escritura. El campo de una credencial es de tipo contraseña: tras
 **Guardar** se vacía y la página solo indica si hay un valor guardado, si viene de una variable de

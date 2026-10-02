@@ -1,7 +1,12 @@
 .app {
+  /* Anchors the absolutely positioned live regions (.sr-only) so they cannot extend the page. */
+  position: relative;
   display: flex;
+  height: 100vh;
   height: 100dvh;
+  /* `hidden` still lets focus() and scrollIntoView() scroll the box; `clip` never does. */
   overflow: hidden;
+  overflow: clip;
 }
 
 .main {

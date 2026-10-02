@@ -348,6 +348,17 @@
   margin-top: 0;
 }
 
+.version {
+  margin: 4px 0 0;
+  padding: 0 10px;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .spacer {
   flex: 1;
 }

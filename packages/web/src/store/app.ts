@@ -23,6 +23,7 @@ import { batch, computed, signal } from "@preact/signals";
 import { t } from "../i18n/index.ts";
 import { ApiClient, ApiRequestError, newId } from "../net/api.ts";
 import { type EventSourceLike, EventStream, type StreamStatus } from "../net/events.ts";
+import { normalizeVersion } from "../util/version.ts";
 import {
   answeredSideQuestion,
   type BtwState,
@@ -186,6 +187,8 @@ export const openWorkspaceRequest = signal(0);
 /** Server capabilities from `/api/health` (native folder dialog, folder browser). */
 export const health = signal<HealthInfo | undefined>(undefined);
 /** How "Open a workspace" asks for a folder on this server. */
+/** The server's Alisio version (undefined until `/api/health` answers or when it omits it). */
+export const appVersion = computed(() => normalizeVersion(health.value?.version));
 export const openMode = computed(() => workspaceOpenMode(health.value?.capabilities));
 /** The native folder dialog is open on the server's desktop. */
 export const picking = signal(false);

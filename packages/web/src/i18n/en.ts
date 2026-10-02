@@ -559,6 +559,9 @@ export const en = {
   "appearance.lead": "How the interface looks in this browser.",
   "about.description":
     "Alisio is a coding-agent harness that connects to OpenAI-compatible endpoints and runs in your terminal or browser, with its own TypeScript core and extensible tools, plugins and skills.",
+  "about.version": "Alisio {version}",
+  "about.versionUnknown": "Version unavailable",
+  "about.versionTitle": "Alisio version {version}",
   "about.repository": "View the repository on GitHub",
   "about.repositoryLabel": "View the Alisio repository on GitHub (opens in a new tab)",
   "config.open": "Open configuration file",

@@ -6,6 +6,19 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.1.1",
+      date: "2026-10-03",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "The web UI no longer scrolls the page and leaves a blank gap under the interface while a reply is streaming: the app now always fills the window exactly and only its inner panels scroll.",
+            "The Alisio version is shown in the web UI: **Settings → About** and, discreetly, the bottom of the sidebar.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.1.0",
       date: "2026-10-02",
       sections: [

@@ -182,7 +182,8 @@ resources act on the workspace of the open session (or the first workspace when 
 
 **Open configuration file** (top right) shows the effective configuration file of the workspace,
 your user settings file and the provider profiles file, each with a copy button. The server never
-opens an editor.
+opens an editor. The Alisio version (the server's, the one `alisio --version` prints) is shown in
+**Settings → About** and, discreetly, at the bottom of the sidebar.
 
 Credentials are write-only. A credential field is a password input: after **Save** it is cleared
 and the page only shows whether a value is stored, whether it comes from an environment variable,

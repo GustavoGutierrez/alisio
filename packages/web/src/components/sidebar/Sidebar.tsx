@@ -4,6 +4,7 @@ import { locale, t } from "../../i18n/index.ts";
 import {
   addWorkspace,
   agentsOpen,
+  appVersion,
   currentId,
   mobileSidebar,
   newSession,
@@ -449,6 +450,11 @@ export function Sidebar() {
         <Icon name="settings" size={17} />
         {t("sidebar.settings")}
       </button>
+      {appVersion.value ? (
+        <p class={styles.version} title={t("about.versionTitle", { version: appVersion.value })}>
+          {t("about.version", { version: appVersion.value })}
+        </p>
+      ) : null}
     </nav>
   );
 }

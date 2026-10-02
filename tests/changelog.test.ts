@@ -258,11 +258,14 @@ describe("shipped changelog", () => {
     expect(loadChangelog()).toEqual(parseChangelog(source));
   });
 
-  it("has curated entries for the published alphas and the stable release on top", () => {
+  it("has curated entries for the published alphas and the stable releases on top", () => {
     const entries = loadChangelog();
     expect(entries.length).toBeGreaterThan(10);
     expect(entries.some((e) => e.version === "0.1.0-alpha.28")).toBe(true);
-    expect(selectEntries(entries).entries[0]?.version).toBe("0.1.0");
+    expect(selectEntries(entries, { limit: 2 }).entries.map((e) => e.version)).toEqual([
+      "0.1.1",
+      "0.1.0",
+    ]);
     for (const entry of entries) {
       expect(entry.sections.length, entry.version).toBeGreaterThan(0);
       for (const section of entry.sections)
