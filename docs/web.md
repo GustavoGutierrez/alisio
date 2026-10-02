@@ -349,6 +349,38 @@ screen replaces the composer, so Shift+Tab and the agent selector do nothing whi
 Clients that do not know the plan review (a script using the API) see a normal question with the
 same three options.
 
+### Plan diagrams and the plan viewer {#plan-viewer}
+
+The plan agent can add small [Mermaid diagrams](/tools#exit-plan) to a plan (0 to 5, only when they
+explain something the text does not; a simple plan gets none). A plan with diagrams is published as one
+folder artifact per revision (`plan.md`, `plan.json` and `diagrams/*.mmd`), and its card shows the same
+**plan.md** name as before. The decision screen gains a discreet line (**3 diagrams**) with **Open plan
+viewer**; the card opens the same viewer in the side panel:
+
+- **Summary**, **Main goals**, **Implementation stages** (a stepper), **Diagrams**, **Components and
+  relationships** (the component and architecture diagrams), **Decisions and considerations** and finally the
+  **Full plan**, all read from `plan.json`, which Alisio generates from the plan text. A plan that does not
+  use the usual sections just shows the full plan and its diagrams; a missing or broken `plan.json` falls back
+  to the plan text and the diagram files.
+- Every diagram has a title, a short explanation and a link to the plan section it illustrates; each
+  section of the full plan links back to its diagrams. Both directions move focus too, and the section bar
+  works with the arrow keys, Home and End.
+- Diagrams are drawn in Alisio's palette (colors for input, process, data, system, external, decision and
+  risk, light and dark) with Mermaid in strict mode. A diagram with a syntax error shows its source and the
+  error instead. Each one can be copied, zoomed, expanded and exported as SVG.
+- From the second revision a diagram that is new or changed since the previous revision carries an
+  **Updated in revision N** badge, and the ones the model dropped are listed as removed.
+- It is responsive down to a phone width. `plan.md` stays fully readable on its own, and the download is a
+  ZIP with `plan.md`, `plan.json` and `diagrams/*.mmd`.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plan_viewer_web_ui.webp" alt="The plan viewer in the side panel: the plan title with its revision, the section bar, and two diagrams drawn in Alisio's colors, a flowchart of the export request and a component diagram marked as updated in revision 2." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>The plan viewer for revision 2 of a plan: the request flow and the components diagram, which changed in this revision (Spanish interface).</figcaption>
+</figure>
+
+Turn it off with [`plan.diagrams`](/configuration#plan) or cap it with `plan.maxDiagrams`. Mermaid draws only in
+the web; the terminal shows each diagram's source (see [Terminal UI](/tui#plan-review)).
+
 ### Background tasks {#background-tasks}
 
 Commands the agent starts with [`bg_run`](/tools#background-tasks) keep running while you chat. The
@@ -504,6 +536,11 @@ Dashboards run in an iframe with `sandbox="allow-scripts allow-downloads"` (neve
 10 minutes. Its Content-Security-Policy forbids every connection (`connect-src 'none'`) and adds the
 `sandbox` directive, so the page has an opaque origin: it cannot read the cookie, the Alisio page,
 `localStorage` or the network, also when opened in a new tab. Data must be embedded in the HTML.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/dashboard_charts_web_ui.webp" alt="A dashboard built with alisio_runtime.charts: headline numbers, a donut of order status, a pie of channel share and a grouped bar chart of sales and profit per seller, scaled to their cards." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>A dashboard made with <code>alisio_runtime.charts</code> (Chart.js bundled; see <a href="/analysis#charts">Charts</a>).</figcaption>
+</figure>
 
 Running Python asks in the approval panel with the title **Run Python analysis?**, the warning that
 managed Python is not a sandbox and the first 40 lines of the script; **S** (**Allow for this

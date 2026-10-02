@@ -34,7 +34,15 @@ export interface ActiveAgent {
 export const DEFAULT_AGENT_ID = "build";
 export const PLAN_AGENT_ID = "plan";
 
-const PLAN_INSTRUCTIONS = `You are the "plan" agent: a read-only planning assistant for this main session.
+export interface PlanInstructionSettings {
+  /** `plan.diagrams`. */
+  diagrams: boolean;
+  /** `plan.maxDiagrams`. */
+  maxDiagrams: number;
+}
+export const DEFAULT_PLAN_SETTINGS: PlanInstructionSettings = { diagrams: true, maxDiagrams: 5 };
+
+const PLAN_BASE = `You are the "plan" agent: a read-only planning assistant for this main session.
 
 Your job is analysis and planning only. Investigate the repository with read-only tools
 (list_files, search_text, read_file, git_status, git_diff) and return a concrete, ordered plan:
@@ -48,7 +56,8 @@ approval hands the plan to the build agent.
 
 When the plan is complete, finish by calling \`exit_plan\` exactly once with the whole plan in
 Markdown (and a short \`title\`). Do not paste the plan in your reply first: exit_plan shows it to
-the user and asks for a decision. Write the plan with these sections, in this order:
+the user and asks for a decision. The plan must be fully understandable on its own, as text. Write
+it with these sections, in this order:
 
 # <Title>
 ## Goal
@@ -57,15 +66,56 @@ What will be true when this is done, in one or two sentences.
 What you found in the repository that the plan relies on (files, functions, conventions).
 ## Steps
 A numbered, ordered list. Each step names the files and functions to change and what changes.
+## Decisions
+Only when there were real choices: each decision and why, in one line.
 ## Risks
 What could go wrong, what is uncertain, and what you did not verify.
 ## Verification
-The exact commands and checks that prove the work is done.
+The exact commands and checks that prove the work is done.`;
+
+const PLAN_DIAGRAMS = (max: number) => `
+
+Diagrams (optional). exit_plan can also carry Mermaid diagrams in its \`diagrams\` argument, as
+{id, title, explanation, section, type, mermaid}. Add one only when it explains the plan better than
+the text does: a flow, the parts of a system and how they relate, a sequence between components, or
+how data moves. Use 0 to ${max} per plan: a simple plan gets none. Never repeat what the text
+already says and never add information that is not in the plan.
+- One idea per diagram, about 40 nodes at most, labels of one to four plain words.
+- id: kebab-case and stable (for example "request-flow"). title: a few words. explanation: one short
+  sentence about what it shows. section: the plan heading it illustrates (for example "Steps").
+  type: overview, flow, components, architecture, sequence, data, state or other.
+- Mermaid types: flowchart (preferred; LR for flows, TD for layers), sequenceDiagram,
+  stateDiagram-v2, erDiagram, classDiagram, gantt, mindmap, timeline, journey. No click, links, HTML
+  tags or %%{init} directives.
+- Style flowcharts with these classes by adding :::name to a node; Alisio defines their colors for
+  light and dark, so do not set colors yourself: input (what comes in), process (a step or a part
+  that does work), data (stored or exchanged data), system (a main part of the product), external
+  (a third party or an outside system), decision (a choice or condition), risk (a risk or an
+  uncertain part).
+- Shapes with meaning: [rectangle] for steps, ([rounded]) for start and end, [(cylinder)] for stored
+  data, {rhombus} for decisions. Group related nodes with: subgraph Name ... end.
+  Example: flowchart LR; user([Request]):::input --> api[API]:::system --> db[(Store)]:::data
+- When you revise a plan, send EVERY diagram that still applies, updated to match it (same id), and
+  leave out the ones that no longer apply. The tool result lists the diagrams it accepted, dropped
+  (with the reason) and removed: fix a dropped one in the next revision.`;
+
+const PLAN_TAIL = `
 
 Read the tool result: "approved" means the build agent will implement the plan, so reply with one
 short sentence and stop. "skipped" means stay in plan mode and do not call exit_plan again unless
 asked. "feedback" carries extra context from the user: revise the plan and call exit_plan again
 with the complete updated plan.`;
+
+/**
+ * The plan agent's system prompt. The diagram style guide is part of it only while diagrams are on
+ * (`plan.diagrams` with a `plan.maxDiagrams` above 0).
+ */
+export function planInstructions(
+  settings: PlanInstructionSettings = DEFAULT_PLAN_SETTINGS,
+): string {
+  const diagrams = settings.diagrams && settings.maxDiagrams > 0;
+  return `${PLAN_BASE}${diagrams ? PLAN_DIAGRAMS(settings.maxDiagrams) : ""}${PLAN_TAIL}`;
+}
 
 /** Product built-ins. `build` keeps the CURRENT behavior exactly: no added persona, full power. */
 export const BUILTIN_AGENTS: ActiveAgent[] = [
@@ -81,7 +131,7 @@ export const BUILTIN_AGENTS: ActiveAgent[] = [
     name: "plan",
     description:
       "Read-only planning agent: analyzes the codebase and returns an implementation plan without modifying anything.",
-    instructions: PLAN_INSTRUCTIONS,
+    instructions: planInstructions(),
     readOnly: true,
     source: "builtin",
   },
@@ -195,7 +245,10 @@ export function resolveActiveAgent(agents: ActiveAgent[], id: string | undefined
 }
 
 /** The run options an active agent implies. An undefined agent yields the current behavior. */
-export function agentRunOptions(agent: ActiveAgent | undefined): {
+export function agentRunOptions(
+  agent: ActiveAgent | undefined,
+  settings?: { plan?: PlanInstructionSettings },
+): {
   instructions?: string;
   policy?: { write: false; process: false; external: false };
   approvals?: false;
@@ -203,12 +256,14 @@ export function agentRunOptions(agent: ActiveAgent | undefined): {
   optInTools?: string[];
 } {
   if (!agent) return {};
+  const builtinPlan = agent.id === PLAN_AGENT_ID && agent.source === "builtin";
+  // The built-in plan agent's prompt follows `plan.diagrams` / `plan.maxDiagrams` (read live).
+  const instructions =
+    builtinPlan && settings?.plan ? planInstructions(settings.plan) : agent.instructions;
   return {
-    ...(agent.instructions ? { instructions: agent.instructions } : {}),
+    ...(instructions ? { instructions } : {}),
     // `exit_plan` exists for the built-in plan agent only (it is hidden from every other run).
-    ...(agent.id === PLAN_AGENT_ID && agent.source === "builtin"
-      ? { optInTools: [EXIT_PLAN_TOOL] }
-      : {}),
+    ...(builtinPlan ? { optInTools: [EXIT_PLAN_TOOL] } : {}),
     ...(agent.effort ? { reasoningEffort: agent.effort } : {}),
     ...(agent.readOnly
       ? {

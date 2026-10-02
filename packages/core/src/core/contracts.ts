@@ -1,6 +1,7 @@
 import type {
   AnalysisCapability,
   ArtifactPublisher,
+  ArtifactPublishInput,
   ArtifactRef,
   CompactionCheckpoint,
   InstallPreview,
@@ -260,6 +261,13 @@ export interface CoreArtifactPublisher extends ArtifactPublisher {
       provenance?: Record<string, unknown>;
     },
   ): Promise<PublishedArtifactInfo[]>;
+  /**
+   * Detailed variant of `publish` (path and warnings). `fileName` names a multi-file folder with
+   * an `entry` after its main file (`plan.md`) instead of `<folder>.zip`; downloads are still ZIPs.
+   */
+  publishDetailed(
+    input: ArtifactPublishInput & { fileName?: string },
+  ): Promise<PublishedArtifactInfo>;
   /** Detailed variant of `publishText` (path and warnings). */
   publishTextDetailed(input: {
     fileName: string;

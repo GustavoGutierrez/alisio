@@ -19,6 +19,9 @@ export function createArtifactPublisher(
     async publish(input) {
       return done(await store.publish(input, owner)).artifact;
     },
+    async publishDetailed(input) {
+      return done(await store.publish(input, owner));
+    },
     async publishText(input) {
       return done(await store.publishText(input, owner)).artifact;
     },

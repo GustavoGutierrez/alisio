@@ -8,7 +8,8 @@
       "!pnpm-lock.yaml",
       "!docs/.vitepress/cache",
       "!docs/.vitepress/dist",
-      "!packs"
+      "!packs",
+      "!packages/core/src/analysis/python/alisio_runtime/chart.umd.min.js"
     ]
   },
   "formatter": {

@@ -280,6 +280,15 @@ lo lista) y abre el panel de decisión **Plan complete. What would you like to d
   vuelve a las opciones); el texto vuelve al modelo, que sigue planificando y propone una revisión
   nueva.
 
+Cuando el plan tiene [diagramas](/es/tools#exit-plan), la transcripción muestra, después del plan, el título
+de cada uno, su propósito, la sección del plan que ilustra, su explicación breve y el **código Mermaid
+recortado a unas pocas líneas** (el resto está en `diagrams/<id>.mmd`; la terminal no dibuja diagramas) y
+después la ruta de la carpeta del plan en disco. Ábrala desde `/artifacts`: **Preview here** muestra la
+entrada `plan.md` como Markdown y **Open with default app** o **Reveal in folder** llegan a la carpeta con
+`plan.json` y los diagramas. La web los dibuja en el [visor del plan](/es/web#plan-viewer). Con
+`--read-only` y en `alisio run` el plan se devuelve como texto, los archivos se escriben igualmente y no se
+abre nada.
+
 Cancelar el turno (`Esc` en el editor) retira una revisión pendiente y descarta una aprobación que
 aún no había empezado. Mientras el panel está abierto Mayús+Tab no hace nada, y el agente plan sigue
 siendo de solo lectura en cualquier [modo de permisos](#permission-modes). Con `--read-only`, o en

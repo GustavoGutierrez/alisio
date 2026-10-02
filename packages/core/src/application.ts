@@ -611,7 +611,15 @@ export async function createApplication(options: AppOptions = {}) {
     }
     // `exit_plan` (opt-in: only the plan agent's run sees it): the plan review hand-over.
     const { registerExitPlan } = await import("./plan/exit-plan.ts");
-    registerExitPlan(registry, { store, ui: plugins.ui, readOnly: !!options.readOnly });
+    registerExitPlan(registry, {
+      store,
+      ui: plugins.ui,
+      readOnly: !!options.readOnly,
+      diagrams: () => ({
+        enabled: config.plan.diagrams,
+        max: config.plan.diagrams ? config.plan.maxDiagrams : 0,
+      }),
+    });
     // Data tools only read (effect `read`): they stay available under --read-only.
     if (config.analysis.enabled) {
       const { registerDataTools } = await import("./tools/data.ts");
@@ -1377,6 +1385,13 @@ export async function createApplication(options: AppOptions = {}) {
             };
             break;
           }
+          case "plan.diagrams":
+            // Read live: `exit_plan` offers (or hides) its `diagrams` field on the next request.
+            config.plan = { ...config.plan, diagrams: value === true };
+            break;
+          case "plan.maxDiagrams":
+            config.plan = { ...config.plan, maxDiagrams: Number(value) };
+            break;
           case "tasks.enabled":
             // Tools are registered when the application starts: the change applies to the next
             // application (a restart; the web recycles the workspace application).

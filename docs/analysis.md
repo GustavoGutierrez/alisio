@@ -111,7 +111,7 @@ are never published.
 A pure-Python helper package copied next to every script:
 
 ```python
-from alisio_runtime import output_dir, html, svg, outputs
+from alisio_runtime import output_dir, html, svg, charts, outputs
 
 chart = svg.bar(["Q1", "Q2", "Q3"], [12, 18, 9], title="Sales")
 html.write("index.html", "Sales", f"<h1>Sales</h1>{chart}")
@@ -119,7 +119,61 @@ html.write("index.html", "Sales", f"<h1>Sales</h1>{chart}")
 outputs.declare("index.html", title="Sales dashboard")
 ```
 
-HTML will be shown offline: embed data, scripts and styles inline (no CDN, no `fetch`).
+HTML will be shown offline: embed data, scripts and styles inline (no CDN, no `fetch`). For charts
+use `charts` or `svg` (next section) instead of writing SVG or loading a library by hand.
+
+### Charts {#charts}
+
+Models that draw charts by hand tend to get them wrong: SVG pie arcs with a bad `large-arc-flag` or a
+broken 100% slice, fixed-size SVGs that stay tiny inside a big card, or a `<script src>` to a CDN
+that the viewer blocks (no network). `alisio_runtime` therefore ships two tested helpers. Chart.js
+is the only chart engine.
+
+| Helper | Use it for | Notes |
+| --- | --- | --- |
+| `charts` | Interactive dashboards in one HTML file | [Chart.js](https://www.chartjs.org/) 4.5.1 (MIT) bundled with Alisio and inlined **once** per page: no CDN, no network, no `eval`, so it works in the viewer, offline and in the downloaded file. Responsive, tooltips, legends, value labels, a screen-reader label and a collapsible data table per chart, light and dark colors that follow the page scheme. |
+| `svg` | Static output (an `.svg` file, a report, no script) and a fallback | One `<svg>` with a `viewBox` that scales with its container, `<title>` and `<desc>`, and `currentColor` text. |
+
+```python
+from alisio_runtime import charts
+
+body = charts.kpis(("Orders", "1,204", "+8% vs last month")) + charts.grid(
+    charts.card("Order status", charts.donut(["Delivered", "In transit", "Cancelled"], [81.7, 14.8, 3.4])),
+    charts.card("Sales by seller", charts.bar(
+        ["Ana", "Luis", "Marta"], {"Sales": [120000, 95000, 87000], "Profit": [30000, 21000, 25000]},
+        fmt="currency:USD", locale="en-US")),
+    charts.card("Orders per month", charts.line(["Jan", "Feb", "Mar"], {"Orders": [120, 135, 128]})),
+)
+charts.write("dashboard.html", "Sales dashboard", body)   # Chart.js is inlined here, once
+```
+
+`charts.pie`, `donut`, `bar`, `hbar`, `line`, `area` and `scatter` take the labels and the values (a
+list, or `{series name: list}` for several series, grouped or `stacked=True`), and optionally
+`title`, `fmt`, `locale`, `unit`, `height`, `note`. `fmt` is `"number"`, `"integer"`, `"percent"`
+(values are fractions), `"compact"`, `"currency:USD"` (any ISO code) or a dict of
+`Intl.NumberFormat` options; `locale` is a tag such as `"es-CO"` (default: the viewer's locale).
+Lay the page out with `charts.card` (one chart per card), `charts.grid` and `charts.kpis`;
+`charts.write` (or `charts.page`) adds the library and the drawing script once, however many charts
+the page has. Missing, non-numeric or negative pie values are skipped with a note on stderr, empty
+data renders a "No data" message instead of failing, and more than 8 series raises an error because
+no palette can tell them apart. The `svg` functions (`pie`, `donut`, `bar`, `hbar`, `line`, `area`,
+`scatter`) take the same data; `svg.pie_slices` is the pure geometry behind the pies (the last slice
+ends exactly at 360 degrees and a single 100% slice is a full circle).
+
+Guidance the model receives: one chart per card with a minimum height, a pie only for 2 to 5 parts
+(more categories fold into "Other"; use a donut or `hbar`), always label values, keep the data
+table, and format money and numbers with the user's locale. Plotly stays an optional extra
+(`alisio analysis setup --extras analysis`, about 75 MB with its dependencies) for the cases Chart.js
+does not cover; `html.inline_plotly()` inlines it.
+
+When a published HTML artifact contains hand-written SVG pie arcs, fixed-size SVG charts without a
+`viewBox` or a script or stylesheet loaded from the network, the `python_run` result adds a
+`warning:` that names the helpers. It never rejects the artifact.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/dashboard_charts_web_ui.webp" alt="A dashboard built with alisio_runtime.charts: three headline numbers, a donut of order status and a pie of channel share with percentages in each slice, and a grouped bar chart of sales and profit per seller, all scaled to their cards." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>A dashboard generated with <code>alisio_runtime.charts</code> in the isolated viewer.</figcaption>
+</figure>
 
 ### Artifact types {#types}
 

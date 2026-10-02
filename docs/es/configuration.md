@@ -410,6 +410,27 @@ inglés y español) y desde `/settings` en la [TUI](/es/tui), con el mismo escri
 de ajustes. Se leen en caliente: la siguiente continuación (o el siguiente `/goal`) usa el valor
 nuevo, pero los topes de turnos y de tiempo de un objetivo que ya existe se fijaron al crearlo.
 
+## `plan` {#plan}
+
+[Diagramas del plan](/es/tools#exit-plan): el agente de plan puede añadir pequeños diagramas Mermaid a
+un plan, que el [visor del plan en la web](/es/web#plan-viewer) dibuja y la [terminal](/es/tui#plan-review)
+muestra como código fuente.
+
+| Campo | Valor por defecto | Descripción |
+| --- | --- | --- |
+| `diagrams` | `true` | `false` quita el argumento `diagrams` de `exit_plan` y la guía de estilo de diagramas de las instrucciones del agente de plan; una llamada que aun así envíe diagramas recibe una nota y no se publican |
+| `maxDiagrams` | `5` | Máximo de diagramas que conserva un plan (0–8); el resto se descarta y el resultado de la herramienta lo dice. `0` equivale a `diagrams: false` |
+
+El tamaño de un diagrama (8 KB) y su número estimado de nodos (40) son límites fijos, no ajustes.
+
+```json
+{ "plan": { "maxDiagrams": 3 } }
+```
+
+Las dos claves se pueden cambiar desde **Ajustes → General** en [`alisio serve`](/es/web) (etiquetas en
+inglés y español) y desde `/settings` en la [TUI](/es/tui), y se leen en caliente: la siguiente
+petición del plan ofrece (u oculta) los diagramas y usa el nuevo máximo.
+
 ## Cambios hechos desde la interfaz web
 
 Las páginas de **Ajustes** de [`alisio serve`](/es/web) escriben en los mismos archivos que la

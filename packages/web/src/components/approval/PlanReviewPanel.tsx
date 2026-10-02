@@ -2,6 +2,7 @@ import type { PendingInteraction } from "@alisio/sdk";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { answer } from "../../store/app.ts";
+import { openArtifact } from "../../store/artifacts.ts";
 import {
   isPlanChoice,
   OPTION_HINTS,
@@ -12,6 +13,7 @@ import {
 } from "../../store/plan-review.ts";
 import { ArtifactCard } from "../artifacts/ArtifactCard.tsx";
 import { Icon } from "../icons.tsx";
+import { diagramCountText, pk } from "../plan/strings.ts";
 import styles from "./approval.module.css";
 import plan from "./plan.module.css";
 
@@ -79,6 +81,23 @@ export function PlanReviewPanel({ interaction }: { interaction: PendingInteracti
           </h2>
           <p class={plan.planTitle}>{view.plan.title}</p>
           {view.plan.artifact ? <ArtifactCard artifact={view.plan.artifact} compact /> : null}
+          {view.plan.diagrams?.length ? (
+            <p class={plan.diagramsLine}>
+              <span>{diagramCountText(view.plan.diagrams.length)}</span>
+              {view.plan.artifact ? (
+                <button
+                  type="button"
+                  class={plan.viewerButton}
+                  aria-controls="artifact-panel"
+                  onClick={(event) =>
+                    openArtifact((view.plan.artifact as { id: string }).id, event.currentTarget)
+                  }
+                >
+                  {pk("openViewer")}
+                </button>
+              ) : null}
+            </p>
+          ) : null}
           {mode === "choose" ? (
             <div class={styles.options} role="group" aria-labelledby={titleId}>
               {view.question.options.map((option) => {

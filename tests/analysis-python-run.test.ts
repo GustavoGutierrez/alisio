@@ -324,4 +324,36 @@ describe.skipIf(!python)("python_run with a real Python 3.10+ (skipped when abse
     ]);
     expect(existsSync(join(root, "runtimes", "python", "discovery.json"))).toBe(true);
   }, 30_000);
+
+  it("publishes a charts dashboard as one HTML file without chart warnings, and warns about a hand-written pie", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-realpy-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const good = await harness(
+      {
+        code: [
+          "from alisio_runtime import charts",
+          "body = charts.grid(charts.card('Status', charts.donut(['A', 'B'], [81.7, 18.3])), charts.card('Sellers', charts.bar(['x', 'y'], {'S': [1, 2], 'P': [2, 1]})))",
+          "charts.write('dashboard.html', 'Sales', body)",
+        ].join("\n"),
+      },
+      { runtime: new AnalysisRuntimeManager({ stateDir: root }) },
+    );
+    await good.run();
+    expect(good.text()).toMatch(/^exit 0 .* published 1 artifact: /);
+    expect(good.text()).not.toContain("warning:");
+    const bad = await harness(
+      {
+        code: [
+          "from alisio_runtime import output_dir",
+          "svg = '<svg width=\"400\" height=\"300\">' + ''.join(f'<path d=\"M200,150 L200,50 A100,100 0 0,1 {x},176 Z\"/>' for x in (250, 300)) + '<rect/><rect/></svg>'",
+          "(output_dir() / 'dashboard.html').write_text('<body>' + svg + '</body>', encoding='utf-8')",
+        ].join("\n"),
+      },
+      { runtime: new AnalysisRuntimeManager({ stateDir: root }) },
+    );
+    await bad.run();
+    expect(bad.text()).toMatch(/^exit 0 .* published 1 artifact/);
+    expect(bad.text()).toContain("warning:");
+    expect(bad.text()).toContain("hand-written SVG arc paths");
+  }, 60_000);
 });

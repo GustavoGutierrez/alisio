@@ -233,7 +233,7 @@ export class SessionService {
   private agentOptions(session: Session): ReturnType<typeof agentRunOptions> {
     const app = this.openApp(session)?.app;
     if (!app) return {};
-    return agentRunOptions(this.resolveAgent(session, app));
+    return agentRunOptions(this.resolveAgent(session, app), { plan: app.config.plan });
   }
 
   /** Merges keys into the session's stored options (undefined removes a key). */

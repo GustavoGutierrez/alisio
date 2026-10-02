@@ -185,4 +185,80 @@ describe("artifact routes", () => {
     expect(items[0]).toMatchObject({ id, status: "deleted" });
     expect((await t.api.get(`/api/artifacts/${id}/download`)).status).toBe(404);
   });
+
+  it("serves a plan folder (entry plan.md) through the files route and the ZIP, with the same auth", async () => {
+    t = await startTestServer();
+    const session = await newSession(t);
+    side = new SQLiteStore(t.db);
+    const store = new ArtifactStore({ root: join(t.root, "state"), db: side.db });
+    const folder = join(t.root, "staging", "plan");
+    await mkdir(join(folder, "diagrams"), { recursive: true });
+    await writeFile(join(folder, "plan.md"), "# Plan\n");
+    await writeFile(join(folder, "plan.json"), '{"version":1}\n');
+    await writeFile(join(folder, "diagrams", "flow.mmd"), "flowchart TD\n a --> b\n");
+    const { artifact } = await store.publish(
+      { source: folder, title: "Plan", entry: "plan.md", fileName: "plan.md" },
+      { sessionId: session.id, rootSessionId: session.id, workspace: t.workspace },
+    );
+    const id = artifact.id;
+    // The listing shows the plan like any Markdown document, previewable.
+    const listed = (await t.api.get(`/api/sessions/${session.id}/artifacts`)).json<{
+      items: ArtifactRef[];
+    }>().items[0];
+    expect(listed).toMatchObject({
+      fileName: "plan.md",
+      kind: "document",
+      previewable: true,
+      fileCount: 3,
+    });
+    // The detail names the entry and every file: how the web decides to open the plan viewer.
+    const detail = (await t.api.get(`/api/artifacts/${id}`)).json<{
+      entry: string;
+      files: Array<{ path: string }>;
+    }>();
+    expect(detail.entry).toBe("plan.md");
+    expect(detail.files.map((f) => f.path).sort()).toEqual([
+      "diagrams/flow.mmd",
+      "plan.json",
+      "plan.md",
+    ]);
+    // The viewer reads each file through the authenticated files route.
+    const manifest = await t.api.get(`/api/artifacts/${id}/files/plan.json`);
+    expect(manifest.status).toBe(200);
+    expect(manifest.json()).toEqual({ version: 1 });
+    const mmd = await rawBytes(
+      t.server.port,
+      `/api/artifacts/${id}/files/diagrams/flow.mmd`,
+      t.cookie,
+    );
+    expect(mmd.status).toBe(200);
+    expect(mmd.body.toString("utf8")).toBe("flowchart TD\n a --> b\n");
+    expect(String(mmd.headers["content-security-policy"])).toContain("default-src 'none'");
+    // Traversal stays inside the artifact.
+    expect(
+      (
+        await rawBytes(
+          t.server.port,
+          `/api/artifacts/${id}/files/..%2F..%2Fmanifest.json`,
+          t.cookie,
+        )
+      ).status,
+    ).toBe(404);
+    // The download is a ZIP with plan.md, plan.json and the diagrams.
+    const zip = await rawBytes(t.server.port, `/api/artifacts/${id}/download`, t.cookie);
+    expect(zip.headers["content-type"]).toBe("application/zip");
+    expect(zip.headers["content-disposition"]).toContain("filename*=UTF-8''plan.zip");
+    expect(unzip(zip.body)).toEqual({
+      "diagrams/flow.mmd": "flowchart TD\n a --> b\n",
+      "plan.json": '{"version":1}\n',
+      "plan.md": "# Plan\n",
+    });
+    // Without the session cookie none of it is readable.
+    for (const path of [
+      `/api/artifacts/${id}`,
+      `/api/artifacts/${id}/files/plan.json`,
+      `/api/artifacts/${id}/download`,
+    ])
+      expect((await raw(t.server.port, path)).status).toBe(401);
+  });
 });

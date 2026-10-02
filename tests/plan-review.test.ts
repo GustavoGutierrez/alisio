@@ -4,7 +4,7 @@
  * the artifact is created per revision, headless sessions degrade instead of hanging and an
  * approval starts ONE implementation turn that carries the approved snapshot.
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -37,6 +37,7 @@ import {
   implementationPrompt,
   PLAN_OPTIONS,
   PLAN_REVIEW_TITLE,
+  planHash,
   proposePlan,
   settlePlanRun,
 } from "../packages/core/src/plan/state.ts";
@@ -63,6 +64,7 @@ async function fixture(options: {
   /** What the (fake) UI answers; `undefined` = no interactive UI is bound. */
   ui?: (request: AskQuestionsRequest) => Promise<AskQuestionsResult> | AskQuestionsResult;
   readOnly?: boolean;
+  diagrams?: () => { enabled: boolean; max: number };
 }) {
   const root = await mkdtemp(join(tmpdir(), "alisio-plan-"));
   roots.push(root);
@@ -93,6 +95,7 @@ async function fixture(options: {
       },
     },
     readOnly: !!options.readOnly,
+    ...(options.diagrams ? { diagrams: options.diagrams } : {}),
   });
   const artifacts = new ArtifactStore({ root, db: store.db });
   const events: RunEvent[] = [];
@@ -624,6 +627,312 @@ describe("settling a plan when its run ends (shared by the TUI and the server)",
       expect(currentPlan(fx.store, fx.session)?.status).toBe("pending");
       expect(settlePlanRun(fx.store, fx.session, { aborted: false }).kind).toBe("none");
       expect(currentPlan(fx.store, fx.session)?.status).toBe("skipped");
+    } finally {
+      fx.close();
+    }
+  });
+});
+
+const FLOW = "flowchart LR\n  a([Request]):::input --> b[API]:::system --> c[(Store)]:::data";
+const SEQUENCE =
+  "sequenceDiagram\n  participant U as User\n  participant A as API\n  U->>A: ask\n  A-->>U: answer";
+const diagramCall = (id: string, diagrams: unknown[], plan = PLAN): ToolCall => ({
+  id,
+  name: "exit_plan",
+  arguments: JSON.stringify({ plan, title: "Flag plan", diagrams }),
+});
+const diagram = (id: string, mermaid = FLOW, extra: Record<string, unknown> = {}) => ({
+  id,
+  title: `Diagram ${id}`,
+  explanation: `What ${id} shows.`,
+  section: "Steps",
+  mermaid,
+  ...extra,
+});
+
+describe("exit_plan with diagrams", () => {
+  const onePlan = (
+    calls: ToolCall[][],
+    answers: Array<Record<string, string>>,
+    extra: { diagrams?: () => { enabled: boolean; max: number }; ui?: boolean } = {},
+  ) => {
+    let answered = 0;
+    return fixture({
+      script: (turn) => (turn < calls.length ? assistant("", calls[turn]) : assistant("Done.")),
+      ...(extra.ui === false
+        ? {}
+        : { ui: () => answers[Math.min(answered++, answers.length - 1)] ?? { plan: "skip" } }),
+      ...(extra.diagrams ? { diagrams: extra.diagrams } : {}),
+    });
+  };
+  const runPlan = (fx: Awaited<ReturnType<typeof fixture>>) =>
+    fx.runner.run(fx.session, "plan it", undefined, agentRunOptions(fx.planAgent));
+
+  it("a call without diagrams keeps the single plan.md artifact and the old result", async () => {
+    const fx = await onePlan([[exitPlan("c1")]], [{ plan: "skip" }]);
+    try {
+      await runPlan(fx);
+      const [artifact] = fx.artifacts.list(fx.session);
+      expect(artifact).toMatchObject({ fileName: "plan.md", kind: "document", fileCount: 1 });
+      const result = JSON.parse(resultText(toolResults(fx.store.messages(fx.session))[0] as never));
+      expect(result).not.toHaveProperty("diagrams");
+      expect(fx.asked[0]?.plan).not.toHaveProperty("diagrams");
+      expect(currentPlan(fx.store, fx.session)?.hash).toBe(planHash(PLAN.trim()));
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("publishes one folder artifact: entry plan.md, plan.json and diagrams/*.mmd, kind document", async () => {
+    const fx = await onePlan(
+      [
+        [
+          diagramCall("c1", [
+            diagram("request-flow"),
+            diagram("talk", SEQUENCE, { section: "Goal" }),
+          ]),
+        ],
+      ],
+      [{ plan: "skip" }],
+    );
+    try {
+      await runPlan(fx);
+      const list = fx.artifacts.list(fx.session);
+      expect(list).toHaveLength(1);
+      const record = list[0] as NonNullable<(typeof list)[number]>;
+      expect(record).toMatchObject({
+        kind: "document",
+        fileName: "plan.md",
+        entry: "plan.md",
+        fileCount: 4,
+        previewable: true,
+      });
+      const files = (await fx.artifacts.files(record)).map((f) => f.path).sort();
+      expect(files).toEqual([
+        "diagrams/request-flow.mmd",
+        "diagrams/talk.mmd",
+        "plan.json",
+        "plan.md",
+      ]);
+      const manifestFile = await fx.artifacts.resolveFile(record, "plan.json");
+      const manifest = JSON.parse(await readFile((manifestFile as { abs: string }).abs, "utf8"));
+      expect(manifest).toMatchObject({
+        version: 1,
+        revision: 1,
+        title: "Flag plan",
+        diagrams: [
+          { id: "request-flow", section: "steps", status: "new", syntax: "flowchart" },
+          { id: "talk", section: "goal", type: "sequence", status: "new" },
+        ],
+      });
+      // The review carries the diagrams (terminals show the source) and the folder artifact.
+      expect(fx.asked[0]?.plan).toMatchObject({
+        artifact: { id: record.id },
+        diagrams: [{ id: "request-flow", mermaid: FLOW }, { id: "talk" }],
+      });
+      const result = JSON.parse(resultText(toolResults(fx.store.messages(fx.session))[0] as never));
+      expect(result.diagrams).toEqual({ accepted: ["request-flow", "talk"] });
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("drops invalid diagrams with a reason and still publishes the plan and the review", async () => {
+    const fx = await onePlan(
+      [
+        [
+          diagramCall("c1", [
+            diagram("ok"),
+            diagram("evil", `${FLOW}\n  click a "https://x.test"`),
+            diagram("Bad Id"),
+            diagram("ok", FLOW),
+          ]),
+        ],
+      ],
+      [{ plan: "approve" }],
+    );
+    try {
+      await runPlan(fx);
+      const result = JSON.parse(resultText(toolResults(fx.store.messages(fx.session))[0] as never));
+      expect(result.decision).toBe("approved");
+      expect(result.diagrams.accepted).toEqual(["ok"]);
+      expect(result.diagrams.dropped.map((d: { id: string }) => d.id)).toEqual([
+        "evil",
+        "Bad Id",
+        "ok",
+      ]);
+      expect(result.diagrams.dropped[0].reason).toMatch(/click/);
+      expect(fx.artifacts.list(fx.session)).toHaveLength(1);
+      expect(claimApprovedPlan(fx.store, fx.session)).toMatchObject({ status: "implementing" });
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("when every diagram is dropped the plan is the plain plan.md artifact", async () => {
+    const fx = await onePlan(
+      [[diagramCall("c1", [diagram("bad", "pie\n  title x\n  a: 1")])]],
+      [{ plan: "skip" }],
+    );
+    try {
+      await runPlan(fx);
+      expect(fx.artifacts.list(fx.session)[0]).toMatchObject({ fileCount: 1, fileName: "plan.md" });
+      const result = JSON.parse(resultText(toolResults(fx.store.messages(fx.session))[0] as never));
+      expect(result.diagrams).toMatchObject({ accepted: [], dropped: [{ id: "bad" }] });
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("respects plan.maxDiagrams and plan.diagrams: false", async () => {
+    const calls = [[diagramCall("c1", [diagram("a"), diagram("b"), diagram("c")])]];
+    const capped = await onePlan(calls, [{ plan: "skip" }], {
+      diagrams: () => ({ enabled: true, max: 2 }),
+    });
+    try {
+      await runPlan(capped);
+      const result = JSON.parse(
+        resultText(toolResults(capped.store.messages(capped.session))[0] as never),
+      );
+      expect(result.diagrams.accepted).toEqual(["a", "b"]);
+      expect(result.diagrams.dropped).toMatchObject([
+        { id: "c", reason: expect.stringContaining("2 diagrams") },
+      ]);
+    } finally {
+      capped.close();
+    }
+    const off = await onePlan(calls, [{ plan: "skip" }], {
+      diagrams: () => ({ enabled: false, max: 0 }),
+    });
+    try {
+      await runPlan(off);
+      expect(off.artifacts.list(off.session)[0]).toMatchObject({ fileCount: 1 });
+      const result = JSON.parse(
+        resultText(toolResults(off.store.messages(off.session))[0] as never),
+      );
+      expect(result.diagrams.accepted).toEqual([]);
+      expect(result.diagrams.dropped[0].reason).toContain("plan.diagrams");
+      // The schema offered to the model no longer has the field.
+      const tool = off.registry.get("exit_plan");
+      expect(Object.keys((tool.inputSchema as { properties: object }).properties)).toEqual([
+        "title",
+        "plan",
+      ]);
+      expect(tool.description).not.toContain("diagrams");
+    } finally {
+      off.close();
+    }
+  });
+
+  it("offers the diagrams field while they are on", async () => {
+    const fx = await onePlan([[exitPlan("c1")]], [{ plan: "skip" }]);
+    try {
+      const tool = fx.registry.get("exit_plan");
+      expect(Object.keys((tool.inputSchema as { properties: object }).properties)).toEqual([
+        "title",
+        "plan",
+        "diagrams",
+      ]);
+      expect(tool.description).toContain("up to 5");
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("a revision diffs against the previous one: new, updated, unchanged and removed", async () => {
+    const fx = await onePlan(
+      [
+        [diagramCall("c1", [diagram("keep"), diagram("change"), diagram("gone")])],
+        [
+          diagramCall("c2", [
+            diagram("keep"),
+            diagram("change", `${FLOW} --> d[Extra]`),
+            diagram("fresh", SEQUENCE),
+          ]),
+        ],
+      ],
+      [{ plan: "context", "plan:text": "revise" }, { plan: "skip" }],
+    );
+    try {
+      await runPlan(fx);
+      const [second, first] = fx.artifacts.list(fx.session);
+      const manifest = JSON.parse(
+        await readFile(
+          ((await fx.artifacts.resolveFile(second as never, "plan.json")) as { abs: string }).abs,
+          "utf8",
+        ),
+      );
+      expect(manifest.revision).toBe(2);
+      expect(
+        Object.fromEntries(
+          manifest.diagrams.map((d: { id: string; status: string }) => [d.id, d.status]),
+        ),
+      ).toEqual({
+        keep: "unchanged",
+        change: "updated",
+        fresh: "new",
+      });
+      expect(manifest.removed).toEqual([{ id: "gone", title: "Diagram gone" }]);
+      expect(first).toBeDefined();
+      const results = toolResults(fx.store.messages(fx.session));
+      const second_result = JSON.parse(resultText(results[1] as never));
+      expect(second_result.diagrams).toMatchObject({ removed: ["gone"] });
+      expect(JSON.parse(resultText(results[0] as never)).message).toContain(
+        "every diagram that still applies",
+      );
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("a change in a diagram alone changes the plan hash; the Markdown alone keeps the old hash", async () => {
+    const fx = await onePlan(
+      [
+        [diagramCall("c1", [diagram("a")])],
+        [diagramCall("c2", [diagram("a", `${FLOW} --> d[More]`)])],
+      ],
+      [{ plan: "context", "plan:text": "again" }, { plan: "skip" }],
+    );
+    try {
+      await runPlan(fx);
+      const [one, two] = fx.asked.map((request) => request.plan as PlanReview);
+      expect(one?.markdown).toBe(two?.markdown);
+      expect(one?.hash).not.toBe(two?.hash);
+      expect(one?.hash).not.toBe(planHash(PLAN.trim()));
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("when the diagrams are removed in a revision, the folder keeps the removed ids", async () => {
+    const fx = await onePlan(
+      [[diagramCall("c1", [diagram("a")])], [exitPlan("c2")]],
+      [{ plan: "context", "plan:text": "drop it" }, { plan: "skip" }],
+    );
+    try {
+      await runPlan(fx);
+      const [second] = fx.artifacts.list(fx.session);
+      expect(second).toMatchObject({ entry: "plan.md", fileCount: 2 });
+      const manifest = JSON.parse(
+        await readFile(
+          ((await fx.artifacts.resolveFile(second as never, "plan.json")) as { abs: string }).abs,
+          "utf8",
+        ),
+      );
+      expect(manifest).toMatchObject({ diagrams: [], removed: [{ id: "a" }] });
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("headless sessions still write the folder and degrade to text", async () => {
+    const fx = await onePlan([[diagramCall("c1", [diagram("a")])]], [], { ui: false });
+    try {
+      await runPlan(fx);
+      const result = JSON.parse(resultText(toolResults(fx.store.messages(fx.session))[0] as never));
+      expect(result).toMatchObject({ decision: "unavailable", diagrams: { accepted: ["a"] } });
+      expect(fx.artifacts.list(fx.session)[0]).toMatchObject({ entry: "plan.md", fileCount: 3 });
+      expect(fx.asked).toHaveLength(0);
     } finally {
       fx.close();
     }

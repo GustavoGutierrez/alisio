@@ -35,7 +35,7 @@ function Diagram(props: { svg: string; zoom: number }) {
   );
 }
 
-export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
+export default function MermaidView(props: { block: UiBlock; live?: boolean; themed?: boolean }) {
   const source = props.block.kind === "mermaid" ? props.block.source : "";
   const title = props.block.kind === "mermaid" ? props.block.title : undefined;
   const ref = useRef<HTMLDivElement>(null);
@@ -51,7 +51,7 @@ export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
     let cancelled = false;
     const stop = whenVisible(ref.current, () => {
       void import("./engine.ts")
-        .then((engine) => engine.render(source, theme))
+        .then((engine) => engine.render(source, theme, props.themed))
         .catch((error: unknown) => ({
           error: error instanceof Error ? error.message : String(error),
         }))
@@ -63,7 +63,7 @@ export default function MermaidView(props: { block: UiBlock; live?: boolean }) {
       cancelled = true;
       stop();
     };
-  }, [source, theme, props.live]);
+  }, [source, theme, props.live, props.themed]);
   useEffect(() => {
     if (!full) return;
     closeRef.current?.focus();

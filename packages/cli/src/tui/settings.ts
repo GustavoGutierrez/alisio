@@ -77,6 +77,7 @@ export interface SettingsConfigView {
     noToolTurnsLimit: number;
     blockedRepeats: number;
   };
+  plan: { diagrams: boolean; maxDiagrams: number };
 }
 
 export interface SettingsMenuInput {
@@ -110,6 +111,7 @@ export const defaultConfig: SettingsConfigView = {
     noToolTurnsLimit: 3,
     blockedRepeats: 2,
   },
+  plan: { diagrams: true, maxDiagrams: 5 },
 };
 
 /** Strictly ascending number sequence with exact step arithmetic (0.85 stays 0.85). */
@@ -410,6 +412,26 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.goal.blockedRepeats,
     description:
       "How many consecutive turns the agent must report the same blocker (with evidence) before the goal stops as blocked. A permission denial blocks at once.",
+  },
+  {
+    id: "plan.diagrams",
+    label: "Plan diagrams",
+    category: "Plan",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.plan.diagrams,
+    description:
+      "The plan agent may add Mermaid diagrams to a plan (exit_plan). The terminal shows each diagram's title, explanation and source; the web draws them in the plan viewer. Off removes them from the tool and from the agent's instructions.",
+  },
+  {
+    id: "plan.maxDiagrams",
+    label: "Most diagrams per plan",
+    category: "Plan",
+    valueType: "number",
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    read: (config) => config.plan.maxDiagrams,
+    description:
+      "Diagrams beyond this number are dropped (the tool result says so). 0 behaves like turning plan diagrams off.",
   },
   {
     id: "tui.paddingX",

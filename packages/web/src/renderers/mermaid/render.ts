@@ -3,6 +3,8 @@
  * SVG labels only (no HTML in `foreignObject`), and the SVG sanitized before it reaches the DOM.
  * A parse or render failure comes back as `{error}` so the view shows the source instead.
  */
+import { themeVariables } from "./palette.ts";
+
 export interface MermaidEngine {
   parse(source: string): Promise<unknown>;
   render(id: string, source: string): Promise<{ svg: string }>;
@@ -10,13 +12,19 @@ export interface MermaidEngine {
 
 export type MermaidResult = { svg: string } | { error: string };
 
-export function mermaidConfig(theme: "dark" | "light") {
+/**
+ * The engine configuration. `themed` is the plan viewer's Alisio theme (Mermaid's `base` theme
+ * with Alisio's colors); chat messages and Markdown previews keep Mermaid's own light and dark
+ * themes. The security settings never depend on it.
+ */
+export function mermaidConfig(theme: "dark" | "light", themed = false) {
   return {
     startOnLoad: false,
     securityLevel: "strict",
     htmlLabels: false,
     flowchart: { htmlLabels: false },
-    theme: theme === "dark" ? "dark" : "default",
+    theme: themed ? "base" : theme === "dark" ? "dark" : "default",
+    ...(themed ? { themeVariables: themeVariables(theme) } : {}),
     maxTextSize: 100_000,
     fontFamily: "inherit",
   } as const;

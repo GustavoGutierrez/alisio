@@ -400,6 +400,26 @@ Spanish) and from `/settings` in the [TUI](/tui), with the same validated writer
 They are read live: the next continuation (or the next `/goal`) uses the new value, but the turn and
 time caps of a goal that already exists were fixed when it was created.
 
+## `plan` {#plan}
+
+[Plan diagrams](/tools#exit-plan): the plan agent may add small Mermaid diagrams to a plan, which the
+[web plan viewer](/web#plan-viewer) draws and the [terminal](/tui#plan-review) shows as source.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `diagrams` | `true` | `false` removes the `diagrams` argument from `exit_plan` and the diagram style guide from the plan agent's instructions; a call that still sends diagrams is answered with a note and they are not published |
+| `maxDiagrams` | `5` | Most diagrams one plan keeps (0–8); the rest are dropped and the tool result says so. `0` behaves like `diagrams: false` |
+
+The size of one diagram (8 KB) and its estimated node count (40) are fixed limits, not settings.
+
+```json
+{ "plan": { "maxDiagrams": 3 } }
+```
+
+Both keys are settable from **Settings → General** in [`alisio serve`](/web) (labels in English and
+Spanish) and from `/settings` in the [TUI](/tui), and are read live: the next plan request offers (or
+hides) the diagrams and uses the new cap.
+
 ## Changes made from the web UI
 
 The **Settings** pages of [`alisio serve`](/web) write to the same files as the terminal:

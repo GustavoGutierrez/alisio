@@ -28,3 +28,32 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+.diagramsLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.viewerButton {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 13px;
+}
+
+.viewerButton:hover {
+  background: var(--hover);
+}
+
+.viewerButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}

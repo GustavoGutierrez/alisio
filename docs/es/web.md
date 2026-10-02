@@ -371,6 +371,39 @@ la ejecución o que esta agote su tiempo. La pantalla sustituye al compositor, p
 el selector de agente no hacen nada mientras está abierta. Los clientes que no conocen la revisión
 del plan (un script que use la API) ven una pregunta normal con las mismas tres opciones.
 
+### Diagramas del plan y visor del plan {#plan-viewer}
+
+El agente de plan puede añadir pequeños [diagramas Mermaid](/es/tools#exit-plan) a un plan (de 0 a 5, solo
+cuando explican algo que el texto no explica; un plan sencillo no lleva ninguno). Un plan con diagramas se
+publica como un artefacto de carpeta por revisión (`plan.md`, `plan.json` y `diagrams/*.mmd`), y su tarjeta
+muestra el mismo nombre **plan.md** de siempre. La pantalla de decisión añade una línea discreta (**3
+diagramas**) con **Abrir el visor del plan**; la tarjeta abre el mismo visor en el panel lateral:
+
+- **Resumen**, **Objetivos principales**, **Etapas de implementación** (un recorrido por pasos),
+  **Diagramas**, **Componentes y relaciones** (los diagramas de componentes y de arquitectura),
+  **Decisiones y consideraciones** y, al final, el **Plan completo**, todo leído de `plan.json`, que Alisio
+  genera a partir del texto del plan. Un plan que no usa las secciones habituales muestra solo el plan
+  completo y sus diagramas; un `plan.json` ausente o roto recurre al texto del plan y a los archivos de
+  diagrama.
+- Cada diagrama tiene un título, una explicación breve y un enlace a la sección del plan que ilustra; cada
+  sección del plan completo enlaza de vuelta a sus diagramas. En ambos sentidos el foco se mueve también, y la
+  barra de secciones funciona con las flechas, Inicio y Fin.
+- Los diagramas se dibujan con la paleta de Alisio (colores para entrada, proceso, datos, sistema, externo,
+  decisión y riesgo, en claro y oscuro) con Mermaid en modo estricto. Un diagrama con un error de sintaxis
+  muestra su código y el error. Cada uno se puede copiar, ampliar, expandir y exportar como SVG.
+- Desde la segunda revisión, un diagrama nuevo o modificado respecto a la anterior lleva la etiqueta
+  **Actualizado en la revisión N**, y los que el modelo descartó se listan como quitados.
+- Se adapta hasta el ancho de un teléfono. `plan.md` sigue siendo legible por sí solo y la descarga es un ZIP
+  con `plan.md`, `plan.json` y `diagrams/*.mmd`.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plan_viewer_web_ui.webp" alt="El visor del plan en el panel lateral: el título del plan con su revisión, la barra de secciones y dos diagramas dibujados con los colores de Alisio, un diagrama de flujo de la petición de exportación y un diagrama de componentes marcado como actualizado en la revisión 2." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>El visor del plan en la revisión 2 de un plan: el flujo de la petición y el diagrama de componentes, que cambió en esta revisión (interfaz en español).</figcaption>
+</figure>
+
+Se desactiva con [`plan.diagrams`](/es/configuration#plan) o se limita con `plan.maxDiagrams`. Mermaid solo
+dibuja en la web; la terminal muestra el código de cada diagrama (véase [Interfaz de terminal](/es/tui#plan-review)).
+
 ### Tareas en segundo plano {#background-tasks}
 
 Los comandos que el agente inicia con [`bg_run`](/es/tools#background-tasks) siguen corriendo mientras
@@ -535,8 +568,12 @@ Los dashboards se ejecutan en un iframe con `sandbox="allow-scripts allow-downlo
 `allow-same-origin`), servido desde `/artifact-view/<token>/…` con un enlace firmado que caduca a
 los 10 minutos. Su Content-Security-Policy prohíbe toda conexión (`connect-src 'none'`) y añade la
 directiva `sandbox`, así que la página tiene un origen opaco: no puede leer la cookie, la página de
-Alisio, `localStorage` ni la red, tampoco al abrirla en una pestaña nueva. Los datos deben ir
-incrustados en el HTML.
+Alisio, `localStorage` ni la red, tampoco al abrirla en una pestaña nueva. Los datos deben ir incrustados en el HTML.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/dashboard_charts_web_ui.webp" alt="Un dashboard creado con alisio_runtime.charts: cifras destacadas, una dona del estado de los pedidos, una tarta del reparto por canal y un gráfico de barras agrupadas de ventas y beneficio por vendedor, ajustados a sus tarjetas." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>Un dashboard hecho con <code>alisio_runtime.charts</code> (Chart.js incluido; consulta <a href="/es/analysis#charts">Gráficos</a>).</figcaption>
+</figure>
 
 Ejecutar Python pregunta en el panel de aprobación con el título **¿Ejecutar análisis en Python?**,
 la advertencia de que Python administrado no es un sandbox y las primeras 40 líneas del script;

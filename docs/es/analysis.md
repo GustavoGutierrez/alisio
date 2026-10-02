@@ -115,7 +115,7 @@ motivo. El script, sus logs y `job.json` nunca se publican.
 Un paquete auxiliar en Python puro que se copia junto a cada script:
 
 ```python
-from alisio_runtime import output_dir, html, svg, outputs
+from alisio_runtime import output_dir, html, svg, charts, outputs
 
 chart = svg.bar(["Q1", "Q2", "Q3"], [12, 18, 9], title="Sales")
 html.write("index.html", "Sales", f"<h1>Sales</h1>{chart}")
@@ -124,7 +124,62 @@ outputs.declare("index.html", title="Sales dashboard")
 ```
 
 El HTML se mostrará sin conexión: incrusta datos, scripts y estilos en línea (sin CDN ni
-`fetch`).
+`fetch`). Para los gráficos usa `charts` o `svg` (siguiente sección) en lugar de escribir SVG o
+cargar una biblioteca a mano.
+
+### Gráficos {#charts}
+
+Los modelos que dibujan gráficos a mano suelen equivocarse: arcos SVG de tarta con un
+`large-arc-flag` incorrecto o un sector del 100% roto, SVG de tamaño fijo que se quedan diminutos
+dentro de una tarjeta grande, o un `<script src>` a un CDN que el visor bloquea (sin red).
+Por eso `alisio_runtime` incluye dos ayudantes probados. Chart.js es el único motor de gráficos.
+
+| Ayudante | Úsalo para | Notas |
+| --- | --- | --- |
+| `charts` | Dashboards interactivos en un solo HTML | [Chart.js](https://www.chartjs.org/) 4.5.1 (MIT) incluido con Alisio e incrustado **una sola vez** por página: sin CDN, sin red y sin `eval`, así que funciona en el visor, sin conexión y en el archivo descargado. Adaptable al contenedor, con tooltips, leyendas, etiquetas de valor, una etiqueta para lectores de pantalla y una tabla de datos plegable por gráfico, con colores claros y oscuros que siguen el esquema de la página. |
+| `svg` | Salida estática (un archivo `.svg`, un informe, sin script) y alternativa | Un único `<svg>` con `viewBox` que escala con su contenedor, `<title>` y `<desc>`, y texto con `currentColor`. |
+
+```python
+from alisio_runtime import charts
+
+body = charts.kpis(("Orders", "1,204", "+8% vs last month")) + charts.grid(
+    charts.card("Order status", charts.donut(["Delivered", "In transit", "Cancelled"], [81.7, 14.8, 3.4])),
+    charts.card("Sales by seller", charts.bar(
+        ["Ana", "Luis", "Marta"], {"Sales": [120000, 95000, 87000], "Profit": [30000, 21000, 25000]},
+        fmt="currency:USD", locale="en-US")),
+    charts.card("Orders per month", charts.line(["Jan", "Feb", "Mar"], {"Orders": [120, 135, 128]})),
+)
+charts.write("dashboard.html", "Sales dashboard", body)   # Chart.js is inlined here, once
+```
+
+`charts.pie`, `donut`, `bar`, `hbar`, `line`, `area` y `scatter` reciben las etiquetas y los valores
+(una lista, o `{nombre de serie: lista}` para varias series, agrupadas o con `stacked=True`) y,
+opcionalmente, `title`, `fmt`, `locale`, `unit`, `height` y `note`. `fmt` es `"number"`,
+`"integer"`, `"percent"` (los valores son fracciones), `"compact"`, `"currency:USD"` (cualquier
+código ISO) o un diccionario de opciones de `Intl.NumberFormat`; `locale` es una etiqueta como
+`"es-CO"` (por defecto, la del visor). Compón la página con `charts.card` (un gráfico por tarjeta),
+`charts.grid` y `charts.kpis`; `charts.write` (o `charts.page`) añade la biblioteca y el script de
+dibujo una sola vez, sin importar cuántos gráficos tenga la página. Los valores de una tarta que
+faltan, no son numéricos o son negativos se omiten con un aviso en stderr, los datos vacíos
+muestran un mensaje "No data" en lugar de fallar, y más de 8 series lanzan un error porque ninguna
+paleta permite distinguirlas. Las funciones de `svg` (`pie`, `donut`, `bar`, `hbar`, `line`,
+`area`, `scatter`) reciben los mismos datos; `svg.pie_slices` es la geometría pura de las tartas (el
+último sector termina exactamente en 360 grados y un único sector del 100% es un círculo completo).
+
+Pautas que recibe el modelo: un gráfico por tarjeta con una altura mínima, una tarta solo para 2 a 5
+partes (más categorías se agrupan en "Other"; usa una dona o `hbar`), etiqueta siempre los valores,
+conserva la tabla de datos y da formato a dinero y números con el idioma del usuario. Plotly sigue
+siendo un extra opcional (`alisio analysis setup --extras analysis`, unos 75 MB con sus
+dependencias) para lo que Chart.js no cubre; `html.inline_plotly()` lo incrusta.
+
+Cuando un artefacto HTML publicado contiene arcos SVG de tarta escritos a mano, gráficos SVG de
+tamaño fijo sin `viewBox` o un script u hoja de estilos cargados desde la red, el resultado de
+`python_run` añade un `warning:` que nombra los ayudantes. Nunca rechaza el artefacto.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/dashboard_charts_web_ui.webp" alt="Un dashboard creado con alisio_runtime.charts: tres cifras destacadas, una dona del estado de los pedidos y una tarta del reparto por canal con porcentajes en cada sector, y un gráfico de barras agrupadas de ventas y beneficio por vendedor, todos ajustados a sus tarjetas." width="1280" height="1000" loading="lazy" decoding="async" />
+  <figcaption>Un dashboard generado con <code>alisio_runtime.charts</code> en el visor aislado.</figcaption>
+</figure>
 
 ### Tipos de artefacto {#types}
 

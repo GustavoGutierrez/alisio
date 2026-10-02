@@ -103,6 +103,35 @@ queda con una llamada colgada:
 | `feedback` | Añadir contexto (el texto va en `feedback`) | Revisa el plan y vuelve a llamar a `exit_plan` |
 | `unavailable` | Sin interfaz interactiva (`alisio run`, `--json`) o con `--read-only` | Da el plan completo como respuesta final |
 
+**Diagramas (opcionales, aditivos).** `{ diagrams?: [{ id, title, explanation, section?, type?, mermaid }] }`
+añade al plan hasta `plan.maxDiagrams` (5 por defecto) diagramas [Mermaid](https://mermaid.js.org/); una
+llamada sin él funciona exactamente como antes. `id` es un nombre estable en kebab-case (el archivo es
+`diagrams/<id>.mmd`), `section` es el encabezado del plan que ilustra el diagrama y `type` es `overview`,
+`flow`, `components`, `architecture`, `sequence`, `data`, `state` u `other` (se deduce de la palabra clave
+de Mermaid si falta). Las instrucciones del agente de plan llevan la guía de estilo: solo cuando un
+diagrama aporta comprensión, de 0 a 5 por plan, una idea cada uno, unos 40 nodos como máximo, etiquetas
+cortas, nada que no esté en el plan y las clases semánticas `input`, `process`, `data`, `system`,
+`external`, `decision` y `risk`, cuyos colores (claro y oscuro) aplica la web al dibujar. Alisio valida cada
+diagrama **sin dibujarlo** (Mermaid necesita un DOM): 8 KB como máximo, un tipo entre `flowchart`/`graph`,
+`sequenceDiagram`, `stateDiagram`/`stateDiagram-v2`, `erDiagram`, `classDiagram`, `gantt`, `mindmap`,
+`timeline` y `journey`, una estimación de 40 nodos como máximo, y ninguna instrucción `click`/`link`/
+`callback`, ni `href`, ni URL `javascript:` o `data:`, ni `url()`, ni etiquetas HTML, ni una directiva
+`%%{init}` o un front matter que toque ajustes de seguridad (`securityLevel`, `htmlLabels`, `secure`, ...).
+Un diagrama que falla se **descarta**: el plan se publica y se revisa igualmente, y el resultado de la
+herramienta lista `diagrams.accepted`, `diagrams.dropped` (con el motivo) y `diagrams.removed` para que el
+modelo se corrija. Un diagrama que valida pero tiene un error de sintaxis de Mermaid se muestra en la web
+como código más el error.
+
+Con diagramas el plan se publica como **un artefacto por revisión, en forma de carpeta**: `plan.md` (la
+entrada, de modo que se previsualiza como cualquier documento Markdown), `plan.json` (un manifiesto que
+Alisio genera a partir del texto del plan: resumen, objetivos, etapas, decisiones y riesgos, los
+encabezados del plan y la lista de diagramas con un hash de contenido y un estado `new`/`updated`/
+`unchanged`) y `diagrams/*.mmd`; su descarga es un ZIP con esos archivos. Un plan sin diagramas es el
+único `plan.md` de siempre. Al revisar el plan, el modelo reenvía todos los diagramas que siguen
+vigentes; Alisio compara hashes con la revisión anterior y marca cada uno como `new`, `updated` o
+`unchanged`, y lista los `removed`. El hash del plan cubre los diagramas, así que un cambio solo en un
+diagrama es otra propuesta.
+
 La herramienta nunca cambia de agente ni inicia trabajo: registra la decisión y, cuando termina la
 ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (véanse
 [Terminal](/es/tui#plan-review) y [Web](/es/web#plan-review)). El agente plan es de solo lectura

@@ -9,12 +9,20 @@ describe("embedded alisio_runtime", () => {
   it("matches the Python sources (regenerate with scripts/analysis-runtime-sources.ts)", () => {
     const sources = Object.fromEntries(
       readdirSync(dir)
-        .filter((name) => name.endsWith(".py"))
+        .filter((name) => /\.(py|js|txt)$/.test(name))
         .map((name) => [name, readFileSync(join(dir, name), "utf8")]),
     );
     expect(ALISIO_RUNTIME_FILES).toEqual(sources);
     expect(Object.keys(sources)).toEqual(
-      expect.arrayContaining(["__init__.py", "outputs.py", "html.py", "svg.py", "datasets.py"]),
+      expect.arrayContaining([
+        "__init__.py",
+        "outputs.py",
+        "html.py",
+        "svg.py",
+        "datasets.py",
+        "charts.py",
+        "chart.umd.min.js",
+      ]),
     );
   });
 });

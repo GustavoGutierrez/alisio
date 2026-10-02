@@ -23,6 +23,7 @@ import type { ArtifactKind, ArtifactPublishInput, ArtifactRef, SqlDatabase } fro
 import { newId } from "../runtime/ids.ts";
 import { inside, workspaceKey } from "../runtime/paths.ts";
 import { writeZip } from "../runtime/zip.ts";
+import { chartWarnings } from "./chart-lint.ts";
 import { classifyArtifact, isPreviewable } from "./kinds.ts";
 
 export interface ArtifactLimits {
@@ -84,6 +85,8 @@ interface Candidate {
   sourceRel?: string;
   title?: string;
   entry?: string;
+  /** Download name of a multi-file folder with an entry (default: `<folder>.zip`). */
+  fileName?: string;
 }
 
 interface ScannedFile {
@@ -101,6 +104,8 @@ interface Planned {
 }
 
 const MAX_DEPTH = 8;
+/** HTML larger than this is not scanned for chart mistakes. */
+const MAX_LINT_BYTES = 8 * 1024 * 1024;
 const HEAD_BYTES = 8192;
 
 /** `title` → `[a-z0-9-]`, at most 48 characters (`artifact` when nothing remains). */
@@ -292,13 +297,17 @@ export class ArtifactStore {
   }
 
   /** Publishes one caller-owned file or directory. */
-  async publish(input: ArtifactPublishInput, owner: ArtifactOwner): Promise<PublishedArtifact> {
+  async publish(
+    input: ArtifactPublishInput & { fileName?: string },
+    owner: ArtifactOwner,
+  ): Promise<PublishedArtifact> {
     const [published] = await this.publishAll(
       [
         {
           source: resolve(input.source),
           ...(input.title ? { title: input.title } : {}),
           ...(input.entry ? { entry: input.entry } : {}),
+          ...(input.fileName ? { fileName: checkName(input.fileName) } : {}),
         },
       ],
       owner,
@@ -527,18 +536,23 @@ export class ArtifactStore {
           kind = type.kind;
           mimeType = type.mimeType;
           fileName = only.path;
+          if (kind === "dashboard" && only.bytes <= MAX_LINT_BYTES)
+            for (const note of chartWarnings(await readFile(join(filesDir, only.path), "utf8")))
+              warnings.push(`${label}: ${note}`);
         } else {
           entry = plan.entry as string;
           const type = classifyArtifact(entry, await readHead(join(filesDir, ...entry.split("/"))));
           kind = type.kind;
           mimeType = type.mimeType;
-          fileName = files.length > 1 ? `${baseName}.zip` : basename(entry);
+          fileName =
+            plan.candidate.fileName ?? (files.length > 1 ? `${baseName}.zip` : basename(entry));
           if (type.kind === "dashboard") {
             const html = await readFile(join(filesDir, ...entry.split("/")), "utf8");
             const entryDir = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
             const missing = missingReferences(html, entryDir, new Set(files.map((f) => f.path)));
             if (missing.length)
               warnings.push(`${label}: ${entry} references missing files: ${missing.join(", ")}`);
+            for (const note of chartWarnings(html)) warnings.push(`${label}: ${entry} ${note}`);
           }
         }
       } else {

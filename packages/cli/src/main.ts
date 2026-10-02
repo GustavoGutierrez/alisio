@@ -176,6 +176,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     const reported = app.plugins.pluginState("subagents", "mainAgents");
     activeRunOptions = agentRunOptions(
       resolveActiveAgent(agentCatalogFromState(reported), app.config.agents.active),
+      { plan: app.config.plan },
     );
   } catch {
     /* agent resolution is best-effort */

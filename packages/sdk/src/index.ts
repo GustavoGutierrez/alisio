@@ -992,6 +992,66 @@ export interface PlanReview {
   markdown: string;
   /** The published `plan.md` artifact (absent when publishing failed). */
   artifact?: ArtifactRef;
+  /** The diagrams that were accepted for this revision (absent without diagrams). */
+  diagrams?: PlanDiagramInfo[];
+}
+/** What a diagram illustrates: a purpose, not a Mermaid syntax. */
+export type PlanDiagramType =
+  | "overview"
+  | "flow"
+  | "components"
+  | "architecture"
+  | "sequence"
+  | "data"
+  | "state"
+  | "other";
+/** How a diagram differs from the previous plan revision. */
+export type PlanDiagramStatus = "new" | "updated" | "unchanged";
+/** One accepted plan diagram (`PlanReview.diagrams`; the same fields as the `plan.json` entries). */
+export interface PlanDiagramInfo {
+  /** Stable kebab-case id; the file is `diagrams/<id>.mmd`. */
+  id: string;
+  title: string;
+  /** A short sentence: what the diagram shows. */
+  explanation: string;
+  /** Id of the plan heading the diagram illustrates, when it matches one. */
+  section?: string;
+  type: PlanDiagramType;
+  /** The Mermaid diagram keyword (`flowchart`, `sequenceDiagram`, ...). */
+  syntax: string;
+  status: PlanDiagramStatus;
+  /** The Mermaid source (terminals show it as code; the web draws it). */
+  mermaid: string;
+}
+/** The `plan.json` manifest of a plan folder. Readers ignore unknown fields. */
+export interface PlanManifest {
+  version: 1;
+  planId: string;
+  revision: number;
+  title: string;
+  /** `sha256` of the plan and its diagrams (the `PlanReview.hash`). */
+  hash: string;
+  summary: string;
+  goals: string[];
+  stages: Array<{ title: string; detail?: string }>;
+  considerations: Array<{ kind: "decision" | "risk" | "verification"; text: string }>;
+  /** The plan headings, in order (`id` is the anchor the diagrams point to). */
+  sections: Array<{ id: string; title: string; level: number }>;
+  diagrams: Array<{
+    id: string;
+    title: string;
+    explanation: string;
+    section?: string;
+    type: PlanDiagramType;
+    syntax: string;
+    /** Path inside the plan folder, `diagrams/<id>.mmd`. */
+    file: string;
+    /** `sha256` of the diagram content (source, title, explanation, section and type). */
+    hash: string;
+    status: PlanDiagramStatus;
+  }>;
+  /** Diagrams of the previous revision that this one no longer has. */
+  removed: Array<{ id: string; title: string }>;
 }
 /** Lifecycle of a background task (`bg_run`); a terminal state is never left. */
 export type BackgroundTaskStatus =

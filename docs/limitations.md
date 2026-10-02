@@ -83,6 +83,19 @@ Chromium only. To make room in the web initial bundle (it had about 100 bytes le
 dictionary is now its own chunk, loaded before the first render when Spanish is the stored language
 or when it is chosen in Settings; English stays in the bundle and is the fallback.
 
+**Plan diagrams and the plan viewer.** Diagrams are Mermaid text written by the plan model, and Mermaid
+only draws inside the web app (it needs a DOM): the terminal shows the source, and there is no standalone
+HTML viewer yet. The server validates them **without drawing**, so the check is lightweight: size (8 KB), an
+allowlist of diagram types, an estimate of the node count (40), and a text scan for `click`/`link`
+statements, `href`, `javascript:`/`data:` URLs, `url()`, HTML tags and `%%{init}` or front matter that touches
+security settings. It is not a Mermaid parser: a diagram can pass and still fail to draw, and then the web
+shows its source and the error. The model can also misrepresent the plan; the instructions forbid adding
+information that is not in it, and each diagram names the section it illustrates, but nothing verifies it.
+`plan.json` is extracted from the Markdown sections the plan agent is asked to write (Goal, Steps, Decisions,
+Risks, Verification, plus a few English and Spanish aliases); other headings only feed the full plan. Only
+plans that carry diagrams (or removed some) are published as a folder. The viewer was checked in Chromium
+only, and the terminal side through its pure logic, not in a real terminal.
+
 **Background tasks (`bg_run`, modes spec phase 3).** A task is an ordinary child process of
 Alisio, not a sandbox: it runs with your permissions, and a subprocess or a permission mode is not
 isolation. All four tools (`bg_run`, `bg_list`, `bg_output`, `bg_stop`) are `process` effects, so
@@ -424,3 +437,14 @@ sections, filter, search and Load more, chat switching, disabling the plugin in 
 (tab removed, back to Conversation, route answers 404) and a 390 px width without horizontal
 scroll. Not verified: Firefox, Safari, screen readers, Windows or macOS, very large memory stores
 and several workspaces open at once.
+
+**Dashboard charts.** Chart.js 4.5.1 (MIT) is bundled in `@alisio/core` as a generated string module
+and inlined once into each dashboard that uses `alisio_runtime.charts` (about 215 KB more per
+page); it is the only chart engine, and Plotly remains an optional heavy extra. Dashboard colors
+follow the browser's `prefers-color-scheme`, not the theme chosen in Alisio, because the isolated
+iframe cannot read it. The chart quality gate only warns (hand-written SVG pie arcs, fixed-size SVG
+charts, remote scripts) and works on the HTML text, so it can miss or over-report. Verified with
+Vitest (pure pie geometry with the three reported datasets, helper output, the gate, a real Python
+run) and in Chromium through `alisio serve` with the real CSP at 1280 px and 390 px, light and dark,
+with no console errors. Not verified: other browsers, Windows or macOS, a real model using the new
+guidance, screen readers and PDF printing.

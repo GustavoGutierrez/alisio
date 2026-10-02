@@ -18,6 +18,8 @@ export {
   mainAgentFromRecord,
   nextAgent,
   PLAN_AGENT_ID,
+  type PlanInstructionSettings,
+  planInstructions,
   resolveActiveAgent,
 } from "./agents/active.ts";
 export {
@@ -325,6 +327,20 @@ export {
   presetToMode,
   READ_ONLY_POLICY,
 } from "./permissions/modes.ts";
+export {
+  DIAGRAM_MAX_BYTES,
+  DIAGRAM_MAX_NODES,
+  DIAGRAM_SYNTAXES,
+  DIAGRAMS_MAX_ALLOWED,
+  mermaidProblem,
+  type PlanDiagram,
+  validateDiagrams,
+} from "./plan/diagrams.ts";
+export {
+  buildPlanManifest,
+  parsePlanHeadings,
+  slugifyHeading,
+} from "./plan/manifest.ts";
 export {
   claimApprovedPlan,
   currentPlan,

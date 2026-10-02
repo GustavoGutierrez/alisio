@@ -394,6 +394,18 @@ const configObjectSchema = z
         noToolTurnsLimit: 3,
         blockedRepeats: 2,
       })),
+    /**
+     * Plan diagrams (`exit_plan`): the plan agent may add Mermaid diagrams to a plan. `diagrams`
+     * off removes them from the tool and from the agent's instructions; `maxDiagrams` caps how
+     * many one plan keeps (0 to 8). The size and node limits of one diagram are constants.
+     */
+    plan: z
+      .object({
+        diagrams: z.boolean().default(true),
+        maxDiagrams: z.number().int().min(0).max(8).default(5),
+      })
+      .strict()
+      .default(() => ({ diagrams: true, maxDiagrams: 5 })),
     tui: z
       .object({
         /** Horizontal padding (columns) around the editor input box. Editor-only. */
@@ -842,6 +854,7 @@ const SETTABLE_SECTIONS = {
   analysis: configObjectSchema.shape.analysis.removeDefault(),
   tasks: configObjectSchema.shape.tasks.removeDefault(),
   goal: configObjectSchema.shape.goal.removeDefault(),
+  plan: configObjectSchema.shape.plan.removeDefault(),
 } as const;
 const ANALYSIS_LIMITS = SETTABLE_SECTIONS.analysis.shape.limits.removeDefault();
 const ANALYSIS_RETENTION = SETTABLE_SECTIONS.analysis.shape.retention.removeDefault();
@@ -882,6 +895,8 @@ const SETTABLE_KEYS = {
   "goal.repeatedReplyLimit": SETTABLE_SECTIONS.goal.shape.repeatedReplyLimit,
   "goal.noToolTurnsLimit": SETTABLE_SECTIONS.goal.shape.noToolTurnsLimit,
   "goal.blockedRepeats": SETTABLE_SECTIONS.goal.shape.blockedRepeats,
+  "plan.diagrams": SETTABLE_SECTIONS.plan.shape.diagrams,
+  "plan.maxDiagrams": SETTABLE_SECTIONS.plan.shape.maxDiagrams,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

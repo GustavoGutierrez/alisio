@@ -171,7 +171,7 @@ import {
 } from "./modes.ts";
 import { cannotOpenMessage, openPath, revealPath } from "./open-path.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
-import { planTranscriptMarkdown } from "./plan-review.ts";
+import { planDiagramsMarkdown, planTranscriptMarkdown } from "./plan-review.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
 import { type SettingRow, type SettingsNavigationAction, settingsMenuRows } from "./settings.ts";
@@ -995,6 +995,24 @@ export async function runTui(options: TuiOptions): Promise<void> {
             reasoning: "",
             done: true,
           });
+          if (plan.diagrams?.length) {
+            // The folder is resolved from the store, never from the model.
+            const record = plan.artifact ? app.artifacts.get(plan.artifact.id) : undefined;
+            const folder =
+              record?.status === "ready"
+                ? shortenPath(join(app.artifacts.folder(record), "files"), homedir(), 96)
+                : undefined;
+            push({
+              kind: "assistant",
+              text: planDiagramsMarkdown({
+                revision: plan.revision,
+                diagrams: plan.diagrams,
+                ...(folder ? { folder } : {}),
+              }),
+              reasoning: "",
+              done: true,
+            });
+          }
           showPicker(
             new PlanReviewPanel(
               options,
@@ -1827,7 +1845,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // An explicit /effort wins; otherwise the agent's own default effort (agentRunOptions) is kept.
     const effort = app.config.agents.effort || !agent.effort ? currentEffort() : undefined;
     // The goal tools are offered while the session has an ACTIVE goal (never to the plan agent).
-    const agentOptions = agentRunOptions(agent);
+    const agentOptions = agentRunOptions(agent, { plan: app.config.plan });
     const goalTools = goalOptInTools(app.goals.get(app.store.rootOf(session)), agent.id === "plan");
     const optInTools = [...(agentOptions.optInTools ?? []), ...goalTools];
     const runId = crypto.randomUUID();

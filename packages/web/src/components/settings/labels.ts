@@ -43,6 +43,8 @@ export const SETTING_LABELS: Record<Locale, Record<string, string>> = {
     "goal.repeatedReplyLimit": "Pause a goal after identical replies",
     "goal.noToolTurnsLimit": "Pause a goal after turns without tools",
     "goal.blockedRepeats": "Turns the agent must report a blocker",
+    "plan.diagrams": "Plan diagrams",
+    "plan.maxDiagrams": "Most diagrams per plan",
   },
   es: {
     "compaction.auto": "Compactar el contexto automáticamente",
@@ -81,6 +83,8 @@ export const SETTING_LABELS: Record<Locale, Record<string, string>> = {
     "goal.repeatedReplyLimit": "Pausar un objetivo tras respuestas idénticas",
     "goal.noToolTurnsLimit": "Pausar un objetivo tras turnos sin herramientas",
     "goal.blockedRepeats": "Turnos en que el agente debe reportar un bloqueo",
+    "plan.diagrams": "Diagramas del plan",
+    "plan.maxDiagrams": "Máximo de diagramas por plan",
   },
 };
 

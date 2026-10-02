@@ -31,21 +31,21 @@ def table(rows, headers=None) -> str:
     return f"<table>{head}<tbody>{body}</tbody></table>"
 
 
-def page(title: str, body: str, css: Optional[str] = None) -> str:
+def page(title: str, body: str, css: Optional[str] = None, lang: str = "en") -> str:
     """A complete HTML document; ``body`` is trusted HTML written by the script."""
     style = _CSS + (css or "")
     return (
-        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+        f"<!doctype html>\n<html lang=\"{escape(lang)}\"><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         f"<title>{escape(title)}</title><style>{style}</style></head>"
         f"<body>{body}</body></html>\n"
     )
 
 
-def write(name: str, title: str, body: str, css: Optional[str] = None) -> Path:
+def write(name: str, title: str, body: str, css: Optional[str] = None, lang: str = "en") -> Path:
     """Writes a page to the output folder and returns its path."""
     target = outputs.path(name)
-    target.write_text(page(title, body, css), encoding="utf-8")
+    target.write_text(page(title, body, css, lang), encoding="utf-8")
     return target
 
 

@@ -8,8 +8,8 @@
  *    ├────skip──────▶ skipped          └─discard─▶ cancelled (the run was cancelled)
  *    └────context───▶ feedback         (a later `exit_plan` call starts a new revision)
  */
-import { createHash } from "node:crypto";
 import type { QuestionOption } from "@alisio/sdk";
+import { type DiagramRecord, planContentHash } from "./manifest.ts";
 
 /** The decision screen title (web: localized; the TUI prints it as is). */
 export const PLAN_REVIEW_TITLE = "Plan complete. What would you like to do?";
@@ -49,6 +49,8 @@ export interface PlanState {
   status: PlanStatus;
   callId?: string;
   artifactId?: string;
+  /** The accepted diagrams of this revision (absent without any): what the next one is diffed against. */
+  diagrams?: DiagramRecord[];
   /** The approved snapshot; kept only while `approved` (afterwards it lives in the user message). */
   plan?: string;
   updatedAt: number;
@@ -63,8 +65,14 @@ export interface PlanStore {
   get(id: string): { options?: Record<string, unknown> };
 }
 
-export const planHash = (plan: string): string =>
-  createHash("sha256").update(plan, "utf8").digest("hex");
+/**
+ * The hash of a plan revision. Without diagrams it is the SHA-256 of the Markdown (as before);
+ * with diagrams it also covers them, so a change in a diagram alone is a different plan.
+ */
+export const planHash = (
+  plan: string,
+  diagrams: Array<{ id: string; hash: string }> = [],
+): string => planContentHash(plan, diagrams);
 
 const STATUSES: ReadonlySet<string> = new Set([
   "pending",

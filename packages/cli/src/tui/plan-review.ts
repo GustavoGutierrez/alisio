@@ -4,6 +4,7 @@
  * {state, effect}, fully testable without a terminal. Esc means "Skip for now" while choosing and
  * "back to the choices" while typing; Enter submits; an empty text never submits.
  */
+import type { PlanDiagramInfo } from "@alisio/sdk";
 import { type ConnectInputState, printableInput, reduceConnectInput } from "./connect-input.ts";
 
 export interface PlanReviewOption {
@@ -110,4 +111,51 @@ export function planTranscriptMarkdown(plan: {
   markdown: string;
 }): string {
   return `**Plan: ${plan.title}**${plan.revision > 1 ? ` (revision ${plan.revision})` : ""}\n\n${plan.markdown}`;
+}
+
+/** Lines of Mermaid source the terminal shows per diagram (the full source is in the folder). */
+export const DIAGRAM_SOURCE_LINES = 8;
+
+/**
+ * What the terminal shows for a plan's diagrams, as Markdown for the transcript: per diagram its
+ * title, purpose, the plan section it illustrates, its explanation and the Mermaid source capped
+ * to a few lines (no attempt to draw it), then where the plan folder is and how to open it.
+ * Empty when the plan has no diagrams.
+ */
+export function planDiagramsMarkdown(plan: {
+  revision: number;
+  diagrams?: PlanDiagramInfo[];
+  /** Display path of the plan folder on disk (absent when the plan could not be saved). */
+  folder?: string;
+}): string {
+  const diagrams = plan.diagrams ?? [];
+  if (!diagrams.length) return "";
+  const blocks = diagrams.map((diagram, index) => {
+    const lines = diagram.mermaid.split("\n");
+    const shown = lines.slice(0, DIAGRAM_SOURCE_LINES);
+    const more = lines.length - shown.length;
+    const change =
+      plan.revision > 1 && diagram.status !== "unchanged"
+        ? ` · ${diagram.status === "new" ? "new" : "updated"} in revision ${plan.revision}`
+        : "";
+    const section = diagram.section ? ` · section: ${diagram.section}` : "";
+    return [
+      `**${index + 1}. ${diagram.title}** · ${diagram.type}${section}${change}`,
+      diagram.explanation,
+      "",
+      "```mermaid",
+      ...shown,
+      "```",
+      ...(more > 0
+        ? [`_… ${more} more line${more === 1 ? "" : "s"} in diagrams/${diagram.id}.mmd_`]
+        : []),
+    ].join("\n");
+  });
+  return [
+    `**Diagrams (${diagrams.length})** · drawn in the web plan viewer; the terminal shows their source`,
+    ...blocks,
+    plan.folder
+      ? `Plan folder: \`${plan.folder}\` (plan.md, plan.json, diagrams/*.mmd). Open it from /artifacts.`
+      : "The plan folder could not be saved, so these diagrams are only shown here.",
+  ].join("\n\n");
 }

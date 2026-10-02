@@ -20,12 +20,14 @@ import {
 import { setPanelExpanded } from "../../store/layout.ts";
 import { ARTIFACT_ICONS, downloadUrl } from "../../util/artifacts.ts";
 import { rendererFor } from "../../util/panel.ts";
+import { isPlanArtifact } from "../../util/plan-view.ts";
 import { Icon, type IconName } from "../icons.tsx";
 import { ArtifactDetails } from "./ArtifactDetails.tsx";
 import { ArtifactMenu, type MenuAction } from "./ArtifactMenu.tsx";
 import { DownloadFallback } from "./DownloadFallback.tsx";
 import { HtmlFrame } from "./HtmlFrame.tsx";
 import { ImageView } from "./ImageView.tsx";
+import { LazyPlanViewer } from "./LazyPlanViewer.tsx";
 import { LazySpreadsheet } from "./LazySpreadsheet.tsx";
 import { PdfFrame } from "./PdfFrame.tsx";
 import styles from "./panel.module.css";
@@ -48,6 +50,9 @@ function Preview(props: { detail: ArtifactDetail }) {
   const { detail } = props;
   const entry = detail.entry ?? detail.fileName;
   const choice = rendererFor(detail);
+  // A plan folder (plan.md + plan.json + diagrams) opens in the plan viewer.
+  if (choice.kind === "markdown" && isPlanArtifact(detail))
+    return <LazyPlanViewer artifact={detail} entry={entry} files={detail.files} />;
   switch (choice.kind) {
     case "html":
       return <HtmlFrame artifact={detail} />;

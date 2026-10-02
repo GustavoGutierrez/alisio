@@ -2526,6 +2526,52 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - El presupuesto inicial de JS de la web quedó en unos 100 bytes de margen tras esta fase; la fase de
   tareas lo resolvió cargando bajo demanda el diccionario español (el bundle inicial bajó a ~78 KB).
 
+### Diagramas del plan y visor del plan
+
+- Contrato aditivo de `exit_plan`: `diagrams?: [{id, title, explanation, section?, type?, mermaid}]`. Sin él,
+  la herramienta, el artefacto `plan.md` único y el resultado son los de siempre. Ajustes `plan.diagrams`
+  (por defecto `true`) y `plan.maxDiagrams` (0–8, por defecto 5), vivos; el esquema que ve el modelo y la guía
+  de estilo de `PLAN_INSTRUCTIONS` (agente `plan` integrado) siguen el ajuste en cada petición, mientras que
+  la validación del esquema siempre acepta `diagrams` (se compila una vez al registrar la herramienta).
+- Los diagramas son Mermaid (`.mmd`) escritos por el modelo. **La validación es ligera y no dibuja** (Mermaid
+  necesita DOM): 8 KB por diagrama, lista de tipos (`flowchart`, `graph`, `sequenceDiagram`, `stateDiagram`,
+  `stateDiagram-v2`, `erDiagram`, `classDiagram`, `gantt`, `mindmap`, `timeline`, `journey`), estimación de 40
+  nodos por diagrama (por exceso; no es un analizador), y rechazo por texto de `click`/`link`/`callback`,
+  `href`, `javascript:`/`vbscript:`/`data:`, `url()`, etiquetas HTML y directivas `%%{init}` o front matter con
+  `securityLevel`, `htmlLabels`, `secure`, `themeCSS`, etc. Un diagrama rechazado se **descarta** con el motivo
+  en el resultado de la herramienta; nunca rompe la revisión. Un diagrama que pasa pero no se dibuja en la web
+  muestra su código y el error. Nada comprueba que el diagrama diga la verdad del plan.
+- Con diagramas aceptados (o quitados respecto a la revisión anterior) el plan es **una carpeta por revisión**
+  con entrada `plan.md` (tipo `document`, nombre `plan.md`; la descarga es un ZIP). La carpeta se escribe en un
+  directorio temporal del sistema que el publicador copia y se borra. Si publicar la carpeta falla, se publica
+  `plan.md` solo y se avisa. Para que el nombre fuera `plan.md` y no `plan.zip`, el almacén admite un
+  `fileName` opcional en `publish` (solo interno de core; el SDK no cambia en `ArtifactPublishInput`).
+- `plan.json` (`version: 1`) lo genera Alisio de forma determinista a partir del Markdown (secciones Goal,
+  Context, Steps, Decisions, Risks y Verification con alias en inglés y español; un `#` de título no cuenta
+  como sección) y de los diagramas: resumen, objetivos, etapas, consideraciones, encabezados con ids estables,
+  y por diagrama id, título, explicación, sección resuelta, tipo, sintaxis, archivo, hash y estado
+  (`new`/`updated`/`unchanged`) más `removed`. El visor lo lee de forma tolerante: ignora campos desconocidos,
+  descarta elementos mal formados y solo acepta rutas `diagrams/<id>.mmd`.
+- Sincronización de revisiones: la revisión anterior se lee del **estado del plan** (`sessions.options.plan.
+  diagrams`: id, título y hash), no del manifiesto del artefacto anterior; así funciona aunque el artefacto se
+  haya borrado o caducado. `planHash` sin diagramas es el SHA-256 del Markdown de antes; con diagramas también
+  cubre sus hashes, de modo que un cambio solo en un diagrama es otra propuesta. Los estados guardados antes
+  de esta versión siguen siendo válidos (el campo es opcional).
+- Visor web (`components/plan/PlanViewer.tsx`, carga diferida; el contenedor `LazyPlanViewer` pesa ~1 KB en el
+  panel): se abre para un artefacto con entrada `plan.md` y `plan.json` en sus archivos, por la ruta
+  autenticada existente de archivos (sin rutas nuevas). Los diagramas usan el renderizador Mermaid existente
+  con `themed` (tema `base` con variables de Alisio y un bloque `classDef` para las clases semánticas que el
+  diagrama use sin definir); los bloques Mermaid del chat no cambian. Es Preact sin HTML del plan (solo el SVG
+  saneado por el camino existente). Presupuesto inicial de JS: 80,2 KB de 90 KB.
+- La TUI no dibuja: muestra título, propósito, sección, explicación y las primeras 8 líneas del código tras el
+  plan (como Markdown, no con `renderCappedCode`), la ruta de la carpeta (resuelta desde el almacén) y se abre
+  desde `/artifacts` (la vista previa lee `plan.md`). Sin interfaz o con `--read-only` el plan vuelve como
+  texto y los archivos se escriben.
+- No hay visor HTML autónomo descargable (exigiría incrustar Mermaid, unos 138 KB comprimidos de núcleo).
+  Verificado en Chromium contra `alisio serve` con un proveedor falso (tema claro y oscuro, 390 px, teclado,
+  revisión 2 con actualizado y quitado, ZIP, `plan.diagrams: false`); no en otros navegadores, Windows ni
+  macOS, y la TUI solo por pruebas de su lógica, no en un terminal real.
+
 ### Tareas en segundo plano
 
 - Una tarea es un proceso hijo corriente de Alisio: **no es un sandbox** y **no es *detached***. Muere
@@ -2568,3 +2614,25 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   durante horas: no es un sandbox. El objetivo se cita como dato, no como instrucción privilegiada, lo que
   reduce pero no elimina la inyección desde un texto malicioso que el usuario pegue.
 - La TUI se verificó por lógica pura y fake terminal, no en un terminal real; la web, en Chromium.
+
+### Gráficos de los dashboards (`alisio_runtime.charts` y `svg`)
+
+- Chart.js 4.5.1 (MIT, `chart.umd.min.js`, 208 KB y unos 70 KB comprimido) viaja dentro de
+  `@alisio/core` como cadena en `analysis/python/sources.ts` (generada por
+  `scripts/analysis-runtime-sources.ts`; un test falla si queda desactualizada) y se copia con el resto
+  de `alisio_runtime` a cada ejecución. `charts.write`/`charts.page` lo incrustan **una vez** en el HTML:
+  cada dashboard con gráficos pesa unos 215 KB más. No hay CDN ni `eval`.
+- **Es el único motor de gráficos.** Plotly sigue como extra opcional pesado. `svg` es solo salida estática.
+- El color del dashboard sigue `prefers-color-scheme` del navegador: el iframe aislado no conoce el tema
+  elegido en Alisio, así que un dashboard puede verse claro dentro de una interfaz oscura.
+- Las cifras se formatean en el navegador con `Intl.NumberFormat` y el `locale` que pase el modelo (por
+  defecto el del visor); los `svg.*` usan un formato compacto fijo (`1.2k`). Las tarjetas de gráficos
+  no tienen paginación: una tabla de datos con miles de filas pesa en el HTML.
+- La puerta de calidad (`artifacts/chart-lint.ts`) solo avisa: arcos SVG de tarta escritos a mano,
+  SVG de tamaño fijo sin `viewBox` y scripts u hojas de estilo remotos. Son heurísticas sobre el HTML
+  (no ejecuta la página) y pueden fallar en ambos sentidos; nunca rechaza un artefacto.
+- Verificado: Vitest (geometría pura de las tartas con los tres conjuntos de datos del informe, estructura de
+  `charts`, aviso de la puerta, publicación con Python real) y Chromium contra `alisio serve` con un
+  proveedor falso: CSP real sin errores de consola, 1280 px y 390 px sin desbordamiento horizontal, esquema
+  claro y oscuro. No verificado: otros navegadores, Windows o macOS, un modelo real con las nuevas pautas,
+  lectores de pantalla ni impresión a PDF.

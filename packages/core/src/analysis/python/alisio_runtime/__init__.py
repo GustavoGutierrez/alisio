@@ -8,8 +8,8 @@ downloadable artifact when the script exits with code 0. Intermediate files belo
 import os
 from pathlib import Path
 
-__all__ = ["output_dir", "input_dir", "work_dir", "execution_id", "outputs", "html", "svg", "datasets"]
-__version__ = "1"
+__all__ = ["output_dir", "input_dir", "work_dir", "execution_id", "outputs", "html", "svg", "charts", "datasets"]
+__version__ = "2"
 
 
 def _dir(name: str, fallback: str) -> Path:
