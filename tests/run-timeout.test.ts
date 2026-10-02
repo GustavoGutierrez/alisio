@@ -399,9 +399,12 @@ describe("silent request retry at the runner boundary", () => {
 
   it("does not start an attempt the whole-run limit cannot let finish", async () => {
     const provider = flaky(99);
+    // The first-token limit must fire well before the whole-run limit (300 ms apart), or a
+    // loaded machine can deliver both timers in one tick and the order stops being meaningful.
+    // After the first attempt 300 ms remain, which is less than the retry pause plus a new attempt.
     const fx = await harness(provider, {
-      timeoutMs: 450,
-      firstTokenTimeoutMs: 300,
+      timeoutMs: 1300,
+      firstTokenTimeoutMs: 1000,
       firstTokenRetries: 3,
     });
     try {
