@@ -35,3 +35,15 @@ Never treat a plugin manifest or a subprocess as a sandbox.
 Test behavior at module boundaries. Do not add snapshot tests that merely restate implementation.
 Document limitations and verification scope in docs/implementation-status.md.
 Keep the English and Spanish documentation pages in parity (see CONTRIBUTING.md).
+
+## Documenting Web UI features (screenshots)
+
+Whenever you document or change a Web UI feature, take a real screenshot of it and put it in the
+documentation. Capture it with Playwright against a built `alisio serve` with a scripted fake provider
+(realistic sample data, never real session titles, e-mails or tokens), after the feature works. Convert
+it to WebP (under ~150 KB), save it as `docs/assets/web-ui/<feature>_web_ui.webp` and delete the
+temporary files and `.playwright-mcp/`. Place it next to the paragraph it illustrates in BOTH the
+English and the Spanish page, with alt text and a caption in each page's language. Reuse an existing
+screenshot when it already shows the feature, never rename existing ones, never use them in TUI
+sections, and do not repeat one image more than twice on a page. `pnpm docs:check` validates that the
+images exist and that both languages stay in parity.
