@@ -16,7 +16,9 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
   de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
-  (`alisio serve`).
+  (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
+  modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
+  (`specs/alisio-web-memory-tab-v1.md`).
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -24,11 +26,13 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
-  comandos; agentes del usuario; servidor web).
+  comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
+  vistas de plugins).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
-  Herdr; agente activo y effort; agentes del usuario; servidor web.
+  Herdr; agente activo y effort; agentes del usuario; servidor web; modos, recarga y novedades;
+  pestaña Memory y vistas de plugins.
 
 ## Implementado
 
@@ -805,6 +809,73 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
     copiables. Las filas de tools de plugins muestran el nombre de la tool y el plugin como
     etiqueta. JS inicial 60,6 KB y CSS 7,5 KB gzip (antes 56,3 y 7,8); chunk de `math` 75 KB gzip
     (KaTeX incluido), Mermaid 32 KB de motor más ~138 KB de núcleo y un chunk por tipo de diagrama.
+
+### Modos de permisos, `/reload` y `/changelog` (fase 1)
+
+Primera fase de `specs/alisio-modes-goal-background-v1.md` (decisiones del propietario confirmadas
+el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, migración v7) y 4
+(`/goal`) están especificadas y **no implementadas**.
+
+- Núcleo (aditivo): `PermissionMode` en el SDK y `PermissionPresetInfo.mode`; la **tabla única**
+  `PERMISSION_MODE_TABLE` (`permissions/modes.ts`: `ask` pregunta por todo; `auto` permite escrituras
+  y pregunta por procesos y externo; `full` lo permite todo) de la que derivan los presets del
+  servidor (`host/presets.ts`) y la TUI; `AgentRunner.setPolicy` (muta en sitio `write/process/
+  external`, nunca `analysis`); `cycleableAgents`/`nextAgent` (orden estable `build`, `plan`, resto
+  por nombre); `reloadApplication` (`reload.ts`: guarda de inactividad, validación de la
+  configuración, construcción de la aplicación nueva junto a la vigente, intercambio y cierre de la
+  antigua; informe por área); el parser puro del changelog (`changelog/`) y los datos embebidos
+  (`changelog/data.ts`, generado desde `CHANGELOG.md` por `scripts/changelog-data.ts`; `pnpm build`
+  lo regenera y un test falla si están desactualizados). Comandos `permission` (alias
+  `permissions`), `reload` y `changelog` en el catálogo (TUI y web).
+- TUI: Shift+Tab cicla los agentes principales desde el listener de entrada (corre antes del
+  Editor); bloqueado durante un turno y con picker, autocompletado o panel de agentes abiertos; no
+  cambia el modelo ni crea una sesión (a diferencia del selector `/agents`). `/permission` abre un
+  menú de cinco filas (ask, auto, full access con confirmación «no es un sandbox», Status, Manage
+  saved permissions…) o acepta `ask|auto|full|status`; el modo inicial se deriva de los flags solo
+  como etiqueta (sin flags `ask`, `--allow-write` `auto`, los tres flags `full`, otra combinación
+  `custom`, `--read-only` bloqueado) y se muestra siempre (cabecera `mode:` y barra de estado
+  `mode:`). `/reload` reconstruye la aplicación (la variable `app` pasa a `let` y se re-enlazan
+  catálogo de comandos, proveedor, cachés de modelos, UI interactiva y autocompletado; se reaplica
+  el modo elegido). `/changelog [version]` abre un panel desplazable y tras una actualización una
+  sola línea avisa (`tui-state.json` junto a la base de datos, escritura atómica y tolerante a fallos).
+- Servidor: `WorkspaceHost.reload` (construir primero, intercambiar después; `recycle` cierra
+  primero), `POST /api/workspaces/:wid/reload` (`409 runs_active` con ejecuciones; `400` con la
+  configuración rota), `GET /api/changelog?version=&lastSeen=`, los comandos `permission`, `reload`
+  (exclusivo) y `changelog` en `POST /api/sessions/:sid/commands`, y `GET /api/agents` en orden
+  estable. Mismas reglas de autenticación, Host y Origen que el resto de `/api`.
+- Web: selector `Agente: <nombre>` en el compositor y atajo Mayús+Tab con el foco en el textarea
+  (`preventDefault`; ignorado con IME, paleta abierta u otros modificadores; anuncio `aria-live`),
+  popover de permisos con los tres modos, estado y «Gestionar permisos guardados…», confirmación al
+  elegir acceso total, diálogo de `/changelog` (chunk propio) y aviso discreto tras actualizar
+  (`localStorage` con `try/catch`). Textos en EN y ES.
+
+### Pestaña Memory de la web y vistas de datos de plugins
+
+Especificada en `specs/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
+
+- SDK: `api.views?.register({ id, description, params?, handler })` (`ViewDefinition`,
+  `ViewContext`, `ViewParamsError`) y los códigos de error `view_failed` (502), `view_timeout`
+  (504) y `view_too_large` (502). El miembro es opcional en el tipo: un plugin lo detecta con
+  `api.views?.register` y sigue funcionando en un core anterior.
+- Core (`PluginHost`): registro por plugin con validación (id, descripción, esquema de primitivos
+  sin `$ref`, duplicados) que se deshace con el plugin, `viewsOf(plugin)` y `runView` (Ajv con
+  conversión de tipos desde la cadena de consulta y valores por defecto; `ViewRunError`).
+- Servidor: `GET /api/sessions/:sid/views/:plugin/:view?<params>` (`routes/plugin-views.ts`) con la
+  misma autenticación, Host y Origen que el resto de `/api`; sesión existente con workspace
+  existente, solo plugins habilitados (también un plugin deshabilitado que sigue corriendo por
+  `restart-required`), 404 uniforme para plugin/vista desconocidos o deshabilitados, máximo 16
+  parámetros de 512 caracteres, timeout de 5 s con `AbortSignal`, respuesta de 1 MiB como máximo,
+  errores del plugin genéricos (`view_failed`) y sin parámetros ni contenido en los logs.
+  `ServerOptions.views` baja los límites en pruebas.
+- Plugin de memoria: vistas `records`, `summary` y `context` (solo `SELECT`; paginación por cursor
+  keyset sobre `pinned, updated_at, id`; búsqueda `LIKE` escapada) y la tabla `injected_context`
+  (migración 101) donde el plugin recuerda lo que inyectó al empezar cada sesión.
+- Web: selector genérico «plugin X habilitado» (`store/plugins.ts`, alimentado por la misma petición
+  de `GET /api/plugins` que ya se hacía), pestaña Memory solo con el plugin habilitado y vuelta a
+  Conversación si se deshabilita, controlador con descarte de respuestas obsoletas
+  (`store/memory.ts`), componente, textos y estilos en un chunk perezoso. Para recuperar presupuesto
+  de bundle los cargadores perezosos de `app.tsx` pasaron a un único componente `Lazy` y la pestaña
+  Trayectoria también se carga de forma perezosa.
 
 ## Validación
 
@@ -1794,6 +1865,50 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   detección de `: keep-alive`: el plugin `@alisio/plugin-deepseek` (repositorio aparte) tendría que
   envolver `fetch` y emitir un evento de latido; no se inventó esa señal.
 
+## Modos de permisos, `/reload` y `/changelog` (fase 1): alcance de la verificación
+
+- Verificado con Vitest (sin red ni credenciales): la tabla de modos y su coherencia con los presets
+  del servidor (incluidos el techo de `alisio serve` y `read-only`), la política real del runner
+  tras `setPolicy` (un efecto `write` pregunta en `ask` y no en `auto`; un `process` pregunta salvo
+  en `full`; `analysis` no se toca), el orden y la envoltura del ciclo con agentes personalizados (en
+  core, en la decisión de Shift+Tab de la TUI y en la web), los bloqueos de Shift+Tab (turno en
+  curso, picker, autocompletado, panel), la transición de modos con `--read-only` bloqueado y el
+  aviso de acceso total, el orquestador de recarga con aplicaciones simuladas y con
+  `createApplication` reales (una configuración rota deja viva la aplicación y su sesión; una
+  corrección se aplica y la sesión persiste), la guarda de inactividad, el parser del changelog
+  (versiones, secciones, saltos de línea de Windows, archivo ausente), el orden de versiones, la
+  lógica de `lastSeenVersion` en la TUI y la web (primer arranque, actualización, bajada de versión,
+  almacenamiento que lanza), los datos embebidos al día, el catálogo de comandos y su paridad con la
+  TUI, y las rutas HTTP (orden de agentes, `/permission`, `/reload` con `catalog_changed`,
+  `runs_active`, configuración rota, 401/403/415, `/changelog`).
+- Navegador: comprobado con Chromium (Playwright) contra `alisio serve` con un proveedor falso
+  compatible con OpenAI; el resultado detallado está en la entrega.
+- No verificado: la TUI en un terminal real (el listener de Shift+Tab, el panel de novedades y el
+  menú de modos se probaron como lógica pura y compilados, no en un pseudo-terminal), terminales que
+  no distinguen Shift+Tab, otros navegadores (Firefox, Safari), lectores de pantalla reales y
+  Windows/macOS.
+
+## Pestaña Memory de la web y vistas de datos de plugins: alcance de la verificación
+
+- Verificado con Vitest (sin red): registro y validación de vistas, detección sin `api.views` (el
+  plugin de memoria arranca en un host sin ella), la ruta HTTP (autenticación, Host, Origen, sesión
+  y workspace inexistentes, plugin deshabilitado, también en `restart-required`, vista desconocida,
+  parámetros no válidos sin eco de valores, límite de tamaño, timeout con aborto, errores
+  genéricos, ausencia de parámetros en los logs), las tres vistas contra una base SQLite temporal
+  (solo la sesión pedida, fijadas primero, filtro, búsqueda con comodines literales, cursor sin
+  duplicados ni huecos al añadir filas, solo lectura, resumen, contexto igual a lo devuelto por el
+  hook de inicio), el extremo a extremo con el plugin real en un servidor real, la migración 101 y
+  la lógica de la web (selector, visibilidad y vuelta a Conversación, paginación, filtros,
+  descarte de respuestas obsoletas, errores por sección, paridad EN/ES de los textos).
+- Navegador: comprobado con Chromium (Playwright) contra `alisio serve` con un proveedor falso
+  compatible con OpenAI y una base de memoria temporal: la pestaña aparece solo con el plugin
+  habilitado; las tres secciones (el contexto cargado salió de una ejecución real); filtro, búsqueda
+  y «Cargar más» (20 de 27, sin duplicados); cambio de chat; deshabilitar el plugin en Ajustes →
+  Plugins quita la pestaña, vuelve a Conversación y la ruta responde 404; ancho móvil (390 px) sin
+  scroll horizontal. Presupuesto del bundle inicial dentro del límite (`pnpm pack:check`).
+- No verificado: Firefox y Safari, lectores de pantalla reales, Windows y macOS, bases de memoria
+  grandes (miles de entradas por sesión) y el comportamiento con varios workspaces abiertos a la vez.
+
 ## Límites conocidos
 
 ## Límites conocidos
@@ -2153,3 +2268,49 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - La ingesta de más de 1 000 000 filas calcula `distinct`/más frecuentes sobre una muestra
   (`distinct_exact=0`). Los originales subidos desde la web quedan en `blobs/` hasta que la
   retención borra su dataset (30 días sin uso por defecto).
+
+### Modos de permisos, recarga y novedades
+
+- Un modo solo decide qué **efectos** se ejecutan sin preguntar: no es un sandbox, no cambia el
+  confinamiento de rutas (los directorios externos siguen preguntando) ni la preconcesión de
+  `--allow-analysis`. `auto` son reglas fijas, sin clasificador de IA.
+- En la TUI el modo inicial es solo una etiqueta derivada de los flags: si plugins o MCP ya
+  permitían `external` al arrancar, la etiqueta `ask` no lo refleja hasta elegir un modo
+  (`/permission status` muestra la política real). Cambiar de modo reinicia las aprobaciones «para
+  esta sesión»; se rechaza durante un turno y bajo `--read-only`.
+- Shift+Tab en la TUI depende de que la terminal lo distinga (`\x1b[Z` o el protocolo Kitty); en
+  la web intercepta una tecla de navegación y por eso el selector de agente es la vía accesible.
+  Alternar no aplica el modelo del agente (usa `/agents`).
+- `/reload` reconstruye la aplicación completa: los servidores MCP y plugins se reinician, el
+  código de plugins ya importado no se recarga (el informe lo dice), los flags de arranque conservan
+  su valor y se rechaza con subagentes o aprobaciones pendientes. Durante la recarga web coexisten
+  un instante dos aplicaciones del mismo workspace sobre la misma base de datos. No hay
+  `/reload` ni `/changelog` en `alisio run`.
+- El changelog es solo inglés, manual y curado (`CHANGELOG.md`); una versión sin entrada no genera
+  aviso, y `Unreleased` se muestra como «sin publicar».
+
+### Pestaña Memory y vistas de plugins
+
+- Las vistas de datos son de solo lectura **por contrato**, no por aislamiento: el host solo
+  controla el método, los parámetros validados, el tiempo (5 s) y el tamaño (1 MiB); no puede impedir
+  que el código de un plugin escriba y un handler síncrono que bloquee el bucle de eventos no se
+  interrumpe con el timeout. Un plugin no es un sandbox.
+- La pestaña no se actualiza en vivo (botón Refresh). Una memoria actualizada o fijada mientras se
+  pagina puede saltar al principio de la lista (no se repite); una memoria con `topic_key` que otro
+  chat actualiza pasa a ese chat (el upsert reasigna `session_id`) y sale de la lista del primero.
+  Las sesiones hijas (subagentes) tienen su propio `session`: no aparecen en la pestaña del chat padre.
+- «Context loaded» es lo que el plugin devolvió en `session.onStart`, guardado por el plugin; no
+  prueba que el runner lo persistiera (si se aborta entre el hook y el `append`, queda registrado
+  sin llegar al transcript; el runner además trunca cada texto) y se muestra completo hasta 50 000
+  caracteres. Los chats anteriores a esta versión no tienen contexto registrado y el contexto
+  recuperado tras una compactación no se guarda.
+- La memoria puede contener datos sensibles del proyecto: la pestaña los muestra a quien tenga la
+  cookie de sesión del servidor. Cada entrada se recorta a 10 000 caracteres en la lista.
+- El selector «plugin habilitado» de la web depende de `GET /api/plugins` (se refresca al abrir una
+  sesión y con `catalog_changed`); un plugin habilitado pero de una versión sin `api.views` muestra
+  el error de la sección con reintento en lugar de ocultar la pestaña.
+- Detectado al verificar y fuera de alcance: la página Ajustes → General lanza un error al
+  renderizar porque faltan en `i18n/en.ts` y `es.ts` las etiquetas `setting.*` de nueve ajustes
+  (`limits.firstTokenTimeoutMs`, `limits.firstTokenRetries`, `limits.truncationRecoveries`,
+  `tui.paddingX`, `tui.contentPaddingX`, `tui.skillSlashCommands`, `agents.active`, `agents.effort`,
+  `analysis.enabled`).

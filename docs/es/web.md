@@ -65,7 +65,7 @@ un cajón que se abre desde la cabecera.
 primer prompt). La insignia muestra el agente y el preset de permisos. **Log de sesión** descarga la
 sesión como JSON Lines: cada evento durable en el formato de `alisio run --json` y después una línea
 `{"type":"message"}` por cada mensaje guardado. El icono de panel a la derecha abre el panel de
-archivos (más abajo). Las pestañas **Conversación** y **Trayectoria** cambian la vista principal.
+archivos (más abajo). Las pestañas **Conversación**, **Trayectoria** y, con el plugin de memoria habilitado, **Memoria** cambian la vista principal.
 
 **Conversación.** Sus mensajes aparecen a la derecha con un botón de copiar. El trabajo del agente
 aparece como filas de una línea: `Razonamiento · …`, `Inyección de contexto · AGENTS.md` y una fila
@@ -123,6 +123,11 @@ seguido del nombre del plugin como etiqueta (por ejemplo `Test report` · `Smoke
 ejecución: estado, hora de inicio, turnos y duración de cada ejecución, y una fila por evento con su
 hora, turno, tipo, un resumen breve y su duración cuando la tiene. Se actualiza a medida que llegan
 eventos; las ejecuciones antiguas quedan detrás de **Mostrar runs anteriores**.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/trajectory_web_ui.webp" alt="La pestaña Trayectoria con los eventos durables de una sesión (tool_started, tool_completed, turn_completed, artifact_published, memory_save) y un dashboard ejecutivo de ventas abierto en el panel de artefactos a la derecha." width="1833" height="986" loading="lazy" decoding="async" />
+  <figcaption>La pestaña Trayectoria: una fila por evento durable, con un artefacto abierto en el panel lateral.</figcaption>
+</figure>
 
 **Panel de archivos.** El icono de panel de la cabecera abre un panel a la derecha (una hoja
 inferior por debajo de 900 px) con tres pestañas. **Archivos** recorre el workspace a demanda, de
@@ -294,18 +299,94 @@ inicia una segunda ejecución.
 Una sesión que usa otro proceso de Alisio (por ejemplo la TUI) aparece bloqueada y es de solo
 lectura en la web hasta que ese proceso la libere.
 
-Cada sesión tiene un preset de permisos. Los efectos que los flags de arranque no permiten siguen
-preguntando, sea cual sea el preset:
+Cada sesión tiene un preset de permisos, que también es su modo de permisos (`ask`, `auto` o
+`full`, véase [Modos de permisos](#permission-modes)). Los efectos que los flags de arranque no
+permiten siguen preguntando, sea cual sea el preset:
 
-| Preset | Permitido sin preguntar | Otros efectos |
-| --- | --- | --- |
-| `read-only` | lecturas | denegados |
-| `ask` | lecturas | piden aprobación |
-| `workspace-write` (por defecto) | lecturas, escrituras | piden aprobación |
-| `full-access` | lecturas, escrituras, procesos, red | piden aprobación |
+| Preset | Modo | Permitido sin preguntar | Otros efectos |
+| --- | --- | --- | --- |
+| `read-only` | ninguno | lecturas | denegados |
+| `ask` | `ask` | lecturas | piden aprobación |
+| `workspace-write` (por defecto) | `auto` | lecturas, escrituras | piden aprobación |
+| `full-access` | `full` | lecturas, escrituras, procesos, red | piden aprobación |
 
 "Permitir para la sesión" en una aprobación amplía solo esa sesión, nunca las demás sesiones del
 mismo workspace.
+
+### Selector de agente y Shift+Tab {#agent-cycle}
+
+La barra del compositor muestra el agente activo (**Agente: build**) junto al menú de permisos.
+Ábralo para elegir cualquier agente principal; la elección se guarda en la sesión y se aplica desde
+el siguiente prompt. **Mayús+Tab** con el foco en el cuadro de mensaje recorre la misma lista:
+`build`, `plan` y después sus agentes primarios por nombre, con vuelta al inicio. El atajo se ignora
+mientras la paleta `/` está abierta, durante una composición IME y con cualquier otro modificador, y
+un lector de pantalla anuncia el agente nuevo.
+
+Compromiso de accesibilidad: Mayús+Tab normalmente mueve el foco hacia atrás, así que interceptarlo
+en el cuadro de mensaje cambia lo que los usuarios de teclado esperan allí. El selector de agente es
+la vía accesible (se alcanza con Tab) y siempre está disponible; el atajo solo actúa con el foco en
+el cuadro de mensaje y en cualquier otro sitio Mayús+Tab conserva su significado habitual. Alternar
+se permite durante un turno porque solo guarda el agente siguiente.
+
+### Modos de permisos {#permission-modes}
+
+`/permission` (también `/permissions`) abre el menú de permisos de la cabecera: tres opciones
+excluyentes, **Preguntar**, **Auto** y **Acceso total**, el estado de la sesión y **Gestionar
+permisos guardados…**, que muestra las concesiones guardadas (por ejemplo análisis en Python
+permitido para esta sesión) con **Revocar**. Elegir **Acceso total** pide una confirmación que dice
+que no es un sandbox. Un modo que el servidor no puede ofrecer (sus flags de arranque son el techo,
+o corre con `--read-only`) aparece como no disponible con el motivo. `/permission ask`,
+`/permission auto`, `/permission full` y `/permission status` se ejecutan sin abrir el menú y
+responden en la conversación; el menú de permisos del compositor conserva los cuatro presets.
+
+### `/reload` y `/changelog` {#reload-and-changelog}
+
+`/reload` vuelve a leer la configuración, los agentes, las skills, las plantillas de prompt y los
+servidores MCP del workspace de la sesión. Se rechaza (`409`) mientras el workspace tiene
+ejecuciones. El servidor valida la configuración y construye la aplicación nueva junto a la actual
+antes de intercambiarlas, así que un archivo roto no cambia nada y el error explica por qué. La
+conversación muestra el informe (qué cambió por área y qué necesita un reinicio, como el código de
+plugins ya importado), un aviso lo confirma y las paletas y páginas de ajustes abiertas se
+actualizan con `catalog_changed`. `/changelog [version]` abre un diálogo con el changelog incluido,
+que funciona sin conexión. Tras una actualización un único aviso discreto lo dice; la última versión
+vista se guarda en el `localStorage` del navegador y nada falla si el almacenamiento está
+bloqueado. Ambos comandos son solo interactivos: `alisio run` no cambia.
+
+### Pestaña Memoria {#memory-tab}
+
+Mientras el [plugin de memoria](/es/memory#web-tab) integrado está habilitado, aparece una pestaña
+**Memoria** junto a **Conversación** y **Trayectoria**. Muestra, solo en lectura, lo que el plugin
+guarda para el **chat abierto**, en tres secciones:
+
+- **Guardado en este chat**: las memorias guardadas mientras este chat estaba abierto (por el modelo,
+  por la compactación o por el resumen de fin de sesión), primero las fijadas y luego las más
+  recientes. Se puede filtrar por tipo, buscar en título, contenido y tema, y pulsar **Cargar más**
+  para leer de 20 en 20. Cada entrada muestra su tipo y título, un resumen de su contenido
+  (**Ver más** / **Ver menos**), cuándo se actualizó, de dónde viene y el registro sin procesar en
+  **Detalles**.
+- **Resumen de la sesión**: el resumen que el plugin guardó para este chat (uno por sesión; la
+  compactación y el resumen de fin de sesión lo sobrescriben).
+- **Contexto cargado**: el contexto de memoria que el plugin añadió cuando empezó este chat, que es
+  lo primero que vio el modelo.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/memory_tab_web_ui.webp" alt="La pestaña Memoria de un chat: la sección Guardado en este chat muestra 20 de 27 memorias con un filtro por tipo y un cuadro de búsqueda, una entrada fijada primero y cada entrada con su tipo, título, resumen del contenido, hora de actualización y origen." width="1280" height="900" loading="lazy" decoding="async" />
+  <figcaption>La pestaña Memoria: las memorias guardadas en este chat, primero las fijadas, con filtro, búsqueda y Cargar más.</figcaption>
+</figure>
+
+Cada sección carga, falla y reintenta por separado. Nada se actualiza en vivo: **Actualizar** vuelve
+a cargar las tres secciones y conserva los filtros, y las memorias guardadas mientras se navega
+aparecen tras actualizar (la lista nunca repite ni se salta una entrada al paginar). Cambiar de chat
+recarga la pestaña y nunca muestra datos de otro chat. La pestaña existe solo mientras el plugin
+está habilitado: desactivarlo en **Ajustes → Plugins** la quita y vuelve a **Conversación**. Un chat
+vacío muestra **Aún no hay memoria guardada para este chat**.
+
+La memoria puede contener datos sensibles del proyecto. La pestaña se sirve por las mismas rutas
+de sesión autenticadas que la conversación (`GET /api/sessions/:sid/views/memory/…`, véanse las
+[vistas de datos de plugins](/es/plugins#data-views)) y se la muestra a quien tenga la cookie de
+sesión de este servidor. Es una vista: fijar y olvidar siguen en la TUI (`/memory`) y en las
+herramientas del modelo. De dónde sale cada sección y sus límites están en
+[Memoria](/es/memory#web-tab).
 
 ### Análisis en Python y artefactos {#artifacts}
 
@@ -342,6 +423,11 @@ panel de archivos (abrir uno cierra el otro):
 - **Copiar al workspace…** pide una carpeta y ejecuta la herramienta `artifact_export` en la sesión:
   se aplica la aprobación de escritura habitual y los archivos copiados aparecen en **Cambios**.
   `/artifacts [filtro]` abre el panel con su menú.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/dashboard_generated.webp" alt="Un dashboard ejecutivo de ventas generado por Alisio en el panel de artefactos: ranking de vendedores, ventas por canal, segmentos de clientes y estado de los pedidos." width="1835" height="990" loading="lazy" decoding="async" />
+  <figcaption>Un dashboard ejecutivo generado en el panel de artefactos.</figcaption>
+</figure>
 
 Los dashboards se ejecutan en un iframe con `sandbox="allow-scripts allow-downloads"` (nunca
 `allow-same-origin`), servido desde `/artifact-view/<token>/…` con un enlace firmado que caduca a
@@ -390,6 +476,11 @@ como máximo 4 KB), mientras que la conversación muestra lo que escribiste con 
 la tabla en el panel derecho. Si solo envías datos, se manda una petición por defecto para que los
 revise.
 
+<figure class="doc-shot">
+  <img src="../assets/web-ui/Preview_of_tabular_data_in_CSV_and_Excel.webp" alt="El visor de tablas con un CSV de 300 filas, su filtro y los botones de copiar y descargar, junto al chip del dataset adjunto en la conversación." width="1831" height="980" loading="lazy" decoding="async" />
+  <figcaption>El visor de tablas con un CSV de 300 filas y el chip de datos adjuntos en el chat.</figcaption>
+</figure>
+
 El **visor de tablas** (`SpreadsheetView`) también abre artefactos de hoja de cálculo (CSV, TSV, XLSX),
 que se ingieren la primera vez que se previsualizan:
 
@@ -424,6 +515,7 @@ GET  /api/sessions                     POST /api/sessions            GET|PATCH /
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/sessions/:sid/views/:plugin/:view?<params>   read-only data view of an enabled plugin
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
@@ -445,10 +537,15 @@ GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}
 GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}
+GET  /api/changelog?version=&lastSeen= POST /api/workspaces/:wid/reload   409 runs_active while it has runs
 GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, provider, values, model}
 PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
 POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Las vistas de datos de plugins responden `404` ante una sesión, un plugin o una vista desconocidos
+o un plugin deshabilitado, `400` ante parámetros no válidos y `view_failed` (502), `view_too_large`
+(502) o `view_timeout` (504) cuando la vista falla, responde más de 1 MiB o tarda más de 5 segundos.
 
 Las subidas de datasets terminan con un frame `dataset_ready` o `dataset_failed` en el stream de la
 sesión. Los errores de datos usan los códigos `dataset_unsupported` (415), `query_rejected` (400) y
@@ -479,6 +576,8 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
   paquete npm.
 - La interfaz web conserva la salida de comandos, los avisos y el razonamiento solo mientras la
   página está abierta; al recargar, la conversación se reconstruye desde los mensajes guardados.
+- Mayús+Tab alterna agentes solo desde el cuadro de mensaje (véase [Selector de agente](#agent-cycle));
+  el changelog está solo en inglés y `/reload` no puede recargar el código de plugins ya importado.
 - El panel de archivos muestra solo el workspace: los directorios añadidos con `--add-dir` no se
   pueden recorrer, los enlaces simbólicos se listan pero nunca se siguen (aunque apunten dentro del
   workspace) y el filtrado por `.gitignore` necesita `git` en el `PATH`. **Cambios** solo conoce los

@@ -55,7 +55,25 @@ const LEGACY_COMMANDS = [
   },
   // Added with the analysis runtime (phase 1): artifacts and saved permissions.
   { name: "artifacts", description: "Browse this session's artifacts", argumentHint: "[filter]" },
-  { name: "permissions", description: "Review and revoke this session's saved permissions" },
+  // Phase 1 of the modes spec: `/permission` replaces `/permissions` (kept as an alias), plus
+  // `/reload` and `/changelog`.
+  {
+    name: "permission",
+    description:
+      "Switch the permission mode (ask, auto, full access), see its status or manage saved permissions",
+    argumentHint: "[ask|auto|full|status]",
+    aliases: ["permissions"],
+  },
+  {
+    name: "reload",
+    description:
+      "Reload the configuration, agents, skills, prompt templates and MCP servers (between turns)",
+  },
+  {
+    name: "changelog",
+    description: "Show what changed in recent Alisio releases",
+    argumentHint: "[version]",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

@@ -111,7 +111,9 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
 | `/artifacts [filter]` | Recorre los artefactos de la sesión (los más recientes primero, con filtro) y ofrece Vista previa aquí, Abrir con la aplicación predeterminada, Copiar ruta, Mostrar en la carpeta, Copiar al workspace…, Mostrar fuentes del análisis, Detalles o Eliminar; consulta [Artefactos](#artifacts) |
-| `/permissions` | Revisa los permisos guardados de la sesión (por ejemplo, análisis en Python permitido en esta sesión) y los revoca |
+| `/permission [ask\|auto\|full\|status]` (`/permissions`) | Un único menú con **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** y **Manage saved permissions…** (revisar y revocar los permisos guardados de la sesión, por ejemplo análisis en Python permitido en esta sesión). Con un argumento fija el modo o imprime el estado directamente; véase [Modos de permisos](#permission-modes) |
+| `/reload` | Recarga la configuración, los agentes, las skills, las plantillas de prompt y los servidores MCP entre turnos; una configuración rota deja la sesión intacta; véase [Recarga y novedades](#reload-and-changelog) |
+| `/changelog [version]` | Panel desplazable con lo que cambió en las versiones recientes (sin conexión); véase [Recarga y novedades](#reload-and-changelog) |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
 | `/command plugin.id:name args` | Ejecuta un comando de plugin |
@@ -130,7 +132,7 @@ en el autocompletado.
 
 Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`,
-`/clear` y `/resume` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
+`/clear`, `/resume` y `/reload` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
 subagentes (`/agents open …`, `/agents list`, …) y `/btw` siguen funcionando durante un turno.
 
 ### Catálogo de skills y autocompletado
@@ -238,6 +240,87 @@ sin concepto de effort lo ignoran. Si más tarde el modelo cambia a uno que no s
 guardado, se usa el valor por defecto del modelo silenciosamente con un aviso único. El nivel
 elegido también se muestra en la cabecera y en la barra de estado, en amarillo.
 
+### Alternar agentes con Shift+Tab {#cycle-agents}
+
+**Shift+Tab** cambia el agente activo sin abrir un menú: `build` → `plan` → cada uno de los demás
+agentes principales (definiciones con `mode: primary` o `mode: all`, ordenadas por nombre) y de
+nuevo `build`. El orden es estable, sea cual sea el orden en que los plugins descubrieron los
+agentes. La barra de estado bajo el editor muestra `agent: <nombre>` y el aviso nombra el agente
+nuevo (`Agent: plan (read-only) · Shift+Tab cycles agents`). La elección se persiste como en
+`/agents` (`agents.active`) y se aplica **desde el siguiente prompt**.
+
+- Durante un turno la tecla solo muestra un aviso (*A turn is running: wait for it to finish before
+  switching agents*): un cambio de agente nunca modifica una ejecución que ya empezó.
+- Con un selector, la lista de autocompletado o el panel de agentes abiertos, la tecla se deja
+  pasar.
+- A diferencia del selector `/agents`, alternar nunca cambia el modelo ni inicia una sesión nueva.
+  Si el agente declara un modelo distinto del actual, el aviso lo dice; ejecute `/agents` para
+  aplicarlo.
+- Con `--read-only` no se pueden escribir los ajustes, así que la elección solo dura mientras vive
+  el proceso.
+- Algunas terminales no distinguen Shift+Tab como tecla propia; `/agents` y `/agent:<id>` siempre
+  funcionan.
+- Los permisos son otro eje: véase [Modos de permisos](#permission-modes).
+
+## Modos de permisos {#permission-modes}
+
+`/permission` abre un único menú: **Use ask mode**, **Use auto mode**, **Use full access mode**,
+**Status** y **Manage saved permissions…**. `/permissions` es un alias del mismo menú, y
+`/permission ask`, `/permission auto`, `/permission full` y `/permission status` lo saltan. El modo
+actual siempre está visible: `mode:<nombre>` en la cabecera y `mode: <nombre>` en la barra de
+estado.
+
+| Modo | Se ejecuta sin preguntar | Sigue preguntando | Preset web |
+| --- | --- | --- | --- |
+| `ask` | lecturas | escrituras, comandos, red y herramientas externas | `ask` |
+| `auto` | lecturas y ediciones de archivos dentro del workspace | comandos, red, herramientas externas y directorios fuera del workspace | `workspace-write` |
+| `full` | todo salvo las rutas fuera del workspace y la instalación de paquetes opcionales | esas dos | `full-access` |
+
+`auto` usa reglas fijas: ningún modelo clasifica las peticiones. `full` muestra una confirmación que
+dice que **no es un sandbox**: lo que ejecute el agente tiene los permisos de su usuario. La misma
+tabla gobierna los presets de la web, así que un modo se comporta igual en ambas interfaces.
+
+- **Modo inicial.** Se deriva de los flags de arranque y solo etiqueta el estado: sin flags es
+  `ask`, `--allow-write` solo es `auto`, `--allow-write --allow-process --allow-external` es `full`
+  y cualquier otra combinación es `custom`. Al arrancar no se cambia nada. Si los plugins o MCP ya
+  podían salir al exterior al arrancar, `/permission status` indica que `external` está activo.
+- **Se aplica entre turnos.** Cambiar el modo durante un turno se rechaza con un aviso. Un modo
+  surte efecto desde la siguiente llamada a herramienta y reinicia las aprobaciones «Permitir
+  siempre en esta sesión».
+- **`--read-only` bloquea los modos.** No hay manejador de aprobación que ampliar, así que todos los
+  modos se rechazan con *Permission modes are locked: Alisio was started with --read-only.*;
+  **Status** sigue funcionando.
+- **Status** imprime el modo y, por efecto, si se ejecuta (`on`), pregunta (`ask`) o se deniega
+  (`off`).
+- Los permisos guardados (análisis en Python permitido para una sesión) se gestionan desde
+  **Manage saved permissions…**; `/permission` no los cambia.
+
+## Recarga y novedades {#reload-and-changelog}
+
+### `/reload` {#reload}
+
+`/reload` vuelve a leer las capas de configuración, los archivos de agentes, las skills, las
+plantillas de prompt y los servidores MCP sin salir de la sesión. Solo se ejecuta **entre turnos**:
+se rechaza mientras hay un turno, un subagente o una aprobación en espera. Todo se valida **antes**
+de aplicar nada: primero se analiza la configuración y se construye una aplicación nueva junto a la
+actual, así que un archivo roto deja su sesión exactamente como estaba (el error explica por qué).
+Si todo va bien, el informe lista por área qué cambió (recuentos y nombres añadidos, eliminados o
+actualizados), actualiza el autocompletado de comandos y conserva el modo de permisos que eligió.
+
+El código de plugins ya importado no se puede descargar: el informe nombra los plugins externos que
+necesitan un reinicio para recoger cambios en su código, y los flags de arranque (`--allow-write`,
+`--read-only`, `--model`…) conservan su valor inicial. `alisio run` no tiene `/reload`.
+
+### `/changelog` {#changelog}
+
+`/changelog` abre un panel desplazable (↑/↓, PgUp/PgDn, Home/End, Esc para cerrar) con las entradas
+más recientes del `CHANGELOG.md` incluido; `/changelog alpha.26` (o la versión completa) muestra una
+sola entrada. Funciona sin conexión: el changelog se convierte en la compilación y viaja dentro del
+paquete. Tras una actualización Alisio imprime **una** línea (*Alisio updated to … · 3 new entries ·
+/changelog*); la última versión vista se guarda en `tui-state.json` junto a la base de datos de
+sesiones, así que la primera ejecución no avisa. Las entradas están en inglés en todos los idiomas.
+`alisio run` no tiene `/changelog`.
+
 ## Gestor MCP {#mcp}
 
 `/mcps` en la TUI lista los servidores por origen y, para el seleccionado, separa los estados
@@ -264,6 +347,7 @@ desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
 | `x` | Expandir o plegar la fila plegable más cercana — una sección **Thought** terminada, un lote agrupado de llamadas a herramientas o una salida de comando larga (cuando la entrada está vacía; véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | Clic del ratón | En la fila de cabecera de un bloque plegable, expandirlo o plegarlo (véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
+| Shift+Tab | Alterna los agentes principales: `build`, `plan` y después sus agentes primarios, con vuelta al inicio (véase [Alternar agentes](#cycle-agents)) |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
 | Ctrl+K | Cancelar el agente seleccionado o visualizado |
@@ -553,7 +637,8 @@ directorio contenedor (una aprobación de sesión cubre el subárbol de ese dire
 preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeoutMs`. Las
 aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
 que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte
-[Herramientas y permisos](/es/tools).
+[Herramientas y permisos](/es/tools) y [Modos de permisos](#permission-modes), que activan o
+desactivan estas aprobaciones de una sola vez.
 
 ## Artefactos {#artifacts}
 

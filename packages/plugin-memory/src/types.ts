@@ -50,6 +50,35 @@ export interface SessionSummary {
   content: string;
   createdAt: number;
 }
+/** One row of the "saved in this chat" list (full body, capped by the caller). */
+export interface SessionRecord {
+  id: number;
+  type: MemoryType;
+  title: string;
+  content: string;
+  scope: MemoryScope;
+  topicKey?: string;
+  /** Producer, e.g. memory_save or compaction. */
+  source?: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+  revisionCount: number;
+  duplicateCount: number;
+}
+/** Keyset position in the `pinned DESC, updated_at DESC, id DESC` order. */
+export interface RecordsCursor {
+  pinned: 0 | 1;
+  updatedAt: number;
+  id: number;
+}
+export interface SessionRecordsQuery {
+  type?: MemoryType;
+  /** Case-insensitive substring of title, content or topic key (literal, not a pattern). */
+  text?: string;
+  limit: number;
+  after?: RecordsCursor;
+}
 export interface SearchOptions {
   limit?: number;
   type?: MemoryType;
@@ -81,5 +110,22 @@ export interface MemoryStore {
   /** Summary of one session, used to confirm an archive write. */
   summaryOf(session: string): string | undefined;
   lastSummary(project: string): SessionSummary | undefined;
+  /**
+   * Read-only listing for the web "Memory" tab: this chat's records (visible to the project),
+   * pinned first then newest, by keyset. Never touches access counters or timestamps.
+   */
+  recordsOfSession(
+    project: string,
+    session: string,
+    query: SessionRecordsQuery,
+  ): { items: SessionRecord[]; total: number; hasMore: boolean };
+  /** Summary stored for one session of this project (read-only). */
+  summaryRow(project: string, session: string): { content: string; updatedAt: number } | undefined;
+  /** Remembers the context injected at session start, one row per session. */
+  saveInjectedContext(project: string, session: string, content: string): void;
+  injectedContext(
+    project: string,
+    session: string,
+  ): { content: string; injectedAt: number } | undefined;
   close(): void;
 }

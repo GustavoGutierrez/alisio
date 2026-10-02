@@ -108,6 +108,7 @@ removed automatically when it is unloaded.
 | `resources.prompts(path)` | Adds a directory of [prompt templates](/prompt-templates#templates-from-plugins) (`*.md`, relative to the plugin file) |
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
+| `views.register(view)` | Registers a named, read-only [data view](#data-views) hosts such as the web UI can read. Absent on a core that predates it: use `api.views?.register(...)` |
 | `compaction.register({ beforeCompact, afterCompact })` | Compaction hooks, see below |
 | `session.onStart(handler)` | Returned text is injected once at the start of a new, empty session (persisted in the session) |
 | `session.onEnd(handler)` | Called when an interactive session ends (`/clear`, `/exit`, quit) |
@@ -257,6 +258,51 @@ const rows = db.prepare("SELECT * FROM notes").all();
 offer `run`, `get`, `all`), `transaction(fn)` (immediate transaction; nested calls join the outer
 one) and `close()`. FTS5 is available. The host provides the driver, so plugins never depend on a
 specific runtime.
+
+### Data views {#data-views}
+
+A data view is a named function that returns JSON for one session, which hosts read without
+running a tool. `alisio serve` exposes them to the web UI (the built-in memory plugin feeds the
+[Memory tab](/web#memory-tab) this way).
+
+```ts
+import { definePlugin } from "@alisio/sdk";
+
+export default definePlugin({
+  id: "notes",
+  version: "1.0.0",
+  apiVersion: 1,
+  setup(api) {
+    // `views` is absent on an older core: feature-detect it and keep working without it.
+    api.views?.register({
+      id: "recent",
+      description: "Recent notes of the session",
+      params: {
+        type: "object",
+        properties: { limit: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+      },
+      // `params` is already validated and coerced; `loadNotes` is your own storage code.
+      handler: (params, { sessionId }) => ({ items: loadNotes(sessionId, Number(params.limit)) }),
+    });
+  },
+});
+```
+
+- `id` is lowercase letters, digits and dashes (up to 40 characters) and unique within the plugin;
+  `description` is required. `params` is a JSON Schema object of primitives (`string`, `integer`,
+  `number`, `boolean`; no `$ref`) whose unknown keys are rejected. Query strings are coerced to the
+  declared types and defaults are applied before `handler(params, { sessionId, workspace, signal })`
+  runs. `ViewParamsError` turns a parameter the schema cannot express into a `400`.
+- Over HTTP a view is `GET /api/sessions/:sid/views/:plugin/:view?<params>`, behind the same
+  session cookie, Host and Origin rules as every other route. Only enabled plugins answer, the
+  session must exist and its workspace must still exist, and a view of another plugin or a disabled
+  one is a `404`. At most 16 query parameters of 512 characters each are accepted.
+- The response is JSON of at most 1 MiB (`view_too_large`, 502) and the handler has 5 seconds
+  (`view_timeout`, 504; `signal` aborts). Any other failure is a generic `view_failed` (502): its
+  message and the parameters are never sent or logged, because they may carry project data.
+- **Views are read-only by contract, not by isolation.** The host only controls the method, the
+  validated parameters, the time and the size; it cannot stop a plugin's code from writing, and a
+  handler that blocks the event loop is not interrupted by the timeout. A plugin is not a sandbox.
 
 ### Child sessions {#child-sessions}
 

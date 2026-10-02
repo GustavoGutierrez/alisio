@@ -30,3 +30,24 @@
     min-width: 520px;
   }
 }
+
+/* Web UI screenshots inside the guide pages: responsive, with a caption that explains them. */
+.doc-shot {
+  margin: 20px 0;
+}
+
+.doc-shot img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+}
+
+.doc-shot figcaption {
+  margin-top: 8px;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}

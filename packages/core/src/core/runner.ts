@@ -293,6 +293,17 @@ export class AgentRunner {
     return !!this.options.approve;
   }
   /**
+   * Sets which effects run without asking (a permission mode). The policy object is mutated in
+   * place because the application and the runner share it; `analysis` is never touched. Takes
+   * effect from the next tool call, so it also drops "allow for this session" widenings.
+   */
+  setPolicy(next: Partial<Pick<Policy, "write" | "process" | "external">>): void {
+    const policy = this.options.policy;
+    if (next.write !== undefined) policy.write = next.write;
+    if (next.process !== undefined) policy.process = next.process;
+    if (next.external !== undefined) policy.external = next.external;
+  }
+  /**
    * Live-update runnable settings so the next `run`/`compact` call honors them without restarting
    * Alisio. Every patch field is merged over the current options; unrelated settings are kept.
    */

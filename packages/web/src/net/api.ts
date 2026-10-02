@@ -19,6 +19,7 @@ import type {
   ArtifactRef,
   BlobRef,
   CapabilityGrantWire,
+  ChangelogView,
   CommandDescriptor,
   CommandOutcome,
   CredentialStatus,
@@ -40,6 +41,7 @@ import type {
   ProviderModelsInfo,
   ProviderProfileInfo,
   ProvidersOverview,
+  ReloadReport,
   RunEvent,
   SessionChange,
   SessionContextUsage,
@@ -370,6 +372,17 @@ export class ApiClient {
       ...(remember ? { remember } : {}),
     });
   agents = (wid: string) => this.request<AgentInfo[]>("GET", `/api/agents?workspace=${enc(wid)}`);
+  /** The shipped changelog (offline): the newest entries, or `version`; `lastSeen` asks for news. */
+  changelog = (params: { version?: string; lastSeen?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.version) query.set("version", params.version);
+    if (params.lastSeen) query.set("lastSeen", params.lastSeen);
+    const text = query.toString();
+    return this.request<ChangelogView>("GET", `/api/changelog${text ? `?${text}` : ""}`);
+  };
+  /** `/reload` of a workspace (the web client usually goes through the `reload` command). */
+  reloadWorkspace = (wid: string) =>
+    this.request<ReloadReport>("POST", `/api/workspaces/${enc(wid)}/reload`, {});
   // ---- Agent definitions (`.agents/agents` files; project scope needs a workspace).
   agentDefinitions = (wid?: string) =>
     this.request<AgentDefinitionsOverview>(

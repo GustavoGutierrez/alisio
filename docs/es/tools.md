@@ -339,6 +339,28 @@ Ambas muestran sus tablas con el renderizador de tablas de la terminal.
 `python_run { inputs: [{ "datasetId": … }] }` entrega el dataset a un script. XLSX es el único formato
 que necesita Python 3.10+ (un helper fijo de Alisio con la biblioteca estándar, no código del modelo).
 
+## Modos de permisos {#permission-modes}
+
+La TUI (`/permission`) y la interfaz web (el menú de permisos y `/permission`) comparten tres
+**modos de permisos**. Una única tabla de `@alisio/core` asigna a cada modo la política de la
+ejecución, y los presets de la web se derivan de ella:
+
+| Modo | `write` | `process` | `external` | Preset web |
+| --- | --- | --- | --- | --- |
+| `ask` | pregunta | pregunta | pregunta | `ask` |
+| `auto` | permitido | pregunta | pregunta | `workspace-write` |
+| `full` | permitido | permitido | permitido | `full-access` |
+
+`auto` tiene reglas fijas y ningún clasificador de IA: las ediciones dentro del workspace se
+ejecutan; los comandos, la red y las herramientas externas siguen preguntando. Un modo solo elige
+qué **efectos** se ejecutan sin preguntar; las rutas fuera del workspace siguen preguntando por
+directorio y la preconcesión del análisis en Python (`--allow-analysis`) no forma parte de ningún
+modo. `--read-only` elimina el manejador de aprobación, así que allí no se pueden elegir modos. En
+`alisio serve` los flags de arranque son el techo: un efecto que no permiten sigue preguntando sea
+cual sea el modo. El modo plan lo impone el runner, no el prompt: un agente de solo lectura no tiene
+herramientas de escritura, de procesos ni externas sea cual sea el modo elegido. Véase
+[TUI](/es/tui#permission-modes) y [Interfaz web](/es/web#permission-modes).
+
 ## No es un sandbox
 
 ::: danger

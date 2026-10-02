@@ -6,6 +6,7 @@
  * question or closes the panel.
  */
 import type { SideQuestionEntry } from "@alisio/sdk";
+import { scrollWindow } from "./scroll.ts";
 
 export const BTW_USAGE = "Usage: /btw <question>";
 export const BTW_DESCRIPTION =
@@ -104,17 +105,4 @@ export function btwUsageLine(entry: SideQuestionEntry): string {
   return `${entry.model} · ${entry.usage.input} in · ${entry.usage.output} out tokens${entry.truncated ? " · truncated" : ""}`;
 }
 /** The visible slice of `lines` for `scroll` (clamped) and whether more lines exist. */
-export function btwWindow(
-  lines: string[],
-  scroll: number,
-  height: number,
-): { lines: string[]; scroll: number; above: boolean; below: boolean } {
-  const max = Math.max(0, lines.length - height);
-  const start = Math.min(Math.max(0, scroll), max);
-  return {
-    lines: lines.slice(start, start + height),
-    scroll: start,
-    above: start > 0,
-    below: start + height < lines.length,
-  };
-}
+export const btwWindow = scrollWindow;

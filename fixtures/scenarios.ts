@@ -1082,7 +1082,7 @@ const fixtures: Record<string, () => Promise<void>> = {
         .all() as { version: number }[];
       assert.deepEqual(
         versions.map((v) => v.version),
-        [1, 2, 3, 4, 5, 6, 100],
+        [1, 2, 3, 4, 5, 6, 100, 101],
       );
       mem.close();
     }

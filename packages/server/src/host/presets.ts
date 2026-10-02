@@ -1,4 +1,10 @@
-import type { Policy } from "@alisio/core";
+import {
+  PERMISSION_MODE_TABLE,
+  type PermissionMode,
+  type Policy,
+  presetToMode,
+  READ_ONLY_POLICY,
+} from "@alisio/core";
 import type { PermissionPresetId, PermissionPresetInfo } from "@alisio/sdk";
 
 export const PRESET_IDS: readonly PermissionPresetId[] = [
@@ -9,12 +15,18 @@ export const PRESET_IDS: readonly PermissionPresetId[] = [
 ];
 export const DEFAULT_PRESET: PermissionPresetId = "workspace-write";
 
+/** The policy of a permission mode (the table lives in core, shared with the TUI). */
+const ofMode = (mode: PermissionMode): { policy: Policy; approvals: boolean } => ({
+  policy: { ...PERMISSION_MODE_TABLE[mode].policy },
+  approvals: PERMISSION_MODE_TABLE[mode].approvals,
+});
+
 /** What each preset asks for before the server ceiling is applied (RF-08). */
 const WANTED: Record<PermissionPresetId, { policy: Policy; approvals: boolean }> = {
-  "read-only": { policy: { write: false, process: false, external: false }, approvals: false },
-  ask: { policy: { write: false, process: false, external: false }, approvals: true },
-  "workspace-write": { policy: { write: true, process: false, external: false }, approvals: true },
-  "full-access": { policy: { write: true, process: true, external: true }, approvals: true },
+  "read-only": { policy: { ...READ_ONLY_POLICY }, approvals: false },
+  ask: ofMode("ask"),
+  "workspace-write": ofMode("auto"),
+  "full-access": ofMode("full"),
 };
 
 const FLAG: Record<keyof Policy, string> = {
@@ -48,9 +60,11 @@ export function presetInfo(id: PermissionPresetId, ceiling: Ceiling): Permission
     // processes (full-access); elsewhere python_run asks.
     ...(wanted.policy.process && ceiling.policy.analysis ? { analysis: true } : {}),
   };
+  const mode = presetToMode(id);
   if (ceiling.readOnly && id !== "read-only")
     return {
       id,
+      ...(mode ? { mode } : {}),
       available: false,
       reason: "The server was started with --read-only",
       policy: { write: false, process: false, external: false },
@@ -61,6 +75,7 @@ export function presetInfo(id: PermissionPresetId, ceiling: Ceiling): Permission
   );
   return {
     id,
+    ...(mode ? { mode } : {}),
     available: true,
     ...(degraded.length
       ? {

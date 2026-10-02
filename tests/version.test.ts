@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadVersion as loadCliVersion } from "../packages/cli/src/version.ts";
@@ -120,6 +120,9 @@ describe("no stale version literals in package sources", () => {
     for (const name of await readdir(root)) {
       const src = join(root, name, "src");
       for (const file of await walkTs(src)) {
+        // The only legitimate carrier of published versions: the changelog data generated from
+        // CHANGELOG.md (scripts/changelog-data.ts), which records what each release changed.
+        if (relative(root, file).split(sep).join("/") === "core/src/changelog/data.ts") continue;
         const text = await readFile(file, "utf8");
         const line = text.split("\n").find((line) => /0\.1\.0(-alpha\.\d+)?/.test(line));
         if (line) offenders.push(`${relative(root, file)}: ${line.trim()}`);

@@ -11,6 +11,7 @@ import {
   CommandCatalog,
   configFile,
   configHome,
+  cycleableAgents,
   hashProjectConfig,
   isSettableSettingKey,
   type McpServerInfo,
@@ -26,6 +27,7 @@ import type {
   McpOverview,
   McpServerWire,
   PluginInfo,
+  ReloadReport,
   ServerFrame,
   SettingInfo,
   SettingsOverview,
@@ -96,7 +98,40 @@ export class WorkspaceRecycler {
   announce(workspaceId: string, scopes: CatalogScope[]): void {
     for (const scope of scopes) this.ctx.broadcast({ t: "catalog_changed", workspaceId, scope });
   }
+
+  /**
+   * `/reload`: refused while the workspace has runs (409 `runs_active`); otherwise validates the
+   * configuration, builds the new app next to the current one and swaps (a broken configuration
+   * leaves the workspace untouched). Every catalog is announced so open palettes refresh.
+   */
+  async reload(id: string): Promise<ReloadReport> {
+    const { workspaces, scheduler } = this.ctx;
+    if (!(await workspaces.pathOf(id))) throw new HttpError("not_found", "Workspace not found");
+    const busy = () =>
+      scheduler.busyWorkspace(id)
+        ? "Reload is only available between turns: wait for the current turn to finish."
+        : undefined;
+    const reason = busy();
+    if (reason) throw new HttpError("runs_active", reason);
+    this.pending.delete(id);
+    if (!workspaces.get(id)) {
+      // Nothing is loaded for this workspace yet: opening it reads the current configuration.
+      const path = (await workspaces.pathOf(id)) as string;
+      await workspaces.openPath(path);
+      this.announce(id, RELOAD_SCOPES);
+      return {
+        refreshed: [],
+        restartRequired: [],
+        warnings: ["The workspace was not open: it was opened with the current configuration."],
+      };
+    }
+    const report = await workspaces.reload(id, { busy });
+    this.announce(id, RELOAD_SCOPES);
+    return report;
+  }
 }
+
+const RELOAD_SCOPES: CatalogScope[] = ["commands", "plugins", "skills", "agents", "mcp", "models"];
 
 function pluginInfo(opened: OpenWorkspace, entry: PluginCatalogEntry): PluginInfo {
   const prefix = pluginPrefix(entry.id);
@@ -324,7 +359,8 @@ export function registerManagementRoutes(
     } catch {
       /* contributions are best-effort */
     }
-    const agents = agentCatalogFromState(state);
+    // Stable order (build, plan, then the rest by name): the web cycles this array.
+    const agents = cycleableAgents(agentCatalogFromState(state));
     const fallback = resolveActiveAgent(agents, opened.app.config.agents.active).id;
     return {
       body: agents.map(
@@ -341,6 +377,11 @@ export function registerManagementRoutes(
       ),
     };
   });
+
+  // ---- Reload ------------------------------------------------------------------------------
+  router.post("/api/workspaces/:wid/reload", async ({ params }) => ({
+    body: await recycler.reload(params.wid ?? ""),
+  }));
 
   // ---- Workspace trust ----------------------------------------------------------------------
   /**

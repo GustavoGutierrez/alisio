@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { newId } from "../../net/api.ts";
 import {
+  activateAgent,
+  agentList,
   api,
   busy,
   cancelRun,
@@ -10,6 +12,7 @@ import {
   composerInsert,
   context,
   currentId,
+  cycleAgent,
   detail,
   focusComposer,
   history,
@@ -37,6 +40,7 @@ import {
 } from "../../store/attachments.ts";
 import { historyStep, matchCommands } from "../../store/composer.ts";
 import { datasetNotices } from "../../store/datasets.ts";
+import { activeAgentId, needsFullAccessConfirm, shiftTabCycles } from "../../store/modes.ts";
 import { datasetShape } from "../artifacts/DatasetChips.tsx";
 import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
@@ -374,6 +378,13 @@ export function Composer() {
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (composing.current || event.isComposing) return;
+    // Shift+Tab cycles the main agents (build, plan, your own). The selector next to the
+    // permissions menu is the accessible path: Shift+Tab normally moves the focus backwards.
+    if (shiftTabCycles(event, { paletteOpen, composing: composing.current, disabled })) {
+      event.preventDefault();
+      void cycleAgent(1);
+      return;
+    }
     if (paletteOpen && matches.length) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -437,6 +448,9 @@ export function Composer() {
 
   const presets = session?.presets ?? [];
   const preset = session?.preset ?? "workspace-write";
+  const agents = agentList.value;
+  const agentId = activeAgentId(session?.agent, agents);
+  const agentName = agents.find((agent) => agent.id === agentId)?.name ?? agentId;
   const catalog = models.value;
   const model = session?.model ?? catalog?.model ?? "";
   const effort = session?.effort;
@@ -531,6 +545,27 @@ export function Composer() {
             }}
           />
           <Menu
+            label={t("composer.agentHint")}
+            disabled={disabled || !agents.length}
+            groups={[
+              {
+                items: agents.map((agent) => ({
+                  id: agent.id,
+                  label: agent.readOnly ? `${agent.name} · ${t("agents.readOnly")}` : agent.name,
+                  description: agent.description,
+                  checked: agent.id === agentId,
+                })),
+                onSelect: (value) => {
+                  if (value !== agentId) void activateAgent(value);
+                },
+              },
+            ]}
+          >
+            <Icon name="users" size={15} />
+            <span class={styles.truncate}>{t("composer.agent", { agent: agentName })}</span>
+            <Icon name="chevronDown" size={14} />
+          </Menu>
+          <Menu
             label={t("composer.preset", { preset: t(`preset.${preset}`) })}
             disabled={disabled || !presets.length}
             groups={[
@@ -542,7 +577,15 @@ export function Composer() {
                   disabled: !p.available,
                   checked: p.id === preset,
                 })),
-                onSelect: (value) => void setPreset(value as PermissionPresetId),
+                onSelect: (value) => {
+                  // Full access is not a sandbox: say so before it is switched on.
+                  if (
+                    needsFullAccessConfirm(value as PermissionPresetId, preset) &&
+                    !window.confirm(t("modes.fullConfirm"))
+                  )
+                    return;
+                  void setPreset(value as PermissionPresetId);
+                },
               },
             ]}
           >

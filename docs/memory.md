@@ -57,6 +57,25 @@ workspace, so they stay available with `--read-only`.
 - **TUI**: `/memory` (recent), `/memory <query>`, `/memory show|forget|pin|unpin <id>`; a `mem N`
   counter in the status bar; details in `/stats`.
 
+## Web tab {#web-tab}
+
+In the web UI (`alisio serve`) a read-only **Memory** tab shows what this plugin holds for the open
+chat; it exists only while the plugin is enabled (see [Memory tab](/web#memory-tab)). The plugin
+registers three [data views](/plugins#data-views) (`records`, `summary`, `context`) that the tab
+reads, and each section has its own source:
+
+| Section | Where it comes from |
+| --- | --- |
+| **Saved in this chat** | Observations whose `session` is the chat's session id (saved by `memory_save`, by compaction or by the end-of-session summary) and that were not forgotten, pinned first and then by `updated_at`, newest first. Filtering by type and the text search (title, content and `topic_key`, case-insensitive, any length) run in the database. |
+| **Session summary** | The summary stored for the session: at most one, overwritten by compaction and by the end-of-session summary. |
+| **Context loaded** | The exact text the plugin returned from its session-start hook when the chat began. The plugin remembers it in its own database (table `injected_context`, schema version 101), so nothing parses the transcript. |
+
+The views only read: they do not change access counts or timestamps. A memory with a `topic_key`
+that another chat updates moves to that chat, so it can leave this chat's list. Chats started
+before this version have no **Context loaded**, and the context recovered after a compaction is not
+recorded. The remembered context is what the plugin returned: the runner truncates very long
+injections and does not report whether it persisted them.
+
 ## Configuration
 
 ```json

@@ -12,9 +12,11 @@ export {
   agentPickerItems,
   agentRunOptions,
   BUILTIN_AGENTS,
+  cycleableAgents,
   DEFAULT_AGENT_ID,
   type MainCapableAgentRecord,
   mainAgentFromRecord,
+  nextAgent,
   resolveActiveAgent,
 } from "./agents/active.ts";
 export {
@@ -165,6 +167,18 @@ export {
   toRef,
 } from "./artifacts/store.ts";
 export {
+  changelogNews,
+  compareVersions,
+  formatChangelogMarkdown,
+  isVersion,
+  loadChangelog,
+  type NewsDecision,
+  parseChangelog,
+  type SelectedEntries,
+  selectEntries,
+  UNRELEASED,
+} from "./changelog/index.ts";
+export {
   BUILTIN_COMMANDS,
   type BuiltinCommand,
   CommandCatalog,
@@ -263,10 +277,33 @@ export {
   type McpToolInfo,
 } from "./mcp/connector.ts";
 export {
+  describePermissionStatus,
+  type EffectState,
+  effectState,
+  FULL_ACCESS_WARNING,
+  type ModeFlags,
+  type ModePolicy,
+  modeFromFlags,
+  modeToPreset,
+  PERMISSION_MODE_TABLE,
+  PERMISSION_MODES,
+  PERMISSION_MODES_LOCKED,
+  PERMISSION_USAGE,
+  type PermissionCommand,
+  type PermissionModeLabel,
+  type PermissionModeSpec,
+  parsePermissionCommand,
+  parsePermissionMode,
+  presetToMode,
+  READ_ONLY_POLICY,
+} from "./permissions/modes.ts";
+export {
   discoverPlugins,
   PluginHost,
   type PluginHostOptions,
   pluginPrefix,
+  type ViewInfo,
+  ViewRunError,
 } from "./plugins/host.ts";
 export {
   type CliInstallOptions,
@@ -297,6 +334,18 @@ export {
   type ProviderSettings,
   ProviderSettingsStore,
 } from "./providers/settings.ts";
+export {
+  buildReloadReport,
+  formatReloadReport,
+  type ReloadableApp,
+  ReloadFailedError,
+  type ReloadInput,
+  ReloadRefusedError,
+  type ReloadSnapshot,
+  reloadApplication,
+  snapshotApplication,
+  validateReloadConfig,
+} from "./reload.ts";
 export {
   type InstructionFile,
   ProjectContext,

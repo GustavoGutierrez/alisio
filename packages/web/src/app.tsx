@@ -10,22 +10,23 @@ import { Icon } from "./components/icons.tsx";
 import { Resizer } from "./components/layout/Resizer.tsx";
 import { Sidebar, searchRequest } from "./components/sidebar/Sidebar.tsx";
 import { StatsLine } from "./components/stats/StatsLine.tsx";
-import { TrajectoryTab } from "./components/trajectory/TrajectoryTab.tsx";
 import { Transcript } from "./components/transcript/Transcript.tsx";
 import { t } from "./i18n/index.ts";
 import {
+  activeTab,
   agentPickerOpen,
   agentsOpen,
+  announceAgent,
   announceAssertive,
   announcePolite,
   auth,
   btw,
+  changelogRequest,
   currentId,
   focusComposer,
   mobileSidebar,
   newSession,
   reloadRequired,
-  sessionTab,
   settingsOpen,
   streamStatus,
   toast,
@@ -58,70 +59,38 @@ const editable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-/** The settings modal is its own chunk, loaded the first time it opens. */
-function LazySettings() {
-  const [View, setView] = useState<ComponentType | undefined>();
+/**
+ * A component in its own chunk, imported the first time it renders (settings, agents, `/btw`,
+ * changelog, artifact panel, Trajectory and Memory tabs). `load` runs once per mount; props are passed through.
+ */
+function Lazy<P extends object>(props: { load: () => Promise<ComponentType<P>> } & P) {
+  const { load, ...rest } = props;
+  const [View, setView] = useState<ComponentType<P> | undefined>();
   useEffect(() => {
     let alive = true;
-    void import("./components/settings/SettingsModal.tsx").then((m) => {
-      if (alive) setView(() => m.SettingsModal);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return View ? <View /> : null;
-}
-
-/** The Agents window and the `/agents` picker are their own chunks, loaded on first open. */
-function LazyAgents(props: { picker?: boolean }) {
-  const [View, setView] = useState<ComponentType | undefined>();
-  useEffect(() => {
-    let alive = true;
-    const load = props.picker
-      ? import("./components/agents/AgentPicker.tsx").then((m) => m.AgentPicker)
-      : import("./components/agents/AgentsModal.tsx").then((m) => m.AgentsModal);
-    void load.then((view) => {
+    void load().then((view) => {
       if (alive) setView(() => view);
     });
     return () => {
       alive = false;
     };
-  }, [props.picker]);
-  return View ? <View /> : null;
-}
-
-/** The `/btw` side panel is its own chunk, loaded the first time a side question opens. */
-function LazyBtw() {
-  const [View, setView] = useState<ComponentType | undefined>();
-  useEffect(() => {
-    let alive = true;
-    void import("./components/btw/BtwPanel.tsx").then((m) => {
-      if (alive) setView(() => m.BtwPanel);
-    });
-    return () => {
-      alive = false;
-    };
   }, []);
-  return View ? <View /> : null;
+  return View ? <View {...(rest as unknown as P)} /> : null;
 }
+const loadSettings = () =>
+  import("./components/settings/SettingsModal.tsx").then((m) => m.SettingsModal);
+const loadAgents = () => import("./components/agents/AgentsModal.tsx").then((m) => m.AgentsModal);
+const loadPicker = () => import("./components/agents/AgentPicker.tsx").then((m) => m.AgentPicker);
+const loadBtw = () => import("./components/btw/BtwPanel.tsx").then((m) => m.BtwPanel);
+const loadChangelog = () =>
+  import("./components/changelog/ChangelogDialog.tsx").then((m) => m.ChangelogDialog);
+const loadTrajectory = () =>
+  import("./components/trajectory/TrajectoryTab.tsx").then((m) => m.TrajectoryTab);
+const loadMemory = () => import("./components/memory/MemoryTab.tsx").then((m) => m.MemoryTab);
+const loadArtifacts = () =>
+  import("./components/artifacts/ArtifactPanel.tsx").then((m) => m.ArtifactPanel);
 
 type PanelProps = { width?: number; narrow: boolean; expanded: boolean; inert: boolean };
-
-/** The artifact panel is its own chunk (renderers included), loaded the first time it opens. */
-function LazyArtifactPanel(props: PanelProps) {
-  const [View, setView] = useState<ComponentType<PanelProps> | undefined>();
-  useEffect(() => {
-    let alive = true;
-    void import("./components/artifacts/ArtifactPanel.tsx").then((m) => {
-      if (alive) setView(() => m.ArtifactPanel);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return View ? <View {...props} /> : null;
-}
 
 /**
  * The right slot (ADR-07): the Dock or the artifact panel, never both, behind one resize handle
@@ -151,7 +120,8 @@ function RightSlot(props: { expanded: boolean }) {
       {right === "dock" ? (
         <Dock {...(narrow ? {} : { width })} />
       ) : (
-        <LazyArtifactPanel
+        <Lazy<PanelProps>
+          load={loadArtifacts}
           {...(narrow ? {} : { width })}
           narrow={narrow}
           expanded={props.expanded && !narrow}
@@ -221,7 +191,13 @@ export function App() {
         <Header />
         {id ? (
           <>
-            {sessionTab.value === "trajectory" ? <TrajectoryTab /> : <Transcript />}
+            {activeTab() === "trajectory" ? (
+              <Lazy key="trajectory" load={loadTrajectory} />
+            ) : activeTab() === "memory" ? (
+              <Lazy key="memory" load={loadMemory} />
+            ) : (
+              <Transcript />
+            )}
             {approvals.length ? (
               <ApprovalPanel approvals={approvals} />
             ) : interactions[0] ? (
@@ -243,10 +219,13 @@ export function App() {
         )}
       </main>
       {id ? <RightSlot expanded={expanded} /> : null}
-      {btw.value && id ? <LazyBtw /> : null}
-      {settingsOpen.value ? <LazySettings /> : null}
-      {agentsOpen.value ? <LazyAgents /> : null}
-      {agentPickerOpen.value ? <LazyAgents picker /> : null}
+      {btw.value && id ? <Lazy load={loadBtw} /> : null}
+      {settingsOpen.value ? <Lazy load={loadSettings} /> : null}
+      {agentsOpen.value ? <Lazy load={loadAgents} /> : null}
+      {agentPickerOpen.value ? <Lazy load={loadPicker} /> : null}
+      {changelogRequest.value ? (
+        <Lazy load={loadChangelog} version={changelogRequest.value.version} />
+      ) : null}
       {toast.value ? (
         <div class={styles.toast} role="status">
           {toast.value}
@@ -254,6 +233,9 @@ export function App() {
       ) : null}
       <div class="sr-only" aria-live="polite">
         {announcePolite.value ? t("transcript.turnDone") : ""}
+      </div>
+      <div class="sr-only" aria-live="polite">
+        {announceAgent.value}
       </div>
       <div class="sr-only" aria-live="assertive">
         {announceAssertive.value ? t("approval.announce", { tool: announceAssertive.value }) : ""}

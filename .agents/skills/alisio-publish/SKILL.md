@@ -30,6 +30,23 @@ cd <REPO>
 git status --short          # confirmar árbol limpio o cambios intencionales
 ```
 
+### 0. CHANGELOG (antes del bump)
+
+`CHANGELOG.md` (raíz) es la fuente de `/changelog` en la TUI y la web. Solo entran cambios
+**visibles para el usuario** (nada de refactors, tests ni docs internas), cortos y en inglés.
+
+```bash
+cd <REPO>
+# 1. Renombra "## [Unreleased]" a "## [<versión del CLI>] - <AAAA-MM-DD>" y deja un nuevo
+#    "## [Unreleased]" vacío arriba. La versión es la del paquete `cli` (la que verá el usuario).
+# 2. Regenera los datos embebidos (módulo TS que viaja dentro de dist; lo comprueba un test):
+pnpm changelog:data
+git add CHANGELOG.md packages/core/src/changelog/data.ts
+```
+
+Sin entrada para la versión del CLI, `/changelog` muestra `Unreleased` y la línea de novedades
+tras actualizar no aparece. `pnpm build` también regenera los datos.
+
 ### 1. Bump manual de versiones (alpha)
 
 Identifica los paquetes afectados (sdk, core, cli, plugins) y sube cada uno en la cadena alpha:
@@ -49,7 +66,7 @@ for path, ver in bumps.items():
     d["version"] = ver
     open(path, "w").write(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 PY
-pnpm pack:check 2>&1 | tail -9   # tarballs limpios
+pnpm pack:check 2>&1 | tail -9   # tarballs limpios (el changelog viaja como dist/*.js)
 pnpm typecheck 2>&1 | tail -1
 ```
 

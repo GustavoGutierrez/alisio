@@ -14,12 +14,30 @@ import {
   agentModelCapabilities,
   agentModelLabels,
   agentModelOptions,
+  changelogNews,
+  describePermissionStatus,
   type ExternalDirectoryRequest,
+  formatChangelogMarkdown,
+  formatReloadReport,
   generateAgentDraft,
+  loadChangelog,
+  modeFromFlags,
   NOT_SANDBOXED,
+  nextAgent,
+  PERMISSION_MODE_TABLE,
+  PERMISSION_USAGE,
+  type PermissionMode,
+  type PermissionModeLabel,
+  parsePermissionCommand,
+  ReloadFailedError,
+  ReloadRefusedError,
+  reloadApplication,
   type SettableSettingKey,
+  selectEntries,
+  stateHome,
   toGrantWire,
   toRef,
+  validateReloadConfig,
 } from "@alisio/core";
 import type {
   AskQuestionsRequest,
@@ -109,6 +127,7 @@ import {
   Footer,
   Header,
   type HeaderInfo,
+  MarkdownPanel,
   QuestionPanel,
   Switch,
   setArtifactPathResolver,
@@ -118,6 +137,16 @@ import {
 import { ConnectInputPrompt } from "./connect-input.ts";
 import { bounded, EXIT_PENDING_CAP_MS, EXIT_SESSION_END_CAP_MS } from "./exit.ts";
 import { BRANCH_REFRESH_MS, createBranchCache } from "./git-branch.ts";
+import {
+  agentCycleHint,
+  isPermissionMode,
+  modeDisplay,
+  type PermissionMenuRow,
+  permissionMenuRows,
+  permissionTransition,
+  reloadGuard,
+  shiftTabDecision,
+} from "./modes.ts";
 import { cannotOpenMessage, openPath, revealPath } from "./open-path.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
 import { summarizeAnswers } from "./questions.ts";
@@ -164,6 +193,7 @@ import {
   visibleGroupedItems,
 } from "./state.ts";
 import { editorTheme, selectListTheme, style } from "./theme.ts";
+import { readViewerState, writeViewerState } from "./viewer-state.ts";
 
 const VERSION = loadVersion(import.meta.url);
 
@@ -300,7 +330,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
   let approve: (request: ApprovalRequest) => Promise<ApprovalDecision> = async () => "deny";
   let approveExternalDirectory: (request: ExternalDirectoryRequest) => Promise<ApprovalDecision> =
     async () => "deny";
-  const app = await createApplication({
+  // The options of every application this process builds: the first one and each `/reload`.
+  const appOptions: AppOptions = {
     builtins: BUILTIN_PLUGINS,
     builtinPrompts: BUILTIN_PROMPTS,
     reservedPromptNames: reservedCommandNames(),
@@ -308,7 +339,9 @@ export async function runTui(options: TuiOptions): Promise<void> {
     onEvent: (event) => dispatch(event),
     approve: (request) => approve(request),
     approveExternalDirectory: (request) => approveExternalDirectory(request),
-  });
+  };
+  // `let`: `/reload` swaps in a freshly built application (the session id and database persist).
+  let app = await createApplication(appOptions);
   let activeProvider = app.providerInfo;
   let session =
     options.session ?? app.store.create(app.workspace, app.provider.id, app.provider.model).id;
@@ -317,6 +350,16 @@ export async function runTui(options: TuiOptions): Promise<void> {
   let view: ViewState = initialViewState(app.store.get(session).model);
   if (options.session) view = { ...view, items: itemsFromHistory(app.store.messages(session)) };
   let pendingAttachments: PendingAttachment[] = [];
+  /**
+   * The permission mode label (`/permission`). Derived from the launch flags and only a LABEL until
+   * the user picks a mode: nothing is applied at startup, so the startup behavior is unchanged.
+   */
+  let permissionMode: PermissionModeLabel = modeFromFlags(options);
+  /** The user picked a mode (so a reload re-applies it); a flag-derived label never changes policy. */
+  let modePicked = false;
+  /** Agent chosen with Shift+Tab before (or without) the config write that persists it. */
+  let agentOverride: string | undefined;
+  let reloading = false;
 
   let modelList: Promise<ModelInfo[]> | undefined;
   /** Cached active-provider catalog for completion and context-window discovery. */
@@ -458,7 +501,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     return activeAgentCatalog(contributions);
   };
   const currentAgent = (): ActiveAgent =>
-    resolveActiveAgent(mainAgents(), app.config.agents.active);
+    resolveActiveAgent(mainAgents(), agentOverride ?? app.config.agents.active);
   const headerInfo = (): HeaderInfo => {
     const policy = app.runner.policy,
       ask = app.runner.approvals;
@@ -474,6 +517,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       branch: branchName,
       write: policy.write ? "on" : ask ? "ask" : "off",
       process: policy.process ? "on" : ask ? "ask" : "off",
+      mode: modeDisplay(permissionMode),
       mcp: app.mcpRuntimePermission() === "granted",
       readOnly: !!options.readOnly,
     };
@@ -536,6 +580,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // effort segment appears only when the active model advertises supported levels).
     () => ({
       agent: currentAgent().name,
+      mode: modeDisplay(permissionMode),
       model: modelDisplayName(view.model),
       provider: app.providers.get(activeProvider?.id ?? "")?.name,
       effort: currentEffort(),
@@ -1170,6 +1215,167 @@ export async function runTui(options: TuiOptions): Promise<void> {
         () => closePicker(),
       ),
     );
+  };
+  // ---- Permission modes, agent cycle, /reload and /changelog (modes spec, Phase 1) ----------
+  /** Markdown status of the current permission mode and what actually runs without asking. */
+  const permissionStatusText = () => {
+    const policy = app.runner.policy;
+    return [
+      describePermissionStatus({
+        mode: permissionMode,
+        policy,
+        approvals: app.runner.approvals,
+      }),
+      ...(permissionMode === "ask" && policy.external
+        ? [
+            "",
+            "Note: external (network, MCP, plugin tools) was already allowed at startup because plugins or MCP are enabled; pick a mode to set it explicitly.",
+          ]
+        : []),
+    ].join("\n");
+  };
+  /** Applies a permission mode between turns: it resets "allow for this session" widenings. */
+  const setPermissionMode = (target: PermissionMode) => {
+    if (busy) return flashHint("A turn is running: wait for it to finish before changing the mode");
+    const result = permissionTransition(permissionMode, target);
+    if (!result.ok) return notice(result.message);
+    app.runner.setPolicy(PERMISSION_MODE_TABLE[target].policy);
+    permissionMode = target;
+    modePicked = true;
+    notice(result.message);
+    if (result.warning) notice(result.warning);
+    flashHint(`Permission mode: ${target}`);
+    tui.requestRender();
+  };
+  /** `/permission`: ONE menu with the three modes, the status and the saved permissions. */
+  const openPermissionMenu = () => {
+    const rows = permissionMenuRows(permissionMode);
+    showPicker(
+      new Picker(
+        "Permission mode",
+        rows.map((row) => ({ value: row.value, label: row.label, description: row.description })),
+        (item) => {
+          const choice = item.value as PermissionMenuRow["value"];
+          if (choice === "status") {
+            closePicker();
+            return info(permissionStatusText());
+          }
+          if (choice === "manage") {
+            closePicker();
+            return managePermissions();
+          }
+          if (choice === "full" && permissionMode !== "locked")
+            return showPicker(
+              new Picker(
+                "Enable full access?",
+                [
+                  { value: "yes", label: "Yes, enable full access" },
+                  { value: "no", label: "Cancel" },
+                ],
+                (confirm) => {
+                  closePicker();
+                  if (confirm.value === "yes") setPermissionMode("full");
+                },
+                () => closePicker(),
+                false,
+                "Writes, commands and network calls will run without asking. This is not a sandbox: anything the agent runs has your user's permissions.",
+              ),
+            );
+          closePicker();
+          if (isPermissionMode(choice)) setPermissionMode(choice);
+        },
+        () => closePicker(),
+        false,
+        "ask: every effect asks · auto: workspace edits run, commands and network ask · full access: nothing asks (not a sandbox). Modes apply from the next tool call and reset session approvals.",
+      ),
+    );
+  };
+  /** Shift+Tab: the next main agent (build, plan, then custom ones); applies from the next prompt. */
+  const cycleAgent = async () => {
+    const next = nextAgent(mainAgents(), currentAgent().id, 1);
+    if (!next) return;
+    const previous = currentAgent().name;
+    // Set synchronously so a quick second press continues from this agent, not the stale config.
+    agentOverride = next.id;
+    flashHint(agentCycleHint(next, view.model), 4000);
+    if (!options.readOnly) {
+      try {
+        await app.updateSetting("agents.active", next.id);
+        if (agentOverride === next.id) agentOverride = undefined;
+      } catch (cause) {
+        agentOverride = undefined;
+        flashHint(`Could not switch to ${next.name} (still ${previous})`);
+        return error(cause);
+      }
+    }
+    refreshEffort();
+    tui.requestRender();
+  };
+  /** `/changelog [version]`: a scrollable panel with the shipped, offline changelog. */
+  const showChangelog = (args: string) => {
+    const selected = selectEntries(loadChangelog(), args ? { version: args } : {});
+    if (!selected.found)
+      return notice(
+        `No changelog entry for version ${args}. Run /changelog to see the latest releases.`,
+      );
+    showPicker(
+      new MarkdownPanel(
+        `What's new · Alisio ${VERSION}${args ? ` · ${args}` : ""}`,
+        formatChangelogMarkdown(selected.entries),
+        closePicker,
+        () => Math.max(6, (process.stdout.rows ?? 30) - 14),
+      ),
+    );
+  };
+  /** After an upgrade: ONE discreet line (never on a first run), then remember the version. */
+  const announceNews = async () => {
+    const dir = stateHome();
+    const news = changelogNews({
+      entries: loadChangelog(),
+      current: VERSION,
+      lastSeen: (await readViewerState(dir)).lastSeenVersion,
+    });
+    if (news.show)
+      notice(
+        `Alisio updated to ${VERSION} · ${news.versions.length} new ${news.versions.length === 1 ? "entry" : "entries"} · /changelog`,
+      );
+    if (news.record && !options.readOnly) await writeViewerState(dir, { lastSeenVersion: VERSION });
+  };
+  /**
+   * `/reload`: refused mid-turn; validates the configuration, builds a NEW application next to the
+   * current one and only then swaps, so a broken config leaves this session untouched.
+   */
+  const reloadAll = async () => {
+    const guard = () =>
+      reloadGuard({
+        busy,
+        runningChildren: panelNodes().filter((node) => node.status === "running").length,
+        queuedPrompts: !!interactiveQueue.current(),
+      });
+    const reason = guard();
+    if (reason) return notice(reason);
+    reloading = true;
+    flashHint("Reloading configuration…", 60_000);
+    try {
+      const report = await reloadApplication({
+        current: app,
+        busy: guard,
+        validate: () => validateReloadConfig(appOptions),
+        create: () => createApplication(appOptions),
+        swap: (next) => rebindApplication(next),
+      });
+      editor.setAutocompleteProvider(buildSlashCompletionProvider());
+      info(formatReloadReport(report));
+      for (const failure of app.mcpStartupFailures()) notice(failure);
+    } catch (cause) {
+      if (cause instanceof ReloadRefusedError) notice(cause.message);
+      else if (cause instanceof ReloadFailedError)
+        error(new Error(`Reload failed; the current session is unchanged: ${cause.message}`));
+      else error(cause);
+    } finally {
+      reloading = false;
+      flashHint("Reload finished", 1500);
+    }
   };
   const runPrompt = (display: string, prompt: string, persistDisplay?: string) => {
     // Any pending clipboard-pasted images ride along with the very next turn, then are cleared.
@@ -2590,7 +2796,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       "- `/init` (above) writes AGENTS.md; the shell command `alisio setup` only scaffolds `.alisio/config.json`",
       "- `/command plugin.id:name args` — run a plugin command",
       "",
-      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents",
+      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents · Shift+Tab cycle the main agents (build, plan, your own)",
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
@@ -2636,7 +2842,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       tui.requestRender();
     }
   };
-  const commandCatalog = new CommandCatalog(app);
+  let commandCatalog = new CommandCatalog(app);
   const mutating = new Set([
     "connect",
     "model",
@@ -2647,10 +2853,16 @@ export async function runTui(options: TuiOptions): Promise<void> {
     "compact",
     "clear",
     "resume",
+    "reload",
   ]);
   const handleSubmit = async (raw: string) => {
     const text = raw.trim();
     if (!text) return;
+    if (reloading) {
+      editor.setText(raw);
+      flashHint("Reloading configuration: wait a moment");
+      return;
+    }
     editor.addToHistory(raw);
     const parsed = parseCommand(text);
     const name = parsed ? resolveCommand(parsed.name) : undefined;
@@ -2733,8 +2945,17 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return await sideQuestion(parsed.args);
         case "artifacts":
           return browseArtifacts(parsed.args);
-        case "permissions":
-          return managePermissions();
+        case "permission": {
+          const action = parsePermissionCommand(parsed.args);
+          if (action.type === "menu") return openPermissionMenu();
+          if (action.type === "status") return info(permissionStatusText());
+          if (action.type === "set") return setPermissionMode(action.mode);
+          return notice(PERMISSION_USAGE);
+        }
+        case "reload":
+          return await reloadAll();
+        case "changelog":
+          return showChangelog(parsed.args);
         case "ask": {
           if (!parsed.args) return notice("Usage: /ask <question>");
           return await runPrompt(
@@ -2859,7 +3080,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   editor.setAutocompleteProvider(buildSlashCompletionProvider());
 
   // Interactive services for plugins: choices (e.g. worktree isolation) and session views.
-  app.plugins.setInteractiveUI({
+  const interactiveUI: Parameters<typeof app.plugins.setInteractiveUI>[0] = {
     // No session/label/signal on SelectRequest: queued FIFO like everything else, never withdrawn
     // early. Routed through the same queue as approve/askQuestions since plugin-subagents can call
     // `select` concurrently with an approval, which previously raced on the shared picker slot.
@@ -2900,7 +3121,24 @@ export async function runTui(options: TuiOptions): Promise<void> {
       openChild(sessionId);
       return true;
     },
-  });
+  };
+  app.plugins.setInteractiveUI(interactiveUI);
+  /** `/reload`: moves every surface binding to the new application (the old one is closed after). */
+  const rebindApplication = (next: typeof app) => {
+    app = next;
+    commandCatalog = new CommandCatalog(app);
+    activeProvider = app.providerInfo;
+    modelList = undefined;
+    modelCatalog = new Map();
+    agentModels = undefined;
+    app.plugins.onStatusChange = () => tui.requestRender();
+    app.plugins.setInteractiveUI(interactiveUI);
+    // A mode the user picked survives the reload; a label that only came from flags is re-derived.
+    if (modePicked && permissionMode !== "custom" && permissionMode !== "locked")
+      app.runner.setPolicy(PERMISSION_MODE_TABLE[permissionMode].policy);
+    primeModels();
+    refreshEstimate();
+  };
   const panelKey = (data: string): string | undefined => {
     if (matchesKey(data, Key.up)) return "up";
     if (matchesKey(data, Key.down)) return "down";
@@ -2941,6 +3179,22 @@ export async function runTui(options: TuiOptions): Promise<void> {
   };
   let lastCtrlC = 0;
   tui.addInputListener((data) => {
+    // Shift+Tab cycles the main agents. Input listeners run before the focused editor, so this is
+    // the one place that sees the key; a picker, the autocomplete list or the agents panel keep it.
+    const cycle = shiftTabDecision(data, {
+      busy,
+      picker: !!picker,
+      autocomplete: editor.isShowingAutocomplete(),
+      panelFocused: panelState.focus !== "editor",
+    });
+    if (cycle.type === "blocked") {
+      flashHint(cycle.hint);
+      return { consume: true };
+    }
+    if (cycle.type === "cycle") {
+      void cycleAgent();
+      return { consume: true };
+    }
     if (!picker && panelState.focus === "editor") {
       if (matchesKey(data, Key.ctrl("v"))) {
         void pasteImage();
@@ -3124,6 +3378,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     }
     tui.start();
     for (const failure of app.mcpStartupFailures()) notice(failure);
+    void announceNews().catch(() => {});
     sync();
     refreshEstimate();
     // Discover context windows in the background; failures only mean "unknown".

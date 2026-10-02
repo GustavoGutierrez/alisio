@@ -12,11 +12,17 @@ import type {
   MemoryType,
   SaveAction,
   SearchOptions,
+  SessionRecord,
+  SessionRecordsQuery,
   SessionSummary,
 } from "./types.ts";
 
 /** Memory schema versions live at 100+ so the file can be shared with the session store. */
 const MEMORY_SCHEMA_VERSION = 100;
+/** Adds `injected_context` (what the plugin put in a chat when it started). */
+const INJECTED_CONTEXT_VERSION = 101;
+/** Largest context text kept per session (the 20 000-token budget at 4 characters per token). */
+export const MAX_INJECTED_CONTEXT = 80_000;
 export const MAX_OBSERVATION_LENGTH = 50_000;
 const TRUNCATED = "... [truncated]";
 const SNIPPET = 300;
@@ -34,6 +40,7 @@ const cap = (text: string, max: number) =>
 interface Row {
   id: number;
   session_id: string | null;
+  tool_name: string | null;
   type: MemoryType;
   title: string;
   content: string;
@@ -77,11 +84,23 @@ export class SQLiteMemoryStore implements MemoryStore {
     );
     this.migrate();
   }
+  private applied(version: number): boolean {
+    return !!this.db.prepare("SELECT 1 FROM schema_migrations WHERE version=?").get(version);
+  }
   private migrate(): void {
-    if (
-      this.db.prepare("SELECT 1 FROM schema_migrations WHERE version=?").get(MEMORY_SCHEMA_VERSION)
-    )
-      return;
+    if (!this.applied(MEMORY_SCHEMA_VERSION)) this.migrateBase();
+    if (!this.applied(INJECTED_CONTEXT_VERSION))
+      this.db.transaction(() => {
+        this.db.exec(
+          `CREATE TABLE IF NOT EXISTS injected_context(session_id TEXT PRIMARY KEY, project TEXT NOT NULL,
+             content TEXT NOT NULL, created_at INTEGER NOT NULL);`,
+        );
+        this.db
+          .prepare("INSERT OR IGNORE INTO schema_migrations VALUES(?)")
+          .run(INJECTED_CONTEXT_VERSION);
+      });
+  }
+  private migrateBase(): void {
     this.db.transaction(() => {
       this.db.exec(`
           CREATE TABLE IF NOT EXISTS observations(id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,6 +390,102 @@ export class SQLiteMemoryStore implements MemoryStore {
     return row
       ? { project: row.project, session: row.id, content: row.summary, createdAt: row.ended_at }
       : undefined;
+  }
+  recordsOfSession(
+    project: string,
+    session: string,
+    query: SessionRecordsQuery,
+  ): { items: SessionRecord[]; total: number; hasMore: boolean } {
+    const like = (text: string) => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+    const filters = [
+      "o.session_id=?",
+      VISIBLE,
+      ...(query.type ? ["o.type=?"] : []),
+      ...(query.text
+        ? [
+            "(o.title LIKE ? ESCAPE '\\' OR o.content LIKE ? ESCAPE '\\' OR COALESCE(o.topic_key,'') LIKE ? ESCAPE '\\')",
+          ]
+        : []),
+    ];
+    const params: Array<string | number> = [
+      session,
+      project,
+      ...(query.type ? [query.type] : []),
+      ...(query.text ? [like(query.text), like(query.text), like(query.text)] : []),
+    ];
+    const total = (
+      this.db
+        .prepare(`SELECT COUNT(*) AS n FROM observations o WHERE ${filters.join(" AND ")}`)
+        .get(...params) as { n: number }
+    ).n;
+    const after = query.after;
+    const page = after
+      ? [
+          ...filters,
+          "(o.pinned<? OR (o.pinned=? AND o.updated_at<?) OR (o.pinned=? AND o.updated_at=? AND o.id<?))",
+        ]
+      : filters;
+    const pageParams = after
+      ? [
+          ...params,
+          after.pinned,
+          after.pinned,
+          after.updatedAt,
+          after.pinned,
+          after.updatedAt,
+          after.id,
+        ]
+      : params;
+    const limit = Math.min(Math.max(query.limit, 1), 50);
+    const rows = this.db
+      .prepare(
+        `SELECT o.* FROM observations o WHERE ${page.join(" AND ")}
+         ORDER BY o.pinned DESC, o.updated_at DESC, o.id DESC LIMIT ?`,
+      )
+      .all(...pageParams, limit + 1) as Row[];
+    return {
+      total,
+      hasMore: rows.length > limit,
+      items: rows.slice(0, limit).map(
+        (r): SessionRecord => ({
+          id: r.id,
+          type: r.type,
+          title: r.title,
+          content: r.content,
+          scope: r.scope,
+          ...(r.topic_key ? { topicKey: r.topic_key } : {}),
+          ...(r.tool_name ? { source: r.tool_name } : {}),
+          pinned: !!r.pinned,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          revisionCount: r.revision_count,
+          duplicateCount: r.duplicate_count,
+        }),
+      ),
+    };
+  }
+  summaryRow(project: string, session: string) {
+    const row = this.db
+      .prepare(
+        "SELECT summary, ended_at FROM memory_sessions WHERE id=? AND project=? AND summary IS NOT NULL",
+      )
+      .get(session, project) as { summary: string; ended_at: number | null } | null;
+    return row ? { content: row.summary, updatedAt: row.ended_at ?? 0 } : undefined;
+  }
+  saveInjectedContext(project: string, session: string, content: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO injected_context(session_id,project,content,created_at) VALUES(?,?,?,?)
+         ON CONFLICT(session_id) DO UPDATE SET project=excluded.project, content=excluded.content,
+           created_at=excluded.created_at`,
+      )
+      .run(session, project, cap(content, MAX_INJECTED_CONTEXT), this.now());
+  }
+  injectedContext(project: string, session: string) {
+    const row = this.db
+      .prepare("SELECT content, created_at FROM injected_context WHERE session_id=? AND project=?")
+      .get(session, project) as { content: string; created_at: number } | null;
+    return row ? { content: row.content, injectedAt: row.created_at } : undefined;
   }
   /** Session summary of one session, used to confirm an archive write. */
   summaryOf(session: string): string | undefined {

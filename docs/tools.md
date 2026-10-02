@@ -313,6 +313,27 @@ limited to 1 000 rows and `analysis.data.queryTimeoutMs`. Both show their tables
 table renderer. `python_run { inputs: [{ "datasetId": … }] }` hands the dataset to a script. XLSX is
 the one format that needs Python 3.10+ (a fixed, standard-library helper of Alisio, not model code).
 
+## Permission modes {#permission-modes}
+
+The TUI (`/permission`) and the web UI (the permissions menu and `/permission`) share three
+**permission modes**. One table in `@alisio/core` maps each mode to the policy of the run, and the
+web presets are derived from it:
+
+| Mode | `write` | `process` | `external` | Web preset |
+| --- | --- | --- | --- | --- |
+| `ask` | asks | asks | asks | `ask` |
+| `auto` | allowed | asks | asks | `workspace-write` |
+| `full` | allowed | allowed | allowed | `full-access` |
+
+`auto` has fixed rules and no AI classifier: edits inside the workspace run, commands, network and
+external tools still ask. A mode only chooses which **effects** run without asking; paths outside
+the workspace still ask per directory and the Python analysis pre-grant (`--allow-analysis`) is not
+part of any mode. `--read-only` removes the approval handler, so modes cannot be selected there. In
+`alisio serve` the launch flags are the ceiling: an effect they do not allow keeps asking whatever
+the mode. Plan mode is enforced by the runner, not by the prompt: a read-only agent has no write,
+process or external tools whatever mode is selected. See [TUI](/tui#permission-modes) and
+[Web UI](/web#permission-modes).
+
 ## Not a sandbox
 
 ::: danger

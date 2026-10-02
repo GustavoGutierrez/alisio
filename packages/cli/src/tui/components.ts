@@ -38,6 +38,7 @@ import {
   type QuestionSpec,
   reduceQuestions,
 } from "./questions.ts";
+import { scrollWindow } from "./scroll.ts";
 import {
   type ContextBudget,
   contextLevel,
@@ -506,6 +507,8 @@ export interface HeaderInfo {
   branch?: string;
   write: PermissionState;
   process: PermissionState;
+  /** Permission mode shown as `mode:<name>` next to the effect states. */
+  mode?: string;
   mcp: boolean;
   readOnly: boolean;
 }
@@ -550,6 +553,15 @@ export class Header implements Component {
     const perms: Painted[] = i.readOnly
       ? [{ text: "read-only", priority: 10, paint: style.red }]
       : [
+          ...(i.mode
+            ? [
+                {
+                  text: `mode:${i.mode}`,
+                  priority: 10,
+                  paint: i.mode === "full" || i.mode === "custom" ? style.red : style.green,
+                },
+              ]
+            : []),
           permission("write", i.write, 10),
           permission("process", i.process, 10),
           {
@@ -665,6 +677,7 @@ export class Footer implements Component {
           .map((part) =>
             ({
               agent: (t: string) => style.bold(style.magenta(t)),
+              mode: (t: string) => (/full|custom/.test(t) ? style.red(t) : style.green(t)),
               model: (t: string) => style.bold(style.cyan(t)),
               provider: style.magenta,
               effort: style.yellow,
@@ -1374,6 +1387,58 @@ export class QuestionPanel implements Component {
  * spinner, then the answer rendered as Markdown like assistant text, scrollable, with ←/→ through
  * the session's earlier side answers. `onClose` runs on Esc (the app cancels a pending question).
  */
+/**
+ * A scrollable Markdown panel in the picker slot (`/changelog`): Up/Down and PgUp/PgDn scroll,
+ * Home/End jump, Esc or q closes. Pure rendering: the text and the height come from the caller.
+ */
+export class MarkdownPanel implements Component {
+  private scroll = 0;
+  private cache?: { width: number; lines: string[] };
+  constructor(
+    private readonly title: string,
+    private readonly markdown: string,
+    private readonly onClose: () => void,
+    private readonly height: () => number,
+  ) {}
+  invalidate(): void {
+    this.cache = undefined;
+  }
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.escape) || data === "q") return this.onClose();
+    const page = Math.max(1, this.height());
+    if (matchesKey(data, Key.up)) this.scroll -= 1;
+    else if (matchesKey(data, Key.down)) this.scroll += 1;
+    else if (matchesKey(data, Key.pageUp)) this.scroll -= page;
+    else if (matchesKey(data, Key.pageDown)) this.scroll += page;
+    else if (matchesKey(data, Key.home)) this.scroll = 0;
+    else if (matchesKey(data, Key.end)) this.scroll = Number.MAX_SAFE_INTEGER;
+  }
+  render(width: number): string[] {
+    const inner = Math.max(1, width - 2);
+    if (this.cache?.width !== inner)
+      this.cache = {
+        width: inner,
+        lines: new Markdown(this.markdown, 0, 0, markdownTheme, markdownDefaultTextStyle, {
+          transform: markdownTransform,
+        }).render(inner),
+      };
+    const view = scrollWindow(this.cache.lines, this.scroll, Math.max(3, this.height()));
+    this.scroll = view.scroll;
+    const bar = style.gray("│");
+    return fit(
+      [
+        "",
+        style.bold(style.yellow(this.title)),
+        ...(view.above ? [`${bar} ${style.dim("↑ more")}`] : []),
+        ...view.lines.map((line) => `${bar} ${line}`),
+        ...(view.below ? [`${bar} ${style.dim("↓ more")}`] : []),
+        style.dim(`  ${view.above || view.below ? "↑/↓ PgUp/PgDn scroll · " : ""}Esc close`),
+      ],
+      width,
+    );
+  }
+}
+
 export class BtwPanel implements Component {
   private markdown?: { id: string; width: number; lines: string[] };
   constructor(

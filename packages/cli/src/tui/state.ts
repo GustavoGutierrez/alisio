@@ -432,12 +432,14 @@ export function effortPickerItems(
 }
 
 /** Role of a status-line identity part; the renderer maps each role to a distinct color. */
-export type IdentityRole = "agent" | "model" | "provider" | "effort";
+export type IdentityRole = "agent" | "mode" | "model" | "provider" | "effort";
 export interface IdentityPart extends Segment {
   role: IdentityRole;
 }
 export interface IdentityInput {
   agent: string;
+  /** Permission mode (`ask`, `auto`, `full`, `custom`, `read-only`); omitted when unknown. */
+  mode?: string;
   model: string;
   provider?: string;
   effort?: string;
@@ -451,6 +453,8 @@ export interface IdentityInput {
 export function identityParts(input: IdentityInput): IdentityPart[] {
   const parts: IdentityPart[] = [
     { text: `agent: ${input.agent}`, priority: 10, role: "agent" },
+    // Between the agent and the model: it drops after the effort and the provider, before the model.
+    ...(input.mode ? [{ text: `mode: ${input.mode}`, priority: 8.5, role: "mode" as const }] : []),
     { text: input.model || "not connected", priority: 9, role: "model" },
   ];
   if (input.provider) parts.push({ text: input.provider, priority: 8, role: "provider" });

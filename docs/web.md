@@ -61,8 +61,8 @@ becomes a drawer opened from the header.
 **Header.** Click the title to rename the session (untitled sessions show their first prompt). The
 badge shows the agent and the permission preset. **Session log** downloads the session as JSON
 Lines: every durable event in the `alisio run --json` format, then one `{"type":"message"}` line per
-stored message. The panel icon at the right opens the files panel (below). The **Conversation** and
-**Trajectory** tabs switch the main view.
+stored message. The panel icon at the right opens the files panel (below). The **Conversation**,
+**Trajectory** and, while the memory plugin is enabled, **Memory** tabs switch the main view.
 
 **Conversation.** Your messages appear on the right with a copy button. The agent's work appears as
 one-line rows: `Think · …` for reasoning, `Context injection · AGENTS.md`, and one row per tool call
@@ -113,6 +113,11 @@ name followed by the plugin's name as a tag (for example `Test report` · `Smoke
 start time, turns and duration per run, and one row per event with its time, turn, type, a short
 summary and its duration when it has one. It updates as events arrive; older runs sit behind
 **Show earlier runs**.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/trajectory_web_ui.webp" alt="The Trajectory tab listing the durable events of a session (tool_started, tool_completed, turn_completed, artifact_published, memory_save) while an executive sales dashboard is open in the artifact panel on the right." width="1833" height="986" loading="lazy" decoding="async" />
+  <figcaption>The Trajectory tab: one row per durable event, with an artifact open in the side panel.</figcaption>
+</figure>
 
 **Files panel.** The panel icon in the header opens a panel on the right (a bottom sheet below
 900 px) with three tabs. **Files** browses the workspace lazily, 1 000 entries at a time, hiding
@@ -273,18 +278,90 @@ with the same request id never starts a second run.
 A session that another Alisio process is using (for example the TUI) is reported as locked and is
 read-only in the web until that process releases it.
 
-Each session has a permission preset. Effects the launch flags do not allow keep asking, whatever
-the preset:
+Each session has a permission preset, which is also its permission mode (`ask`, `auto` or `full`,
+see [Permission modes](#permission-modes)). Effects the launch flags do not allow keep asking,
+whatever the preset:
 
-| Preset | Allowed without asking | Other effects |
-| --- | --- | --- |
-| `read-only` | reads | denied |
-| `ask` | reads | ask for approval |
-| `workspace-write` (default) | reads, writes | ask for approval |
-| `full-access` | reads, writes, processes, network | ask for approval |
+| Preset | Mode | Allowed without asking | Other effects |
+| --- | --- | --- | --- |
+| `read-only` | none | reads | denied |
+| `ask` | `ask` | reads | ask for approval |
+| `workspace-write` (default) | `auto` | reads, writes | ask for approval |
+| `full-access` | `full` | reads, writes, processes, network | ask for approval |
 
 "Allow for session" in an approval widens only that session, never the other sessions of the same
 workspace.
+
+### Agent selector and Shift+Tab {#agent-cycle}
+
+The composer toolbar shows the active agent (**Agent: build**) next to the permissions menu. Open
+it to pick any main agent; the choice is stored on the session and applies from the next prompt.
+**Shift+Tab** with the focus in the message box cycles the same list: `build`, `plan`, then your
+own primary agents by name, wrapping around. The shortcut is ignored while the `/` palette is open,
+during an IME composition and with any other modifier, and a screen reader announces the new agent.
+
+Accessibility trade-off: Shift+Tab normally moves the focus backwards, so intercepting it in the
+message box changes what keyboard users expect there. The agent selector is the accessible path
+(reach it with Tab) and is always available; the shortcut only acts while the focus is in the
+message box, and everywhere else Shift+Tab keeps its usual meaning. Cycling is allowed during a
+turn because it only stores the next agent.
+
+### Permission modes {#permission-modes}
+
+`/permission` (also `/permissions`) opens the permissions popover from the header: three radio
+options, **Ask**, **Auto** and **Full access**, the status of the session and **Manage saved
+permissions…**, which shows the saved grants (for example Python analysis allowed for this session)
+with **Revoke**. Choosing **Full access** asks for a confirmation that says it is not a sandbox. A
+mode the server cannot offer (its launch flags are the ceiling, or it runs with `--read-only`) is
+listed as unavailable with the reason. `/permission ask`, `/permission auto`, `/permission full`
+and `/permission status` run without opening the popover and answer in the conversation; the
+permissions menu of the composer keeps the four presets.
+
+### `/reload` and `/changelog` {#reload-and-changelog}
+
+`/reload` re-reads the configuration, agents, skills, prompt templates and MCP servers of the
+session's workspace. It is refused (`409`) while the workspace has runs. The server validates the
+configuration and builds the new application next to the current one before swapping, so a broken
+file changes nothing and the error says why. The conversation shows the report (what changed per
+area and what needs a restart, such as already imported plugin code), a toast confirms it and open
+palettes and settings pages refresh through `catalog_changed`. `/changelog [version]` opens a
+dialog with the shipped changelog, which works offline. After an upgrade one discreet toast says so;
+the last seen version is kept in the browser's `localStorage` and nothing breaks when storage is
+blocked. Both commands are interactive only: `alisio run` is unchanged.
+
+### Memory tab {#memory-tab}
+
+While the built-in [memory plugin](/memory#web-tab) is enabled, a **Memory** tab appears next to
+**Conversation** and **Trajectory**. It shows what the plugin holds for the **open chat**, read-only,
+in three sections:
+
+- **Saved in this chat**: the memories saved while this chat was open (by the model, by compaction
+  or by the end-of-session summary), pinned first and then newest. Filter by type, search title,
+  content and topic, and press **Load more** to read 20 at a time. Each entry shows its type and
+  title, a summary of its content (**Show more** / **Show less**), when it was updated, where it
+  came from and the raw record under **Details**.
+- **Session summary**: the summary the plugin stored for this chat (one per session; compaction
+  and the end-of-session summary overwrite it).
+- **Context loaded**: the memory context the plugin added when this chat started, which is what the
+  model saw first.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/memory_tab_web_ui.webp" alt="The Memory tab of a chat: the Saved in this chat section shows 20 of 27 memories with a type filter and a search box, a pinned entry first, and each entry with its type, title, content summary, update time and source." width="1280" height="900" loading="lazy" decoding="async" />
+  <figcaption>The Memory tab: the memories saved in this chat, pinned first, with filter, search and Load more.</figcaption>
+</figure>
+
+Each section loads, fails and retries on its own. Nothing updates live: **Refresh** reloads the
+three sections and keeps your filters, and memories saved while you browse appear after a refresh
+(the list never repeats or skips an entry while you page). Switching chats reloads the tab and never
+shows another chat's data. The tab exists only while the plugin is enabled: turning it off in
+**Settings → Plugins** removes the tab and returns you to **Conversation**. An empty chat shows
+**No memory stored for this chat yet**.
+
+Memory can hold sensitive project data. The tab is served by the same authenticated session routes as the conversation
+(`GET /api/sessions/:sid/views/memory/…`, see [plugin data views](/plugins#data-views)) and shows it
+to whoever has this server's session cookie. It is a view: pinning and forgetting stay in the TUI
+(`/memory`) and the model's tools. How each section is sourced, and its limits, are in
+[Memory](/memory#web-tab).
 
 ### Python analysis and artifacts {#artifacts}
 
@@ -319,6 +396,11 @@ panel (opening one closes the other):
 - **Copy to workspace…** asks for a folder and runs the `artifact_export` tool in the session: the
   usual write approval applies, and the copied files appear in **Changes**. `/artifacts [filter]`
   opens the panel with its menu.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/dashboard_generated.webp" alt="An executive sales dashboard generated by Alisio in the artifact panel: seller ranking, sales by channel, customer segments and order status." width="1835" height="990" loading="lazy" decoding="async" />
+  <figcaption>A generated executive dashboard in the artifact panel (Spanish interface).</figcaption>
+</figure>
 
 Dashboards run in an iframe with `sandbox="allow-scripts allow-downloads"` (never
 `allow-same-origin`), served from `/artifact-view/<token>/…` with a signed link that expires after
@@ -362,6 +444,11 @@ without Python) turns it into an error with the reason. Sending the message adds
 what you typed with the chips; a chip opens the table in the right panel. Data alone sends a default
 request to look at it.
 
+<figure class="doc-shot">
+  <img src="./assets/web-ui/Preview_of_tabular_data_in_CSV_and_Excel.webp" alt="The table viewer showing a 300-row CSV with its filter box and copy and download buttons, next to the attached-dataset chip in the conversation." width="1831" height="980" loading="lazy" decoding="async" />
+  <figcaption>The table viewer with a 300-row CSV and the attached-data chip in the chat (Spanish interface).</figcaption>
+</figure>
+
 The **table viewer** (`SpreadsheetView`) also opens spreadsheet artifacts (CSV, TSV, XLSX), which are
 ingested the first time they are previewed:
 
@@ -394,6 +481,7 @@ GET  /api/sessions                     POST /api/sessions            GET|PATCH /
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/sessions/:sid/views/:plugin/:view?<params>   read-only data view of an enabled plugin
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel
 GET  /api/approvals                    POST /api/approvals/:aid      POST /api/interactions/:iid
@@ -415,10 +503,15 @@ GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}
 GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}
+GET  /api/changelog?version=&lastSeen= POST /api/workspaces/:wid/reload   409 runs_active while it has runs
 GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, provider, values, model}
 PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-only
 POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
+
+Plugin data views answer `404` for an unknown session, plugin or view or a disabled plugin, `400`
+for invalid parameters and `view_failed` (502), `view_too_large` (502) or `view_timeout` (504) when
+the view fails, answers more than 1 MiB or takes longer than 5 seconds.
 
 Dataset uploads end with a `dataset_ready` or `dataset_failed` frame to the session's stream. Data
 errors use the codes `dataset_unsupported` (415), `query_rejected` (400) and `query_timeout` (408).
@@ -446,6 +539,8 @@ protocol version is reported by `/api/health` and in the stream's first frame.
 - The standalone binary serves the API only; the web UI assets ship with the npm package.
 - The web UI keeps command output, notices and reasoning only while the page is open; a reload
   rebuilds the conversation from stored messages.
+- Shift+Tab cycles agents only from the message box (see [Agent selector](#agent-cycle)); the
+  changelog is English-only and `/reload` cannot reload plugin code that was already imported.
 - The files panel shows the workspace only: directories added with `--add-dir` are not browsable,
   symbolic links are listed but never followed (even when they point inside the workspace), and
   `.gitignore` filtering needs `git` on `PATH`. **Changes** only knows files written through

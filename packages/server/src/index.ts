@@ -38,6 +38,7 @@ import {
 import { registerArtifactRoutes } from "./routes/artifacts.ts";
 import { registerBlobRoutes } from "./routes/blobs.ts";
 import { registerCapabilityRoutes } from "./routes/capabilities.ts";
+import { registerChangelogRoutes } from "./routes/changelog.ts";
 import { registerCommandRoutes } from "./routes/commands.ts";
 import { registerDatasetRoutes } from "./routes/datasets.ts";
 import { registerEventRoutes } from "./routes/events.ts";
@@ -45,6 +46,7 @@ import { registerFileRoutes } from "./routes/files.ts";
 import { registerFolderRoutes } from "./routes/folders.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
+import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
@@ -117,6 +119,8 @@ export interface ServerOptions {
    * tests. Always off when the server is bound for remote access.
    */
   folderPicker?: FolderPicker;
+  /** Limits of plugin data views (`GET /api/sessions/:sid/views/…`): 5 s and 1 MiB by default. */
+  views?: { timeoutMs?: number; maxBytes?: number };
 }
 
 export interface RunningServer {
@@ -316,6 +320,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerWorkspaceRoutes(router, { workspaces, catalog, scheduler });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerSessionViewRoutes(router, { catalog, sessions });
+  registerPluginViewRoutes(router, {
+    sessions,
+    workspaces,
+    logger,
+    ...(options.views?.timeoutMs !== undefined ? { timeoutMs: options.views.timeoutMs } : {}),
+    ...(options.views?.maxBytes !== undefined ? { maxBytes: options.views.maxBytes } : {}),
+  });
   registerFileRoutes(router, { workspaces, catalog, sessions });
   registerBlobRoutes(router, { blobs });
   registerArtifactRoutes(router, {
@@ -339,9 +350,6 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     toSession: (sessionId, frame) => hub.toSession(sessionId, frame),
   });
   registerPromptRoutes(router, { sessions, scheduler });
-  registerCommandRoutes(router, { sessions, scheduler, workspaces });
-  registerSideQuestionRoutes(router, { sessions });
-  registerApprovalRoutes(router, { approvals, interactions });
   const management = {
     workspaces,
     scheduler,
@@ -349,6 +357,17 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     broadcast: (frame: ServerFrame) => hub.broadcast(frame),
   };
   recycler = new WorkspaceRecycler(management);
+  const reloader = recycler;
+  registerChangelogRoutes(router, { version: options.version ?? "dev" });
+  registerCommandRoutes(router, {
+    sessions,
+    scheduler,
+    workspaces,
+    reload: (workspaceId) => reloader.reload(workspaceId),
+    version: options.version ?? "dev",
+  });
+  registerSideQuestionRoutes(router, { sessions });
+  registerApprovalRoutes(router, { approvals, interactions });
   registerManagementRoutes(router, management, recycler);
   registerAgentDefinitionRoutes(router, management, recycler);
   registerProviderRoutes(router, management, recycler);

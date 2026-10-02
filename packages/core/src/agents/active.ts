@@ -123,6 +123,46 @@ export function activeAgentCatalog(contributions: ActiveAgent[] = []): ActiveAge
   return out;
 }
 
+/**
+ * The agents Shift+Tab (and the web selector) cycles through, in a STABLE order: `build`, then
+ * `plan`, then every other main-capable agent (`mode: primary|all`) by name. The catalog order of
+ * contributed agents follows plugin discovery and is not stable across reloads, so cycling never
+ * relies on it. Duplicated ids are dropped.
+ */
+export function cycleableAgents(agents: ActiveAgent[]): ActiveAgent[] {
+  const builtinRank = new Map(BUILTIN_AGENTS.map((agent, index) => [agent.id, index]));
+  const seen = new Set<string>();
+  const unique = agents.filter((agent) => {
+    if (seen.has(agent.id)) return false;
+    seen.add(agent.id);
+    return true;
+  });
+  const byName = (a: ActiveAgent, b: ActiveAgent) =>
+    a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id);
+  return [
+    ...unique
+      .filter((agent) => builtinRank.has(agent.id))
+      .sort((a, b) => (builtinRank.get(a.id) ?? 0) - (builtinRank.get(b.id) ?? 0)),
+    ...unique.filter((agent) => !builtinRank.has(agent.id)).sort(byName),
+  ];
+}
+
+/**
+ * The agent after (`step` 1) or before (`step` -1) `currentId` in the cycle, wrapping around. An
+ * unknown current id starts the cycle at its first agent (`build`). An empty list yields undefined.
+ */
+export function nextAgent(
+  agents: ActiveAgent[],
+  currentId: string | undefined,
+  step: 1 | -1 = 1,
+): ActiveAgent | undefined {
+  const cycle = cycleableAgents(agents);
+  if (!cycle.length) return undefined;
+  const index = cycle.findIndex((agent) => agent.id === currentId);
+  if (index < 0) return cycle[0];
+  return cycle[(index + step + cycle.length) % cycle.length];
+}
+
 /** Resolves the persisted agent id; unknown ids fall back to the built-in default (`build`). */
 export function resolveActiveAgent(agents: ActiveAgent[], id: string | undefined): ActiveAgent {
   const found = id ? agents.find((a) => a.id === id) : undefined;

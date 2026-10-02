@@ -108,7 +108,9 @@ description, and `/resume` suggests matching session IDs.
 | `/effort [level]` | Set the reasoning effort for the active model when it advertises `effort.supportedLevels`: no argument opens a picker (the model's default is marked), an argument is validated and persisted (`agents.effort`). The level is sent from the next prompt; see [Active agent and effort](#active-agent-and-effort) |
 | `/init [focus]` | Built-in [prompt template](/prompt-templates#built-in-init): analyze the repository and create or update the root `AGENTS.md` |
 | `/artifacts [filter]` | Browse the artifacts of the session (newest first, filterable), then Preview here, Open with default app, Copy path, Reveal in folder, Copy to workspace…, Reveal analysis sources, Details or Delete; see [Artifacts](#artifacts) |
-| `/permissions` | Review the saved permissions of the session (for example Python analysis allowed for this session) and revoke them |
+| `/permission [ask\|auto\|full\|status]` (`/permissions`) | One menu with **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** and **Manage saved permissions…** (review and revoke the permissions saved for the session, for example Python analysis allowed for this session). With an argument it sets the mode or prints the status directly; see [Permission modes](#permission-modes) |
+| `/reload` | Reload the configuration, agents, skills, prompt templates and MCP servers between turns; a broken configuration leaves the session untouched; see [Reload and changelog](#reload-and-changelog) |
+| `/changelog [version]` | Scrollable panel with what changed in recent releases (offline); see [Reload and changelog](#reload-and-changelog) |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
@@ -126,7 +128,7 @@ Other [prompt templates](/prompt-templates) appear in their own section of
 `/help` and in autocompletion.
 
 Other plugin commands are routed the same way and listed in `/help` and autocompletion. While a turn
-is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`, `/clear` and `/resume` commands wait: press Esc to
+is running, prompts and the `/model`, `/agents` (picker), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`, `/clear`, `/resume` and `/reload` commands wait: press Esc to
 interrupt first. The subagent task-management verbs (`/agents open …`, `/agents list`, …) and `/btw` keep working during a run.
 
 ### Skills catalog and autocompletion
@@ -231,6 +233,81 @@ effort concept ignore it. If the model later changes to one that does not suppor
 the model's default is used silently with a one-time notice. The chosen level is also shown in the
 header and the status line, in yellow.
 
+### Cycling agents with Shift+Tab {#cycle-agents}
+
+**Shift+Tab** switches the active agent without opening a menu: `build` → `plan` → every other main
+agent (definitions marked `mode: primary` or `mode: all`, sorted by name) and back to `build`. The
+order is stable, whatever order the plugins discovered the agents in. The status row below the
+editor shows `agent: <name>` and the hint names the new agent (`Agent: plan (read-only) · Shift+Tab
+cycles agents`). The choice is persisted like `/agents` (`agents.active`) and applies **from the next
+prompt**.
+
+- During a turn the key only shows a hint (*A turn is running: wait for it to finish before
+  switching agents*): an agent switch never changes a run that has already started.
+- With a picker, the autocomplete list or the agent panel open the key is left alone.
+- Unlike the `/agents` picker, cycling never switches the model and never starts a new session. If
+  the agent declares a model different from the current one, the hint says so; run `/agents` to
+  apply it.
+- Under `--read-only` settings cannot be written, so the choice only lasts while the process runs.
+- Some terminals do not report Shift+Tab as a separate key; `/agents` and `/agent:<id>` always work.
+- Permissions are a separate axis: see [Permission modes](#permission-modes).
+
+## Permission modes {#permission-modes}
+
+`/permission` opens one menu: **Use ask mode**, **Use auto mode**, **Use full access mode**,
+**Status** and **Manage saved permissions…**. `/permissions` is an alias of the same menu, and
+`/permission ask`, `/permission auto`, `/permission full` and `/permission status` skip it. The
+current mode is always visible: `mode:<name>` in the header and `mode: <name>` in the status row.
+
+| Mode | Runs without asking | Still asks | Web preset |
+| --- | --- | --- | --- |
+| `ask` | reads | writes, commands, network and external tools | `ask` |
+| `auto` | reads and file edits inside the workspace | commands, network, external tools and directories outside the workspace | `workspace-write` |
+| `full` | everything except paths outside the workspace and the install of optional packages | those two | `full-access` |
+
+`auto` uses fixed rules: there is no model that classifies requests. `full` shows a confirmation
+that says it is **not a sandbox**: anything the agent runs has your user's permissions. The same
+table drives the web presets, so a mode behaves the same in both interfaces.
+
+- **Initial mode.** It is derived from the launch flags and only labels the state: no flags is
+  `ask`, `--allow-write` alone is `auto`, `--allow-write --allow-process --allow-external` is `full`
+  and any other combination is `custom`. Nothing is changed at startup. If plugins or MCP were
+  already allowed to reach outside at startup, `/permission status` says that `external` is on.
+- **Applies between turns.** Changing the mode during a turn is refused with a hint. A mode takes
+  effect from the next tool call and resets the "Always allow in this session" approvals.
+- **`--read-only` locks the modes.** There is no approval handler to widen, so every mode is
+  refused with *Permission modes are locked: Alisio was started with --read-only.*; **Status**
+  still works.
+- **Status** prints the mode and, per effect, whether it runs (`on`), asks (`ask`) or is denied
+  (`off`).
+- Saved permissions (Python analysis allowed for a session) are managed from **Manage saved
+  permissions…**; `/permission` does not change them.
+
+## Reload and changelog {#reload-and-changelog}
+
+### `/reload` {#reload}
+
+`/reload` re-reads the configuration layers, agent files, skills, prompt templates and MCP servers
+without leaving the session. It only runs **between turns**: it is refused while a turn, a subagent
+or an approval is waiting. Everything is validated **before** anything is applied: the
+configuration is parsed first and a new application is built next to the current one, so a broken
+file leaves your session exactly as it was (the error says why). When it succeeds the report lists,
+per area, what changed (counts, added, removed or updated names), refreshes the slash completion
+and keeps the permission mode you picked.
+
+Plugin code that was already imported cannot be unloaded: the report names the external plugins
+that need a restart to pick up source changes, and the launch flags (`--allow-write`,
+`--read-only`, `--model`…) keep their startup values. `alisio run` has no `/reload`.
+
+### `/changelog` {#changelog}
+
+`/changelog` opens a scrollable panel (↑/↓, PgUp/PgDn, Home/End, Esc to close) with the newest
+entries of the shipped `CHANGELOG.md`; `/changelog alpha.26` (or the full version) shows one entry.
+It works offline: the changelog is converted at build time and ships inside the package. After an
+upgrade Alisio prints **one** line (*Alisio updated to … · 3 new entries · /changelog*); the last
+version seen is stored in `tui-state.json` next to the session database, so a first run stays
+silent. Entries are in English in every language. `alisio run` has no `/changelog`.
+
 ## MCP manager {#mcp}
 
 `/mcps` in the TUI lists servers by source and, for the selected one, separates configured/enabled,
@@ -256,6 +333,7 @@ that preference and disconnects servers. `--read-only` blocks the whole manager.
 | `x` | Expand or collapse the nearest collapsible row — a finished **Thought** section, a grouped batch of tool calls, or a long command output (when the input is empty; see [Tool & reasoning display](#tool-reasoning-display)) |
 | Mouse click | On a collapsible header row, expand or collapse it (see [Tool & reasoning display](#tool-reasoning-display)) |
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
+| Shift+Tab | Cycle the main agents: `build`, `plan`, then your own primary agents, wrapping around (see [Cycling agents](#cycle-agents)) |
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |
 | Ctrl+K | Cancel the selected or viewed agent |
@@ -524,7 +602,8 @@ containing directory (one session approval covers that directory's subtree). Wit
 nothing is asked and those tools stay disabled. Headless modes never ask. The time
 spent waiting for an approval counts toward `limits.timeoutMs`. Approvals share the same
 [interactive queue](#ask-user-question) as `ask_user_question`, so a subagent's approval prompt and a
-subagent's question never race each other for the screen. See [Tools & permissions](/tools).
+subagent's question never race each other for the screen. See [Tools & permissions](/tools) and
+[Permission modes](#permission-modes), which switch these approvals on or off in one step.
 
 ## Artifacts {#artifacts}
 

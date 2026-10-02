@@ -110,6 +110,7 @@ plugin se elimina automáticamente cuando se descarga.
 | `resources.prompts(path)` | Añade un directorio de [plantillas de prompts](/es/prompt-templates#templates-from-plugins) (`*.md`, relativo al archivo del plugin) |
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
+| `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
 | `session.onStart(handler)` | El texto devuelto se inyecta una vez al comienzo de una sesión nueva y vacía (persistido en la sesión) |
 | `session.onEnd(handler)` | Se llama cuando termina una sesión interactiva (`/clear`, `/exit`, salida) |
@@ -263,6 +264,54 @@ const rows = db.prepare("SELECT * FROM notes").all();
 ofrecen `run`, `get`, `all`), `transaction(fn)` (transacción inmediata; las llamadas anidadas se unen
 a la exterior) y `close()`. FTS5 está disponible. El host proporciona el driver, por lo que los
 plugins nunca dependen de un runtime concreto.
+
+### Vistas de datos {#data-views}
+
+Una vista de datos es una función con nombre que devuelve JSON para una sesión y que los hosts leen
+sin ejecutar una herramienta. `alisio serve` las expone a la interfaz web (el plugin de memoria
+integrado alimenta así la [pestaña Memoria](/es/web#memory-tab)).
+
+```ts
+import { definePlugin } from "@alisio/sdk";
+
+export default definePlugin({
+  id: "notes",
+  version: "1.0.0",
+  apiVersion: 1,
+  setup(api) {
+    // `views` is absent on an older core: feature-detect it and keep working without it.
+    api.views?.register({
+      id: "recent",
+      description: "Recent notes of the session",
+      params: {
+        type: "object",
+        properties: { limit: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+      },
+      // `params` is already validated and coerced; `loadNotes` is your own storage code.
+      handler: (params, { sessionId }) => ({ items: loadNotes(sessionId, Number(params.limit)) }),
+    });
+  },
+});
+```
+
+- `id` son letras minúsculas, dígitos y guiones (hasta 40 caracteres) y es único dentro del plugin;
+  `description` es obligatoria. `params` es un objeto JSON Schema de primitivos (`string`,
+  `integer`, `number`, `boolean`; sin `$ref`) cuyas claves desconocidas se rechazan. Las cadenas de
+  consulta se convierten a los tipos declarados y se aplican los valores por defecto antes de
+  ejecutar `handler(params, { sessionId, workspace, signal })`. `ViewParamsError` convierte un
+  parámetro que el esquema no puede expresar en un `400`.
+- Por HTTP una vista es `GET /api/sessions/:sid/views/:plugin/:view?<params>`, con la misma cookie
+  de sesión y las mismas reglas de Host y Origin que el resto de rutas. Solo responden los plugins
+  habilitados, la sesión debe existir y su workspace también, y una vista de otro plugin o de uno
+  deshabilitado es un `404`. Se aceptan como máximo 16 parámetros de consulta de 512 caracteres.
+- La respuesta es JSON de como máximo 1 MiB (`view_too_large`, 502) y el handler tiene 5 segundos
+  (`view_timeout`, 504; `signal` aborta). Cualquier otro fallo es un `view_failed` genérico (502):
+  su mensaje y los parámetros nunca se envían ni se registran, porque pueden contener datos del
+  proyecto.
+- **Las vistas son de solo lectura por contrato, no por aislamiento.** El host solo controla el
+  método, los parámetros validados, el tiempo y el tamaño; no puede impedir que el código de un
+  plugin escriba, y un handler que bloquee el bucle de eventos no se interrumpe con el timeout. Un
+  plugin no es un sandbox.
 
 ### Sesiones hijas {#child-sessions}
 

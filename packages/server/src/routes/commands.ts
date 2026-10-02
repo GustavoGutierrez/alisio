@@ -1,6 +1,21 @@
-import { agentIdFromCommand, CommandCatalog } from "@alisio/core";
-import type { CommandDescriptor, CommandOutcome } from "@alisio/sdk";
+import {
+  agentIdFromCommand,
+  CommandCatalog,
+  describePermissionStatus,
+  FULL_ACCESS_WARNING,
+  formatChangelogMarkdown,
+  formatReloadReport,
+  loadChangelog,
+  modeToPreset,
+  PERMISSION_MODE_TABLE,
+  PERMISSION_USAGE,
+  parsePermissionCommand,
+  presetToMode,
+  selectEntries,
+} from "@alisio/core";
+import type { CommandDescriptor, CommandOutcome, ReloadReport } from "@alisio/sdk";
 import { activateSessionAgent } from "../host/agents.ts";
+import { presetInfo } from "../host/presets.ts";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { SessionService } from "../host/sessions.ts";
 import type { OpenWorkspace, WorkspaceHost } from "../host/workspace-host.ts";
@@ -11,7 +26,7 @@ import { is, validate } from "../schemas.ts";
 import { RecentRequests } from "./prompts.ts";
 
 /** Commands that change the session's own run state: refused while it runs or compacts. */
-const EXCLUSIVE = new Set(["model", "compact"]);
+const EXCLUSIVE = new Set(["model", "compact", "reload"]);
 
 /**
  * The `/ask` prompt: the TUI sends the same instruction (packages/cli/src/tui/app.ts); both turn
@@ -37,7 +52,7 @@ const helpText = (commands: CommandDescriptor[]): string =>
         }`,
     ),
     "",
-    "**Keys**: Enter send · Shift+Enter newline · ↑↓ prompt history · `/` focus the composer · Esc close popovers",
+    "**Keys**: Enter send · Shift+Enter newline · Shift+Tab cycle agents · ↑↓ prompt history · `/` focus the composer · Esc close popovers",
   ].join("\n");
 
 /**
@@ -52,6 +67,10 @@ export function registerCommandRoutes(
     scheduler: RunScheduler;
     workspaces: WorkspaceHost;
     recent?: RecentRequests;
+    /** `/reload` of a workspace (validate, build next to the current app, swap, announce). */
+    reload?: (workspaceId: string) => Promise<ReloadReport>;
+    /** The running Alisio version (the CLI's), for `/changelog`. */
+    version?: string;
   },
 ): void {
   const { sessions, scheduler } = ctx;
@@ -120,6 +139,64 @@ export function registerCommandRoutes(
     if (descriptor.name !== "btw") sessions.notify(session.id);
     return { body: outcome };
 
+    /**
+     * `/permission`: web clients open the permissions popover for the bare command; API callers
+     * get the status and the saved permissions as text. `ask|auto|full` sets the session preset
+     * (the same change as the composer menu), within the server's capability ceiling.
+     */
+    function permission(): CommandOutcome {
+      const parsed = parsePermissionCommand(args);
+      if (parsed.type === "invalid") throw new Error(PERMISSION_USAGE);
+      const current = sessions.detail(session);
+      const status = (preset: typeof current.preset) => {
+        const info = presetInfo(preset, sessions.ceiling);
+        return [
+          describePermissionStatus({
+            mode: presetToMode(preset) ?? "locked",
+            policy: info.policy,
+            approvals: info.approvals,
+          }),
+          ...(info.reason ? ["", `Note: ${info.reason}.`] : []),
+        ].join("\n");
+      };
+      if (parsed.type === "set") {
+        const preset = modeToPreset(parsed.mode);
+        const info = presetInfo(preset, sessions.ceiling);
+        if (!info.available)
+          throw new HttpError(
+            "capability_ceiling",
+            info.reason ?? "That mode is not available under the server flags",
+          );
+        sessions.setOptions(session.id, { preset });
+        sessions.resetPolicy(session.id);
+        return {
+          output: [
+            `Permission mode: **${PERMISSION_MODE_TABLE[parsed.mode].label}**. ${PERMISSION_MODE_TABLE[parsed.mode].summary}`,
+            ...(parsed.mode === "full" ? ["", FULL_ACCESS_WARNING] : []),
+            ...(info.reason ? ["", `Note: ${info.reason}.`] : []),
+          ].join("\n"),
+          tone: "notice",
+          effects: ["preset"],
+        };
+      }
+      const live = opened.app.capabilityGrants.live(session.id);
+      return {
+        output: [
+          status(current.preset),
+          "",
+          "**Saved permissions**",
+          "",
+          ...(live.length
+            ? live.map(
+                (g) =>
+                  `- ${g.capability} · allowed for this session · since ${new Date(g.createdAt).toISOString()} (${g.source})`,
+              )
+            : ["No saved permissions in this session."]),
+        ].join("\n"),
+        tone: parsed.type === "status" ? "notice" : "info",
+      };
+    }
+
     async function run(): Promise<CommandOutcome> {
       if (!descriptor) throw new HttpError("unknown_command", `Unknown command /${name}`);
       if (descriptor.source === "prompt") {
@@ -141,19 +218,16 @@ export function registerCommandRoutes(
         });
       }
       if (descriptor.name === "help") return { output: helpText(catalog.list("web")) };
-      if (descriptor.name === "permissions") {
-        // Web clients open the permissions popover instead; API callers get the list as text.
-        const live = opened.app.capabilityGrants.live(session.id);
+      if (descriptor.name === "permission") return permission();
+      if (descriptor.name === "reload") {
+        if (!ctx.reload) throw new Error("/reload is unavailable here");
+        return { output: formatReloadReport(await ctx.reload(opened.id)), effects: ["catalog"] };
+      }
+      if (descriptor.name === "changelog") {
+        const selected = selectEntries(loadChangelog(), { ...(args ? { version: args } : {}) });
+        if (!selected.found) throw new Error(`No changelog entry for version ${args}`);
         return {
-          output: live.length
-            ? live
-                .map(
-                  (g) =>
-                    `- ${g.capability} · allowed for this session · since ${new Date(g.createdAt).toISOString()} (${g.source})`,
-                )
-                .join("\n")
-            : "No saved permissions in this session.",
-          tone: "notice",
+          output: `**Alisio ${ctx.version ?? "dev"}**\n\n${formatChangelogMarkdown(selected.entries)}`,
         };
       }
       if (descriptor.name === "artifacts") {

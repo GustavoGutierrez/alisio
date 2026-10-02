@@ -42,6 +42,34 @@ it is not a statement that all of its release criteria are met.
 
 ## Known limits
 
+**Permission modes, `/reload` and `/changelog` (modes spec, phase 1).** A permission mode only
+chooses which effects run without asking: it is not a sandbox, it does not change path confinement
+(directories outside the workspace still ask) or the `--allow-analysis` pre-grant, and `auto` uses
+fixed rules with no AI classifier. In the TUI the initial mode is only a label derived from the
+launch flags (if plugins or MCP already allowed `external`, `/permission status` shows the real
+policy); changing it resets "allow for this session" approvals and is refused during a turn and
+under `--read-only`. Shift+Tab needs a terminal that reports it as a separate key and, in the web,
+it intercepts a navigation key, so the agent selector is the accessible path; cycling never applies
+the model an agent declares (use `/agents`). `/reload` rebuilds the whole application: MCP servers
+and plugins restart, plugin code that was already imported is not reloaded (the report says so),
+launch flags keep their startup values and it is refused during a turn, with running subagents or
+with a pending approval. The changelog is English-only and curated by hand. `alisio run` has neither
+command. The later phases of the same spec (plan review, background tasks, `/goal`) are specified
+and not implemented.
+
+**Web Memory tab and plugin data views.** Views are read-only by contract, not by isolation: the
+host only controls the method, validated parameters, time (5 s) and size (1 MiB), cannot stop a
+plugin's code from writing, and a synchronous handler that blocks the event loop is not interrupted
+by the timeout; a plugin is not a sandbox. The tab does not update live (use Refresh); a memory
+updated or pinned while you page can jump to the top, and a memory with a `topic_key` that another
+chat updates moves to that chat. Subagent sessions have their own session id and do not appear in
+the parent chat's tab. **Context loaded** is what the plugin returned when the chat started, kept
+by the plugin: it does not prove the runner persisted it, chats from before this version have none
+and the context recovered after a compaction is not recorded. Memory can hold sensitive project
+data and is shown to anyone with the server's session cookie. Settings → General currently throws
+while rendering because nine settings (`limits.firstTokenTimeoutMs`, `tui.paddingX`,
+`agents.effort`, `analysis.enabled` and others) have no `setting.*` labels in the web dictionaries.
+
 - **Python analysis (phases 1–4)**: managed Python is not a sandbox (it runs with your
   permissions, can read files, use the network and change the repository). The optional container
   runtime (`analysis.runtime: "oci"`, Docker or Podman, a digest-pinned image) blocks the network,
@@ -322,3 +350,27 @@ task-management verbs (with an argument) still route to the plugin, but the edit
 `/help` show only the TUI command; task management stays reachable as `/agents <verb>` and
 `/command agents <verb>`. The picker interactions of `/agents` and `/effort` were not verified in a
 pseudo-terminal (their pure logic and status-line parts were).
+
+**Permission modes, `/reload` and `/changelog`.** Verified with mocked providers and real
+temporary workspaces (Vitest, no network): the mode table against the web presets and the real
+runner policy, the agent cycle order and its Shift+Tab guards, mode transitions including the
+`--read-only` lock, validate-then-apply reloads with a broken configuration (the application and its
+session survive), the idle-only guard, the changelog parser, `lastSeenVersion` in both interfaces,
+the HTTP routes and their auth rules, and a Chromium run against `alisio serve` with a fake
+OpenAI-compatible provider. Not verified: a real terminal for the TUI (Shift+Tab, the changelog
+panel and the mode menu were tested as pure logic), terminals that do not report Shift+Tab, other
+browsers, screen readers and Windows or macOS.
+
+**Web Memory tab and plugin data views.** Verified with Vitest (no network): view registration and
+validation, a plugin set up without `api.views`, the HTTP route (auth, Host, Origin, unknown
+session or workspace, disabled plugin including `restart-required`, unknown view, invalid
+parameters without echoing values, size cap, timeout, generic errors, nothing sensitive in the
+logs), the three memory views against a temporary SQLite store (one chat only, pinned first,
+filter, literal-wildcard search, cursor paging without duplicates or gaps, read-only, summary,
+context equal to what the start hook returned), an end-to-end run with the real plugin on a real
+server, the 101 schema migration and the web logic. Checked in Chromium against `alisio serve` with
+a fake OpenAI-compatible provider: the tab appears only with the plugin enabled, the three
+sections, filter, search and Load more, chat switching, disabling the plugin in Settings → Plugins
+(tab removed, back to Conversation, route answers 404) and a 390 px width without horizontal
+scroll. Not verified: Firefox, Safari, screen readers, Windows or macOS, very large memory stores
+and several workspaces open at once.

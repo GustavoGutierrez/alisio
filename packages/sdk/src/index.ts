@@ -972,6 +972,40 @@ export interface CommandOptions {
   description?: string;
   argumentHint?: string;
 }
+/** Where a data view runs: the session the web asked about (already validated by the host). */
+export interface ViewContext {
+  sessionId: string;
+  /** Workspace of that session. */
+  workspace: string;
+  /** Aborted when the host timeout for the view expires. */
+  signal: AbortSignal;
+}
+/**
+ * A named, read-only data view a plugin exposes to hosts (the web UI reads them through
+ * `GET /api/sessions/:sid/views/:plugin/:view`). Read-only is a CONTRACT, not a sandbox: the host
+ * only enforces the method, the validated parameters, a timeout and a response size cap.
+ */
+export interface ViewDefinition {
+  /** Lowercase letters, digits and dashes, starting with a letter (max 40 characters). */
+  id: string;
+  description: string;
+  /**
+   * JSON Schema of the query parameters: `type: "object"` whose properties are primitives
+   * (`string`, `integer`, `number`, `boolean`). Query strings are coerced to these types and
+   * unknown keys are rejected. Omitted means "no parameters".
+   */
+  params?: JsonSchema;
+  /** Returns JSON-serializable data. Throw `ViewParamsError` for a parameter the schema cannot express. */
+  handler(params: Record<string, unknown>, context: ViewContext): unknown | Promise<unknown>;
+}
+/** `ViewDefinition.handler` failure caused by the caller's parameters (becomes a 400). */
+export class ViewParamsError extends Error {
+  readonly code = "view_invalid_params";
+  constructor(message = "Invalid view parameters") {
+    super(message);
+    this.name = "ViewParamsError";
+  }
+}
 export interface PluginAPI {
   tools: { register(tool: ToolDefinition): () => void };
   commands: {
@@ -1011,6 +1045,11 @@ export interface PluginAPI {
   providers: { register(provider: ProviderRegistration): () => void };
   /** Opens a private (0600) SQLite file, creating parent directories (0700). */
   storage: { sqlite(path: string): SqlDatabase };
+  /**
+   * Named read-only data views for hosts such as the web UI. Absent on a core that predates it:
+   * feature-detect with `api.views?.register(...)` so the plugin keeps working there.
+   */
+  views?: { register(view: ViewDefinition): () => void };
   /** Provide an implementation for a named extension point (e.g. mascot, startup-screen). */
   extensions: {
     register<K extends keyof ExtensionPoints>(
@@ -1319,6 +1358,12 @@ export type ApiErrorCode =
   | "query_rejected"
   /** A data query exceeded `analysis.data.queryTimeoutMs` (408). */
   | "query_timeout"
+  /** A plugin data view threw while running (502; the message never carries its internals). */
+  | "view_failed"
+  /** A plugin data view exceeded the host timeout (504). */
+  | "view_timeout"
+  /** A plugin data view answered more than the host response cap (502). */
+  | "view_too_large"
   | "internal";
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {
@@ -1388,8 +1433,16 @@ export interface WorkspaceInfo {
 }
 /** Permission presets of the web composer (RF-08). */
 export type PermissionPresetId = "read-only" | "ask" | "workspace-write" | "full-access";
+/**
+ * The permission mode shared by the TUI and the web presets: `ask` (every effect asks), `auto`
+ * (workspace edits run without asking; commands, network and external directories still ask) and
+ * `full` (nothing asks). A mode is NOT a sandbox.
+ */
+export type PermissionMode = "ask" | "auto" | "full";
 export interface PermissionPresetInfo {
   id: PermissionPresetId;
+  /** The mode this preset implements (`read-only` has none). */
+  mode?: PermissionMode;
   /** Selectable under the server's launch flags (its capability ceiling). */
   available: boolean;
   /** Why it is unavailable, or which effects still ask because of the ceiling. */
@@ -1398,6 +1451,48 @@ export interface PermissionPresetInfo {
   policy: { write: boolean; process: boolean; external: boolean };
   /** Whether non-allowed effects ask for approval (false: they are denied). */
   approvals: boolean;
+}
+/** One section (`Added`, `Changed`, `Fixed`…) of a changelog entry. */
+export interface ChangelogSection {
+  title: string;
+  items: string[];
+}
+/** One released (or `Unreleased`) version of `CHANGELOG.md`. */
+export interface ChangelogEntry {
+  /** A semantic version such as `1.2.3-alpha.4`, or `Unreleased`. */
+  version: string;
+  date?: string;
+  unreleased?: boolean;
+  sections: ChangelogSection[];
+}
+/** `GET /api/changelog`: the entries asked for and whether there is news since `lastSeen`. */
+export interface ChangelogView {
+  /** The running Alisio (CLI) version. */
+  current: string;
+  /** Newest first. */
+  entries: ChangelogEntry[];
+  /** `false` when a `version` was asked for and the changelog has no such entry. */
+  found: boolean;
+  /** Present when `lastSeen` is older than `current` and the changelog has entries in between. */
+  news?: { latest: string; versions: string[] };
+}
+export type ReloadArea = "config" | "agents" | "skills" | "prompts" | "mcp" | "plugins";
+/** What `/reload` refreshed in one area: counts and the ids that appeared or disappeared. */
+export interface ReloadAreaReport {
+  area: ReloadArea;
+  before: number;
+  after: number;
+  added: string[];
+  removed: string[];
+  /** Items present in both whose definition changed (config: the changed sections). */
+  changed?: string[];
+}
+/** Answer of `/reload` and `POST /api/workspaces/:wid/reload`. */
+export interface ReloadReport {
+  refreshed: ReloadAreaReport[];
+  /** What a reload cannot refresh (for example plugin code that was already imported). */
+  restartRequired: string[];
+  warnings: string[];
 }
 /** A row of the session list (`GET /api/sessions`). */
 export interface SessionSummary extends SessionDetailWire {

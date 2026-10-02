@@ -220,3 +220,61 @@
 .revoke:hover {
   background: var(--danger-soft);
 }
+
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.mode:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mode[data-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.modeStatus {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.manage {
+  margin: 0 0 8px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.manage:hover {
+  text-decoration: underline;
+}

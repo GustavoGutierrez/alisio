@@ -124,8 +124,25 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
-    name: "permissions",
-    description: "Review and revoke this session's saved permissions",
+    name: "permission",
+    description:
+      "Switch the permission mode (ask, auto, full access), see its status or manage saved permissions",
+    aliases: ["permissions"],
+    argumentHint: "[ask|auto|full|status]",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
+    name: "reload",
+    description:
+      "Reload the configuration, agents, skills, prompt templates and MCP servers (between turns)",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
+    name: "changelog",
+    description: "Show what changed in recent Alisio releases",
+    argumentHint: "[version]",
     surfaces: INTERACTIVE,
     execution: "surface",
   },

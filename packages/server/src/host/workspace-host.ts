@@ -3,11 +3,15 @@ import {
   type AppOptions,
   createApplication,
   findWorkspace,
+  ReloadFailedError,
+  ReloadRefusedError,
+  reloadApplication,
   resolveTrust,
   type SQLiteStore,
+  validateReloadConfig,
   workspaceKey,
 } from "@alisio/core";
-import type { WorkspaceInfo } from "@alisio/sdk";
+import type { ReloadReport, WorkspaceInfo } from "@alisio/sdk";
 import { HttpError } from "../http/errors.ts";
 
 export type Application = Awaited<ReturnType<typeof createApplication>>;
@@ -128,34 +132,44 @@ export class WorkspaceHost {
     return promise;
   }
 
-  private async create(id: string, path: string): Promise<OpenWorkspace> {
+  /**
+   * Builds the `Application` of a workspace: launch flags are explicit, one-run trust like in the
+   * terminal; otherwise the trust store decides and a workspace that would need a prompt opens
+   * untrusted.
+   */
+  private async build(
+    id: string,
+    path: string,
+  ): Promise<{ app: Application; trusted: boolean; untrustedResources: boolean }> {
     const base = this.options.base;
-    // Launch flags are explicit, one-run trust like in the terminal; otherwise the trust store
-    // decides and a workspace that would need a prompt opens untrusted.
     const explicit = !!base.trustProject || !!base.config;
     const trust = explicit ? undefined : await resolveTrust(path);
     const trusted = explicit || !!trust?.trusted;
-    let app: Application;
     try {
-      app = await (this.options.create ?? createApplication)({
+      const app = await (this.options.create ?? createApplication)({
         ...base,
         trustProject: explicit ? base.trustProject : trusted,
         cwd: path,
         approvalSource: "web",
         ...(this.options.wire?.(id, path) ?? {}),
       });
+      return { app, trusted, untrustedResources: !trusted && !!trust?.hasProjectResources };
     } catch (error) {
       // The folder vanished between the check and the open (the core canonicalizes it).
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code && MISSING_ERRNO.has(code) && !(await workspaceExists(path))) throw missing(path);
       throw error;
     }
+  }
+
+  private async create(id: string, path: string): Promise<OpenWorkspace> {
+    const { app, trusted, untrustedResources } = await this.build(id, path);
     const entry: OpenWorkspace = {
       id,
       path,
       app,
       trusted,
-      untrustedResources: !trusted && !!trust?.hasProjectResources,
+      untrustedResources,
       lastUsed: this.now(),
     };
     if (this.closed) {
@@ -216,6 +230,58 @@ export class WorkspaceHost {
     if (!entry) return undefined;
     await this.close(id);
     return this.openPath(entry.path);
+  }
+
+  /**
+   * `/reload` for one open workspace: validate, build the new app NEXT TO the current one and
+   * only then swap, so a broken configuration leaves the workspace and its sessions untouched
+   * (unlike `recycle`, which closes first). The caller refuses while runs are active (`busy`).
+   * SSE subscribers are unaffected: they read the shared store.
+   */
+  async reload(id: string, guard: { busy?: () => string | undefined } = {}): Promise<ReloadReport> {
+    const entry = this.open.get(id);
+    if (!entry) throw new HttpError("not_found", "Workspace is not open");
+    const base = this.options.base;
+    let built: { trusted: boolean; untrustedResources: boolean } | undefined;
+    try {
+      return await reloadApplication<Application>({
+        current: entry.app,
+        ...(guard.busy ? { busy: guard.busy } : {}),
+        validate: async () => {
+          const explicit = !!base.trustProject || !!base.config;
+          const trust = explicit ? undefined : await resolveTrust(entry.path);
+          await validateReloadConfig({
+            ...base,
+            cwd: entry.path,
+            trustProject: explicit ? base.trustProject : !!trust?.trusted,
+          });
+        },
+        create: async () => {
+          const next = await this.build(id, entry.path);
+          built = next;
+          return next.app;
+        },
+        swap: (next) => {
+          if (this.closed || this.open.get(id) !== entry)
+            throw new Error("The workspace was closed while reloading");
+          this.options.onClose?.(entry);
+          entry.app = next;
+          entry.trusted = built?.trusted ?? entry.trusted;
+          entry.untrustedResources = built?.untrustedResources ?? entry.untrustedResources;
+          entry.lastUsed = this.now();
+          this.options.onOpen?.(entry);
+        },
+      });
+    } catch (error) {
+      if (error instanceof ReloadRefusedError) throw new HttpError("runs_active", error.message);
+      if (error instanceof ReloadFailedError)
+        throw new HttpError(
+          "validation_failed",
+          `Reload failed; the current session is unchanged: ${error.message}`,
+          { stage: error.stage },
+        );
+      throw error;
+    }
   }
 
   /** Closes every app in parallel (each close is capped by the core's teardown timeouts). */

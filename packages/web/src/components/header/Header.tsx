@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import {
+  activeTab,
   agentPickerOpen,
   api,
   detail,
+  memoryAvailability,
   mobileSidebar,
   patchCurrent,
   sessionTab,
   transcript,
 } from "../../store/app.ts";
 import { dockOpen, setDockOpen } from "../../store/dock.ts";
+import { visibleTabs } from "../../store/plugins.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./header.module.css";
 import { PermissionsButton } from "./PermissionsPopover.tsx";
@@ -117,12 +120,12 @@ export function Header() {
       </div>
       {session ? (
         <div class={styles.tabs} role="tablist" aria-label={t("header.titleLabel")}>
-          {(["conversation", "trajectory"] as const).map((tab) => (
+          {visibleTabs(memoryAvailability()).map((tab) => (
             <button
               key={tab}
               type="button"
               role="tab"
-              aria-selected={sessionTab.value === tab}
+              aria-selected={activeTab() === tab}
               class={styles.tab}
               onClick={() => {
                 sessionTab.value = tab;

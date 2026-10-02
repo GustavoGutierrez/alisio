@@ -36,6 +36,9 @@ export const STATUS: Record<ApiErrorCode, number> = {
   dataset_unsupported: 415,
   query_rejected: 400,
   query_timeout: 408,
+  view_failed: 502,
+  view_timeout: 504,
+  view_too_large: 502,
   internal: 500,
 };
 

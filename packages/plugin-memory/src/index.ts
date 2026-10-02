@@ -21,6 +21,7 @@ import { projectId, SQLiteMemoryStore } from "./store.ts";
 import { memoryContextText, memoryTools } from "./tools.ts";
 import type { MemoryScope } from "./types.ts";
 import { loadVersion } from "./version.ts";
+import { memoryViews } from "./views.ts";
 
 export interface MemoryPluginContext {
   workspace: string;
@@ -119,6 +120,8 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
         return counts;
       };
       for (const tool of memoryTools(deps)) api.tools.register(tool);
+      // Read-only data views for the web UI. A core without `api.views` simply lacks the tab.
+      for (const view of memoryViews({ store: db, project })) api.views?.register(view);
       api.context.register(async () => MEMORY_PROTOCOL);
       api.compaction.register({
         async beforeCompact() {
@@ -172,7 +175,16 @@ export function createMemoryPlugin(rawOptions: unknown, context: MemoryPluginCon
       });
       api.session.onStart(async (info) => {
         refresh();
-        return memoryContextText(deps, info.sessionId);
+        const text = memoryContextText(deps, info.sessionId);
+        // Remember what this chat was given so the web can show it without parsing the transcript.
+        if (text) {
+          try {
+            db.saveInjectedContext(project, info.sessionId, text);
+          } catch {
+            /* A bookkeeping failure never blocks the context itself. */
+          }
+        }
+        return text;
       });
       api.session.onEnd(async (info) => {
         const prompts = userTexts(info.messages);

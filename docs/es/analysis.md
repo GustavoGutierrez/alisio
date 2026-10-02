@@ -51,6 +51,11 @@ TUI previsualiza los artefactos de texto y los copia al workspace desde `/artifa
 [TUI](/es/tui#artifacts). Copiar desde la web o la TUI es una llamada real a `artifact_export` en la
 sesión, así que pregunta antes de escribir igual que una llamada del modelo.
 
+<figure class="doc-shot">
+  <img src="../assets/web-ui/trajectory_web_ui.webp" alt="La pestaña Trayectoria con los eventos durables de una sesión (tool_started, tool_completed, turn_completed, artifact_published, memory_save) y un dashboard ejecutivo de ventas abierto en el panel de artefactos a la derecha." width="1833" height="986" loading="lazy" decoding="async" />
+  <figcaption>La pestaña Trayectoria: una fila por evento durable, con un artefacto abierto en el panel lateral.</figcaption>
+</figure>
+
 ## Cómo funciona una ejecución {#execution}
 
 Cada llamada tiene su propia carpeta de trabajo bajo el directorio de estado (nunca el
@@ -130,6 +135,11 @@ descargable. Se publican dashboards (`.html`), documentos (`.md`, `.pdf`, `.docx
 En la interfaz web, las hojas de cálculo se abren en el [visor de tablas](/es/web#tables); un CSV o
 TSV puede estar en UTF-8, UTF-16 (con BOM) o windows-1252.
 
+<figure class="doc-shot">
+  <img src="../assets/web-ui/dashboard_generated.webp" alt="Un dashboard ejecutivo de ventas generado por Alisio en el panel de artefactos: ranking de vendedores, ventas por canal, segmentos de clientes y estado de los pedidos." width="1835" height="990" loading="lazy" decoding="async" />
+  <figcaption>Un dashboard ejecutivo generado en el panel de artefactos.</figcaption>
+</figure>
+
 ## Datos tabulares {#data}
 
 Los archivos CSV, TSV, JSON, JSONL y XLSX se convierten en **datasets**: un archivo SQLite por
@@ -139,6 +149,11 @@ adjunta un archivo con el botón `+` del compositor (muestra *Leyendo sales.csv�
 abre la tabla); en la terminal el modelo lee un archivo del workspace con `data_inspect { path }`
 (las rutas fuera del workspace siguen la aprobación de directorios habitual). El mismo contenido en la
 misma sesión reutiliza su dataset.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/Preview_of_tabular_data_in_CSV_and_Excel.webp" alt="El visor de tablas con un CSV de 300 filas, su filtro y los botones de copiar y descargar, junto al chip del dataset adjunto en la conversación." width="1831" height="980" loading="lazy" decoding="async" />
+  <figcaption>El visor de tablas con un CSV de 300 filas y el chip de datos adjuntos en el chat.</figcaption>
+</figure>
 
 ```text
 CSV/TSV/JSON/JSONL ── proceso del motor de datos (node:sqlite) ──┐

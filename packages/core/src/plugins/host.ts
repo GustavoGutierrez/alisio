@@ -19,7 +19,10 @@ import type {
   SelectRequest,
   SessionInfo,
   ToolContext,
+  ViewContext,
+  ViewDefinition,
 } from "@alisio/sdk";
+import Ajv, { type ValidateFunction } from "ajv";
 import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
@@ -38,6 +41,35 @@ export interface PluginHostOptions {
   hookTimeoutMs?: number;
   /** Timeout for session-end hooks (for example an automatic summary). */
   sessionEndTimeoutMs?: number;
+}
+const VIEW_ID = /^[a-z][a-z0-9-]{0,39}$/;
+const VIEW_PARAM_TYPES = new Set(["string", "integer", "number", "boolean"]);
+/** Query strings arrive as text: coerce them to the declared primitives and apply defaults. */
+const viewAjv = new Ajv({ allErrors: true, strict: true, coerceTypes: true, useDefaults: true });
+const rejectSchemaReferences = (value: unknown): void => {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (["$ref", "$id", "$async"].includes(key))
+      throw new Error(`Schema keyword ${key} is not supported`);
+    rejectSchemaReferences(child);
+  }
+};
+/** A failed data view: the host maps `code` to an API error (never echoing parameter values). */
+export class ViewRunError extends Error {
+  constructor(
+    readonly code: "not_found" | "invalid_params" | "failed",
+    message: string,
+    readonly fields: string[] = [],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "ViewRunError";
+  }
+}
+export interface ViewInfo {
+  id: string;
+  description: string;
+  params: Record<string, unknown>;
 }
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 export class PluginHost implements RunnerExtensions {
@@ -68,6 +100,16 @@ export class PluginHost implements RunnerExtensions {
   promptSources: Array<{ plugin: string; dir: string }> = [];
   /** Agent definition directories registered by plugins, with their plugin id. */
   agentSources: Array<{ plugin: string; dir: string }> = [];
+  /** Read-only data views contributed by plugins, keyed `plugin:view`. */
+  private views = new Map<
+    string,
+    {
+      plugin: string;
+      view: ViewDefinition;
+      schema: Record<string, unknown>;
+      validate: ValidateFunction;
+    }
+  >();
   /** Tree panels contributed by plugins, keyed `plugin:id`. */
   panels = new Map<string, { plugin: string; provider: PanelProvider }>();
   private sessionsImpl?: PluginAPI["sessions"];
@@ -345,6 +387,29 @@ export class PluginHost implements RunnerExtensions {
           return db;
         },
       },
+      views: {
+        register: (view) => {
+          if (!VIEW_ID.test(view.id)) throw new Error(`Invalid view id: ${view.id}`);
+          if (typeof view.description !== "string" || !view.description.trim())
+            throw new Error("A view needs a description");
+          if (typeof view.handler !== "function") throw new Error("A view needs a handler");
+          const key = `${plugin.id}:${view.id}`;
+          if (this.views.has(key)) throw new Error(`Duplicate view ${key}`);
+          const declared = view.params ?? { type: "object", properties: {} };
+          if (declared.type !== "object") throw new Error("View params must be an object schema");
+          rejectSchemaReferences(declared);
+          const properties = (declared.properties ?? {}) as Record<string, { type?: unknown }>;
+          for (const [name, spec] of Object.entries(properties))
+            if (typeof spec?.type !== "string" || !VIEW_PARAM_TYPES.has(spec.type))
+              throw new Error(`View param ${name} must be a string, integer, number or boolean`);
+          const schema = { ...declared, additionalProperties: false };
+          const entry = { plugin: plugin.id, view, schema, validate: viewAjv.compile(schema) };
+          this.views.set(key, entry);
+          return track(() => {
+            if (this.views.get(key) === entry) this.views.delete(key);
+          });
+        },
+      },
       compaction: {
         register: (hooks) => {
           const entry = { plugin: plugin.id, hooks };
@@ -599,6 +664,48 @@ export class PluginHost implements RunnerExtensions {
           : {}),
       }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+  /** Data views a plugin registered (without their handlers). */
+  viewsOf(plugin: string): ViewInfo[] {
+    return [...this.views.values()]
+      .filter((entry) => entry.plugin === plugin)
+      .map(({ view, schema }) => ({ id: view.id, description: view.description, params: schema }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+  /**
+   * Validates `query` against the view's declared schema (coerced from strings) and runs it.
+   * Timeouts and response caps are the caller's job (the server enforces both). Errors are
+   * `ViewRunError`s whose messages never include parameter values or handler internals.
+   */
+  async runView(
+    plugin: string,
+    id: string,
+    query: Record<string, string>,
+    context: ViewContext,
+  ): Promise<unknown> {
+    const entry = this.views.get(`${plugin}:${id}`);
+    if (!entry) throw new ViewRunError("not_found", "View not found");
+    const params: Record<string, unknown> = { ...query };
+    if (!entry.validate(params)) {
+      const fields = [
+        ...new Set(
+          (entry.validate.errors ?? []).map((error) => {
+            const p = error.params as { additionalProperty?: string; missingProperty?: string };
+            return (
+              p.additionalProperty ?? p.missingProperty ?? error.instancePath.replace(/^\//, "")
+            );
+          }),
+        ),
+      ].filter(Boolean);
+      throw new ViewRunError("invalid_params", "Invalid view parameters", fields);
+    }
+    try {
+      return await entry.view.handler(params, context);
+    } catch (error) {
+      if ((error as { code?: unknown } | null)?.code === "view_invalid_params")
+        throw new ViewRunError("invalid_params", message(error), [], { cause: error });
+      throw new ViewRunError("failed", "The view failed", [], { cause: error });
+    }
   }
   /** Registered names of the tools a plugin contributes (namespaced unless built in). */
   toolsOf(plugin: string): string[] {

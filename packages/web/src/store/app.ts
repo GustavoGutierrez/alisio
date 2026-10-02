@@ -5,11 +5,14 @@
  */
 
 import type {
+  AgentInfo,
   BlobRef,
+  ChangelogView,
   CommandDescriptor,
   DatasetRef,
   HealthInfo,
   PermissionPresetId,
+  PluginInfo,
   ServerFrame,
   SessionContextUsage,
   SessionDetail,
@@ -27,10 +30,21 @@ import {
   pendingSideQuestion,
   sideQuestionOf,
 } from "./btw.ts";
+import { LAST_SEEN_KEY, newsAction } from "./changelog.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
 import { pushDatasetNotice } from "./datasets.ts";
 import { errorText } from "./errors.ts";
+import { nextAgentId } from "./modes.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
+import {
+  effectiveTab,
+  emptyPlugins,
+  MEMORY_PLUGIN,
+  type PluginsState,
+  pluginAvailability,
+  pluginsFailed,
+  type SessionTab,
+} from "./plugins.ts";
 import { applyProgress, type RunProgress } from "./progress.ts";
 import {
   applySessionStatus,
@@ -79,6 +93,12 @@ export const settingsOpen = signal(false);
 export const agentsOpen = signal(false);
 /** The `/agents` quick picker of the open chat. */
 export const agentPickerOpen = signal(false);
+/** The main agents of the open chat's workspace, in the server's stable cycle order. */
+export const agentList = signal<AgentInfo[]>([]);
+/** Polite screen-reader announcement of the agent a Shift+Tab or selector switch activated. */
+export const announceAgent = signal("");
+/** The `/changelog` dialog: the version asked for (empty: the latest entries). */
+export const changelogRequest = signal<{ version: string; at: number } | undefined>(undefined);
 export const mobileSidebar = signal(false);
 /** Asks the composer to take focus (e.g. after an approval is answered). */
 export const focusComposer = signal(0);
@@ -91,13 +111,35 @@ export const runEnded = signal(0);
 export const eventsTick = signal(0);
 /** Bumped per `catalog_changed` scope (settings pages reload what changed). */
 export const catalogTick = signal<Record<string, number>>({});
-/** Plugin display names by their tool prefix (`p_<hash>`), to label plugin tool calls. */
-export const pluginNames = signal<Record<string, string>>({});
 /** The `/btw` side panel (not part of the transcript); undefined when closed. */
 export const btw = signal<BtwState | undefined>(undefined);
 /** The session view tab (RF-10). */
-export const sessionTab = signal<"conversation" | "trajectory">("conversation");
-/** The header's "Session permissions" popover (also opened by `/permissions`). */
+export const sessionTab = signal<SessionTab>("conversation");
+/** Plugins of the open session's workspace (feeds "is plugin X enabled" and the tabs). */
+export const pluginsState = signal<PluginsState>(emptyPlugins);
+/** Plugin display names by their tool prefix (`p_<hash>`), to label plugin tool calls. */
+export const pluginNames = computed(() =>
+  Object.fromEntries((pluginsState.value.list ?? []).map((p) => [p.toolPrefix, p.name])),
+);
+/** Whether plugin `id` is enabled and running in the open workspace (reading it subscribes). */
+export const isPluginEnabled = (id: string): boolean =>
+  pluginAvailability(pluginsState.value, detail.value?.workspaceId, id) === "enabled";
+/** Availability of the memory plugin (decides whether the Memory tab exists). */
+export const memoryAvailability = () =>
+  pluginAvailability(pluginsState.value, detail.value?.workspaceId, MEMORY_PLUGIN);
+/** The tab to render and highlight: Memory only while its plugin is available. */
+export const activeTab = () => effectiveTab(sessionTab.value, memoryAvailability());
+/** Stores a workspace's plugin list; a tab whose plugin is now disabled falls back to Conversation. */
+export function receivePlugins(workspace: string, list: PluginInfo[]): void {
+  pluginsState.value = { workspace, list };
+  // Only a definitely disabled plugin removes its tab (a slow or failed load never bounces the user).
+  if (memoryAvailability() === "disabled")
+    sessionTab.value = effectiveTab(sessionTab.value, "disabled");
+}
+export function failPlugins(workspace: string): void {
+  pluginsState.value = pluginsFailed(pluginsState.value, workspace);
+}
+/** The header's permissions popover: modes, status and saved permissions (`/permission`). */
 export const permissionsOpen = signal(false);
 /** Bumped by `capabilities_changed` for the open session (permissions are refetched). */
 export const capabilitiesTick = signal(0);
@@ -202,15 +244,32 @@ async function refreshCommands(): Promise<void> {
   }
 }
 
+/** Loads the workspace's main agents (stable cycle order) for the selector and Shift+Tab. */
+async function refreshAgents(): Promise<void> {
+  const wid = detail.value?.workspaceId;
+  if (!wid) {
+    agentList.value = [];
+    return;
+  }
+  try {
+    const list = await api.agents(wid);
+    if (detail.value?.workspaceId === wid) agentList.value = list;
+  } catch {
+    /* the selector keeps the previous list */
+  }
+}
+
 /** Loads plugin names for the open session's workspace (labels of plugin tool calls). */
 async function refreshPluginNames(): Promise<void> {
   const wid = detail.value?.workspaceId;
   if (!wid) return;
   try {
     const list = await api.plugins(wid);
-    pluginNames.value = Object.fromEntries(list.map((p) => [p.toolPrefix, p.name]));
+    if (detail.value?.workspaceId !== wid) return;
+    receivePlugins(wid, list);
   } catch {
-    /* labels fall back to "plugin" */
+    /* labels fall back to "plugin"; the plugin list keeps its last known state */
+    failPlugins(wid);
   }
 }
 
@@ -290,6 +349,7 @@ function onFrames(frames: ServerFrame[]): void {
     catalogTick.value = next;
     if (scopes.has("models")) void refreshModels();
     if (scopes.has("plugins")) void refreshPluginNames();
+    if (scopes.has("agents")) void refreshAgents();
   }
   // A compaction replaced older messages: take a fresh snapshot of the history.
   if (rewritten) {
@@ -330,6 +390,7 @@ export async function openSession(id: string | undefined): Promise<void> {
   void refreshModels();
   void refreshContext();
   void refreshPluginNames();
+  void refreshAgents();
 }
 
 function history_replace(hash: string): void {
@@ -344,6 +405,23 @@ const sessionFromHash = (): string | undefined => {
   const match = /^#\/s\/(.+)$/.exec(location.hash);
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
 };
+
+/**
+ * After an upgrade: ONE discreet toast, then remember the version. A first visit is silent. The
+ * viewer state lives in localStorage and every access is guarded (private windows, blocked data).
+ */
+export async function checkChangelogNews(): Promise<ChangelogView | undefined> {
+  const lastSeen = readPref(LAST_SEEN_KEY);
+  try {
+    const view = await api.changelog(lastSeen ? { lastSeen } : {});
+    const action = newsAction(lastSeen, view);
+    if (action.toast) showToast(t("changelog.news", { version: action.toast }));
+    if (action.record) writePref(LAST_SEEN_KEY, action.record);
+    return view;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function init(): Promise<void> {
   stream = new EventStream({
@@ -380,6 +458,7 @@ export async function init(): Promise<void> {
     .catch(() => {});
   await reloadSidebar();
   if (auth.value !== "ok") return;
+  void checkChangelogNews();
   const fromHash = sessionFromHash();
   const last = readPref("alisio.lastSession");
   const sessions = sidebar.value.sessions;
@@ -515,6 +594,22 @@ export async function activateAgent(agentId: string): Promise<void> {
 }
 
 /**
+ * Shift+Tab and the selector: activates the next main agent of the open chat (build, plan, then
+ * custom ones, wrapping around). It applies from the next prompt, so it is allowed mid-turn.
+ */
+export async function cycleAgent(step: 1 | -1 = 1): Promise<void> {
+  const session = detail.value;
+  if (!session) return;
+  const agents = agentList.value;
+  const current = session.agent ?? agents.find((agent) => agent.default)?.id;
+  const next = nextAgentId(agents, current, step);
+  if (!next || next === current) return;
+  await activateAgent(next);
+  const name = agents.find((agent) => agent.id === next)?.name ?? next;
+  announceAgent.value = t("composer.agentApplied", { agent: name });
+}
+
+/**
  * Starts a NEW chat in `workspace` with `agentId` active ("Try it"). The agent's model is used
  * when the configured profiles can resolve it; otherwise the chat starts on the current model.
  */
@@ -647,8 +742,13 @@ export async function submit(
       datasets,
     );
   const slash = parseSlash(text);
-  if (slash?.name === "permissions") {
+  // `/permission` (alias `/permissions`) alone opens the popover; with arguments it is a command.
+  if ((slash?.name === "permission" || slash?.name === "permissions") && !slash.args) {
     permissionsOpen.value = true;
+    return;
+  }
+  if (slash?.name === "changelog") {
+    changelogRequest.value = { version: slash.args ?? "", at: Date.now() };
     return;
   }
   if (slash?.name === "artifacts") {
@@ -675,6 +775,7 @@ export async function submit(
       ...(slash.args ? { args: slash.args } : {}),
     });
     if (outcome.output) transcript.value = addLocalNote(transcript.value, outcome.output);
+    if (known.name === "reload") showToast(t("reloadCmd.done"));
     if (outcome.prompt) await sendPrompt(outcome.prompt.text, outcome.prompt.display);
     if (outcome.effects?.length) {
       void refreshDetail();
