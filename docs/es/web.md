@@ -343,66 +343,19 @@ responden en la conversación; el menú de permisos del compositor conserva los 
 ### Modo plan y revisión del plan {#plan-review}
 
 Cambie un chat al agente **plan** (el selector, **Mayús+Tab** o `/agent:plan`): investiga con
-herramientas de solo lectura y termina llamando a la herramienta `exit_plan` con el plan completo en
-Markdown. El plan aparece abierto en la conversación (una fila **Plan**), se guarda como artefacto
-`plan.md` (uno por revisión, en el panel de artefactos y abrible en el panel lateral desde su
-tarjeta) y el compositor se sustituye por la pantalla de decisión **Plan completo. ¿Qué quieres
-hacer?**:
-
-- **Aceptar y empezar la implementación**: el chat cambia al agente `build` y empieza un turno de
-  implementación. Su mensaje lleva el plan aprobado como instantánea (el chat muestra una línea
-  corta *Implement the approved plan* en lugar de repetirlo) y usa el modo de permisos del chat sin
-  cambios.
-- **Omitir por ahora**: no pasa nada más; el chat sigue en modo plan. Esc hace lo mismo.
-- **Añadir contexto**: se abre un cuadro de texto; lo que envíe vuelve al modelo como resultado de la
-  herramienta y este sigue planificando; después propone una revisión nueva.
-
-<figure class="doc-shot">
-  <img src="../assets/web-ui/plan_review_web_ui.webp" alt="La pantalla de revisión del plan: el plan abierto en la conversación, el panel de decisión Plan completo con la tarjeta del artefacto plan.md y las tres opciones (aceptar y empezar la implementación, omitir por ahora, añadir contexto) y el artefacto plan.md abierto en el panel lateral." width="1280" height="820" loading="lazy" decoding="async" />
-  <figcaption>La revisión del plan: la pantalla de decisión bajo el plan, con plan.md abierto en el panel lateral.</figcaption>
-</figure>
-
-La ejecución del plan es de solo lectura sea cual sea el modo de permisos: el runner deniega al agente
-plan las escrituras, los comandos y la red, de modo que elegir **Acceso total** nunca lo amplía.
-Aprobar dos veces (doble clic, dos pestañas, una recarga) inicia un único turno de implementación.
-Si recarga la página con una revisión pendiente, vuelve a mostrar la misma decisión; si cierra el
-navegador queda pendiente 30 segundos y después cuenta como **Omitir por ahora**, igual que cancelar
-la ejecución o que esta agote su tiempo. La pantalla sustituye al compositor, por lo que Mayús+Tab y
-el selector de agente no hacen nada mientras está abierta. Los clientes que no conocen la revisión
-del plan (un script que use la API) ven una pregunta normal con las mismas tres opciones.
+herramientas de solo lectura y entrega su plan con `exit_plan`. El plan se abre en la conversación, se
+guarda como artefacto `plan.md` y el compositor deja paso a la pantalla de decisión: **Aceptar y
+empezar la implementación**, **Omitir por ahora** (Esc hace lo mismo) o **Añadir contexto**. La
+ejecución del plan es de solo lectura sea cual sea el modo de permisos. La guía completa, con capturas,
+las reglas de decisión y las revisiones, es [Modo plan y revisión del plan](/es/plan#plan-review).
 
 ### Diagramas del plan y visor del plan {#plan-viewer}
 
-El agente de plan puede añadir pequeños [diagramas Mermaid](/es/tools#exit-plan) a un plan (de 0 a 5, solo
-cuando explican algo que el texto no explica; un plan sencillo no lleva ninguno). Un plan con diagramas se
-publica como un artefacto de carpeta por revisión (`plan.md`, `plan.json` y `diagrams/*.mmd`), y su tarjeta
-muestra el mismo nombre **plan.md** de siempre. La pantalla de decisión añade una línea discreta (**3
-diagramas**) con **Abrir el visor del plan**; la tarjeta abre el mismo visor en el panel lateral:
-
-- **Resumen**, **Objetivos principales**, **Etapas de implementación** (un recorrido por pasos),
-  **Diagramas**, **Componentes y relaciones** (los diagramas de componentes y de arquitectura),
-  **Decisiones y consideraciones** y, al final, el **Plan completo**, todo leído de `plan.json`, que Alisio
-  genera a partir del texto del plan. Un plan que no usa las secciones habituales muestra solo el plan
-  completo y sus diagramas; un `plan.json` ausente o roto recurre al texto del plan y a los archivos de
-  diagrama.
-- Cada diagrama tiene un título, una explicación breve y un enlace a la sección del plan que ilustra; cada
-  sección del plan completo enlaza de vuelta a sus diagramas. En ambos sentidos el foco se mueve también, y la
-  barra de secciones funciona con las flechas, Inicio y Fin.
-- Los diagramas se dibujan con la paleta de Alisio (colores para entrada, proceso, datos, sistema, externo,
-  decisión y riesgo, en claro y oscuro) con Mermaid en modo estricto. Un diagrama con un error de sintaxis
-  muestra su código y el error. Cada uno se puede copiar, ampliar, expandir y exportar como SVG.
-- Desde la segunda revisión, un diagrama nuevo o modificado respecto a la anterior lleva la etiqueta
-  **Actualizado en la revisión N**, y los que el modelo descartó se listan como quitados.
-- Se adapta hasta el ancho de un teléfono. `plan.md` sigue siendo legible por sí solo y la descarga es un ZIP
-  con `plan.md`, `plan.json` y `diagrams/*.mmd`.
-
-<figure class="doc-shot">
-  <img src="../assets/web-ui/plan_viewer_web_ui.webp" alt="El visor del plan en el panel lateral: el título del plan con su revisión, la barra de secciones y dos diagramas dibujados con los colores de Alisio, un diagrama de flujo de la petición de exportación y un diagrama de componentes marcado como actualizado en la revisión 2." width="1280" height="1000" loading="lazy" decoding="async" />
-  <figcaption>El visor del plan en la revisión 2 de un plan: el flujo de la petición y el diagrama de componentes, que cambió en esta revisión (interfaz en español).</figcaption>
-</figure>
-
-Se desactiva con [`plan.diagrams`](/es/configuration#plan) o se limita con `plan.maxDiagrams`. Mermaid solo
-dibuja en la web; la terminal muestra el código de cada diagrama (véase [Interfaz de terminal](/es/tui#plan-review)).
+Un plan puede llevar pequeños diagramas Mermaid. La pantalla de decisión ofrece **Abrir el visor del
+plan** y la tarjeta del plan abre el mismo visor en el panel lateral: secciones, diagramas dibujados con
+la paleta de Alisio, enlaces entre diagramas y texto, y una descarga en ZIP. Véase [El visor del
+plan](/es/plan#plan-viewer); desactive los diagramas o limítelos con [`plan.diagrams` y
+`plan.maxDiagrams`](/es/plan#settings).
 
 ### Tareas en segundo plano {#background-tasks}
 

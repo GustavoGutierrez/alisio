@@ -87,7 +87,7 @@ chat's own setting) wins over the agent's. The agent's model is applied in the s
 it belongs to the chat's provider; otherwise start a new chat with the agent.
 
 The built-in `plan` agent ends with the `exit_plan` tool: the user reviews the plan and, if they agree,
-the chat switches to `build` and implements it. See [Plan mode and plan review](/web#plan-review).
+the chat switches to `build` and implements it. See [Plan mode and plan review](/plan).
 
 ## Terminal: `/agents`
 

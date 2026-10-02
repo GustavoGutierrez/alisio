@@ -5,7 +5,7 @@ This page is an English translation of the limitations and pending work recorded
 That Spanish file in the repository is the source of truth; the
 [Spanish version of this page](/es/limitations) includes it verbatim.
 
-Alisio `__ALISIO_VERSION__` is the first stable release (pre-1.0: minor versions may include breaking changes). The original specification sets the product direction;
+Alisio `__ALISIO_VERSION__` is a stable release (pre-1.0: minor versions may include breaking changes). The original specification sets the product direction;
 it is not a statement that all of its release criteria are met.
 
 ## Pending to reach 1.0.0
@@ -17,7 +17,7 @@ it is not a statement that all of its release criteria are met.
 - Interactive onboarding; configurable color themes; expandable reasoning view.
 - Stable release with binaries: the `pnpm publish` script (`scripts/publish.ts`, see
   [Publishing](/publishing)) published the earlier alpha versions and the stable `0.1.0` (dist-tag
-  `latest`); SemVer ranges for plugins (`@alisio/sdk` as a `^0.1.0` peer) and reload in an idle
+  `latest`); SemVer ranges for plugins (`@alisio/sdk` as a `^0.2.0` peer) and reload in an idle
   session.
 - Automatic discovery of Pi paths and incremental watch.
 - Interactive MCP OAuth and MCP multimedia capabilities. `/mcps` supports explicit reconnect and
@@ -94,7 +94,8 @@ information that is not in it, and each diagram names the section it illustrates
 `plan.json` is extracted from the Markdown sections the plan agent is asked to write (Goal, Steps, Decisions,
 Risks, Verification, plus a few English and Spanish aliases); other headings only feed the full plan. Only
 plans that carry diagrams (or removed some) are published as a folder. The viewer was checked in Chromium
-only, and the terminal side through its pure logic, not in a real terminal.
+only, and the terminal side through its pure logic, not in a real terminal. User guide:
+[Plan mode and plan review](/plan).
 
 **Background tasks (`bg_run`, modes spec phase 3).** A task is an ordinary child process of
 Alisio, not a sandbox: it runs with your permissions, and a subprocess or a permission mode is not
@@ -447,4 +448,4 @@ charts, remote scripts) and works on the HTML text, so it can miss or over-repor
 Vitest (pure pie geometry with the three reported datasets, helper output, the gate, a real Python
 run) and in Chromium through `alisio serve` with the real CSP at 1280 px and 390 px, light and dark,
 with no console errors. Not verified: other browsers, Windows or macOS, a real model using the new
-guidance, screen readers and PDF printing.
+guidance, screen readers and PDF printing. User guide: [Charts](/analysis#charts).

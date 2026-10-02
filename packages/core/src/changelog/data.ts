@@ -6,8 +6,39 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.2.0",
+      date: "2026-10-02",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Plan diagrams: the plan agent can attach small Mermaid diagrams (flows, sequences, architecture) to the plan it proposes with `exit_plan`.",
+            "A plan viewer in the web UI: the plan opens in the artifact panel with its diagrams drawn in your theme, next to the plan review. The terminal shows the diagram source.",
+            "Plan files are saved in a plan folder with a `plan.json` manifest, so the plan and its diagrams are easy to find and reuse.",
+            "Two new settings, `plan.diagrams` and `plan.maxDiagrams` (in the configuration file, **Settings** in the web and `/settings` in the terminal), to turn diagrams off or cap how many a plan keeps.",
+            "Dashboard charts for Python analysis: `alisio_runtime.charts` builds interactive pie, donut, bar, line, area and scatter charts, KPI tiles and cards with an embedded Chart.js (MIT), so dashboards work offline, in the viewer and in the downloaded file.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "Charts adapt to their card and follow the light and dark theme, with value labels, tooltips and a data table for screen readers.",
+            "The pure-SVG helpers (`alisio_runtime.svg`) were rewritten: they scale with their container and carry a title and description.",
+            "The agent receives clearer guidance for `python_run` about how to draw charts and dashboards.",
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            "Pie charts drew wrong or broken slices in generated dashboards (including a single 100% slice), and bar charts rendered at a fixed small size.",
+            "A dashboard that draws SVG pies by hand, uses fixed-size SVG charts or loads a script from the network now gets a warning in the `python_run` result that points to the chart helpers.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.1.1",
-      date: "2026-10-03",
+      date: "2026-10-02",
       sections: [
         {
           title: "Fixed",

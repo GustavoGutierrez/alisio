@@ -269,13 +269,9 @@ the decision panel **Plan complete. What would you like to do?**:
 - **Add context**: a one-line field opens (`←`/`→`/Home/End edit, `Enter` sends, `Esc` goes back to
   the choices); the text goes back to the model, which keeps planning and proposes a new revision.
 
-When the plan has [diagrams](/tools#exit-plan) the transcript shows, after the plan, each one's title,
-purpose, the plan section it illustrates, its short explanation and the **Mermaid source capped to a few
-lines** (the rest is in `diagrams/<id>.mmd`; the terminal does not draw diagrams), then the path of the plan
-folder on disk. Open it from `/artifacts`: **Preview here** shows the `plan.md` entry as Markdown and
-**Open with default app** or **Reveal in folder** reach the folder with `plan.json` and the diagrams. The
-web draws them in the [plan viewer](/web#plan-viewer). Under `--read-only` and in `alisio run` the plan is
-returned as text, the files are still written, and nothing is opened.
+Plan diagrams, the plan folder with `plan.json` and the behavior of `alisio run` are explained in
+[Plan mode and plan review: in the terminal and headless](/plan#terminal); the terminal shows each
+diagram's source and the web draws it in the [plan viewer](/web#plan-viewer).
 
 Cancelling the turn (`Esc` in the editor) withdraws a pending review and drops an approval that had
 not started yet. While the panel is open Shift+Tab does nothing, and the plan agent stays read-only

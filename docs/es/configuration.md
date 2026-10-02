@@ -413,8 +413,8 @@ nuevo, pero los topes de turnos y de tiempo de un objetivo que ya existe se fija
 ## `plan` {#plan}
 
 [Diagramas del plan](/es/tools#exit-plan): el agente de plan puede añadir pequeños diagramas Mermaid a
-un plan, que el [visor del plan en la web](/es/web#plan-viewer) dibuja y la [terminal](/es/tui#plan-review)
-muestra como código fuente.
+un plan, que el [visor del plan en la web](/es/plan#plan-viewer) dibuja y la [terminal](/es/plan#terminal)
+muestra como código fuente. Véanse los [ajustes del plan](/es/plan#settings) para saber dónde cambiarlos.
 
 | Campo | Valor por defecto | Descripción |
 | --- | --- | --- |

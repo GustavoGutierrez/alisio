@@ -94,7 +94,7 @@ agente se aplica en el mismo chat solo si pertenece al proveedor del chat; si no
 nuevo con el agente.
 
 El agente integrado `plan` termina con la herramienta `exit_plan`: el usuario revisa el plan y, si lo
-acepta, el chat cambia a `build` y lo implementa. Véase [Modo plan y revisión del plan](/es/web#plan-review).
+acepta, el chat cambia a `build` y lo implementa. Véase [Modo plan y revisión del plan](/es/plan).
 
 ## Terminal: `/agents`
 

@@ -36,6 +36,10 @@ features:
     details: Herramientas, comandos, eventos, contexto, hooks de compactación y sesión, completados del modelo y un puerto de almacenamiento SQLite.
   - title: Agentes
     details: Crea agentes con ayuda del modelo activo, desde plantillas o a mano, guárdalos como Markdown portable en .agents/agents y cámbialos con /agents o /agent:&lt;id&gt; en la web y la TUI.
+  - title: Modo plan y visor del plan
+    details: Un agente de plan de solo lectura propone un plan que aprueba antes de que cambie nada, con diagramas Mermaid opcionales en un visor del plan en la web.
+  - title: Dashboards y gráficos
+    details: El análisis en Python publica dashboards, informes y hojas de cálculo como artefactos; los gráficos interactivos usan un Chart.js incrustado, sin conexión.
   - title: Subagentes
     details: Delegación en agentes especializados en sesiones hijas, con árbol de agentes en vivo, worktrees git en paralelo y cancelación en cascada.
   - title: MCP y Herdr
@@ -78,12 +82,14 @@ Incluye:
 - Herramientas locales para leer, buscar, editar, ejecutar procesos y Git, controladas por permisos explícitos.
 - Compactación de contexto y un plugin integrado de memoria persistente.
 - [Agentes](/es/agents): creación asistida por el modelo, plantillas, archivos `.agents/agents` de proyecto o globales y cambio de agente desde la web y la TUI.
+- [Modo plan y revisión del plan](/es/plan): un agente de plan de solo lectura, diagramas opcionales y un visor del plan en la web.
+- Análisis en Python con dashboards y [gráficos](/es/analysis#charts) publicados como artefactos.
 - Subagentes: delegación en agentes especializados en sesiones hijas, con un árbol de agentes en vivo.
 - [Instrucciones jerárquicas `AGENTS.md` y Agent Skills](/es/context).
 - Un cliente MCP (stdio y Streamable HTTP) y una integración con Herdr.
 - Un SDK de plugins tipado (`@alisio/sdk`) para herramientas, comandos, hooks y almacenamiento.
 
-Alisio `__ALISIO_VERSION__` es la primera versión **estable**, todavía anterior a 1.0: las versiones menores pueden incluir cambios incompatibles (consulte [Estabilidad y versionado](/es/publishing#estabilidad-y-versionado)). Lea [Limitaciones conocidas](/es/limitations)
+Alisio `__ALISIO_VERSION__` es una versión **estable**, todavía anterior a 1.0: las versiones menores pueden incluir cambios incompatibles (consulte [Estabilidad y versionado](/es/publishing#estabilidad-y-versionado)). Lea [Limitaciones conocidas](/es/limitations)
 antes de depender de él, y recuerde que **no es un sandbox**: las herramientas y los plugins se
 ejecutan con sus privilegios de usuario.
 

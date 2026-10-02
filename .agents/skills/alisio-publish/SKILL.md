@@ -34,7 +34,8 @@ en las instrucciones).
   `@alisio/sdk`, formato de configuración, protocolo web/SSE; las migraciones de BD solo avanzan).
 - `1.0.0` solo cuando el SDK, el formato de configuración y el protocolo de eventos estén
   congelados. **Los plugins externos** (repo `alisio-plugins`, p. ej. `@alisio/plugin-deepseek`)
-  declaran `@alisio/sdk` como peer `^0.1.0`: acepta 0.1.x pero no 0.2.0 ni 1.0.0.
+  declaran `@alisio/sdk` como peer (`^0.1.0` para la línea 0.1, `^0.2.0` para 0.2): un rango con
+  circunflejo en 0.x no cruza versiones menores; quien soporte ambas declara `^0.1.0 || ^0.2.0`.
 - Prereleases opcionales: `-rc.N` o `-alpha.N`. `latest` es para estables: el script pasa
   `--tag latest` a las estables y **no pasa `--tag` a las prereleases** (npm aplica su tag por
   defecto, que podría ser `latest`), así que una prerelease solo se publica con cuidado y

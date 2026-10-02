@@ -1,7 +1,7 @@
 # Estado de implementación — `__ALISIO_VERSION__`
 
 La especificación original es la dirección del producto, no una declaración de que todos
-sus criterios de release estén superados. `__ALISIO_VERSION__` es la primera versión estable
+sus criterios de release estén superados. `__ALISIO_VERSION__` es una versión estable
 (semver 0.x: las versiones menores pueden incluir cambios incompatibles hasta 1.0.0), funcional
 y no solo interfaces o stubs.
 
@@ -1022,7 +1022,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
 - Release estable con binarios: el script `pnpm publish` (`scripts/publish.ts`, ver
   [Publicación](/es/publishing)) publica las versiones alpha anteriores y la `0.1.0` estable
-  (dist-tag `latest`); SemVer de rangos de plugins (`@alisio/sdk` como peer `^0.1.0`) y recarga en
+  (dist-tag `latest`); SemVer de rangos de plugins (`@alisio/sdk` como peer `^0.2.0`) y recarga en
   sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo y capacidades multimedia MCP. `/mcps` permite reconexión explícita y bearer
@@ -2571,6 +2571,7 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   Verificado en Chromium contra `alisio serve` con un proveedor falso (tema claro y oscuro, 390 px, teclado,
   revisión 2 con actualizado y quitado, ZIP, `plan.diagrams: false`); no en otros navegadores, Windows ni
   macOS, y la TUI solo por pruebas de su lógica, no en un terminal real.
+- Guía de usuario: [Modo plan y revisión del plan](/es/plan).
 
 ### Tareas en segundo plano
 
@@ -2636,3 +2637,4 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   proveedor falso: CSP real sin errores de consola, 1280 px y 390 px sin desbordamiento horizontal, esquema
   claro y oscuro. No verificado: otros navegadores, Windows o macOS, un modelo real con las nuevas pautas,
   lectores de pantalla ni impresión a PDF.
+- Guía de usuario: [Gráficos](/es/analysis#charts).

@@ -403,7 +403,8 @@ time caps of a goal that already exists were fixed when it was created.
 ## `plan` {#plan}
 
 [Plan diagrams](/tools#exit-plan): the plan agent may add small Mermaid diagrams to a plan, which the
-[web plan viewer](/web#plan-viewer) draws and the [terminal](/tui#plan-review) shows as source.
+[web plan viewer](/plan#plan-viewer) draws and the [terminal](/plan#terminal) shows as source.
+See [Plan settings](/plan#settings) for where to change them.
 
 | Field | Default | Description |
 | --- | --- | --- |

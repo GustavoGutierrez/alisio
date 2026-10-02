@@ -67,8 +67,9 @@ Alisio sigue semver en su forma 0.x:
   `alisio serve`. Las migraciones de SQLite solo avanzan: una versión nueva de Alisio actualiza sus
   datos, una anterior puede no poder leerlos. Mientras sea 0.x, una versión menor puede cambiar
   cualquiera de ellos; el changelog lo indica.
-- **Los plugins** declaran `@alisio/sdk` como dependencia peer con `^0.1.0`, que acepta 0.1.x y no
-  la 0.2.0.
+- **Los plugins** declaran `@alisio/sdk` como dependencia peer con `^0.2.0`, que acepta 0.2.x y no
+  0.1.x ni 0.3.0 (los rangos con circunflejo en 0.x nunca cruzan una versión menor). Un plugin que
+  soporte ambas líneas declara `^0.1.0 || ^0.2.0`.
 - **1.0.0** está prevista para cuando el SDK, el formato de configuración y el protocolo de eventos
   estén congelados. No se publicará antes, y desde entonces los cambios incompatibles exigirán una
   versión mayor.

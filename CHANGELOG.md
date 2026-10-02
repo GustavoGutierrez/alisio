@@ -4,7 +4,31 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
-## [0.1.1] - 2026-10-03
+## [0.2.0] - 2026-10-02
+
+A minor release: while Alisio is 0.x it may include breaking changes. Plugins that declare
+`@alisio/sdk` as a `^0.1.0` peer must update the range (or declare `^0.1.0 || ^0.2.0`).
+
+### Added
+
+- Plan diagrams: the plan agent can attach small Mermaid diagrams (flows, sequences, architecture) to the plan it proposes with `exit_plan`.
+- A plan viewer in the web UI: the plan opens in the artifact panel with its diagrams drawn in your theme, next to the plan review. The terminal shows the diagram source.
+- Plan files are saved in a plan folder with a `plan.json` manifest, so the plan and its diagrams are easy to find and reuse.
+- Two new settings, `plan.diagrams` and `plan.maxDiagrams` (in the configuration file, **Settings** in the web and `/settings` in the terminal), to turn diagrams off or cap how many a plan keeps.
+- Dashboard charts for Python analysis: `alisio_runtime.charts` builds interactive pie, donut, bar, line, area and scatter charts, KPI tiles and cards with an embedded Chart.js (MIT), so dashboards work offline, in the viewer and in the downloaded file.
+
+### Improved
+
+- Charts adapt to their card and follow the light and dark theme, with value labels, tooltips and a data table for screen readers.
+- The pure-SVG helpers (`alisio_runtime.svg`) were rewritten: they scale with their container and carry a title and description.
+- The agent receives clearer guidance for `python_run` about how to draw charts and dashboards.
+
+### Fixed
+
+- Pie charts drew wrong or broken slices in generated dashboards (including a single 100% slice), and bar charts rendered at a fixed small size.
+- A dashboard that draws SVG pies by hand, uses fixed-size SVG charts or loads a script from the network now gets a warning in the `python_run` result that points to the chart helpers.
+
+## [0.1.1] - 2026-10-02
 
 ### Fixed
 

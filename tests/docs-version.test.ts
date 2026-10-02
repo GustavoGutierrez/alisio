@@ -75,15 +75,15 @@ describe("stable release wording", () => {
       );
   });
 
-  it("keeps plugin and example SDK ranges on the stable ^0.1.0", () => {
+  it("keeps plugin and example SDK ranges on the current ^0.2.0", () => {
     for (const file of ["docs/plugins.md", "docs/es/plugins.md"])
       expect(readFileSync(file, "utf8"), file).not.toMatch(/@alisio\/sdk": "\^0\.1\.0-alpha/);
     for (const name of ["custom-mascot", "custom-websearch"]) {
       const manifest = JSON.parse(
         readFileSync(join("examples", "plugins", name, "package.json"), "utf8"),
       ) as { peerDependencies: Record<string, string>; devDependencies: Record<string, string> };
-      expect(manifest.peerDependencies["@alisio/sdk"], name).toBe("^0.1.0");
-      expect(manifest.devDependencies["@alisio/sdk"], name).toBe("^0.1.0");
+      expect(manifest.peerDependencies["@alisio/sdk"], name).toBe("^0.2.0");
+      expect(manifest.devDependencies["@alisio/sdk"], name).toBe("^0.2.0");
     }
   });
 });

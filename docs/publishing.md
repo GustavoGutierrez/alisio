@@ -63,8 +63,9 @@ Alisio follows semver in its 0.x form:
   events), the configuration file format, and the web/SSE protocol of `alisio serve`. SQLite
   migrations are forward-only: a newer Alisio upgrades your data, an older one may not read it.
   While 0.x, a minor release may change any of them; the changelog says so.
-- **Plugins** declare `@alisio/sdk` as a peer dependency with `^0.1.0`, which accepts 0.1.x and not
-  0.2.0.
+- **Plugins** declare `@alisio/sdk` as a peer dependency with `^0.2.0`, which accepts 0.2.x and not
+  0.1.x or 0.3.0 (caret ranges on 0.x never cross a minor). A plugin that supports both lines declares
+  `^0.1.0 || ^0.2.0`.
 - **1.0.0** is planned for when the SDK, the config format and the event protocol are frozen. It
   will not be published before then, and from it on breaking changes require a major version.
 

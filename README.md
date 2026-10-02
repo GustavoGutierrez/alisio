@@ -16,7 +16,7 @@ persistent memory (a built-in plugin you can disable), and exposes a typed plugi
 extend it without touching the core.
 
 > **Status: Usable, tested and documented. First stable release (0.1.0), still pre-1.0.** Until 1.0.0
-> the usual 0.x semver rules apply: fixes ship as 0.1.x and a minor release (0.2.0) may include
+> the usual 0.x semver rules apply: fixes ship as patch releases and a new minor release (such as 0.3.0) may include
 > breaking changes. The npm badge above always shows the latest published version; see the
 > [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
 > [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
@@ -41,6 +41,10 @@ extend it without touching the core.
 - **Agents**: create agents with the active model's help (or from templates), stored as portable
   Markdown in `.agents/agents` (project) or `~/.agents/agents` (global), reloaded without a restart
   and switched with `/agents` or `/agent:<id>` in the web UI and the TUI.
+- **Plan mode and plan viewer**: a read-only plan agent proposes a plan (with optional Mermaid diagrams)
+  that you approve before anything changes; the web UI opens it in a plan viewer.
+- **Dashboards and charts**: Python analysis publishes dashboards, reports and spreadsheets as
+  artifacts, with interactive charts from an embedded Chart.js that works offline.
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned
@@ -124,3 +128,8 @@ Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability, and fol
 ## License
 
 [MIT](LICENSE) · Maintainer: **Gustavo Gutiérrez**
+
+Third-party notice: [Chart.js](https://www.chartjs.org/) 4.5.1 (MIT, © Chart.js Contributors) is
+bundled in `@alisio/core` for dashboard charts. Its copyright header stays in the bundled file and
+its license text is kept in
+`packages/core/src/analysis/python/alisio_runtime/chart.LICENSE.txt`.

@@ -321,65 +321,18 @@ permissions menu of the composer keeps the four presets.
 ### Plan mode and plan review {#plan-review}
 
 Switch a chat to the **plan** agent (the selector, **Shift+Tab** or `/agent:plan`) and it
-investigates with read-only tools, then finishes by calling the `exit_plan` tool with the whole plan
-in Markdown. The plan appears open in the conversation (a **Plan** row), is saved as a `plan.md`
-artifact (one per revision, listed in the artifacts panel and openable in the side panel from its
-card) and the composer is replaced by the decision screen **Plan complete. What would you like to
-do?**:
-
-- **Agree and start implementation**: the chat switches to the `build` agent and one implementation
-  turn starts. Its message carries the approved plan as a snapshot (the chat shows a short
-  *Implement the approved plan* line instead of repeating it) and uses the chat's permission mode
-  unchanged.
-- **Skip for now**: nothing else happens; the chat stays in plan mode. Esc does the same.
-- **Add context**: a text box opens; what you send goes back to the model as the tool result and it
-  keeps planning, then proposes a new revision.
-
-<figure class="doc-shot">
-  <img src="./assets/web-ui/plan_review_web_ui.webp" alt="The plan review screen: the plan open in the conversation, the Plan complete decision panel with the plan.md artifact card and the three options (agree and start implementation, skip for now, add context), and the plan.md artifact open in the side panel." width="1280" height="820" loading="lazy" decoding="async" />
-  <figcaption>The plan review: the decision screen under the plan, with plan.md open in the side panel (Spanish interface).</figcaption>
-</figure>
-
-The plan run is read-only whatever the permission mode: the runner denies writes, commands and
-network calls to the plan agent, so choosing **Full access** never widens it. Approving twice (a
-double click, two tabs, a reload) starts a single implementation turn. Reloading the page with a
-review pending shows the same decision again; closing the browser leaves it pending for 30 seconds
-and then counts as **Skip for now**, as does cancelling the run or letting the run time out. The
-screen replaces the composer, so Shift+Tab and the agent selector do nothing while it is open.
-Clients that do not know the plan review (a script using the API) see a normal question with the
-same three options.
+investigates with read-only tools, then hands over its plan with `exit_plan`. The plan opens in the
+conversation, is saved as a `plan.md` artifact and the composer gives way to the decision screen:
+**Agree and start implementation**, **Skip for now** (Esc does the same) or **Add context**. The plan
+run is read-only whatever the permission mode. The full guide, with screenshots, the decision rules and
+revisions, is [Plan mode and plan review](/plan#plan-review).
 
 ### Plan diagrams and the plan viewer {#plan-viewer}
 
-The plan agent can add small [Mermaid diagrams](/tools#exit-plan) to a plan (0 to 5, only when they
-explain something the text does not; a simple plan gets none). A plan with diagrams is published as one
-folder artifact per revision (`plan.md`, `plan.json` and `diagrams/*.mmd`), and its card shows the same
-**plan.md** name as before. The decision screen gains a discreet line (**3 diagrams**) with **Open plan
-viewer**; the card opens the same viewer in the side panel:
-
-- **Summary**, **Main goals**, **Implementation stages** (a stepper), **Diagrams**, **Components and
-  relationships** (the component and architecture diagrams), **Decisions and considerations** and finally the
-  **Full plan**, all read from `plan.json`, which Alisio generates from the plan text. A plan that does not
-  use the usual sections just shows the full plan and its diagrams; a missing or broken `plan.json` falls back
-  to the plan text and the diagram files.
-- Every diagram has a title, a short explanation and a link to the plan section it illustrates; each
-  section of the full plan links back to its diagrams. Both directions move focus too, and the section bar
-  works with the arrow keys, Home and End.
-- Diagrams are drawn in Alisio's palette (colors for input, process, data, system, external, decision and
-  risk, light and dark) with Mermaid in strict mode. A diagram with a syntax error shows its source and the
-  error instead. Each one can be copied, zoomed, expanded and exported as SVG.
-- From the second revision a diagram that is new or changed since the previous revision carries an
-  **Updated in revision N** badge, and the ones the model dropped are listed as removed.
-- It is responsive down to a phone width. `plan.md` stays fully readable on its own, and the download is a
-  ZIP with `plan.md`, `plan.json` and `diagrams/*.mmd`.
-
-<figure class="doc-shot">
-  <img src="./assets/web-ui/plan_viewer_web_ui.webp" alt="The plan viewer in the side panel: the plan title with its revision, the section bar, and two diagrams drawn in Alisio's colors, a flowchart of the export request and a component diagram marked as updated in revision 2." width="1280" height="1000" loading="lazy" decoding="async" />
-  <figcaption>The plan viewer for revision 2 of a plan: the request flow and the components diagram, which changed in this revision (Spanish interface).</figcaption>
-</figure>
-
-Turn it off with [`plan.diagrams`](/configuration#plan) or cap it with `plan.maxDiagrams`. Mermaid draws only in
-the web; the terminal shows each diagram's source (see [Terminal UI](/tui#plan-review)).
+A plan can carry small Mermaid diagrams. The decision screen offers **Open plan viewer** and the plan
+card opens the same viewer in the side panel: sections, diagrams drawn in Alisio's palette, links
+between diagrams and text, and a ZIP download. See [The plan viewer](/plan#plan-viewer); turn
+diagrams off or cap them with [`plan.diagrams` and `plan.maxDiagrams`](/plan#settings).
 
 ### Background tasks {#background-tasks}
 

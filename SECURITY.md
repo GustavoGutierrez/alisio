@@ -7,7 +7,7 @@ and `docs/tools.md`). Please read the scope below before reporting.
 
 ## Supported versions
 
-Alisio is pre-1.0: the first stable release is `0.1.0` and it is evolving quickly. Only the
+Alisio is pre-1.0 (the first stable release was `0.1.0`) and it is evolving quickly. Only the
 **latest published release** of `@alisio/alisio-code` (and the `@alisio/*` packages released with
 it) receives security fixes; the `0.1.0-alpha.x` prereleases and older 0.x lines are not supported. When
 reporting, tell us which version you are on (`alisio --version`) and how you installed it

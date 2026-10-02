@@ -108,10 +108,7 @@ añade al plan hasta `plan.maxDiagrams` (5 por defecto) diagramas [Mermaid](http
 llamada sin él funciona exactamente como antes. `id` es un nombre estable en kebab-case (el archivo es
 `diagrams/<id>.mmd`), `section` es el encabezado del plan que ilustra el diagrama y `type` es `overview`,
 `flow`, `components`, `architecture`, `sequence`, `data`, `state` u `other` (se deduce de la palabra clave
-de Mermaid si falta). Las instrucciones del agente de plan llevan la guía de estilo: solo cuando un
-diagrama aporta comprensión, de 0 a 5 por plan, una idea cada uno, unos 40 nodos como máximo, etiquetas
-cortas, nada que no esté en el plan y las clases semánticas `input`, `process`, `data`, `system`,
-`external`, `decision` y `risk`, cuyos colores (claro y oscuro) aplica la web al dibujar. Alisio valida cada
+de Mermaid si falta). Las instrucciones del agente de plan llevan la guía de estilo (véase [Diagramas](/es/plan#diagrams)). Alisio valida cada
 diagrama **sin dibujarlo** (Mermaid necesita un DOM): 8 KB como máximo, un tipo entre `flowchart`/`graph`,
 `sequenceDiagram`, `stateDiagram`/`stateDiagram-v2`, `erDiagram`, `classDiagram`, `gantt`, `mindmap`,
 `timeline` y `journey`, una estimación de 40 nodos como máximo, y ninguna instrucción `click`/`link`/
@@ -122,19 +119,15 @@ herramienta lista `diagrams.accepted`, `diagrams.dropped` (con el motivo) y `dia
 modelo se corrija. Un diagrama que valida pero tiene un error de sintaxis de Mermaid se muestra en la web
 como código más el error.
 
-Con diagramas el plan se publica como **un artefacto por revisión, en forma de carpeta**: `plan.md` (la
-entrada, de modo que se previsualiza como cualquier documento Markdown), `plan.json` (un manifiesto que
-Alisio genera a partir del texto del plan: resumen, objetivos, etapas, decisiones y riesgos, los
-encabezados del plan y la lista de diagramas con un hash de contenido y un estado `new`/`updated`/
-`unchanged`) y `diagrams/*.mmd`; su descarga es un ZIP con esos archivos. Un plan sin diagramas es el
-único `plan.md` de siempre. Al revisar el plan, el modelo reenvía todos los diagramas que siguen
-vigentes; Alisio compara hashes con la revisión anterior y marca cada uno como `new`, `updated` o
-`unchanged`, y lista los `removed`. El hash del plan cubre los diagramas, así que un cambio solo en un
-diagrama es otra propuesta.
+Con diagramas el plan se publica como **un artefacto por revisión, en forma de carpeta** (`plan.md`,
+`plan.json` y `diagrams/*.mmd`; un plan sin diagramas sigue siendo el único `plan.md`). Alisio marca cada
+diagrama como `new`, `updated` o `unchanged` respecto a la revisión anterior y lista los `removed`; el hash
+del plan cubre los diagramas. La carpeta, el manifiesto y las revisiones se describen en
+[Modo plan y revisión del plan](/es/plan#diagrams).
 
 La herramienta nunca cambia de agente ni inicia trabajo: registra la decisión y, cuando termina la
-ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (véanse
-[Terminal](/es/tui#plan-review) y [Web](/es/web#plan-review)). El agente plan es de solo lectura
+ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (véase
+[Modo plan y revisión del plan](/es/plan)). El agente plan es de solo lectura
 porque la política de su ejecución no permite ningún efecto de escritura, proceso o externo, así que
 ningún [modo de permisos](#permission-modes) puede ampliarla. `plan_proposed` y `plan_decided` son
 eventos de ejecución durables.

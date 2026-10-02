@@ -36,6 +36,10 @@ features:
     details: Tools, commands, events, context, compaction and session hooks, model completions and a SQLite storage port.
   - title: Agents
     details: Create agents with the active model, from templates or by hand, store them as portable Markdown in .agents/agents and switch with /agents or /agent:&lt;id&gt; in the web UI and the TUI.
+  - title: Plan mode and plan viewer
+    details: A read-only plan agent proposes a plan you approve before anything changes, with optional Mermaid diagrams shown in a plan viewer in the web UI.
+  - title: Dashboards and charts
+    details: Python analysis publishes dashboards, reports and spreadsheets as artifacts; interactive charts are built with an embedded Chart.js, offline.
   - title: Subagents
     details: Delegate to specialized agents in child sessions, with a live agent tree, parallel git worktrees and cascade cancellation.
   - title: MCP and Herdr
@@ -78,12 +82,14 @@ It includes:
 - Local tools for reading, searching, editing, running processes and Git, gated by explicit permissions.
 - Context compaction and a built-in persistent memory plugin.
 - [Agents](/agents): model-assisted creation, templates, project/global `.agents/agents` files and switching from the web UI and the TUI.
+- [Plan mode and plan review](/plan): a read-only plan agent, optional diagrams and a plan viewer in the web UI.
+- Python analysis with dashboards and [charts](/analysis#charts) published as artifacts.
 - Subagents: delegation to specialized agents in child sessions, with a live agent tree.
 - Hierarchical [`AGENTS.md` instructions and Agent Skills](/context).
 - An MCP client (stdio and Streamable HTTP) and a Herdr integration.
 - A typed plugin SDK (`@alisio/sdk`) for tools, commands, hooks and storage.
 
-Alisio `__ALISIO_VERSION__` is the first **stable** release, still pre-1.0: minor versions may include breaking changes (see [Stability and versioning](/publishing#stability-and-versioning)). Read [Known limitations](/limitations) before relying
+Alisio `__ALISIO_VERSION__` is a **stable** release, still pre-1.0: minor versions may include breaking changes (see [Stability and versioning](/publishing#stability-and-versioning)). Read [Known limitations](/limitations) before relying
 on it, and remember that it is **not a sandbox**: tools and plugins run with your user privileges.
 
 Next steps: [Installation](/installation) · [Quick start](/quick-start) · [Configuration](/configuration).
