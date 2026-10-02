@@ -424,6 +424,14 @@ export interface ToolContext {
   /** Run and tool call that issued this execution, when run by the agent loop. */
   runId?: string;
   callId?: string;
+  /**
+   * Emits a durable run event of the call's run. Only `exit_plan` receives it (`plan_proposed`,
+   * `plan_decided`); other tools, plugin tools included, never do.
+   */
+  emitEvent?: <K extends "plan_proposed" | "plan_decided">(
+    type: K,
+    data: RunEventDataMap[K],
+  ) => void;
   /** Present when the host has an artifact store for this session (built-in tools only in v1). */
   artifacts?: ArtifactPublisher;
   /**
@@ -566,6 +574,23 @@ export interface RunEventDataMap {
     path: string;
     callId?: string;
     executionId?: string;
+  };
+  /** The plan agent proposed a plan with `exit_plan` and is waiting for the user's decision. */
+  plan_proposed: {
+    callId: string;
+    planId: string;
+    revision: number;
+    hash: string;
+    title: string;
+    /** The `plan.md` artifact (absent when publishing failed). */
+    artifactId?: string;
+  };
+  /** The user decided: approve (implementation follows), skip (stay in plan) or add context. */
+  plan_decided: {
+    callId: string;
+    planId: string;
+    hash: string;
+    decision: "approve" | "skip" | "context";
   };
   run_completed: { tokens: number; text: string; truncated?: boolean };
   /**
@@ -943,6 +968,30 @@ export interface QuestionOption {
   description?: string;
   /** At most one option per question should be marked recommended. A suggestion, never forced. */
   recommended?: boolean;
+  /**
+   * Choosing this option also asks for free text (for example "Add context"). The text travels
+   * back as the extra answer key `"<questionId>:text"`; clients that do not know the field show
+   * a plain option and the answer simply carries no text.
+   */
+  textInput?: { placeholder?: string };
+}
+/**
+ * A plan waiting for the user's decision (`exit_plan`). Carried by `AskQuestionsRequest.plan` and
+ * `PendingInteraction.request.plan`: clients that know it render the plan and the three decisions;
+ * clients that do not still show the single question with its options.
+ */
+export interface PlanReview {
+  /** Stable id of this proposal; one per `exit_plan` call. */
+  planId: string;
+  /** 1 for the first proposal of a session, then one more for every `exit_plan` call. */
+  revision: number;
+  /** `sha256` of the Markdown: the approved snapshot is the one with this hash. */
+  hash: string;
+  title: string;
+  /** The whole plan in Markdown (the same text as the `plan.md` artifact). */
+  markdown: string;
+  /** The published `plan.md` artifact (absent when publishing failed). */
+  artifact?: ArtifactRef;
 }
 export interface Question {
   id: string;
@@ -960,6 +1009,8 @@ export interface AskQuestionsRequest {
   session?: string;
   /** Who is asking, e.g. an agent path such as "general › explore". */
   label?: string;
+  /** Set by `exit_plan`: the plan these questions decide on (see `PlanReview`). */
+  plan?: PlanReview;
   signal?: AbortSignal;
 }
 /** Each question id maps to the chosen value(s), or undefined when the question was skipped. */
@@ -1231,7 +1282,7 @@ export interface PendingInteraction {
   workspaceId: string;
   request:
     | { kind: "select"; select: SelectRequest }
-    | { kind: "questions"; questions: Question[]; label?: string };
+    | { kind: "questions"; questions: Question[]; label?: string; plan?: PlanReview };
 }
 /** One entry of the shared slash-command catalog. */
 export interface CommandDescriptor {

@@ -317,6 +317,37 @@ listed as unavailable with the reason. `/permission ask`, `/permission auto`, `/
 and `/permission status` run without opening the popover and answer in the conversation; the
 permissions menu of the composer keeps the four presets.
 
+### Plan mode and plan review {#plan-review}
+
+Switch a chat to the **plan** agent (the selector, **Shift+Tab** or `/agent:plan`) and it
+investigates with read-only tools, then finishes by calling the `exit_plan` tool with the whole plan
+in Markdown. The plan appears open in the conversation (a **Plan** row), is saved as a `plan.md`
+artifact (one per revision, listed in the artifacts panel and openable in the side panel from its
+card) and the composer is replaced by the decision screen **Plan complete. What would you like to
+do?**:
+
+- **Agree and start implementation**: the chat switches to the `build` agent and one implementation
+  turn starts. Its message carries the approved plan as a snapshot (the chat shows a short
+  *Implement the approved plan* line instead of repeating it) and uses the chat's permission mode
+  unchanged.
+- **Skip for now**: nothing else happens; the chat stays in plan mode. Esc does the same.
+- **Add context**: a text box opens; what you send goes back to the model as the tool result and it
+  keeps planning, then proposes a new revision.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plan_review_web_ui.webp" alt="The plan review screen: the plan open in the conversation, the Plan complete decision panel with the plan.md artifact card and the three options (agree and start implementation, skip for now, add context), and the plan.md artifact open in the side panel." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>The plan review: the decision screen under the plan, with plan.md open in the side panel (Spanish interface).</figcaption>
+</figure>
+
+The plan run is read-only whatever the permission mode: the runner denies writes, commands and
+network calls to the plan agent, so choosing **Full access** never widens it. Approving twice (a
+double click, two tabs, a reload) starts a single implementation turn. Reloading the page with a
+review pending shows the same decision again; closing the browser leaves it pending for 30 seconds
+and then counts as **Skip for now**, as does cancelling the run or letting the run time out. The
+screen replaces the composer, so Shift+Tab and the agent selector do nothing while it is open.
+Clients that do not know the plan review (a script using the API) see a normal question with the
+same three options.
+
 ### `/reload` and `/changelog` {#reload-and-changelog}
 
 `/reload` re-reads the configuration, agents, skills, prompt templates and MCP servers of the

@@ -262,6 +262,27 @@ nuevo (`Agent: plan (read-only) · Shift+Tab cycles agents`). La elección se pe
   funcionan.
 - Los permisos son otro eje: véase [Modos de permisos](#permission-modes).
 
+### Modo plan y revisión del plan {#plan-review}
+
+Con el agente **plan** activo (Mayús+Tab, `/agents` o `/agent:plan`) el modelo investiga con
+herramientas de solo lectura y termina llamando a `exit_plan` con el plan completo en Markdown.
+Alisio imprime el plan entero en la transcripción, lo guarda como artefacto `plan.md` (`/artifacts`
+lo lista) y abre el panel de decisión **Plan complete. What would you like to do?**:
+
+- `↑`/`↓` eligen, `Enter` confirma.
+- **Agree and start implementation**: cuando termina el turno del plan, Alisio cambia al agente
+  `build` (se persiste como `/agents`) y ejecuta un turno de implementación cuyo mensaje lleva el
+  plan aprobado. El modo de permisos no cambia. Pulsar Enter dos veces inicia un solo turno.
+- **Skip for now** (o `Esc`): el agente sigue siendo `plan` y no pasa nada más.
+- **Add context**: se abre un campo de una línea (`←`/`→`/Inicio/Fin editan, `Enter` envía, `Esc`
+  vuelve a las opciones); el texto vuelve al modelo, que sigue planificando y propone una revisión
+  nueva.
+
+Cancelar el turno (`Esc` en el editor) retira una revisión pendiente y descarta una aprobación que
+aún no había empezado. Mientras el panel está abierto Mayús+Tab no hace nada, y el agente plan sigue
+siendo de solo lectura en cualquier [modo de permisos](#permission-modes). Con `--read-only`, o en
+`alisio run`, no hay revisión: la herramienta se lo dice al modelo y el plan es su respuesta final.
+
 ## Modos de permisos {#permission-modes}
 
 `/permission` abre un único menú: **Use ask mode**, **Use auto mode**, **Use full access mode**,

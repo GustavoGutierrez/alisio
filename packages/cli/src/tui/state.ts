@@ -916,6 +916,8 @@ export function runPhase(view: ViewState): RunPhase {
       };
     if (name === "ask_user_question")
       return { label: "waiting for your answer", silentByDesign: true };
+    if (name === "exit_plan")
+      return { label: "waiting for your plan decision", silentByDesign: true };
     if (name === "task" || name === "task_wait")
       return { label: "a sub-agent is working", silentByDesign: true };
     if (name === "python_run") return { label: `running Python${detail}`, silentByDesign: false };

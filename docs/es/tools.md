@@ -84,6 +84,30 @@ texto plano en su lugar; nunca se queda esperando una interfaz que no puede resp
 Esc (omite solo la pregunta actual) y cómo se ponen en cola y se enrutan las preguntas de la raíz y
 de los subagentes hacia la sesión exacta que preguntó.
 
+## Entregar un plan: exit_plan {#exit-plan}
+
+`exit_plan` es como termina el agente integrado **plan**: `{ plan: string (Markdown, hasta 60 000
+caracteres), title?: string }`. Es `effect: read`, de modo que cualquier política lo permite, y se
+ofrece **solo a la ejecución del agente plan** (nunca a `build`, a los subagentes ni a Code Mode). La
+herramienta guarda el plan como artefacto `plan.md` (uno por llamada, así que cada revisión es un
+artefacto nuevo de la sesión), pide una decisión al usuario con la misma infraestructura que
+`ask_user_question` y **siempre devuelve un resultado de herramienta**, de modo que la sesión nunca
+queda con una llamada colgada:
+
+| `decision` del resultado | Significado | Qué se le dice al modelo |
+|---|---|---|
+| `approved` | El usuario aceptó | El agente build implementará exactamente este plan: responde en una frase y detente |
+| `skipped` | Omitir por ahora, Esc, una pantalla cerrada, una ejecución cancelada o un tiempo agotado | Sigue en modo plan; no la llames de nuevo salvo que te lo pidan |
+| `feedback` | Añadir contexto (el texto va en `feedback`) | Revisa el plan y vuelve a llamar a `exit_plan` |
+| `unavailable` | Sin interfaz interactiva (`alisio run`, `--json`) o con `--read-only` | Da el plan completo como respuesta final |
+
+La herramienta nunca cambia de agente ni inicia trabajo: registra la decisión y, cuando termina la
+ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (véanse
+[Terminal](/es/tui#plan-review) y [Web](/es/web#plan-review)). El agente plan es de solo lectura
+porque la política de su ejecución no permite ningún efecto de escritura, proceso o externo, así que
+ningún [modo de permisos](#permission-modes) puede ampliarla. `plan_proposed` y `plan_decided` son
+eventos de ejecución durables.
+
 ## Leer una URL: webfetch {#webfetch}
 
 `webfetch(url, format?, timeout?)` obtiene una URL `http(s)` y la devuelve como `markdown` (por

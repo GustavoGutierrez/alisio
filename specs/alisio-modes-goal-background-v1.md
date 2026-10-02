@@ -4,7 +4,7 @@
 |---|---|
 | Versión | 1.0 |
 | Proyecto | Alisio |
-| Estado | Especificación técnica ejecutable. **Fase 1 en implementación (2026-10-02)**; fases 2–4 pendientes |
+| Estado | Especificación técnica ejecutable. **Fases 1 y 2 implementadas (2026-10-02)**; fases 3–4 pendientes |
 | Fecha | 2026-10-02 |
 | Paquetes afectados | `@alisio/sdk`, `@alisio/core`, `@alisio/server`, `@alisio/web` (privado), `@alisio/alisio-code` (CLI/TUI); `@alisio/plugin-subagents` solo en la fase 3 (lista de tareas unificada) |
 | Paquetes nuevos | Ninguno |
@@ -299,53 +299,91 @@ Entradas cortas, visibles para el usuario, redactadas desde `git log` y los comm
 
 ---
 
-## 7. FASE 2 — Plan mode con Plan Review (pendiente)
+## 7. FASE 2 — Plan mode con Plan Review (IMPLEMENTADA 2026-10-02)
 
 ### 7.1 Objetivos
 
-El agente `plan` entrega un plan Markdown con `exit_plan`; el plan se ve completo en el chat y se guarda como artefacto; el usuario decide: **Agree and start implementation**, **Skip for now**, **Add context**.
+El agente `plan` entrega un plan Markdown con `exit_plan`; el plan se ve completo en el chat y se guarda como artefacto `plan.md`; el usuario decide: **Agree and start implementation**, **Skip for now**, **Add context**. Ambas superficies (TUI y web); en `alisio run` degrada sin colgarse.
 
-### 7.2 Módulos
+### 7.2 Hechos verificados que corrigen el borrador (lo marcado «(no verificado)» antes de implementar)
+
+| Tema | Borrador | Realidad | Estado |
+|---|---|---|---|
+| Visibilidad de `exit_plan` | `toolFilter` en `agentRunOptions` que solo ofrece la herramienta a `plan` | `RunOptions.toolFilter` existe, pero `build` no lleva filtro (vería la herramienta), las sesiones hijas calculan su filtro aparte (`ChildSessions.filter`, la raíz devuelve `() => true`) y Code Mode (`execute`) llama a `registry` sin filtro. Solución: **herramienta opt-in** (`core/opt-in.ts`): oculta para todos y visible solo si la ejecución lista el nombre en `RunOptions.optInTools`; `agentRunOptions` lo añade solo al agente `plan` integrado y `execute` la rechaza. | (verificado) |
+| Registro condicionado a `ui.interactive()` | En `tools/standard.ts` | `registerStandard` corre antes de que la TUI enlace la interfaz; `interactive()` se evalúa al llamar. Se registra siempre (`application.ts`, `registerExitPlan`) y la degradación se decide en la ejecución. | (verificado) |
+| Eventos desde una herramienta | `plan_proposed`/`plan_decided` | `ToolContext.emit` solo produce `tool_progress` (efímero). Se añadió `ToolContext.emitEvent` (solo lo recibe `exit_plan`, tipado a esos dos eventos); los dos son durables. | (verificado) |
+| Opciones de ejecución del servidor | Heredan `agentRunOptions` | `SessionService.runOptions` copia solo un subconjunto de campos: hubo que reenviar `optInTools`. | (verificado) |
+| Artefacto | «publicar con `ArtifactStore`» | `ToolContext.artifacts.publishText` está disponible en toda llamada (no solo con análisis habilitado); queda enlazado a `runId`/`callId`. Un `plan.md` por llamada; título `<título> (revision N)` desde la 2ª. No se usa `python_run`. | (verificado) |
+| Ruta `POST /api/sessions/:sid/plan/decision` | Reintento tras reconexión | **No se implementa.** La decisión viaja por `POST /api/interactions/:iid` (idempotente: la segunda respuesta devuelve `409 approval_resolved`) y la revisión pendiente se reenvía en el `snapshot` SSE (`pending.interactions`). Una ruta extra no aportaba nada. | (decisión) |
+| Reanudar tras la decisión | `task()`/servidor al terminar el run | TUI: hook al final de `task()`; servidor: `RunScheduler.onChange("finished")` con el nuevo parámetro `{cancelled}`. `RunScheduler.submit` es la vía para iniciar el run. | (verificado) |
+| `applyActiveAgent` (TUI) | No usar | Correcto: cambia el modelo y crea sesión. Se usa `app.updateSetting("agents.active","build")` con `agentOverride`, igual que el ciclo. | (verificado) |
+| Ciclo bloqueado con la revisión pendiente | A verificar | TUI: el turno sigue `busy` y el panel ocupa la ranura del picker (`shiftTabDecision` → bloqueo o `ignore`). Web: la revisión sustituye al compositor; además `cycleAgent` se niega con una interacción pendiente (probado). | (verificado) |
+| Tiempo máximo del run | — | `limits.timeoutMs` (10 min) corre durante la espera: una revisión sin respuesta puede acabar como «Skip». El puente web además omite tras 30 s sin clientes y a los 10 min. | (verificado, documentado) |
+
+### 7.3 Módulos
 
 | Ruta | Estado | Contenido |
 |---|---|---|
-| `packages/core/src/plan/exit-plan.ts` | **nuevo** | Herramienta `exit_plan`, snapshot del plan (hash), publicación del artefacto, decisión. |
-| `packages/core/src/tools/standard.ts` | modificado | Registro condicionado (`ui.interactive()`). |
-| `packages/core/src/agents/active.ts` | modificado | `PLAN_INSTRUCTIONS` pide terminar con `exit_plan`; `agentRunOptions` añade `toolFilter` que **solo** ofrece `exit_plan` al agente `plan`. |
-| `packages/sdk/src/index.ts` | modificado | `QuestionOption.textInput?`, `RunEventDataMap` (`plan_proposed`, `plan_decided`). |
-| `packages/cli/src/tui/questions.ts`, `app.ts` | modificado | Entrada de texto en la pregunta; cambio a `build` + turno de implementación. |
-| `packages/server/src/bridges/interaction-bridge.ts` | modificado | Acepta la clave auxiliar `"<id>:text"`. |
-| `packages/web/src/components/approval/InteractionPanel.tsx` | modificado | Campo de texto para «Add context»; el artefacto del plan se abre en el panel lateral. |
+| `packages/sdk/src/index.ts` | modificado | `QuestionOption.textInput?`, `PlanReview`, `AskQuestionsRequest.plan?`, `PendingInteraction.request.plan?`, `RunEventDataMap.plan_proposed/plan_decided`, `ToolContext.emitEvent?`. |
+| `packages/core/src/core/opt-in.ts` | **nuevo** | `EXIT_PLAN_TOOL`, `OPT_IN_TOOLS`, `optInAllows`. |
+| `packages/core/src/core/runner.ts` | modificado | `RunOptions.optInTools`; la herramienta opt-in se oculta (`availableTools`) y se rechaza en el ejecutor; `emitEvent` solo para `exit_plan`. |
+| `packages/core/src/tools/execute.ts` | modificado | Code Mode rechaza herramientas opt-in. |
+| `packages/core/src/plan/state.ts` | **nuevo** | Estado `sessions.options.plan` con compare-and-set (`proposePlan`, `decidePlan`, `claimApprovedPlan`, `discardApprovedPlan`, `withdrawPendingPlan`, `settlePlanRun`), `implementationPrompt`, constantes y opciones. |
+| `packages/core/src/plan/exit-plan.ts` | **nuevo** | La herramienta. |
+| `packages/core/src/runtime/store.ts` | modificado | `mutateSessionOptions` (lectura-modificación-escritura atómica, `BEGIN IMMEDIATE`). |
+| `packages/core/src/agents/active.ts` | modificado | `PLAN_INSTRUCTIONS` (estructura del plan y uso de `exit_plan`); `agentRunOptions` devuelve `optInTools` para `plan`. |
+| `packages/core/src/application.ts` | modificado | Registro de `exit_plan` (`readOnly` y `plugins.ui`). |
+| `packages/server/src/bridges/interaction-bridge.ts` | modificado | Reenvía `plan`; acepta la clave `"<id>:text"` (≤ 20 000 caracteres) solo si una opción declara `textInput`. |
+| `packages/server/src/host/{plan,run-scheduler,sessions}.ts`, `index.ts` | **nuevo/mod.** | Seguimiento tras el run (`followUpPlanRun`), `onChange(..., {cancelled})`, `runOptions.optInTools`. |
+| `packages/cli/src/tui/plan-review.ts`, `components.ts` (`PlanReviewPanel`), `app.ts`, `state.ts` | **nuevo/mod.** | Reductor puro, panel, `askPlanReview`, `followUpPlan` en `task()`, etiqueta de espera. |
+| `packages/web/src/store/plan-review.ts`, `components/approval/{PlanReviewPanel.tsx,plan.module.css}`, `app.tsx`, `ToolRow.tsx`, `store/app.ts`, `i18n/*` | **nuevo/mod.** | Panel perezoso (con respaldo al panel genérico si el chunk no carga), fila **Plan** abierta con el Markdown, refresco de la insignia del agente y guarda del ciclo. |
+| `packages/web/src/components/settings/labels.ts` | **nuevo** | Etiquetas de ajustes fuera del diccionario inicial (presupuesto de bundle). |
 
-### 7.3 Contratos
+### 7.4 Contratos
 
 ```ts
 export interface QuestionOption { /* … */ textInput?: { placeholder?: string } }
-// AskQuestionsResult is unchanged: a text answer travels as an extra key `"<questionId>:text"`.
-// RunEventDataMap additions (durable):
-//   plan_proposed: { callId: string; artifactId: string; hash: string; title: string }
-//   plan_decided:  { callId: string; hash: string; decision: "approve" | "skip" | "context" }
+export interface PlanReview { planId: string; revision: number; hash: string; title: string; markdown: string; artifact?: ArtifactRef }
+// AskQuestionsRequest.plan?: PlanReview ; PendingInteraction.request (kind "questions").plan?: PlanReview
+// AskQuestionsResult is unchanged: free text travels as the extra key "<questionId>:text".
+// RunEventDataMap (durable):
+//   plan_proposed: { callId; planId; revision; hash; title; artifactId? }
+//   plan_decided:  { callId; planId; hash; decision: "approve" | "skip" | "context" }
 ```
 
-**Herramienta `exit_plan`** (`effect: "read"`; solo visible para `plan` mediante `toolFilter`; falla en sesiones no interactivas con el mismo mensaje que `ask_user_question`):
+**`exit_plan`** (`effect: "read"`, opt-in): entrada `{ plan: string (1–60 000), title?: string (≤ 120) }`. La pregunta tiene `id: "plan"`, título «Plan complete. What would you like to do?» y tres opciones con valor `approve` / `skip` / `context` y etiquetas exactas «Agree and start implementation», «Skip for now», «Add context» (`textInput`). Las UIs web localizan por **valor** (ES: «Aceptar y empezar la implementación», «Omitir por ahora», «Añadir contexto»; título «Plan completo. ¿Qué quieres hacer?»).
 
-```json
-{ "name": "exit_plan",
-  "inputSchema": { "type": "object", "required": ["plan"], "additionalProperties": false,
-    "properties": { "title": {"type":"string","maxLength":120}, "plan": {"type":"string","minLength":1,"maxLength":60000} } } }
-```
+Resultado (siempre hay uno; JSON en la parte de texto, más el bloque `artifact` de la UI): `approved`, `skipped` (Skip, Esc, pantalla cerrada, run cancelado, contexto vacío, revisión ya no pendiente), `feedback` (+ `feedback: <texto>`; el modelo debe volver a llamar a `exit_plan`) y `unavailable` (sin UI interactiva o `--read-only`: se pide el plan completo como respuesta final). La llamada nunca cambia de agente ni inicia trabajo.
 
-Flujo: (1) publica el plan como artefacto Markdown (`ArtifactStore`, procedencia `plan`); (2) emite `plan_proposed`; (3) `ui.askQuestions` con tres opciones («Agree and start implementation», «Skip for now», «Add context» con `textInput`); (4) emite `plan_decided`; (5) devuelve `{decision, text?}` al modelo. `approve` → el run termina; el *host* (TUI `task()`/servidor al terminar el run) llama a la activación de `build` y lanza **un** turno `Implement the approved plan (artifact <id>): <plan>`; la idempotencia usa `hash` + `requestId`. `skip` → sigue en `plan`. `context` → el texto vuelve al modelo (`The user added context: …`), que sigue planificando y debe llamar de nuevo a `exit_plan`.
+### 7.5 Estado, idempotencia y recuperación
 
-**Imposición**: el plan no puede escribir ni ejecutar porque `agentRunOptions` ya fija `policy {false,false,false}` y `approvals:false` y `executeCall` deniega en el ejecutor (verificado); ningún modo de permisos ni preset amplía un run de agente `readOnly`.
+- `sessions.options.plan = { planId, revision, hash, title, status, callId?, artifactId?, plan? , updatedAt }` con `status` ∈ `pending → approved → implementing`, o `skipped` / `feedback` / `cancelled`. `plan` (la instantánea) solo existe en `approved`. La revisión es `anterior + 1`.
+- Cada transición es compare-and-set en `mutateSessionOptions`. `claimApprovedPlan` pasa `approved → implementing` y, en la misma transacción, fija `agent: "build"` en la web: una segunda reclamación (doble clic, otra pestaña, otro proceso) no encuentra nada. El run de implementación usa `requestId = plan-<planId>`: aunque hubiera otra vía, `beginRun` no crearía un segundo run.
+- Turno de implementación: mensaje de usuario persistido con la instantánea (`<approved_plan …>`) y `display` «Implement the approved plan: <título>», ejecutado con `runner.run` normal (IDs de llamadas y datos de continuación intactos). El agente cambia **antes** de ese run y el modo de permisos no cambia.
+- `settlePlanRun` (compartido por TUI y servidor) al terminar un run: una revisión sin respuesta cuenta como `skipped`; un run cancelado descarta la aprobación (`cancelled`); si no, reclama.
+- Recarga web con revisión pendiente: el `snapshot` SSE trae `pending.interactions` con `plan`; el panel vuelve a mostrarse. Una respuesta tardía a una revisión retirada devuelve `409`.
 
-### 7.4 UX
+### 7.6 UX
 
-TUI: el plan se imprime completo en el transcript; `/artifacts` lo lista; el panel de preguntas muestra las tres opciones; «Add context» abre una línea de texto. Web: tarjeta de artefacto + panel lateral con el Markdown; `InteractionPanel` con las tres opciones y un `textarea` para «Add context». Textos EN/ES (`plan.review.title` = «Plan complete. What would you like to do?» / «Plan completo. ¿Qué quieres hacer?»).
+TUI: el plan se imprime completo en la transcripción antes del panel; el panel (`PlanReviewPanel`) muestra las tres opciones, `Esc` = skip, «Add context» abre una línea de texto (Enter envía, Esc vuelve), el artefacto figura en `/artifacts`. Web: fila **Plan** abierta con el Markdown, panel de decisión en el lugar del compositor con la tarjeta de `plan.md` (se abre en el panel lateral) y las tres opciones; «Añadir contexto» abre un `textarea` (Enter envía, Mayús+Enter salto de línea); Esc omite (en el `textarea`, vuelve a las opciones). Los botones se bloquean tras la primera decisión.
 
-### 7.5 Criterios y pruebas
+### 7.7 Criterios de aceptación (resultado)
 
-Plan solo lectura aunque el modelo llame a `write_file`; decisión idempotente (doble clic = un turno); `skip` y `context` no cambian de agente; sesión no interactiva falla con mensaje accionable; el artefacto existe y se abre; paridad TUI/web; `alisio run` no ve `exit_plan` salvo agente plan interactivo. Docs: `docs/agents.md`, `docs/tui.md`, `docs/web.md` (+ES).
+| Criterio | Prueba |
+|---|---|
+| `exit_plan` solo en `plan`; el plan no escribe ni ejecuta con ningún modo | `tests/plan-review.test.ts` (visibilidad, ask/auto/full, Code Mode) |
+| Aprobar / skip / contexto / cancelar devuelven resultado, sin llamadas colgadas | `tests/plan-review.test.ts`, `tests/server-plan-review.test.ts` |
+| Aprobar dos veces = un turno; cambia a build antes y lleva la instantánea | ambas, más `settlePlanRun` |
+| Degradación sin UI y con `--read-only` | `tests/plan-review.test.ts` |
+| Artefacto por revisión | `tests/plan-review.test.ts`, `tests/server-plan-review.test.ts` |
+| Trama de interacción, respuesta con texto, repetición tras reconexión, retirada al cancelar, auth/Origin | `tests/server-plan-review.test.ts` |
+| Reductor y panel TUI, ciclo bloqueado, plan en transcripción | `tests/tui-plan-review.test.ts` |
+| Web: reconocimiento, respuestas, recarga, carga perezosa, EN/ES, ciclo bloqueado | `tests/web-plan-review.test.ts` |
+| Navegador | Comprobado en Chromium contra `alisio serve` con proveedor falso (plan → exit_plan → contexto → aprobación con doble clic → turno build que escribe un archivo; Esc; recarga con revisión pendiente; artefacto en el panel lateral) |
+
+### 7.8 Qué necesita la Fase 3 de la Fase 2
+
+La política del agente `plan` (`bg_*` son `process`: denegadas), `RunScheduler.onChange` con `{cancelled}` y el patrón «hook al terminar el run» para la notificación de tareas, `mutateSessionOptions` como ejemplo de CAS entre procesos, y la regla de presupuesto de bundle (≈ 100 bytes de margen: textos de los paneles Tasks en chunks perezosos).
 
 ---
 
@@ -505,7 +543,7 @@ Salida de tareas: `<stateRoot>/tasks/<root_session>/<id>.log` (acotada por `back
 
 | Método y ruta | Fase | Resumen |
 |---|---|---|
-| `POST /api/sessions/:sid/plan/decision` | 2 | `{callId, decision, text?}` idempotente por `hash`; solo si hay plan pendiente. (La decisión normal viaja por `POST /api/interactions/:iid`; esta ruta es la vía de reintento tras reconexión.) |
+| ~~`POST /api/sessions/:sid/plan/decision`~~ | 2 | **No implementada** (§7.2): la decisión viaja por `POST /api/interactions/:iid` con `{answer: {plan, "plan:text"?}}`. |
 | `GET /api/sessions/:sid/tasks` | 3 | Lista (`BackgroundTaskInfo[]`), incluye espejo de subagentes. |
 | `GET /api/sessions/:sid/tasks/:tid/output?offset=&limit=` | 3 | `{text, nextOffset, eof}`; misma política que `bg_output` (`process`). |
 | `POST /api/sessions/:sid/tasks/:tid/stop` | 3 | Parada del usuario (`stop_origin:"user"`). |
@@ -549,7 +587,7 @@ Se añaden a `SETTABLE_KEYS` solo las que tengan sentido en caliente; las demás
 | R6 | Windows: matar el grupo de procesos (fase 3) y rutas del changelog. | `taskkill /T /F`; pruebas con rutas neutras; marcado «no verificado» hasta probar. |
 | R7 | Presupuesto de `/goal` depende de que el proveedor reporte `usage`. | Sin `usage` se estima (`estimateTokens`) y se marca; el tope de turnos sigue siendo duro. |
 | R8 | Dos aplicaciones del mismo workspace coexisten un instante durante la recarga. | La antigua está inactiva (guarda) y se cierra tras el intercambio; ambas comparten la base SQLite (ya soportado por el servidor). |
-| R9 | El presupuesto de JS inicial de la web (90 KB gzip) quedó en ~89,7 KB tras la Fase 1 (hubo que dejar el menú de permisos y el diálogo de changelog como chunks perezosos y reutilizar claves i18n). | Las fases 2–4 deben cargar sus paneles de forma perezosa y, si hace falta, cargar el diccionario del idioma no activo bajo demanda. |
+| R9 | El presupuesto de JS inicial de la web (90 KB gzip) quedó en ~89,7 KB tras la Fase 1 y en ~89,9 KB tras la Fase 2 (≈ 100 bytes de margen; se movieron las etiquetas de ajustes a un módulo perezoso) (hubo que dejar el menú de permisos y el diálogo de changelog como chunks perezosos y reutilizar claves i18n). | Las fases 2–4 deben cargar sus paneles de forma perezosa y, si hace falta, cargar el diccionario del idioma no activo bajo demanda. |
 
 ---
 

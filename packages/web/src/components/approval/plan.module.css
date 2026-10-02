@@ -1,0 +1,30 @@
+.planTitle {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.contextField {
+  display: block;
+  margin-top: 10px;
+}
+
+.contextInput {
+  width: 100%;
+  min-height: 84px;
+  max-height: 240px;
+  resize: vertical;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.contextInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

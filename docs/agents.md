@@ -86,6 +86,9 @@ read-only mode and default reasoning effort take effect then. An explicit effort
 chat's own setting) wins over the agent's. The agent's model is applied in the same chat only when
 it belongs to the chat's provider; otherwise start a new chat with the agent.
 
+The built-in `plan` agent ends with the `exit_plan` tool: the user reviews the plan and, if they agree,
+the chat switches to `build` and implements it. See [Plan mode and plan review](/web#plan-review).
+
 ## Terminal: `/agents`
 
 ```text

@@ -20,6 +20,7 @@ import {
   formatChangelogMarkdown,
   formatReloadReport,
   generateAgentDraft,
+  IMPLEMENTATION_AGENT_ID,
   loadChangelog,
   modeFromFlags,
   NOT_SANDBOXED,
@@ -28,12 +29,15 @@ import {
   PERMISSION_USAGE,
   type PermissionMode,
   type PermissionModeLabel,
+  PLAN_QUESTION_ID,
+  PLAN_TEXT_KEY,
   parsePermissionCommand,
   ReloadFailedError,
   ReloadRefusedError,
   reloadApplication,
   type SettableSettingKey,
   selectEntries,
+  settlePlanRun,
   stateHome,
   toGrantWire,
   toRef,
@@ -44,6 +48,7 @@ import type {
   AskQuestionsResult,
   ModelInfo,
   PanelNode,
+  PlanReview,
   RunEvent,
 } from "@alisio/sdk";
 import {
@@ -128,6 +133,7 @@ import {
   Header,
   type HeaderInfo,
   MarkdownPanel,
+  PlanReviewPanel,
   QuestionPanel,
   Switch,
   setArtifactPathResolver,
@@ -149,6 +155,7 @@ import {
 } from "./modes.ts";
 import { cannotOpenMessage, openPath, revealPath } from "./open-path.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
+import { planTranscriptMarkdown } from "./plan-review.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
 import { type SettingRow, type SettingsNavigationAction, settingsMenuRows } from "./settings.ts";
@@ -905,7 +912,79 @@ export async function runTui(options: TuiOptions): Promise<void> {
    * while queued or displayed (its session cancelled) resolves every question undefined and prints
    * a notice; it never leaves a stale prompt on screen or blocks the next queued item.
    */
+  /**
+   * `exit_plan`: the plan is printed in the transcript (above the panel), then the three decisions
+   * (and the free-text line for "Add context") are asked through the same queue. Dismissing the
+   * panel (Esc) or cancelling the run answers "skip": the tool always returns a result.
+   */
+  const askPlanReview = (
+    request: AskQuestionsRequest,
+    plan: PlanReview,
+  ): Promise<AskQuestionsResult> => {
+    const question = request.questions[0];
+    const options = (question?.options ?? []).map((option) => ({
+      value: option.value,
+      label: option.label,
+      ...(option.description ? { description: option.description } : {}),
+      ...(option.recommended ? { recommended: true } : {}),
+      ...(option.textInput ? { textInput: true } : {}),
+    }));
+    const withdrawn = (): AskQuestionsResult => ({ [PLAN_QUESTION_ID]: undefined });
+    return interactiveQueue.submit<AskQuestionsResult>({
+      sessionId: request.session,
+      label: request.label,
+      signal: request.signal,
+      onWithdrawn: () => {
+        notice("Plan review withdrawn: the run was cancelled.");
+        return withdrawn();
+      },
+      run: () =>
+        new Promise<AskQuestionsResult>((resolve) => {
+          let settled = false;
+          const finish = (result: AskQuestionsResult) => {
+            if (settled) return;
+            settled = true;
+            request.signal?.removeEventListener("abort", onAbort);
+            closePicker();
+            resolve(result);
+          };
+          const onAbort = () => {
+            notice("Plan review withdrawn: the run was cancelled.");
+            finish(withdrawn());
+          };
+          request.signal?.addEventListener("abort", onAbort, { once: true });
+          push({
+            kind: "assistant",
+            text: planTranscriptMarkdown(plan),
+            reasoning: "",
+            done: true,
+          });
+          showPicker(
+            new PlanReviewPanel(
+              options,
+              {
+                title: plan.title,
+                revision: plan.revision,
+                ...(plan.artifact ? { artifactId: plan.artifact.id } : {}),
+                question: question?.question ?? "",
+              },
+              (effect) => {
+                info(
+                  `Plan review: ${options.find((o) => o.value === effect.value)?.label ?? effect.value}`,
+                );
+                finish({
+                  [PLAN_QUESTION_ID]: effect.value,
+                  ...(effect.text ? { [PLAN_TEXT_KEY]: effect.text } : {}),
+                });
+              },
+              question?.options.find((o) => o.textInput)?.textInput?.placeholder,
+            ),
+          );
+        }),
+    });
+  };
   const askQuestions = (request: AskQuestionsRequest): Promise<AskQuestionsResult> => {
+    if (request.plan && request.questions.length === 1) return askPlanReview(request, request.plan);
     const specs = request.questions.map((q) => ({
       header: q.header,
       question: q.question,
@@ -974,11 +1053,50 @@ export async function runTui(options: TuiOptions): Promise<void> {
     });
   };
 
+  /**
+   * After a run: an approved plan (`exit_plan`) starts its implementation exactly once. The claim is
+   * a compare-and-set in the session database, so a double Enter or a second surface cannot start
+   * a second turn. The agent switches to build BEFORE the turn (the run that took the decision has
+   * already ended, so no tool call is cut in half); the permission mode is left as it is. A run the
+   * user cancelled drops an approval it had not started yet.
+   */
+  const followUpPlan = async (owner: string, aborted: boolean) => {
+    if (stopping) return;
+    try {
+      const next = settlePlanRun(app.store, owner, { aborted });
+      if (next.kind === "dropped")
+        return notice(
+          "Plan approval dropped: the run was cancelled before the implementation started.",
+        );
+      if (next.kind !== "implement") return;
+      agentOverride = IMPLEMENTATION_AGENT_ID;
+      if (!options.readOnly)
+        try {
+          await app.updateSetting("agents.active", IMPLEMENTATION_AGENT_ID);
+          if (agentOverride === IMPLEMENTATION_AGENT_ID) agentOverride = undefined;
+        } catch (cause) {
+          agentOverride = undefined;
+          return error(
+            new Error(
+              `The plan was approved but Alisio could not switch to the build agent: ${cause instanceof Error ? cause.message : String(cause)}. Switch with /agent:build and ask it to implement the plan.`,
+            ),
+          );
+        }
+      refreshEffort();
+      notice(
+        `Plan approved: switching to the build agent to implement revision ${next.plan.revision}.`,
+      );
+      await runPrompt(next.display, next.text, next.display);
+    } catch (cause) {
+      error(cause);
+    }
+  };
   const task = async (work: (signal: AbortSignal) => Promise<unknown>) => {
     busy = true;
     terminalEvent = false;
     controller = new AbortController();
     const signal = controller.signal;
+    const owner = session;
     const promise = work(signal);
     pending = promise;
     try {
@@ -993,6 +1111,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       if (!view.context || view.context.estimated) refreshEstimate();
       tui.requestRender();
     }
+    await followUpPlan(owner, signal.aborted);
   };
   /** `/artifacts [filter]`: the root session's artifacts, newest first, then their actions. */
   const browseArtifacts = (filter: string) => {

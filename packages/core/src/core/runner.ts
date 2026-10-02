@@ -37,6 +37,7 @@ import type {
   SessionStore,
   TerminalRunStatus,
 } from "./contracts.ts";
+import { EXIT_PLAN_TOOL, optInAllows } from "./opt-in.ts";
 import { type OutputLimit, resolveMaxOutputTokens } from "./output-limit.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
@@ -189,6 +190,11 @@ export interface RunOptions {
   /** Extra system instructions for this run (e.g. an agent persona). */
   instructions?: string;
   toolFilter?: (tool: ToolDefinition) => boolean;
+  /**
+   * Opt-in tools this run may use (see `OPT_IN_TOOLS`): they are hidden from every run that does
+   * not list them, for the model and for the executor alike.
+   */
+  optInTools?: string[];
   policy?: Policy;
   /** Allow interactive approvals for this run (default: when the runner has a handler). */
   approvals?: boolean;
@@ -354,6 +360,7 @@ export class AgentRunner {
     const approvals = !!o.approve && run.approvals !== false;
     return o.registry.list().filter((t) => {
       if (run.toolFilter && !run.toolFilter(t)) return false;
+      if (!optInAllows(t.name, run.optInTools)) return false;
       const effect = t.effect ?? "external";
       if (allowed(policy, effect)) return true;
       if (t.capability) {
@@ -666,7 +673,10 @@ export class AgentRunner {
             resolved.set(target, target);
           }
       scope.guard?.(effect);
-      if (options.toolFilter && !options.toolFilter(p.tool))
+      if (
+        (options.toolFilter && !options.toolFilter(p.tool)) ||
+        !optInAllows(p.tool.name, options.optInTools)
+      )
         throw new Error(`Tool ${call.name} is not available in this session`);
       const capability = p.tool.capability;
       const gate = o.capabilities;
@@ -809,6 +819,15 @@ export class AgentRunner {
         ...(publisher ? { artifacts: publisher } : {}),
         approveInstall,
         emit: (data) => emit("tool_progress", { id: call.id, data }),
+        // Only the built-in plan tool reports its durable events (never a plugin tool).
+        ...(p.tool.name === EXIT_PLAN_TOOL
+          ? {
+              emitEvent: <K extends "plan_proposed" | "plan_decided">(
+                type: K,
+                data: RunEventDataMap[K],
+              ) => emit(type, data),
+            }
+          : {}),
         ...(options.label ? { label: options.label } : {}),
         ...(pathAccess
           ? {

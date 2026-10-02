@@ -66,9 +66,21 @@ chat updates moves to that chat. Subagent sessions have their own session id and
 the parent chat's tab. **Context loaded** is what the plugin returned when the chat started, kept
 by the plugin: it does not prove the runner persisted it, chats from before this version have none
 and the context recovered after a compaction is not recorded. Memory can hold sensitive project
-data and is shown to anyone with the server's session cookie. Settings → General currently throws
-while rendering because nine settings (`limits.firstTokenTimeoutMs`, `tui.paddingX`,
-`agents.effort`, `analysis.enabled` and others) have no `setting.*` labels in the web dictionaries.
+data and is shown to anyone with the server's session cookie.
+
+**Plan review (`exit_plan`).** The plan agent is read-only because its run policy allows no write,
+process or network effect: no permission mode widens it. `exit_plan` is offered only to the built-in
+plan agent's run. The decision is recorded while that run is still going; the switch to `build` and
+the single implementation turn happen after the plan run ends (the model first gets the `approved`
+result and answers once). State lives in `sessions.options.plan` with compare-and-set transitions,
+so approving twice starts one turn. Cancelling the run withdraws a pending review and drops an
+approval that had not started; the run time limit (`limits.timeoutMs`) includes the wait, and a
+review nobody answers counts as Skip for now. Without an interactive UI (`alisio run`, `--json`) or
+under `--read-only` the tool returns `unavailable` and asks the model for the plan as its final reply
+(Alisio does not print it itself). The terminal edits the context on one line and its turn flow is
+verified through the shared pure logic and the panel, not in a real terminal; the web was checked in
+Chromium only. The web initial bundle has about 100 bytes of headroom, so later phases must load
+their strings lazily.
 
 - **Python analysis (phases 1–4)**: managed Python is not a sandbox (it runs with your
   permissions, can read files, use the network and change the repository). The optional container

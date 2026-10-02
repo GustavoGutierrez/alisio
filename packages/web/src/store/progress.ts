@@ -72,7 +72,7 @@ export const toolCategory = (name: string): ToolCategory => {
   if (bare === "python_run") return "python";
   if (bare === "data_inspect" || bare === "data_query") return "data";
   if (bare === "artifact_create") return "artifact";
-  if (bare === "ask_user_question") return "question";
+  if (bare === "ask_user_question" || bare === "exit_plan") return "question";
   if (bare === "task" || bare === "task_wait") return "agent";
   return "other";
 };

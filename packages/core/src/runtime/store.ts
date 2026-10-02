@@ -738,6 +738,25 @@ export class SQLiteStore implements SessionStore {
           .run(JSON.stringify({ ...(current.options ?? {}), ...patch.options }), id);
     });
   }
+  /**
+   * Atomic read-modify-write of `sessions.options` (`BEGIN IMMEDIATE`: safe across processes that
+   * share the database). `change` receives the current options and returns the keys to merge
+   * (`undefined` removes a key; `undefined` as a whole changes nothing) and a value for the caller.
+   */
+  mutateSessionOptions<T>(
+    id: string,
+    change: (current: Record<string, unknown>) => { patch?: Record<string, unknown>; value: T },
+  ): T {
+    return this.db.transaction(() => {
+      const current = this.get(id).options ?? {};
+      const { patch, value } = change(current);
+      if (patch)
+        this.db
+          .prepare("UPDATE sessions SET options=? WHERE id=?")
+          .run(JSON.stringify({ ...current, ...patch }), id);
+      return value;
+    });
+  }
   /** `MAX(events.seq)` of a session (0 without events): the web snapshot cursor. */
   lastEventId(session: string): number {
     const row = this.db

@@ -252,6 +252,26 @@ prompt**.
 - Some terminals do not report Shift+Tab as a separate key; `/agents` and `/agent:<id>` always work.
 - Permissions are a separate axis: see [Permission modes](#permission-modes).
 
+### Plan mode and plan review {#plan-review}
+
+With the **plan** agent active (Shift+Tab, `/agents` or `/agent:plan`) the model investigates with
+read-only tools and ends by calling `exit_plan` with the whole plan in Markdown. Alisio prints the
+plan in full in the transcript, saves it as a `plan.md` artifact (`/artifacts` lists it) and opens
+the decision panel **Plan complete. What would you like to do?**:
+
+- `↑`/`↓` choose, `Enter` confirms.
+- **Agree and start implementation**: after the plan turn ends Alisio switches to the `build`
+  agent (persisted like `/agents`) and runs one implementation turn whose message carries the
+  approved plan. The permission mode is not changed. Pressing Enter twice starts one turn.
+- **Skip for now** (or `Esc`): the agent stays `plan` and nothing else happens.
+- **Add context**: a one-line field opens (`←`/`→`/Home/End edit, `Enter` sends, `Esc` goes back to
+  the choices); the text goes back to the model, which keeps planning and proposes a new revision.
+
+Cancelling the turn (`Esc` in the editor) withdraws a pending review and drops an approval that had
+not started yet. While the panel is open Shift+Tab does nothing, and the plan agent stays read-only
+in every [permission mode](#permission-modes). With `--read-only`, or in `alisio run`, there is no
+review: the tool tells the model so and the plan is its final answer.
+
 ## Permission modes {#permission-modes}
 
 `/permission` opens one menu: **Use ask mode**, **Use auto mode**, **Use full access mode**,

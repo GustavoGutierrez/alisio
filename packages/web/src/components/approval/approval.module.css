@@ -169,6 +169,15 @@
   background: var(--hover);
 }
 
+.option[data-primary="true"] {
+  border-color: var(--accent);
+}
+
+.option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .option[aria-checked="true"] {
   border-color: var(--accent);
   background: var(--accent-soft);

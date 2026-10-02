@@ -10,6 +10,7 @@
  * publishes for the host to read.
  */
 import type { CommandDescriptor } from "@alisio/sdk";
+import { EXIT_PLAN_TOOL } from "../core/opt-in.ts";
 
 export interface ActiveAgent {
   /** Stable id, also the persisted `agents.active` value. */
@@ -31,6 +32,7 @@ export interface ActiveAgent {
 }
 
 export const DEFAULT_AGENT_ID = "build";
+export const PLAN_AGENT_ID = "plan";
 
 const PLAN_INSTRUCTIONS = `You are the "plan" agent: a read-only planning assistant for this main session.
 
@@ -41,7 +43,29 @@ inspection tools that do not modify anything.
 
 You never edit, write or delete files, and you never start processes that change the workspace
 or the network. If a task requires changes, hand back a precise plan (and the exact commands)
-instead of making them.`;
+instead of making them. You do not implement the plan yourself, even when the user approves it:
+approval hands the plan to the build agent.
+
+When the plan is complete, finish by calling \`exit_plan\` exactly once with the whole plan in
+Markdown (and a short \`title\`). Do not paste the plan in your reply first: exit_plan shows it to
+the user and asks for a decision. Write the plan with these sections, in this order:
+
+# <Title>
+## Goal
+What will be true when this is done, in one or two sentences.
+## Context
+What you found in the repository that the plan relies on (files, functions, conventions).
+## Steps
+A numbered, ordered list. Each step names the files and functions to change and what changes.
+## Risks
+What could go wrong, what is uncertain, and what you did not verify.
+## Verification
+The exact commands and checks that prove the work is done.
+
+Read the tool result: "approved" means the build agent will implement the plan, so reply with one
+short sentence and stop. "skipped" means stay in plan mode and do not call exit_plan again unless
+asked. "feedback" carries extra context from the user: revise the plan and call exit_plan again
+with the complete updated plan.`;
 
 /** Product built-ins. `build` keeps the CURRENT behavior exactly: no added persona, full power. */
 export const BUILTIN_AGENTS: ActiveAgent[] = [
@@ -53,7 +77,7 @@ export const BUILTIN_AGENTS: ActiveAgent[] = [
     source: "builtin",
   },
   {
-    id: "plan",
+    id: PLAN_AGENT_ID,
     name: "plan",
     description:
       "Read-only planning agent: analyzes the codebase and returns an implementation plan without modifying anything.",
@@ -176,10 +200,15 @@ export function agentRunOptions(agent: ActiveAgent | undefined): {
   policy?: { write: false; process: false; external: false };
   approvals?: false;
   reasoningEffort?: string;
+  optInTools?: string[];
 } {
   if (!agent) return {};
   return {
     ...(agent.instructions ? { instructions: agent.instructions } : {}),
+    // `exit_plan` exists for the built-in plan agent only (it is hidden from every other run).
+    ...(agent.id === PLAN_AGENT_ID && agent.source === "builtin"
+      ? { optInTools: [EXIT_PLAN_TOOL] }
+      : {}),
     ...(agent.effort ? { reasoningEffort: agent.effort } : {}),
     ...(agent.readOnly
       ? {

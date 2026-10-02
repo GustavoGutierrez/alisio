@@ -38,6 +38,8 @@ interface Entry {
 }
 
 const RECENT = 500;
+/** Longest free-text answer accepted ("Add context"). */
+const TEXT_MAX = 20_000;
 
 /**
  * Plugin UI requests (`ui.select`, `ui.askQuestions`, `ui.open`) for web clients (RF-18). A
@@ -81,6 +83,12 @@ export class InteractionBridge {
         const empty = (): AskQuestionsResult =>
           Object.fromEntries(request.questions.map((q) => [q.id, undefined]));
         const ids = new Set(request.questions.map((q) => q.id));
+        // `"<questionId>:text"` carries the free text of an option with `textInput` ("Add context").
+        const textKeys = new Set(
+          request.questions
+            .filter((q) => q.options.some((o) => o.textInput))
+            .map((q) => `${q.id}:text`),
+        );
         return this.ask<AskQuestionsResult>(
           {
             interactionId: randomUUID(),
@@ -90,6 +98,7 @@ export class InteractionBridge {
               kind: "questions",
               questions: request.questions,
               ...(request.label ? { label: request.label } : {}),
+              ...(request.plan ? { plan: request.plan } : {}),
             },
           },
           request.signal,
@@ -99,12 +108,13 @@ export class InteractionBridge {
             (!!answer &&
               typeof answer === "object" &&
               !Array.isArray(answer) &&
-              Object.entries(answer).every(
-                ([id, value]) =>
-                  ids.has(id) &&
-                  (value === null ||
-                    typeof value === "string" ||
-                    (Array.isArray(value) && value.every((v) => typeof v === "string"))),
+              Object.entries(answer).every(([id, value]) =>
+                textKeys.has(id)
+                  ? value === null || (typeof value === "string" && value.length <= TEXT_MAX)
+                  : ids.has(id) &&
+                    (value === null ||
+                      typeof value === "string" ||
+                      (Array.isArray(value) && value.every((v) => typeof v === "string"))),
               )),
           (answer) => ({
             ...empty(),

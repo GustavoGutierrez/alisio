@@ -17,6 +17,7 @@ export {
   type MainCapableAgentRecord,
   mainAgentFromRecord,
   nextAgent,
+  PLAN_AGENT_ID,
   resolveActiveAgent,
 } from "./agents/active.ts";
 export {
@@ -251,6 +252,7 @@ export type {
   TerminalRunStatus,
   ToolCallMeta,
 } from "./core/contracts.ts";
+export { EXIT_PLAN_TOOL, OPT_IN_TOOLS } from "./core/opt-in.ts";
 export {
   DEFAULT_MAX_OUTPUT_TOKENS,
   describeOutputLimitSource,
@@ -297,6 +299,25 @@ export {
   presetToMode,
   READ_ONLY_POLICY,
 } from "./permissions/modes.ts";
+export {
+  claimApprovedPlan,
+  currentPlan,
+  discardApprovedPlan,
+  IMPLEMENTATION_AGENT_ID,
+  implementationPrompt,
+  PLAN_CONTEXT_MAX_CHARS,
+  PLAN_OPTIONS,
+  PLAN_QUESTION_ID,
+  PLAN_REVIEW_TITLE,
+  PLAN_TEXT_KEY,
+  type PlanFollowUp,
+  type PlanState,
+  type PlanStatus,
+  planHash,
+  readPlanState,
+  settlePlanRun,
+  withdrawPendingPlan,
+} from "./plan/state.ts";
 export {
   discoverPlugins,
   PluginHost,

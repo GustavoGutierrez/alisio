@@ -33,8 +33,15 @@ interface Tracked extends RunJob {
 export interface RunSchedulerOptions {
   /** Global semaphore across sessions and workspaces (RF-02, default 4). */
   maxConcurrent?: number;
-  /** Called on every job state change (queued, running, finished). */
-  onChange?: (job: RunJob, status: "queued" | "running" | "finished") => void;
+  /**
+   * Called on every job state change (queued, running, finished). `finished` also says whether
+   * the job was cancelled (its abort signal fired), so a follow-up never outlives a cancel.
+   */
+  onChange?: (
+    job: RunJob,
+    status: "queued" | "running" | "finished",
+    outcome?: { cancelled: boolean },
+  ) => void;
 }
 
 /**
@@ -113,7 +120,7 @@ export class RunScheduler {
     void job.done.finally(() => {
       this.running--;
       if (this.jobs.get(job.sessionId) === job) this.jobs.delete(job.sessionId);
-      this.options.onChange?.(job, "finished");
+      this.options.onChange?.(job, "finished", { cancelled: job.controller.signal.aborted });
       this.pump();
     });
   }

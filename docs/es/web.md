@@ -339,6 +339,37 @@ o corre con `--read-only`) aparece como no disponible con el motivo. `/permissio
 `/permission auto`, `/permission full` y `/permission status` se ejecutan sin abrir el menú y
 responden en la conversación; el menú de permisos del compositor conserva los cuatro presets.
 
+### Modo plan y revisión del plan {#plan-review}
+
+Cambie un chat al agente **plan** (el selector, **Mayús+Tab** o `/agent:plan`): investiga con
+herramientas de solo lectura y termina llamando a la herramienta `exit_plan` con el plan completo en
+Markdown. El plan aparece abierto en la conversación (una fila **Plan**), se guarda como artefacto
+`plan.md` (uno por revisión, en el panel de artefactos y abrible en el panel lateral desde su
+tarjeta) y el compositor se sustituye por la pantalla de decisión **Plan completo. ¿Qué quieres
+hacer?**:
+
+- **Aceptar y empezar la implementación**: el chat cambia al agente `build` y empieza un turno de
+  implementación. Su mensaje lleva el plan aprobado como instantánea (el chat muestra una línea
+  corta *Implement the approved plan* en lugar de repetirlo) y usa el modo de permisos del chat sin
+  cambios.
+- **Omitir por ahora**: no pasa nada más; el chat sigue en modo plan. Esc hace lo mismo.
+- **Añadir contexto**: se abre un cuadro de texto; lo que envíe vuelve al modelo como resultado de la
+  herramienta y este sigue planificando; después propone una revisión nueva.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plan_review_web_ui.webp" alt="La pantalla de revisión del plan: el plan abierto en la conversación, el panel de decisión Plan completo con la tarjeta del artefacto plan.md y las tres opciones (aceptar y empezar la implementación, omitir por ahora, añadir contexto) y el artefacto plan.md abierto en el panel lateral." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>La revisión del plan: la pantalla de decisión bajo el plan, con plan.md abierto en el panel lateral.</figcaption>
+</figure>
+
+La ejecución del plan es de solo lectura sea cual sea el modo de permisos: el runner deniega al agente
+plan las escrituras, los comandos y la red, de modo que elegir **Acceso total** nunca lo amplía.
+Aprobar dos veces (doble clic, dos pestañas, una recarga) inicia un único turno de implementación.
+Si recarga la página con una revisión pendiente, vuelve a mostrar la misma decisión; si cierra el
+navegador queda pendiente 30 segundos y después cuenta como **Omitir por ahora**, igual que cancelar
+la ejecución o que esta agote su tiempo. La pantalla sustituye al compositor, por lo que Mayús+Tab y
+el selector de agente no hacen nada mientras está abierta. Los clientes que no conocen la revisión
+del plan (un script que use la API) ven una pregunta normal con las mismas tres opciones.
+
 ### `/reload` y `/changelog` {#reload-and-changelog}
 
 `/reload` vuelve a leer la configuración, los agentes, las skills, las plantillas de prompt y los

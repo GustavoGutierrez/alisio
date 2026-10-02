@@ -5,8 +5,9 @@
  */
 import type { SettingInfo } from "@alisio/sdk";
 import { useState } from "preact/hooks";
-import { LOCALES, locale, type MessageKey, setLocale, t } from "../../i18n/index.ts";
+import { LOCALES, locale, setLocale, t } from "../../i18n/index.ts";
 import { api, showToast } from "../../store/app.ts";
+import { settingLabel } from "./labels.ts";
 import styles from "./settings.module.css";
 import {
   Choice,
@@ -37,7 +38,7 @@ function SettingRow(props: {
       setBusy(false);
     }
   };
-  const label = t(`setting.${setting.key}` as MessageKey);
+  const label = settingLabel(setting.key, locale.value);
   const id = `setting-${setting.key}`;
   const commitText = () => {
     if (draft === undefined) return;

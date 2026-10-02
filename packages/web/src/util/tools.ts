@@ -17,6 +17,7 @@ const NAMES: Record<string, string> = {
   web_fetch: "Fetch",
   web_search: "Web search",
   ask_user_question: "Question",
+  exit_plan: "Plan",
   task: "Agent",
 };
 
@@ -32,6 +33,7 @@ const SUMMARY_KEYS = [
   "url",
   "prompt",
   "name",
+  "title",
 ];
 
 /** Plugin tools are namespaced `p_<10 hex>_<tool>` by the plugin host. */

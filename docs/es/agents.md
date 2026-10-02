@@ -93,6 +93,9 @@ esfuerzo explícito (`/effort`, o el ajuste propio del chat) gana sobre el del a
 agente se aplica en el mismo chat solo si pertenece al proveedor del chat; si no, inicia un chat
 nuevo con el agente.
 
+El agente integrado `plan` termina con la herramienta `exit_plan`: el usuario revisa el plan y, si lo
+acepta, el chat cambia a `build` y lo implementa. Véase [Modo plan y revisión del plan](/es/web#plan-review).
+
 ## Terminal: `/agents`
 
 ```text

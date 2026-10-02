@@ -175,6 +175,7 @@ export class SessionService {
     approvals: boolean;
     reasoningEffort?: string;
     instructions?: string;
+    optInTools?: string[];
   } {
     const session = this.get(sessionId);
     const { policy, approvals } = this.policy(session);
@@ -190,6 +191,7 @@ export class SessionService {
           ? { reasoningEffort: agent.reasoningEffort }
           : {}),
       ...(agent.instructions ? { instructions: agent.instructions } : {}),
+      ...(agent.optInTools ? { optInTools: agent.optInTools } : {}),
     };
   }
 

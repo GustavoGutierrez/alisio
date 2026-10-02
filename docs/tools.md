@@ -80,6 +80,28 @@ text instead; it never hangs waiting for a UI that cannot answer. See [Terminal
 UI](/tui#ask-user-question) for the panel, its keys, the Esc-skips-current-question-only behavior,
 and how root and subagent questions are queued and routed back to the exact session that asked.
 
+## Handing over a plan: exit_plan {#exit-plan}
+
+`exit_plan` is how the built-in **plan** agent finishes: `{ plan: string (Markdown, up to 60 000
+characters), title?: string }`. It is `effect: read`, so every policy allows it, and it is offered
+**only to the plan agent's run** (never to `build`, subagents or Code Mode). The tool saves the plan
+as a `plan.md` artifact (one per call, so each revision is a new artifact of the session), asks the
+user for a decision through the same question machinery as `ask_user_question` and **always returns
+a tool result**, so the session never keeps a dangling call:
+
+| Result `decision` | Meaning | What the model is told |
+|---|---|---|
+| `approved` | The user agreed | The build agent will implement exactly this plan: answer in one sentence and stop |
+| `skipped` | Skip for now, Esc, a closed screen, a cancelled run or a timeout | Stay in plan mode; do not call it again unless asked |
+| `feedback` | Add context (the text is in `feedback`) | Revise the plan and call `exit_plan` again |
+| `unavailable` | No interactive UI (`alisio run`, `--json`) or `--read-only` | Give the complete plan as the final reply |
+
+The tool never changes agents or starts work: it records the decision, and once the plan run has
+ended the host switches to `build` and starts one implementation turn (see [Terminal UI](/tui#plan-review)
+and [Web UI](/web#plan-review)). The plan agent is read-only because its run policy allows no write,
+process or external effect, so no [permission mode](#permission-modes) can widen it. `plan_proposed`
+and `plan_decided` are durable run events.
+
 ## Reading a URL: webfetch {#webfetch}
 
 `webfetch(url, format?, timeout?)` fetches an `http(s)` URL and returns it as `markdown` (default),

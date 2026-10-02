@@ -26,6 +26,6 @@ export function setLocale(next: Locale): void {
 
 /** Translates `key` in the current locale (reading the signal subscribes the component). */
 export const t = (key: MessageKey, params?: Record<string, string | number>): string =>
-  format(DICTIONARIES[locale.value][key] ?? en[key], params);
+  format(DICTIONARIES[locale.value][key] ?? en[key] ?? key, params);
 
 export type { MessageKey };

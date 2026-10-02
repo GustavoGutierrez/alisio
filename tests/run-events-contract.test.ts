@@ -96,6 +96,18 @@ const contract: { [K in RunEventType]: Check } = {
     oneOf("once", "session", "deny")(d.decision) &&
     opt(d.capability, oneOf("analysis.run", "analysis.install")) &&
     opt(d.persisted, (v) => v === true),
+  plan_proposed: (d) =>
+    str(d.callId) &&
+    str(d.planId) &&
+    num(d.revision) &&
+    str(d.hash) &&
+    str(d.title) &&
+    opt(d.artifactId, str),
+  plan_decided: (d) =>
+    str(d.callId) &&
+    str(d.planId) &&
+    str(d.hash) &&
+    oneOf("approve", "skip", "context")(d.decision),
   artifact_published: (d) => {
     const a = d.artifact as Record<string, unknown> | undefined;
     return (

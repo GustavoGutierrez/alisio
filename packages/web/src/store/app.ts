@@ -287,8 +287,12 @@ async function refreshDetail(): Promise<void> {
   }
 }
 
+/** An approved plan switches the session to build when its next run starts: refresh the badge. */
+let planApproved = false;
+
 function onFrames(frames: ServerFrame[]): void {
   let ended = false;
+  let agentChanged = false;
   let rewritten = false;
   let catalog = false;
   let durable = false;
@@ -328,12 +332,19 @@ function onFrames(frames: ServerFrame[]): void {
           if (data.artifact) published.push(data.artifact);
         }
         if (type === "model_changed") ended = true;
+        if (type === "plan_decided")
+          planApproved = (frame.event.data as { decision?: string }).decision === "approve";
+        if (type === "run_started" && planApproved) {
+          planApproved = false;
+          agentChanged = true;
+        }
       }
     }
     pending.value = nextPending;
     sidebar.value = nextSidebar;
   });
   if (durable) eventsTick.value++;
+  if (agentChanged) void refreshDetail();
   const session = currentId.value;
   if (published.length && session)
     publishedArtifacts.value = { sessionId: session, artifacts: published };
@@ -600,6 +611,8 @@ export async function activateAgent(agentId: string): Promise<void> {
 export async function cycleAgent(step: 1 | -1 = 1): Promise<void> {
   const session = detail.value;
   if (!session) return;
+  // A pending question or plan review owns the session: the agent does not change under it.
+  if (visiblePending(pending.value, session).interactions.length) return;
   const agents = agentList.value;
   const current = session.agent ?? agents.find((agent) => agent.default)?.id;
   const next = nextAgentId(agents, current, step);

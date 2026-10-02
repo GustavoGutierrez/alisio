@@ -32,6 +32,14 @@ import {
 } from "./btw.ts";
 import { branchDisplay } from "./git-branch.ts";
 import {
+  initialPlanReviewState,
+  type PlanReviewAction,
+  type PlanReviewEffect,
+  type PlanReviewOption,
+  type PlanReviewState,
+  reducePlanReview,
+} from "./plan-review.ts";
+import {
   initialQuestionState,
   type QuestionAction,
   type QuestionPanelState,
@@ -1378,6 +1386,87 @@ export class QuestionPanel implements Component {
       "Esc skip",
     ];
     lines.push(style.dim(`  ${hints.join(" · ")}`));
+    return fit(lines, width);
+  }
+}
+
+/**
+ * The plan review panel (`exit_plan`): the three decisions under the plan the transcript already
+ * shows. "Add context" turns the panel into a one-line text field (Enter sends, Esc goes back);
+ * Esc while choosing is "Skip for now". The logic lives in `plan-review.ts`.
+ */
+export class PlanReviewPanel implements Component {
+  private state: PlanReviewState;
+  constructor(
+    options: PlanReviewOption[],
+    private header: { title: string; revision: number; artifactId?: string; question: string },
+    private onSubmit: (effect: PlanReviewEffect) => void,
+    private placeholder = "Add context for the plan",
+  ) {
+    this.state = initialPlanReviewState(options);
+  }
+  invalidate(): void {}
+  private dispatch(action: PlanReviewAction): void {
+    const { state, effect } = reducePlanReview(this.state, action);
+    this.state = state;
+    if (effect) this.onSubmit(effect);
+  }
+  handleInput(data: string): void {
+    const text = this.state.mode === "text";
+    if (matchesKey(data, Key.escape)) return this.dispatch({ type: "escape" });
+    if (matchesKey(data, Key.enter)) return this.dispatch({ type: "confirm" });
+    if (!text) {
+      if (matchesKey(data, Key.up)) return this.dispatch({ type: "up" });
+      if (matchesKey(data, Key.down)) return this.dispatch({ type: "down" });
+      return;
+    }
+    if (matchesKey(data, Key.left)) return this.dispatch({ type: "left" });
+    if (matchesKey(data, Key.right)) return this.dispatch({ type: "right" });
+    if (matchesKey(data, Key.home)) return this.dispatch({ type: "home" });
+    if (matchesKey(data, Key.end)) return this.dispatch({ type: "end" });
+    if (matchesKey(data, Key.backspace)) return this.dispatch({ type: "backspace" });
+    if (matchesKey(data, Key.delete)) return this.dispatch({ type: "delete" });
+    this.dispatch({ type: "insert", text: data });
+  }
+  render(width: number): string[] {
+    const s = this.state;
+    const lines: string[] = [];
+    const { title, revision, artifactId, question } = this.header;
+    lines.push(
+      truncateToWidth(
+        `${style.bold(style.yellow("Plan review"))} ${style.dim(`${title}${revision > 1 ? ` · revision ${revision}` : ""}`)}`,
+        width,
+      ),
+    );
+    lines.push(...wrap(question, Math.max(1, width - 2)).map((l) => `  ${l}`));
+    s.options.forEach((option, i) => {
+      const focused = i === s.cursor;
+      const cursor = focused ? style.cyan("❯ ") : "  ";
+      const label = focused ? style.bold(style.cyan(option.label)) : option.label;
+      const tag = option.recommended ? ` ${style.green("(recommended)")}` : "";
+      lines.push(truncateToWidth(`${cursor}${label}${tag}`, width));
+    });
+    if (s.mode === "text") {
+      const value = Array.from(s.text.value);
+      const before = value.slice(0, s.text.cursor).join("");
+      const current = value[s.text.cursor] ?? " ";
+      const after = value.slice(s.text.cursor + 1).join("");
+      lines.push(
+        truncateToWidth(
+          value.length
+            ? `  ${style.brightCyan("›")} ${before}${style.brightCyan(`▏${current}`)}${after}`
+            : `  ${style.brightCyan("›")} ${style.dim(this.placeholder)} ${style.brightCyan("▏")}`,
+          width,
+        ),
+      );
+    }
+    if (artifactId)
+      lines.push(style.dim(`  Saved as plan.md (artifact ${artifactId}) · /artifacts`));
+    lines.push(
+      style.dim(
+        `  ${s.mode === "text" ? "Enter send · Esc back to the choices" : "↑↓ select · Enter confirm · Esc skip for now"}`,
+      ),
+    );
     return fit(lines, width);
   }
 }

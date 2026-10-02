@@ -41,6 +41,7 @@ import {
   setPanelWidth,
   viewport,
 } from "./store/layout.ts";
+import { planReviewOf } from "./store/plan-review.ts";
 import { clampPanelWidth, defaultPanelWidth } from "./util/panel.ts";
 
 function Centered(props: { title: string; body: string; action?: preact.ComponentChildren }) {
@@ -82,6 +83,11 @@ const loadSettings = () =>
 const loadAgents = () => import("./components/agents/AgentsModal.tsx").then((m) => m.AgentsModal);
 const loadPicker = () => import("./components/agents/AgentPicker.tsx").then((m) => m.AgentPicker);
 const loadBtw = () => import("./components/btw/BtwPanel.tsx").then((m) => m.BtwPanel);
+/** Falls back to the generic question panel if the chunk cannot load (it still offers a skip). */
+const loadPlanReview = () =>
+  import("./components/approval/PlanReviewPanel.tsx")
+    .then((m) => m.PlanReviewPanel)
+    .catch(() => InteractionPanel);
 const loadChangelog = () =>
   import("./components/changelog/ChangelogDialog.tsx").then((m) => m.ChangelogDialog);
 const loadTrajectory = () =>
@@ -200,6 +206,12 @@ export function App() {
             )}
             {approvals.length ? (
               <ApprovalPanel approvals={approvals} />
+            ) : interactions[0] && planReviewOf(interactions[0]) ? (
+              <Lazy
+                key={interactions[0].interactionId}
+                load={loadPlanReview}
+                interaction={interactions[0]}
+              />
             ) : interactions[0] ? (
               <InteractionPanel interaction={interactions[0]} />
             ) : (

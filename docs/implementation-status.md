@@ -2309,8 +2309,38 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - El selector «plugin habilitado» de la web depende de `GET /api/plugins` (se refresca al abrir una
   sesión y con `catalog_changed`); un plugin habilitado pero de una versión sin `api.views` muestra
   el error de la sección con reintento en lugar de ocultar la pestaña.
-- Detectado al verificar y fuera de alcance: la página Ajustes → General lanza un error al
-  renderizar porque faltan en `i18n/en.ts` y `es.ts` las etiquetas `setting.*` de nueve ajustes
-  (`limits.firstTokenTimeoutMs`, `limits.firstTokenRetries`, `limits.truncationRecoveries`,
-  `tui.paddingX`, `tui.contentPaddingX`, `tui.skillSlashCommands`, `agents.active`, `agents.effort`,
-  `analysis.enabled`).
+- Ajustes → General: las etiquetas de los ajustes viven en `components/settings/labels.ts` (carga
+  perezosa con la página) y una prueba falla si una clave ajustable del servidor no tiene etiqueta en
+  inglés o en español; una clave desconocida muestra su nombre y el traductor `t()` nunca lanza.
+
+### Revisión del plan (`exit_plan`)
+
+- El agente `plan` es de solo lectura porque la política de su ejecución no permite escritura,
+  procesos ni red y no tiene aprobaciones: ningún modo de permisos ni preset la amplía. `exit_plan`
+  (efecto `read`) es opt-in: solo la ejecución del agente `plan` integrado lo ve; `build`, los
+  subagentes y Code Mode no pueden llamarlo. Un agente personalizado de solo lectura no lo recibe.
+- El estado vive en `sessions.options.plan` (sin migración): una entrada por sesión, la última
+  propuesta. Todas las transiciones son compare-and-set en una transacción `BEGIN IMMEDIATE`, por lo
+  que aprobar dos veces (doble clic, dos pestañas, recarga) inicia **un** turno. La instantánea
+  aprobada se conserva solo mientras está `approved`; después vive en el mensaje de usuario del turno
+  de implementación.
+- El cambio a `build` y el turno de implementación ocurren **cuando termina la ejecución del plan**,
+  no en mitad de ella (el modelo recibe antes el resultado `approved` y responde una última vez). En
+  la TUI el cambio es `agents.active` (global, como `/agents`); en la web, `session.options.agent`, en
+  la misma transacción que la reclamación. Si el cambio de la TUI falla, la aprobación se pierde y se
+  avisa cómo continuar a mano.
+- Cancelar la ejecución retira la revisión pendiente y descarta una aprobación que no había empezado.
+  El tiempo máximo de la ejecución (`limits.timeoutMs`, 10 min por defecto) incluye la espera de la
+  decisión: una revisión sin respuesta al agotarse equivale a «Skip for now». En la web, sin ningún
+  cliente conectado durante 30 s (o 10 min con cliente) la revisión se omite igual que las demás
+  preguntas interactivas.
+- Sin interfaz interactiva (`alisio run`, `--json`) o con `--read-only`, la herramienta devuelve
+  `unavailable` y pide al modelo el plan completo como respuesta final; Alisio no lo imprime por su
+  cuenta. El artefacto `plan.md` se crea igualmente cuando hay almacén de artefactos.
+- La TUI edita el contexto en una línea (sin varias líneas ni historial) y su flujo de turno
+  (reclamar, cambiar de agente, lanzar el turno) solo está probado por la lógica pura compartida y
+  por el panel; no se ha verificado en un terminal real. En la web se comprobó con Chromium contra
+  `alisio serve` y un proveedor falso; no con otros navegadores, Windows ni macOS.
+- El presupuesto inicial de JS de la web quedó en unos 100 bytes de margen: las fases siguientes
+  deben cargar sus textos de forma perezosa (como las etiquetas de ajustes) o cargar bajo demanda el
+  diccionario del idioma no activo.

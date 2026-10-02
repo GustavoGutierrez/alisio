@@ -1,9 +1,11 @@
 import type { ToolResult } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
+import { Markdown } from "../../markdown/view.tsx";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
 import { pluginNames } from "../../store/app.ts";
 import { openInDock } from "../../store/dock.ts";
+import { planFromArguments } from "../../store/plan-review.ts";
 import { density } from "../../store/prefs.ts";
 import type { ToolState } from "../../store/transcript.ts";
 import {
@@ -29,6 +31,7 @@ const ICONS: Record<string, IconName> = {
   web_fetch: "globe",
   web_search: "globe",
   ask_user_question: "question",
+  exit_plan: "file",
 };
 
 function Part({ part }: { part: ToolResult["content"][number] }) {
@@ -72,7 +75,9 @@ function ResultView({ result }: { result: ToolResult }) {
 /** A compact one-line tool call (`Read · README.md`) that expands to its input and output. */
 export function ToolRow({ tool }: { tool: ToolState }) {
   const [open, setOpen] = useState<boolean | undefined>(undefined);
-  const expanded = open ?? density.value === "detailed";
+  // The plan of `exit_plan` is the answer of the turn: it is shown open, as Markdown, in the chat.
+  const plan = tool.name === "exit_plan" ? planFromArguments(tool.arguments) : undefined;
+  const expanded = open ?? (!!plan || density.value === "detailed");
   const label = toolLabel(tool.name);
   const plugin = toolPlugin(tool.name, pluginNames.value);
   const summary = toolSummary(tool.arguments);
@@ -128,8 +133,16 @@ export function ToolRow({ tool }: { tool: ToolState }) {
       </div>
       {expanded ? (
         <div id={id} class={styles.processBody}>
-          <p class={styles.sectionLabel}>{t("tool.input")}</p>
-          <pre class={styles.output}>{prettyArgs(tool.arguments)}</pre>
+          {plan ? (
+            <div class={styles.answer}>
+              <Markdown text={plan.plan} />
+            </div>
+          ) : (
+            <>
+              <p class={styles.sectionLabel}>{t("tool.input")}</p>
+              <pre class={styles.output}>{prettyArgs(tool.arguments)}</pre>
+            </>
+          )}
           <p class={styles.sectionLabel}>{t("tool.output")}</p>
           {tool.result ? (
             <>

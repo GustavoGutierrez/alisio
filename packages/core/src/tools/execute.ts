@@ -21,6 +21,7 @@
  */
 import { createContext, Script } from "node:vm";
 import type { Policy } from "../core/contracts.ts";
+import { OPT_IN_TOOLS } from "../core/opt-in.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 
 export const EXECUTE_TIMEOUT_MS = 10_000;
@@ -63,6 +64,9 @@ export async function runExecute(code: string, deps: ExecuteDeps): Promise<unkno
     if (calls > MAX_NESTED_CALLS)
       throw new Error(`callTool: exceeded the limit of ${MAX_NESTED_CALLS} nested tool calls`);
     const tool = deps.registry.get(name); // throws "Unknown tool: <name>" when absent
+    // Opt-in tools (`exit_plan`) belong to the run that lists them, never to a nested call.
+    if (OPT_IN_TOOLS.has(name))
+      throw new Error(`callTool: "${name}" is not available from execute`);
     const effect = tool.effect ?? "external";
     // A capability tool is reachable only when already allowed (never through a persisted grant).
     if (

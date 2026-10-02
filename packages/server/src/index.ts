@@ -21,6 +21,7 @@ import { redactViewPath } from "./auth/view-token.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
 import { createNativePicker, type FolderPicker } from "./host/folder-picker.ts";
+import { followUpPlanRun } from "./host/plan.ts";
 import { RunScheduler } from "./host/run-scheduler.ts";
 import { SessionService } from "./host/sessions.ts";
 import { type ServerAppOptions, WorkspaceHost, workspaceId } from "./host/workspace-host.ts";
@@ -190,11 +191,27 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   let recycler: WorkspaceRecycler | undefined;
   const scheduler = new RunScheduler({
     ...(options.maxConcurrentRuns ? { maxConcurrent: options.maxConcurrentRuns } : {}),
-    onChange: (job, status) => {
+    onChange: (job, status, outcome) => {
       if (status === "finished") {
         inflight.clear(job.sessionId, job.runId);
         // A deferred plugin change applies once the workspace has no runs left.
         setImmediate(() => recycler?.idle(job.workspaceId));
+        // An approved plan starts its implementation run once the plan run is over.
+        if (sessions && !job.tool)
+          try {
+            followUpPlanRun({
+              job,
+              cancelled: !!outcome?.cancelled,
+              catalog,
+              sessions,
+              scheduler,
+            });
+          } catch (error) {
+            logger.error("plan_follow_up_failed", {
+              sessionId: job.sessionId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
       } else inflight.mark(job.sessionId, job.runId, status);
       sessions?.notify(job.sessionId);
     },

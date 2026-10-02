@@ -529,6 +529,9 @@ export async function createApplication(options: AppOptions = {}) {
       const { registerArtifactTools } = await import("./tools/artifacts.ts");
       registerArtifactTools(registry, { store: artifacts, rootOf: (id) => store.rootOf(id) });
     }
+    // `exit_plan` (opt-in: only the plan agent's run sees it): the plan review hand-over.
+    const { registerExitPlan } = await import("./plan/exit-plan.ts");
+    registerExitPlan(registry, { store, ui: plugins.ui, readOnly: !!options.readOnly });
     // Data tools only read (effect `read`): they stay available under --read-only.
     if (config.analysis.enabled) {
       const { registerDataTools } = await import("./tools/data.ts");
