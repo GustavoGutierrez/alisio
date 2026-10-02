@@ -68,6 +68,15 @@ export interface SettingsConfigView {
     limits: { timeoutMs: number };
     retention: { jobsDays: number; intermediateDays: number; artifactsDays: number };
   };
+  tasks: { enabled: boolean; maxPerSession: number; retentionDays: number };
+  goal: {
+    enabled: boolean;
+    maxTurns: number;
+    maxMinutes: number;
+    repeatedReplyLimit: number;
+    noToolTurnsLimit: number;
+    blockedRepeats: number;
+  };
 }
 
 export interface SettingsMenuInput {
@@ -91,6 +100,15 @@ export const defaultConfig: SettingsConfigView = {
     enabled: true,
     limits: { timeoutMs: 120_000 },
     retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
+  },
+  tasks: { enabled: true, maxPerSession: 4, retentionDays: 7 },
+  goal: {
+    enabled: true,
+    maxTurns: 50,
+    maxMinutes: 120,
+    repeatedReplyLimit: 3,
+    noToolTurnsLimit: 3,
+    blockedRepeats: 2,
   },
 };
 
@@ -302,6 +320,96 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.analysis.retention.artifactsDays,
     description:
       "Artifacts older than this expire: their files are deleted and the card shows Expired (Rerun can recreate them). 0 keeps them forever.",
+  },
+  {
+    id: "tasks.enabled",
+    label: "Background tasks",
+    category: "Background tasks",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.tasks.enabled,
+    description:
+      "The bg_run, bg_list, bg_output and bg_stop tools. They are not sandboxed and end when Alisio exits. Off removes them. Applies the next time Alisio starts.",
+  },
+  {
+    id: "tasks.maxPerSession",
+    label: "Live tasks per session",
+    category: "Background tasks",
+    valueType: "number",
+    values: [1, 2, 4, 8, 16, 32],
+    read: (config) => config.tasks.maxPerSession,
+    description:
+      "How many background tasks one session can have running at once. Applied from the next task.",
+  },
+  {
+    id: "tasks.retentionDays",
+    label: "Keep finished tasks (days)",
+    category: "Background tasks",
+    valueType: "number",
+    values: [0, 1, 3, 7, 14, 30, 90],
+    read: (config) => config.tasks.retentionDays,
+    description:
+      "Finished tasks and their output logs are deleted after this many days. 0 keeps them. Swept at most once a day.",
+  },
+  {
+    id: "goal.enabled",
+    label: "Session goals",
+    category: "Goals",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.goal.enabled,
+    description:
+      "/goal: the agent keeps working on one objective, turn after turn, with hard limits. Off refuses new goals and stops continuing the current one.",
+  },
+  {
+    id: "goal.maxTurns",
+    label: "Goal turn limit",
+    category: "Goals",
+    valueType: "number",
+    values: [10, 25, 50, 100, 200, 500],
+    read: (config) => config.goal.maxTurns,
+    description:
+      "A goal pauses after this many turns (a turn is one run: the kickoff, a continuation or your own prompt). Applies to goals started afterwards.",
+  },
+  {
+    id: "goal.maxMinutes",
+    label: "Goal time limit (minutes)",
+    category: "Goals",
+    valueType: "number",
+    values: [15, 30, 60, 120, 240, 480],
+    read: (config) => config.goal.maxMinutes,
+    description:
+      "A goal pauses after this much time spent inside runs (time spent waiting for you or for background tasks does not count). Applies to goals started afterwards. Without a token budget, the turn and time limits are the only hard stops.",
+  },
+  {
+    id: "goal.repeatedReplyLimit",
+    label: "Pause after identical replies",
+    category: "Goals",
+    valueType: "number",
+    values: [2, 3, 4, 5, 8],
+    read: (config) => config.goal.repeatedReplyLimit,
+    description:
+      "A goal pauses (no_progress) after this many identical final replies in a row. The first repeat is logged and the next continuation carries a nudge.",
+  },
+  {
+    id: "goal.noToolTurnsLimit",
+    label: "Pause after turns without tools",
+    category: "Goals",
+    valueType: "number",
+    values: [2, 3, 4, 5, 8],
+    read: (config) => config.goal.noToolTurnsLimit,
+    description:
+      "A goal pauses (no_progress) after this many turns in a row in which the agent called no tool.",
+  },
+  {
+    id: "goal.blockedRepeats",
+    label: "Blocker reports needed",
+    category: "Goals",
+    valueType: "number",
+    values: [1, 2, 3, 4],
+    read: (config) => config.goal.blockedRepeats,
+    description:
+      "How many consecutive turns the agent must report the same blocker (with evidence) before the goal stops as blocked. A permission denial blocks at once.",
   },
   {
     id: "tui.paddingX",

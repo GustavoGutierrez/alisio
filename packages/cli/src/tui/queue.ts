@@ -16,6 +16,8 @@
 export interface QueueAsker {
   sessionId?: string;
   label?: string;
+  /** What is being asked (a goal waits differently for a permission than for an answer). */
+  kind?: "approval" | "question";
 }
 
 export interface QueueJob<T> extends QueueAsker {
@@ -37,7 +39,11 @@ export class InteractiveQueue {
   submit<T>(job: QueueJob<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       let settled = false;
-      const asker: QueueAsker = { sessionId: job.sessionId, label: job.label };
+      const asker: QueueAsker = {
+        sessionId: job.sessionId,
+        label: job.label,
+        ...(job.kind ? { kind: job.kind } : {}),
+      };
       const entry: Entry = {
         asker,
         start: () => {

@@ -1,0 +1,160 @@
+.tab,
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 10px;
+}
+
+.lead,
+.muted,
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.row:hover {
+  background: var(--hover);
+}
+
+.rowTop,
+.titleRow,
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.status {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.status[data-status="running"],
+.status[data-status="stopping"],
+.status[data-status="queued"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.status[data-status="succeeded"] {
+  color: var(--ok);
+}
+
+.status[data-status="failed"],
+.status[data-status="lost"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.back,
+.stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.back {
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.stop {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.stop:disabled {
+  opacity: 0.6;
+}
+
+.detailTitle {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}

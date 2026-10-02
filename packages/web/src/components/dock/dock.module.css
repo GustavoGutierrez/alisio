@@ -193,3 +193,12 @@
     box-shadow: var(--shadow);
   }
 }
+
+.count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+}

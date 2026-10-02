@@ -350,6 +350,56 @@ The timeout and the retention apply from the next call or sweep; `analysis.enabl
 Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime` and
 `oci.*` are not editable from the UI: edit the file.
 
+## `tasks` {#tasks}
+
+[Background tasks](/tools#background-tasks): the `bg_run`, `bg_list`, `bg_output` and `bg_stop` tools.
+`retentionDays` is **global only**: it is read from `<config home>/config.json` and a project or
+`--config` layer that sets it is ignored with a notice (`alisio doctor` lists what was ignored), because
+one sweep deletes the data of every workspace.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | `false` registers none of the four tools. Applies the next time Alisio starts |
+| `maxPerSession` | `4` | Live (queued, running or stopping) tasks per root session (1–32). There is also a fixed limit of 16 per Alisio process |
+| `maxRunMs` | `3600000` | Watchdog: a task still running after this long (and the cap of `bg_run`'s `timeoutMs`) is stopped and ends `failed` with the code `timeout` (1 000–86 400 000) |
+| `maxOutputBytes` | `2097152` | Size of one task log: the first bytes are kept, one marker line, and the last 32 KiB are appended when the task ends (65 536–104 857 600) |
+| `retentionDays` | `7` | Finished tasks and their logs are deleted after this many days; `0` keeps them. Swept at most once a day in the background (0–3 650). Global only |
+
+```json
+{ "tasks": { "maxPerSession": 2, "maxRunMs": 600000 } }
+```
+
+All five keys are settable from **Settings → General** in [`alisio serve`](/web) (labels in English and
+Spanish) and the main ones from `/settings` in the [TUI](/tui), with the same validated writer as the
+other settings. `maxPerSession`, `maxRunMs` and `maxOutputBytes` apply to the next task and
+`retentionDays` to the next sweep; `enabled` applies when Alisio restarts (the web reloads the
+workspace's tools once it has no runs or tasks). Tasks are not sandboxed and end when Alisio exits.
+
+## `goal` {#goal}
+
+[Session goals](/tui#goals) (`/goal`): the agent keeps working on one objective with hard limits.
+There is **no** token budget setting on purpose: a goal has none unless you give it one with
+`/goal <objective> budget=50k`. **Without a token budget only the turn and time limits below stop a
+goal**, so set one when the objective could run long or expensive.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | `false` refuses new goals and stops continuing the current one (the tools stay registered; they are only offered to a session with an active goal) |
+| `maxTurns` | `50` | A goal pauses (`max_turns`) after this many turns; a turn is one run: the kickoff, a continuation or a prompt of yours while the goal is active (1–1 000) |
+| `maxMinutes` | `120` | A goal pauses (`max_wall`) after this much time spent **inside runs**; time spent waiting for you or for background tasks does not count (1–1 440) |
+| `repeatedReplyLimit` | `3` | Pause (`no_progress`) after this many consecutive repeats of the same final reply; the first is logged and the second adds a nudge to the next continuation (2–20) |
+| `noToolTurnsLimit` | `3` | Pause (`no_progress`) after this many consecutive turns in which the agent called no tool, with the same log-then-nudge steps (2–20) |
+| `blockedRepeats` | `2` | Consecutive turns in which the agent must report the same blocker, with evidence, before the goal stops as blocked (1–10); a permission denial blocks at once |
+
+```json
+{ "goal": { "maxTurns": 30, "maxMinutes": 60 } }
+```
+
+All six keys are settable from **Settings → General** in [`alisio serve`](/web) (labels in English and
+Spanish) and from `/settings` in the [TUI](/tui), with the same validated writer as the other settings.
+They are read live: the next continuation (or the next `/goal`) uses the new value, but the turn and
+time caps of a goal that already exists were fixed when it was created.
+
 ## Changes made from the web UI
 
 The **Settings** pages of [`alisio serve`](/web) write to the same files as the terminal:

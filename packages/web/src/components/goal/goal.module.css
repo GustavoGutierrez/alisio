@@ -1,0 +1,259 @@
+.wrap {
+  padding: 0 24px 8px;
+}
+
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.bar[data-status="active"] {
+  border-left-color: var(--accent);
+}
+
+.bar[data-status="paused"],
+.bar[data-status="budget_limited"] {
+  border-left-color: var(--warn);
+}
+
+.bar[data-status="blocked"] {
+  border-left-color: var(--danger);
+}
+
+.bar[data-status="complete"] {
+  border-left-color: var(--ok);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.chip[data-status="paused"],
+.chip[data-status="budget_limited"] {
+  background: rgb(227 181 92 / 16%);
+  color: var(--warn);
+}
+
+.chip[data-status="blocked"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.chip[data-status="complete"] {
+  background: rgb(124 207 142 / 16%);
+  color: var(--ok);
+}
+
+.objective {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.actions button,
+.formActions button {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.actions button:hover:not(:disabled),
+.formActions button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.actions button:disabled,
+.formActions button:disabled {
+  opacity: 0.55;
+}
+
+.primary {
+  border-color: var(--accent) !important;
+  color: var(--accent-strong) !important;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.budget {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.track {
+  position: relative;
+  display: inline-block;
+  width: 96px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s var(--ease);
+}
+
+.track[data-level="warn"] .fill {
+  background: var(--warn);
+}
+
+.track[data-level="danger"] .fill {
+  background: var(--danger);
+}
+
+.stat {
+  white-space: nowrap;
+}
+
+.why {
+  min-height: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.why:empty {
+  display: none;
+}
+
+.why[data-tone="wait"] {
+  color: var(--accent-strong);
+}
+
+.why[data-tone="blocked"] {
+  color: var(--danger);
+}
+
+.why[data-tone="paused"],
+.why[data-tone="budget_limited"] {
+  color: var(--warn);
+}
+
+.report {
+  font-size: 12.5px;
+}
+
+.report summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.report p,
+.report ul {
+  margin: 6px 0 0;
+}
+
+.report ul {
+  padding-left: 18px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field textarea,
+.field input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.field textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.field small {
+  color: var(--faint);
+}
+
+.formActions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    padding: 0 12px 8px;
+  }
+
+  .head {
+    flex-wrap: wrap;
+  }
+
+  .objective {
+    flex-basis: 100%;
+    order: 3;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .actions {
+    margin-left: auto;
+  }
+}

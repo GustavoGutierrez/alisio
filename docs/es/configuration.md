@@ -359,6 +359,57 @@ tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; 
 aplica al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
 ejecuciones). `runtime` y `oci.*` no se editan desde la interfaz: edita el archivo.
 
+## `tasks` {#tasks}
+
+[Tareas en segundo plano](/es/tools#background-tasks): las herramientas `bg_run`, `bg_list`,
+`bg_output` y `bg_stop`. `retentionDays` es **solo global**: se lee de `<config home>/config.json` y una
+capa de proyecto o `--config` que lo defina se ignora con un aviso (`alisio doctor` lista lo ignorado),
+porque una sola barrida borra los datos de todos los workspaces.
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | `false` no registra ninguna de las cuatro herramientas. Se aplica la próxima vez que arranque Alisio |
+| `maxPerSession` | `4` | Tareas vivas (en cola, en ejecución o deteniéndose) por sesión raíz (1–32). También hay un límite fijo de 16 por proceso de Alisio |
+| `maxRunMs` | `3600000` | Watchdog: una tarea que sigue corriendo pasado este tiempo (y el tope del `timeoutMs` de `bg_run`) se detiene y termina `failed` con el código `timeout` (1 000–86 400 000) |
+| `maxOutputBytes` | `2097152` | Tamaño del log de una tarea: se conservan los primeros bytes, una línea de aviso, y los últimos 32 KiB se añaden cuando la tarea termina (65 536–104 857 600) |
+| `retentionDays` | `7` | Las tareas terminadas y sus logs se borran pasados estos días; `0` las conserva. Se barre como mucho una vez al día en segundo plano (0–3 650). Solo global |
+
+```json
+{ "tasks": { "maxPerSession": 2, "maxRunMs": 600000 } }
+```
+
+Las cinco claves se pueden ajustar desde **Ajustes → General** en [`alisio serve`](/es/web) (con
+etiquetas en inglés y español) y las principales desde `/settings` en la [TUI](/es/tui), con el mismo
+escritor validado que los demás ajustes. `maxPerSession`, `maxRunMs` y `maxOutputBytes` se aplican a la
+siguiente tarea y `retentionDays` a la siguiente barrida; `enabled` se aplica al reiniciar Alisio (la
+web recarga las herramientas del workspace cuando no tiene ejecuciones ni tareas). Las tareas no están
+aisladas y terminan cuando Alisio termina.
+
+## `goal` {#goal}
+
+[Objetivos de sesión](/es/tui#goals) (`/goal`): el agente sigue trabajando en un objetivo con límites
+duros. A propósito **no** hay un ajuste de presupuesto de tokens: un objetivo no lo tiene salvo que se
+lo des con `/goal <objetivo> budget=50k`. **Sin presupuesto de tokens, solo los límites de turnos y de
+tiempo de abajo detienen un objetivo**, así que fija uno cuando el objetivo pueda ser largo o caro.
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | `false` rechaza objetivos nuevos y deja de continuar el actual (las herramientas siguen registradas; solo se ofrecen a una sesión con un objetivo activo) |
+| `maxTurns` | `50` | Un objetivo se pausa (`max_turns`) tras esta cantidad de turnos; un turno es una ejecución: el arranque, una continuación o un mensaje tuyo mientras el objetivo está activo (1–1 000) |
+| `maxMinutes` | `120` | Un objetivo se pausa (`max_wall`) tras este tiempo gastado **dentro de ejecuciones**; el tiempo de espera por ti o por tareas en segundo plano no cuenta (1–1 440) |
+| `repeatedReplyLimit` | `3` | Pausa (`no_progress`) tras esta cantidad de repeticiones consecutivas de la misma respuesta final; la primera se registra y la segunda añade un aviso a la siguiente continuación (2–20) |
+| `noToolTurnsLimit` | `3` | Pausa (`no_progress`) tras esta cantidad de turnos consecutivos en los que el agente no llamó a ninguna herramienta, con los mismos pasos de registro y aviso (2–20) |
+| `blockedRepeats` | `2` | Turnos consecutivos en los que el agente debe informar del mismo bloqueo, con evidencia, antes de que el objetivo se detenga como bloqueado (1–10); una denegación de permiso bloquea de inmediato |
+
+```json
+{ "goal": { "maxTurns": 30, "maxMinutes": 60 } }
+```
+
+Las seis claves se pueden cambiar desde **Ajustes → General** en [`alisio serve`](/es/web) (etiquetas en
+inglés y español) y desde `/settings` en la [TUI](/es/tui), con el mismo escritor validado que el resto
+de ajustes. Se leen en caliente: la siguiente continuación (o el siguiente `/goal`) usa el valor
+nuevo, pero los topes de turnos y de tiempo de un objetivo que ya existe se fijaron al crearlo.
+
 ## Cambios hechos desde la interfaz web
 
 Las páginas de **Ajustes** de [`alisio serve`](/es/web) escriben en los mismos archivos que la

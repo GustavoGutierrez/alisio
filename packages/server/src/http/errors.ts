@@ -39,6 +39,10 @@ export const STATUS: Record<ApiErrorCode, number> = {
   view_failed: 502,
   view_timeout: 504,
   view_too_large: 502,
+  task_not_found: 404,
+  goal_not_found: 404,
+  goal_conflict: 409,
+  goal_disabled: 409,
   internal: 500,
 };
 

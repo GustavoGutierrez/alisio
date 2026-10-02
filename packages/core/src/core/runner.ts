@@ -40,6 +40,7 @@ import type {
 import { EXIT_PLAN_TOOL, optInAllows } from "./opt-in.ts";
 import { type OutputLimit, resolveMaxOutputTokens } from "./output-limit.ts";
 import type { ToolRegistry } from "./registry.ts";
+import { attachRunStats } from "./run-stats.ts";
 import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
 import {
   incompleteCalls,
@@ -997,6 +998,8 @@ export class AgentRunner {
     text: string;
     status: string;
     usage: { input: number; output: number };
+    /** Tool calls the model made during the run (the goal controller's no-progress breaker). */
+    toolCalls: number;
   }> {
     const controller = this.claim(sessionId);
     const runId = options.runId ?? crypto.randomUUID();
@@ -1012,6 +1015,7 @@ export class AgentRunner {
     };
     const limit = o.maxContextChars ?? 800_000;
     let tokens = 0,
+      toolCalls = 0,
       lastText = "",
       acquired = false;
     const usageTotal = { input: 0, output: 0 };
@@ -1387,8 +1391,9 @@ export class AgentRunner {
           }
           emit("run_completed", final);
           finish("completed");
-          return { sessionId, text: lastText, status: "completed", usage: usageTotal };
+          return { sessionId, text: lastText, status: "completed", usage: usageTotal, toolCalls };
         }
+        toolCalls += completion.calls.length;
         const prepared = completion.calls.map((call) => {
           try {
             const tool = o.registry.get(call.name),
@@ -1475,7 +1480,7 @@ export class AgentRunner {
       // token budget (`maxTokens`) and the timeout; the turn count is a safety rail.
       emit("run_turns_exceeded", { turns: maxTurns, maxTurns });
       finish("turns_exceeded");
-      return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal };
+      return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal, toolCalls };
     } catch (error) {
       const timedOut = silentTimedOut
         ? { kind: "first_token" as const, ms: firstTokenMs, attempts: Math.max(1, silentAttempts) }
@@ -1493,6 +1498,7 @@ export class AgentRunner {
         });
         emit("run_failed", { error: failure.message, code: "timeout", timeout: failure.info });
         finish("failed", failure.message);
+        attachRunStats(failure, { usage: { ...usageTotal }, toolCalls });
         throw failure;
       }
       if (error instanceof RunTruncationError) {
@@ -1502,6 +1508,7 @@ export class AgentRunner {
           truncation: error.info,
         });
         finish("failed", error.message);
+        attachRunStats(error, { usage: { ...usageTotal }, toolCalls });
         throw error;
       }
       // On cancellation report the abort reason, not the transport's secondary error.
@@ -1509,6 +1516,7 @@ export class AgentRunner {
       const message = cause instanceof Error ? cause.message : String(cause);
       emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
       finish(combined.aborted ? "cancelled" : "failed", message);
+      attachRunStats(error, { usage: { ...usageTotal }, toolCalls });
       throw error;
     } finally {
       if (acquired) o.store.release(sessionId);

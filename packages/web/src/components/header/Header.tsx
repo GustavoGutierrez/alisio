@@ -11,7 +11,7 @@ import {
   sessionTab,
   transcript,
 } from "../../store/app.ts";
-import { dockOpen, setDockOpen } from "../../store/dock.ts";
+import { dockOpen, liveTasks, setDockOpen } from "../../store/dock.ts";
 import { visibleTabs } from "../../store/plugins.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./header.module.css";
@@ -108,13 +108,16 @@ export function Header() {
         {session ? (
           <button
             type="button"
-            class="icon-btn"
+            class={`icon-btn ${styles.dockToggle}`}
             aria-pressed={dockOpen.value}
             aria-label={t("header.toggleDock")}
             title={t("header.toggleDock")}
             onClick={() => setDockOpen(!dockOpen.value)}
           >
             <Icon name="panel" size={17} />
+            {liveTasks.value ? (
+              <span class={styles.dot} title={t("dock.tasksLive", { count: liveTasks.value })} />
+            ) : null}
           </button>
         ) : null}
       </div>

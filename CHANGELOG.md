@@ -12,6 +12,7 @@ out. `/changelog` (terminal and web) shows these entries offline.
 - `/permission` (also `/permissions`) switches between ask, auto and full-access modes and shows the current status; saved permissions are managed from the same menu.
 - `/reload` reloads the configuration, agents, skills, prompt templates and MCP servers between turns; a broken configuration leaves your session untouched.
 - `/changelog [version]` shows what changed in each release, and Alisio mentions the news once after an upgrade.
+- `/goal <objective>` keeps the agent working on one objective, turn after turn, with a token budget (`budget=50k`), turn and time limits, and breakers for repeated replies; it never runs in plan mode and waits for approvals, questions and background tasks. The terminal and the web show its status, and only you pause, resume, edit or clear it.
 
 ## [0.1.0-alpha.28] - 2026-10-01
 

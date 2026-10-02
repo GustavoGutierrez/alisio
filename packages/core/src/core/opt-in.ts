@@ -5,8 +5,10 @@
  * `RunOptions.optInTools` to see (and be allowed to call) it.
  */
 export const EXIT_PLAN_TOOL = "exit_plan";
+/** The goal tools: offered only while the session has an active goal (see `goal/service.ts`). */
+export const GOAL_TOOLS: readonly string[] = ["get_goal", "update_goal"];
 
-export const OPT_IN_TOOLS: ReadonlySet<string> = new Set([EXIT_PLAN_TOOL]);
+export const OPT_IN_TOOLS: ReadonlySet<string> = new Set([EXIT_PLAN_TOOL, ...GOAL_TOOLS]);
 
 /** Whether `name` may be offered or executed for a run that opted into `optIn`. */
 export const optInAllows = (name: string, optIn: readonly string[] | undefined): boolean =>

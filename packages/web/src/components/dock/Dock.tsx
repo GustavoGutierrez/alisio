@@ -1,5 +1,6 @@
 import type { FileEntry } from "@alisio/sdk";
-import { useEffect } from "preact/hooks";
+import type { ComponentType } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
 import CodeView from "../../renderers/code/view.tsx";
@@ -12,6 +13,7 @@ import {
   dockTab,
   downloadUrl,
   expanded,
+  liveTasks,
   loadChanges,
   loadDir,
   openInDock,
@@ -25,7 +27,22 @@ import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
 import styles from "./dock.module.css";
 
-const TABS: DockTab[] = ["files", "changes", "preview"];
+const TABS: DockTab[] = ["files", "changes", "preview", "tasks"];
+
+/** The Tasks tab is its own chunk (the initial bundle has a size budget). */
+function LazyTasks() {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("../tasks/TasksTab.tsx").then((m) => {
+      if (alive) setView(() => m.TasksTab);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View /> : <p class={styles.empty}>{t("common.loading")}</p>;
+}
 
 function Dir({ path, depth }: { path: string; depth: number }) {
   const state = dirs.value[path];
@@ -211,6 +228,11 @@ export function Dock(props: { width?: number } = {}) {
               }}
             >
               {t(`dock.${id}`)}
+              {id === "tasks" && liveTasks.value ? (
+                <span class={styles.count} title={t("dock.tasksLive", { count: liveTasks.value })}>
+                  {liveTasks.value}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -258,6 +280,8 @@ export function Dock(props: { width?: number } = {}) {
           <Dir path="" depth={0} />
         ) : tab === "changes" ? (
           <ChangesTab />
+        ) : tab === "tasks" ? (
+          <LazyTasks />
         ) : (
           <PreviewBody />
         )}

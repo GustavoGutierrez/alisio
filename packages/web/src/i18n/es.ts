@@ -261,6 +261,8 @@ export const es: Record<MessageKey, string> = {
   "dock.files": "Archivos",
   "dock.changes": "Cambios",
   "dock.preview": "Vista previa",
+  "dock.tasks": "Tareas",
+  "dock.tasksLive": "{count} en curso",
   "dock.close": "Cerrar el panel",
   "dock.more": "Mostrar más",
   "dock.symlink": "Enlace simbólico (no se sigue)",

@@ -111,6 +111,8 @@ description, and `/resume` suggests matching session IDs.
 | `/permission [ask\|auto\|full\|status]` (`/permissions`) | One menu with **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** and **Manage saved permissions…** (review and revoke the permissions saved for the session, for example Python analysis allowed for this session). With an argument it sets the mode or prints the status directly; see [Permission modes](#permission-modes) |
 | `/reload` | Reload the configuration, agents, skills, prompt templates and MCP servers between turns; a broken configuration leaves the session untouched; see [Reload and changelog](#reload-and-changelog) |
 | `/changelog [version]` | Scrollable panel with what changed in recent releases (offline); see [Reload and changelog](#reload-and-changelog) |
+| `/tasks` | Panel with this session's [background tasks](/tools#background-tasks) (`bg_run`) and a read-only view of its subagents: a list, the live output of one and a Stop key; see [Background tasks](#tasks) |
+| `/goal [objective \| pause \| resume \| edit \| clear \| help \| budget=<n>]` | Start or manage the current Session Goal: with a goal it opens a menu (status, pause, resume, edit, budget, clear, help); with an objective it starts one that the agent keeps working on until it is done, blocked, paused or out of budget; see [Session goals](#goals) |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
 | `/command plugin.id:name args` | Run a plugin command |
@@ -308,8 +310,8 @@ table drives the web presets, so a mode behaves the same in both interfaces.
 ### `/reload` {#reload}
 
 `/reload` re-reads the configuration layers, agent files, skills, prompt templates and MCP servers
-without leaving the session. It only runs **between turns**: it is refused while a turn, a subagent
-or an approval is waiting. Everything is validated **before** anything is applied: the
+without leaving the session. It only runs **between turns**: it is refused while a turn, a subagent,
+an approval or a [background task](#tasks) is waiting. Everything is validated **before** anything is applied: the
 configuration is parsed first and a new application is built next to the current one, so a broken
 file leaves your session exactly as it was (the error says why). When it succeeds the report lists,
 per area, what changed (counts, added, removed or updated names), refreshes the slash completion
@@ -327,6 +329,129 @@ It works offline: the changelog is converted at build time and ships inside the 
 upgrade Alisio prints **one** line (*Alisio updated to … · 3 new entries · /changelog*); the last
 version seen is stored in `tui-state.json` next to the session database, so a first run stays
 silent. Entries are in English in every language. `alisio run` has no `/changelog`.
+
+## Background tasks {#tasks}
+
+When the agent starts a command with [`bg_run`](/tools#background-tasks) it keeps working and the
+command runs in the background. `/tasks` opens a panel with the session's tasks — shell commands plus
+a **read-only** view of the status of its [subagents](/subagents) (their own
+[agent panel](#agent-panel) manages them) — and works during a turn.
+
+| Where | Key | Action |
+| --- | --- | --- |
+| List | ↑ / ↓, Home / End | Move |
+| List | Enter | Open the task |
+| List, detail | `s` | Stop the task (asks `y`/`n`; only a running shell task) |
+| List, detail | `q` | Close the panel |
+| List | Esc | Close the panel |
+| Detail | ↑ / ↓, PgUp / PgDn, Home | Scroll the output (this stops following the end) |
+| Detail | End | Follow the end of the output again (it follows by default while the task runs) |
+| Detail | Esc | Back to the list |
+
+The detail view shows the command, the directory, the status (`running`, `done`, `failed · exit 2`,
+`failed · time limit`, `stopped · by user`, `lost`…) and the output, read incrementally once a second
+while the task runs (control characters and colors are removed so output cannot move the cursor).
+Your stop ends the task `cancelled`, never `failed`.
+
+When a task ends on its own, one coalesced message wakes the agent (a normal run of the session
+shows *Background task finished: …*); it waits while a turn runs, a question or approval is on
+screen or another session is open. Tasks are **not sandboxed** and **end when Alisio exits**; if it
+was killed abruptly they show as `lost` next time. `/reload` is refused while tasks run (it would
+close the old application and kill them): stop them or wait. `alisio run` waits for no task: it
+stops the ones still running and says so.
+
+## Session goals {#goals}
+
+`/goal <objective>` gives the agent one objective for the whole session and lets it keep working on
+it, turn after turn, until it is done, blocked, paused or out of budget. You write the objective once:
+Alisio sends the full contract the first time and a short, stable reminder on every later turn, and the
+**runtime** (not the prompt) enforces the limits. The agent decides when it is finished and says so
+with [`update_goal`](/tools#goal-tools), with evidence; only **you** pause, resume, edit or clear a
+goal or change its budget. There is no separate evaluator model in v1.
+
+> **Cost.** A goal keeps spending tokens by itself. Every request of every turn counts, and each turn
+> sends the whole context again. A goal **without a token budget is stopped only by its turn and time
+> limits** (`goal.maxTurns`, 50, and `goal.maxMinutes`, 120): give long or open-ended objectives a
+> budget (`budget=50k`) and watch the bar.
+
+| Command | What it does |
+| --- | --- |
+| `/goal` | With a goal: opens the menu (status, pause, resume, edit, budget, clear, help). Without one: says how to start it |
+| `/goal <objective>` | Creates the goal and starts working. One goal per session: if there is one, asks before replacing it |
+| `/goal <objective> budget=50k` | Same, with a token budget (`50k`, `1.5M`, `250000`) |
+| `/goal pause` | Stops continuing automatically; the turn in progress finishes |
+| `/goal resume` | Continues a paused or blocked goal |
+| `/goal edit [<objective>]` | Changes the objective (without text it puts the current one in the editor); the contract is sent again on the next turn |
+| `/goal clear` | Removes the goal |
+| `/goal budget=50k` | Sets the token budget of the current goal; `budget=clear` (also `none`, `off`, `0`) removes it |
+| `/goal help` | The syntax with budget examples |
+
+The objective can have up to 4 000 characters; `budget=` may appear once (a duplicate is rejected) and is
+never part of the objective. The menu rows **Edit objective…** and **Set token budget…** leave
+`/goal edit …` or `/goal budget=…` in the editor for you to finish.
+
+### The goal bar {#goal-bar}
+
+While a session has a goal, a two-line bar sits above the editor: the **status** and the objective, then
+the **tokens** used against the budget, the **turn** `n/max`, the time spent in runs, **why it waits or
+stopped**, and the actions for that state (`/goal pause · /goal edit · /goal clear`). When a goal stops
+by itself one line also appears in the transcript.
+
+### States {#goal-states}
+
+| State | Reason codes | You can |
+| --- | --- | --- |
+| **Active** | `created`, `resumed` | pause, edit, budget, clear |
+| **Paused** | `user_paused`, `user_interrupt` (you pressed Esc), `max_turns`, `max_wall`, `no_progress` (`repeated_reply` or `no_tool_turns`), `restart` | resume, edit, budget, clear |
+| **Blocked** | `model_blocked`, `policy_denied`, `run_error` (the error is shown) | resume, edit, budget, clear |
+| **Budget reached** | `token_budget` | raise or clear the budget (it continues); edit, clear. Not resumable otherwise |
+| **Complete** | `model_complete` (with the agent's summary and evidence) | edit, budget, clear. Not resumable: start a new goal |
+
+Resuming after `max_turns` or `max_wall` grants one more allowance of that limit. Two windows (or the
+terminal and the web) cannot fight: every change is a compare-and-set, so an action based on an
+out-of-date view is refused.
+
+### Limits {#goal-limits}
+
+- **Token budget (hard).** Counted over all the runs of the goal: the input and output tokens of
+  every request, so a long context is paid again each turn. Each run is started with what is left as
+  its own cap, and the runner refuses further tool calls once it is spent; the goal then goes to
+  *Budget reached* and **nothing more runs** (there is no closing turn). If the provider reports no
+  usage, the text of the replies is used as an estimate. Raising or clearing the budget re-arms a goal
+  that stopped for it; lowering it to what was already spent stops an active one at once.
+- **Turns** (`goal.maxTurns`, 50) and **time** (`goal.maxMinutes`, 120, time inside runs): the goal
+  pauses. A continuation's own timeout shrinks to what is left of the time.
+- **Breakers.** Pause with `no_progress` after the same final reply repeats
+  (`goal.repeatedReplyLimit`, 3) or after consecutive turns without a tool call (`goal.noToolTurnsLimit`,
+  3). The first occurrence is logged, the second adds a nudge to the next continuation, the limit
+  pauses.
+- **Blocked.** The agent must report the same blocker, with evidence, in consecutive turns
+  (`goal.blockedRepeats`, 2), except a permission denial, which blocks at once. A turn that **fails**
+  blocks the goal with the error as the reason, except a provider timeout (the runner already retried
+  it), which only counts as a turn.
+
+### What never continues on its own {#goal-waits}
+
+One ordered list decides, in this order: the goal is not active (or goals are off); a turn is running
+or a continuation is already claimed; you have text in the editor (you go first); a **permission**
+waits (*Waiting for permission*); a **question** or plan review waits (*Waiting for your answer*); the
+active agent is the **plan agent** (a goal never runs in plan mode); **background tasks** of the session
+are running (*Waiting for background tasks*: it continues when the last one ends, also if you stopped
+it). Pressing **Esc** during a turn pauses the goal (`user_interrupt`). These are waits, not states:
+the goal stays active and continues when the cause is gone.
+
+### Safety and restart {#goal-safety}
+
+A goal never widens permissions: its turns use the same policy, approvals and permission mode as any
+other turn, and never run in plan mode. The objective is **your text** and goes into the prompt as
+quoted data, never as instructions that outrank the rules around it; the transcript shows only its
+first 140 characters. Every continuation is a normal persisted user message started with an idempotent
+request id (`goal-<id>-<n>`), so a double trigger starts one run and tool call ids and provider
+continuation data stay consistent.
+
+If Alisio stops while a goal is active (closed, killed), the next start brings it back **paused** with
+reason `restart`: it never resumes by itself, run `/goal resume`. `alisio run` (headless) has no
+`/goal` in v1.
 
 ## MCP manager {#mcp}
 

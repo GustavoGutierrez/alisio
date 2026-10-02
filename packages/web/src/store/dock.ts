@@ -8,7 +8,7 @@ import { type PreviewKind, parentDirs, previewKind, workspaceRelative } from "..
 import { api, currentId, detail } from "./app.ts";
 import { readPref, writePref } from "./storage.ts";
 
-export type DockTab = "files" | "changes" | "preview";
+export type DockTab = "files" | "changes" | "preview" | "tasks";
 
 export interface DirState {
   entries: FileEntry[];
@@ -35,6 +35,8 @@ export type PreviewState =
 
 export const dockOpen = signal(readPref("alisio.dock") === "open");
 export const dockTab = signal<DockTab>("files");
+/** Live background tasks of the open session (set by the lazy tasks store; feeds the badges). */
+export const liveTasks = signal(0);
 export const dirs = signal<Record<string, DirState>>({});
 export const expanded = signal<Set<string>>(new Set([""]));
 export const preview = signal<PreviewState | undefined>(undefined);
@@ -46,6 +48,16 @@ export const changes = signal<{ files: SessionChange[]; loading: boolean; error?
 let dockWorkspace: string | undefined;
 let objectUrl: string | undefined;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** `/tasks`: opens the dock on its Tasks tab. */
+export function openTasks(): void {
+  batch(() => {
+    dockOpen.value = true;
+    dockTab.value = "tasks";
+  });
+  writePref("alisio.dock", "open");
+  ensureWorkspace();
+}
 
 export function setDockOpen(open: boolean): void {
   dockOpen.value = open;

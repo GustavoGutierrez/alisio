@@ -173,7 +173,7 @@ describe("CommandCatalog (T-05)", () => {
       );
       // Phase 2 of the analysis runtime: `/artifacts` opens the web artifact panel too.
       expect(web).toEqual(
-        expect.arrayContaining(["artifacts", "permission", "reload", "changelog"]),
+        expect.arrayContaining(["artifacts", "permission", "reload", "changelog", "tasks", "goal"]),
       );
       const tui = new CommandCatalog(fx.host).list("tui").map((c) => c.name);
       expect(tui).toEqual(expect.arrayContaining(["copy", "exit", "settings", "connect"]));

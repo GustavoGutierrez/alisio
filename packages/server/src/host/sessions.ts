@@ -1,6 +1,9 @@
 import {
   agentCatalogFromState,
   agentRunOptions,
+  GoalStore,
+  goalOptInTools,
+  PLAN_AGENT_ID,
   type Policy,
   resolveActiveAgent,
   type Session,
@@ -32,6 +35,8 @@ export interface SessionServiceOptions {
   awaitingInput?: (rootSessionId: string) => boolean;
   /** Sends a frame to every connected stream (session status for sidebars). */
   broadcast?: (frame: ServerFrame) => void;
+  /** A session's stored options changed (agent, preset, effort): a goal may now continue. */
+  onOptions?: (sessionId: string) => void;
 }
 
 /**
@@ -43,8 +48,10 @@ export class SessionService {
   /** Per-session policy objects: "allow for session" widens only its own session. */
   private policies = new Map<string, Policy>();
   readonly ceiling: Ceiling;
+  private readonly goals: GoalStore;
 
   constructor(private options: SessionServiceOptions) {
+    this.goals = new GoalStore(options.catalog.db);
     const base = options.base;
     const readOnly = !!base.readOnly;
     this.ceiling = {
@@ -181,6 +188,12 @@ export class SessionService {
     const { policy, approvals } = this.policy(session);
     const effort = session.options?.effort;
     const agent = this.agentOptions(session);
+    // The goal tools exist for the runs of a session with an ACTIVE goal (never in plan mode).
+    const goalTools = goalOptInTools(
+      this.goals.get(session.id),
+      this.activeAgentId(session) === PLAN_AGENT_ID,
+    );
+    const optInTools = [...(agent.optInTools ?? []), ...goalTools];
     return {
       policy: agent.policy ? { ...agent.policy } : policy,
       approvals: agent.approvals ?? approvals,
@@ -191,13 +204,19 @@ export class SessionService {
           ? { reasoningEffort: agent.reasoningEffort }
           : {}),
       ...(agent.instructions ? { instructions: agent.instructions } : {}),
-      ...(agent.optInTools ? { optInTools: agent.optInTools } : {}),
+      ...(optInTools.length ? { optInTools } : {}),
     };
   }
 
-  private agentOptions(session: Session): ReturnType<typeof agentRunOptions> {
+  /** The agent id the session's next run uses (stored id, else the app's active agent). */
+  activeAgentId(session: Session): string | undefined {
     const app = this.openApp(session)?.app;
-    if (!app) return {};
+    const stored = session.options?.agent;
+    if (!app) return typeof stored === "string" ? stored : undefined;
+    return this.resolveAgent(session, app)?.id;
+  }
+
+  private resolveAgent(session: Session, app: OpenWorkspace["app"]) {
     let state: unknown;
     try {
       state = app.plugins.pluginState("subagents", "mainAgents");
@@ -205,16 +224,27 @@ export class SessionService {
       /* agent contributions are best-effort */
     }
     const stored = session.options?.agent;
-    const agent = resolveActiveAgent(
+    return resolveActiveAgent(
       agentCatalogFromState(state),
       typeof stored === "string" ? stored : app.config.agents.active,
     );
-    return agentRunOptions(agent);
+  }
+
+  private agentOptions(session: Session): ReturnType<typeof agentRunOptions> {
+    const app = this.openApp(session)?.app;
+    if (!app) return {};
+    return agentRunOptions(this.resolveAgent(session, app));
   }
 
   /** Merges keys into the session's stored options (undefined removes a key). */
   setOptions(sessionId: string, options: Record<string, unknown>): void {
     this.options.catalog.updateSessionMeta(sessionId, { options });
+    this.optionsChanged(sessionId);
+  }
+
+  /** A session option (agent, preset, effort) changed: a goal that waited on it may continue. */
+  optionsChanged(sessionId: string): void {
+    this.options.onOptions?.(sessionId);
   }
 
   runByRequest(sessionId: string, requestId: string) {
@@ -262,7 +292,7 @@ export class SessionService {
   }
 
   /** Late binding for components created after this service. */
-  bind(hooks: Pick<SessionServiceOptions, "awaitingInput" | "broadcast">): void {
+  bind(hooks: Pick<SessionServiceOptions, "awaitingInput" | "broadcast" | "onOptions">): void {
     Object.assign(this.options, hooks);
   }
 }

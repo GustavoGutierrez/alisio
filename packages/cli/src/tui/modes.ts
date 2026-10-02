@@ -129,8 +129,12 @@ export function reloadGuard(state: {
   busy: boolean;
   runningChildren: number;
   queuedPrompts: boolean;
+  /** Live background tasks (`bg_run`): closing the old application would kill them. */
+  backgroundTasks?: number;
 }): string | undefined {
   if (state.busy) return RELOAD_BUSY;
+  if (state.backgroundTasks)
+    return `Reload would stop ${state.backgroundTasks} running background task${state.backgroundTasks === 1 ? "" : "s"}: stop ${state.backgroundTasks === 1 ? "it" : "them"} with /tasks or wait for ${state.backgroundTasks === 1 ? "it" : "them"} to finish, then reload.`;
   if (state.runningChildren > 0)
     return `Reload is unavailable while ${state.runningChildren} subagent${state.runningChildren === 1 ? " is" : "s are"} running: wait for ${state.runningChildren === 1 ? "it" : "them"} to finish or cancel with Ctrl+K in the agents panel.`;
   if (state.queuedPrompts) return "Reload is unavailable while an approval or question is waiting.";

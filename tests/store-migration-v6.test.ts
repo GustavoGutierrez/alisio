@@ -82,7 +82,7 @@ describe("SQLiteStore v6 migration (analysis, artifacts, grants, datasets)", () 
           version: number;
         }[]
       ).map((v) => v.version);
-      expect(versions).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
       expect(second.db.prepare("SELECT count(*) AS n FROM capability_grants").get()).toEqual({
         n: 1,
       });

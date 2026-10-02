@@ -159,6 +159,7 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
     });
     if (patch.preset !== undefined) sessions.resetPolicy(session.id);
     sessions.notify(session.id);
+    if (Object.keys(options).length) sessions.optionsChanged(session.id);
     return { body: sessions.detail(sessions.get(session.id)) };
   });
 

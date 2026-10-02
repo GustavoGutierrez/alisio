@@ -59,7 +59,7 @@ describe("SQLiteStore v5 migration (archived workspaces)", () => {
     v4Fixture(path);
     const store = new SQLiteStore(path);
     try {
-      expect(versions(store)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(versions(store)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
       expect(store.workspaces()).toEqual([
         { path: "/labelled", label: "Mine", pinned: true, lastOpenedAt: 42, sessions: 0 },
         { path: "/w", pinned: false, sessions: 1 },
@@ -74,7 +74,7 @@ describe("SQLiteStore v5 migration (archived workspaces)", () => {
     v3Fixture(path);
     const store = new SQLiteStore(path);
     try {
-      expect(versions(store)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(versions(store)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
       store.recordWorkspace("/w", { archived: true });
       expect(store.workspaces()[0]).toMatchObject({ path: "/w", archivedAt: expect.any(Number) });
     } finally {
@@ -83,7 +83,7 @@ describe("SQLiteStore v5 migration (archived workspaces)", () => {
     // Idempotent across reopen.
     const again = new SQLiteStore(path);
     try {
-      expect(versions(again)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(versions(again)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
       expect(again.workspaces()[0]?.archivedAt).toEqual(expect.any(Number));
     } finally {
       again.close();

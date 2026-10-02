@@ -293,7 +293,13 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     }
   } finally {
     process.off("SIGINT", interrupt);
+    // Background tasks end with Alisio: `run` waits for none of them, it stops them and says so.
+    const live = app.tasks.liveCount();
     await app.close();
+    if (live)
+      process.stderr.write(
+        `${live} background task${live === 1 ? " was" : "s were"} still running and ${live === 1 ? "was" : "were"} stopped: background tasks end when Alisio exits.\n`,
+      );
   }
 }
 program

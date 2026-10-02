@@ -30,6 +30,8 @@ estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 | `edit_file` | `write` | Reemplazar una coincidencia exacta y única en un archivo |
 | `run_process` | `process` | Ejecutar un comando con un array de argumentos |
 | `shell` | `process` | Ejecutar un comando de shell |
+| `bg_run` | `process` | Iniciar un comando de shell en segundo plano y seguir trabajando (véase [más abajo](#background-tasks)) |
+| `bg_list`, `bg_output`, `bg_stop` | `process` | Listar las tareas en segundo plano, leer la salida de una de forma incremental, detener una (véase [más abajo](#background-tasks)) |
 | `webfetch` | `external` | Leer una URL como texto/markdown/html (véase [más abajo](#webfetch)) |
 | `websearch` | `external` | Buscar en la web (véase [más abajo](#websearch)) |
 | `execute` | `process` | Ejecutar un fragmento JS que llama a otras herramientas ("Code Mode", véase [más abajo](#execute)) |
@@ -107,6 +109,108 @@ ejecución del plan, el anfitrión cambia a `build` e inicia un turno de impleme
 porque la política de su ejecución no permite ningún efecto de escritura, proceso o externo, así que
 ningún [modo de permisos](#permission-modes) puede ampliarla. `plan_proposed` y `plan_decided` son
 eventos de ejecución durables.
+
+## Ejecutar comandos en segundo plano: bg_run {#background-tasks}
+
+`bg_run` inicia un comando de shell y devuelve de inmediato un id de tarea, de modo que el agente
+puede seguir trabajando mientras corre un servidor de desarrollo, un watcher o una suite de pruebas
+larga. Son cuatro herramientas, todas con `effect: process`:
+
+| Herramienta | Entrada | Resultado |
+| --- | --- | --- |
+| `bg_run` | `command` (hasta 8 000 caracteres), `cwd?` (relativo al workspace), `label?`, `timeoutMs?` (de 1 s a 24 h, limitado por `tasks.maxRunMs`) | `{ id, label, status: "running", timeout_ms, note }` |
+| `bg_list` | `status?`, `limit?` (hasta 50) | `{ tasks: [{ id, label, status, exit_code?, error?, stopped_by?, output_bytes, … }] }`, la más reciente primero |
+| `bg_output` | `id`, `offset?` (0 por defecto), `limit?` (hasta 65 536 bytes, 16 KiB por defecto) | `{ id, status, exit_code?, text, next_offset, eof, output_truncated? }` |
+| `bg_stop` | `id` | La tarea tal como queda tras la parada: `cancelled`, `stopped_by: "model"` |
+
+**Una sola política para las cuatro.** Iniciar, listar, leer la salida de una tarea y detenerla pasan
+por la misma compuerta `process` que `shell` y `run_process`: [`--read-only`](#permission-flags) y el
+agente plan deniegan el conjunto entero (un modo que no puede iniciar un proceso tampoco puede leer
+ni detener uno), y en modo `ask` y `auto` cada llamada pregunta primero (`Allow for this session`
+cubre el resto). El modo `full` las ejecuta sin preguntar. El comando, el directorio de trabajo
+(comprobado con la [política de rutas](#external-directories)) y el entorno siguen las mismas reglas
+que `shell`: el mismo shell y la misma lista corta de variables de entorno. Una tarea pertenece a la
+sesión raíz que la inició; otra sesión, aunque sea del mismo workspace, recibe «not found».
+
+**Leer la salida.** La salida (estándar y de error, en orden de llegada) se guarda en un archivo de
+log con offsets en bytes: pase `0` la primera vez y después el `next_offset` de la llamada anterior,
+de modo que nada se repite y el contexto del modelo no se inunda. `eof` es verdadero solo cuando la
+tarea terminó y se leyó todo. Un log conserva sus primeros `tasks.maxOutputBytes` bytes (2 MiB por
+defecto), después una línea de aviso; los **últimos 32 KiB** se añaden cuando la tarea termina, así
+que el error al final de una compilación larga sigue ahí.
+
+**Estados.** `queued → running → stopping → succeeded | failed | cancelled | lost`; cada cambio es un
+compare-and-set en la base de datos, de modo que nunca se sale de un estado terminal y una parada que
+compite con la salida del proceso termina en un único estado. Una parada suya (UI) o del modelo
+(`bg_stop`) es `cancelled`, nunca `failed`; el watchdog (`tasks.maxRunMs`, 1 hora por defecto) detiene
+una tarea que corre demasiado y termina `failed` con el código `timeout`; detener envía SIGTERM al
+grupo de procesos y SIGKILL tras 3 segundos (`taskkill /T /F` en Windows). Se conserva el origen de la
+parada (`user`, `model`, `timeout`, `shutdown`).
+
+**Límites.** Como máximo `tasks.maxPerSession` tareas vivas por sesión (4 por defecto) y 16 por
+proceso de Alisio; los ajustes están en [Configuración](/es/configuration#tasks).
+
+**La notificación de fin de tarea.** Cuando una tarea termina **por sí sola** (éxito, fallo o el
+límite de tiempo), un mensaje despierta al agente dueño de la sesión: los ids de las tareas, su estado
+y cómo leer la salida con `bg_output`. Está coalescida y limitada en frecuencia, nunca es uno por
+turno:
+
+- las tareas que terminan con menos de 2 segundos de diferencia comparten un mensaje;
+- como máximo un despertar por sesión cada 10 segundos y 6 cada 10 minutos; lo que no cabe espera al
+  siguiente lote (no se descarta nada);
+- mientras la sesión está ocupada (corre un turno, espera una aprobación o una pregunta, otro proceso
+  tiene la sesión) el mensaje espera y se reintenta cada 2 segundos, y otra vez en cuanto la sesión
+  queda libre;
+- la entrega se reclama en la base de datos (`delivered_at`) antes de despertar, así que no puede
+  repetirse; una tarea cuya salida el modelo ya leyó después de que terminara **no** se anuncia;
+- no se envía nada por una tarea que usted o el modelo detuvieron, por una que murió con Alisio, por
+  tareas de sesiones hijas (subagentes) ni por una sesión archivada.
+
+El despertar es una ejecución normal de la sesión: la terminal la inicia por su ruta de prompts y el
+servidor web mediante su planificador de ejecuciones (`runner.enqueue` por sí solo dejaría el texto
+esperando al siguiente prompt). En `alisio run` sin interfaz nada despierta al agente (el resultado de
+`bg_run` lo dice): lea la salida con `bg_output`.
+
+**Ciclo de vida y seguridad.** Una tarea es un proceso hijo corriente de Alisio, iniciado con el
+ejecutor de procesos compartido. **No** está aislada (corre con sus permisos) y **no** es *detached*:
+cuando Alisio termina (`/exit`, el final de `alisio run`, cerrar el servidor o un workspace) se mata el
+grupo de procesos de cada tarea viva y la tarea termina `cancelled` con origen `shutdown`; un comando
+que deja hijos en segundo plano los pierde también. `alisio run` no espera ninguna tarea: detiene las
+que siguen corriendo y lo dice por stderr. Si Alisio muere de golpe (SIGKILL, corte de luz) nada puede
+ejecutarse, así que el siguiente arranque marca las tareas sin terminar como `lost` —solo aquellas
+cuyo proceso dueño ya no existe, nunca las de otro proceso de Alisio vivo— y sus procesos pueden seguir
+corriendo: deténgalos usted (la tarea muestra su `pid`). Las tareas terminadas y sus logs se borran
+tras `tasks.retentionDays` (7 por defecto). Los ids de tarea son ULID (80 bits aleatorios).
+
+Véanse [Interfaz de terminal](/es/tui#tasks) e [Interfaz web](/es/web#background-tasks) para los
+paneles `/tasks`.
+
+## Trabajar hacia un objetivo: get_goal y update_goal {#goal-tools}
+
+`/goal` ([terminal](/es/tui#goals), [web](/es/web#goals)) mantiene al agente trabajando en un objetivo
+hasta que esté terminado, bloqueado, en pausa o sin presupuesto. Estas dos herramientas son todo lo
+que el modelo tiene a mano sobre él:
+
+- `get_goal` lee el objetivo, el estado y lo que queda del presupuesto de tokens, del tope de turnos
+  y del tope de tiempo.
+- `update_goal` informa que el objetivo está **`complete`** o **`blocked`**, con un `summary` y una
+  lista de `evidence` (de 1 a 20 elementos, cada uno con un `kind` — `file`, `test`, `log`, `command`,
+  `denied` u `other` — y un `detail`: una ruta, una ejecución de pruebas, una línea de registro).
+  `complete` sin evidencia se rechaza. Un informe `blocked` debe repetirse, con evidencia nueva, en el
+  turno **siguiente** (`goal.blockedRepeats`, 2 turnos consecutivos por defecto) antes de que el
+  objetivo se detenga; un turno que no lo repite lo borra. Solo la evidencia de tipo `denied` (se
+  denegó un permiso) bloquea de inmediato. Alisio no verifica la evidencia: se guarda y se muestra para
+  que **tú** puedas hacerlo.
+
+El modelo no puede pausar, reanudar, editar ni borrar el objetivo, ni cambiar su presupuesto: ninguna
+herramienta lo hace, solo tú. `update_goal` solo funciona mientras el objetivo está activo (uno que
+pausaste sigue en pausa) y cambia la contabilidad interna de Alisio, nunca el workspace, por lo que es
+un efecto `internal` y nunca amplía un permiso.
+
+Las dos herramientas son **opt-in**: una ejecución solo las ve mientras su sesión tiene un objetivo
+**activo** y el agente no es el agente plan (el `execute` de Code Mode nunca las ofrece). En cualquier
+otro caso no figuran ni se pueden llamar, así que sus descripciones no cuestan tokens en las peticiones
+de una sesión sin objetivo.
 
 ## Leer una URL: webfetch {#webfetch}
 

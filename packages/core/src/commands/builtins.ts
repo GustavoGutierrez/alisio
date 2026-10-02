@@ -147,6 +147,19 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
+    name: "tasks",
+    description: "Show this session's background tasks (bg_run) with their output, and stop them",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
+    name: "goal",
+    description: "Start or manage the current Session Goal",
+    argumentHint: "[objective | pause | resume | edit | clear | help | budget=<n>]",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
     name: "exit",
     description: "Exit Alisio",
     aliases: ["quit"],

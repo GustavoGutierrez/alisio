@@ -45,6 +45,8 @@ type CatalogScope = Extract<ServerFrame, { t: "catalog_changed" }>["scope"];
 export interface ManagementContext {
   workspaces: WorkspaceHost;
   scheduler: RunScheduler;
+  /** Whether a workspace has live background tasks (closing its application would kill them). */
+  tasksLive?: (workspaceId: string) => boolean;
   base: ServerAppOptions;
   broadcast: (frame: ServerFrame) => void;
 }
@@ -77,9 +79,14 @@ export class WorkspaceRecycler {
   private pending = new Set<string>();
   constructor(private ctx: ManagementContext) {}
 
-  /** Recycles now when idle; otherwise once the workspace's runs finish. */
+  /** Runs or live background tasks (the application's close would kill them). */
+  private busy(id: string): boolean {
+    return this.ctx.scheduler.busyWorkspace(id) || !!this.ctx.tasksLive?.(id);
+  }
+
+  /** Recycles now when idle; otherwise once the workspace's runs and tasks finish. */
   async request(id: string): Promise<OpenWorkspace | undefined> {
-    if (this.ctx.scheduler.busyWorkspace(id)) {
+    if (this.busy(id)) {
       this.pending.add(id);
       return undefined;
     }
@@ -91,7 +98,7 @@ export class WorkspaceRecycler {
 
   /** Called when a run finishes: applies a deferred recycle once nothing runs. */
   idle(id: string): void {
-    if (!this.pending.has(id) || this.ctx.scheduler.busyWorkspace(id)) return;
+    if (!this.pending.has(id) || this.busy(id)) return;
     void this.request(id).catch(() => {});
   }
 
@@ -110,7 +117,9 @@ export class WorkspaceRecycler {
     const busy = () =>
       scheduler.busyWorkspace(id)
         ? "Reload is only available between turns: wait for the current turn to finish."
-        : undefined;
+        : this.ctx.tasksLive?.(id)
+          ? "Reload would stop the running background tasks: stop them or wait for them to finish, then reload."
+          : undefined;
     const reason = busy();
     if (reason) throw new HttpError("runs_active", reason);
     this.pending.delete(id);
@@ -487,7 +496,8 @@ export function registerManagementRoutes(
     if (key.startsWith("agents.")) recycler.announce(opened.id, ["agents"]);
     // Analysis tools are registered when the workspace application starts: rebuild it (after its
     // runs) so `analysis.enabled` applies without restarting the server.
-    if (key === "analysis.enabled") void recycler.request(opened.id).catch(() => undefined);
+    if (key === "analysis.enabled" || key === "tasks.enabled")
+      void recycler.request(opened.id).catch(() => undefined);
     return { body: { message: `Saved ${key}` } };
   });
 }

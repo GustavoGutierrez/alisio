@@ -35,6 +35,47 @@ export function matchCommands(commands: CommandDescriptor[], query: string): Com
   return tiers.flat();
 }
 
+const GOAL_PALETTE: Record<string, string> = {
+  pause: "Pause the goal's automatic continuation",
+  resume: "Resume the paused or blocked goal",
+  edit: "Edit the goal's objective",
+  clear: "Remove the goal from this session",
+};
+
+/**
+ * `/goal` subcommands for the palette: one row per action the session's goal allows (typing
+ * `/goal` lists them under the command itself), so the palette offers what the goal bar does.
+ */
+export function goalPaletteRows(
+  goal: { actions: readonly string[] } | null,
+  query: string,
+): CommandDescriptor[] {
+  const q = query.trim().toLowerCase();
+  if (!goal || q.length < 3 || !"goal".startsWith(q)) return [];
+  return goal.actions
+    .filter((action) => action in GOAL_PALETTE)
+    .map((action) => ({
+      name: `goal ${action}`,
+      description: GOAL_PALETTE[action] as string,
+      source: "builtin" as const,
+      surfaces: ["web" as const],
+      execution: "surface" as const,
+    }));
+}
+
+/** The palette rows for `query`: the matching commands, with the goal's actions under `/goal`. */
+export function paletteRows(
+  commands: CommandDescriptor[],
+  query: string,
+  goal: { actions: readonly string[] } | null,
+): CommandDescriptor[] {
+  const rows = matchCommands(commands, query);
+  const extra = goalPaletteRows(goal, query);
+  if (!extra.length) return rows;
+  const at = rows.findIndex((row) => row.name === "goal");
+  return at < 0 ? [...rows, ...extra] : [...rows.slice(0, at + 1), ...extra, ...rows.slice(at + 1)];
+}
+
 /** Appends a sent prompt to the history (no blanks, no consecutive duplicates, bounded). */
 export function pushHistory(history: string[], text: string, limit = 100): string[] {
   if (!text.trim() || history.at(-1) === text) return history;

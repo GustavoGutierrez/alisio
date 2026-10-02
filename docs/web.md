@@ -348,6 +348,71 @@ screen replaces the composer, so Shift+Tab and the agent selector do nothing whi
 Clients that do not know the plan review (a script using the API) see a normal question with the
 same three options.
 
+### Background tasks {#background-tasks}
+
+Commands the agent starts with [`bg_run`](/tools#background-tasks) keep running while you chat. The
+header's panel icon opens the right panel, whose **Tasks** tab lists them (the tab shows how many are
+running, and the panel icon gets a dot while any is). Pick one to follow its **live output**: it is
+read incrementally once a second, shown in the same terminal view as `shell` results (colors, copy,
+the last 2 000 lines) and keeps the last 200 000 characters. **Stop** ends a running task as you
+(it becomes *Stopped*, never *Failed*). The list also shows the session's
+[subagents](/subagents) as a **read-only** view of their status; they are managed as before. `/tasks`
+in the composer opens the tab, and the panel is loaded on demand (it is not part of the initial
+bundle).
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/background_tasks_web_ui.webp" alt="The Tasks tab of the right panel following a running background command: the task's status, command and elapsed time, a red Stop button and the live output lines in the terminal view, while the chat shows the agent's bg_run call." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>The Tasks tab following a running task: live output and the Stop button (Spanish interface).</figcaption>
+</figure>
+
+When a task ends on its own a toast says so (not for a task you or the agent stopped), and one
+coalesced message wakes the agent: it appears in the chat as *Background task finished: …* and the
+agent can read the output with `bg_output`. The message waits while the session is running, an
+approval or a question is open, or the session is locked by the TUI. Tasks are **not sandboxed**, **end
+when `alisio serve` stops** (or the workspace's application is closed) and show as *Lost* after an
+abrupt stop; a workspace with running tasks is not evicted when idle, and `/reload` answers `409`
+until they end or are stopped. A task is only reachable through the session that owns it.
+
+### Session goals {#goals}
+
+`/goal <objective>` gives the agent one objective for the session and lets it keep working on it,
+turn after turn, until it is done, blocked, paused or out of budget. The **goal bar** above the
+message box shows it, loads on demand (it is not part of the initial bundle) and comes back after a
+reload (the stream's snapshot carries the goal). The agent marks the goal complete or blocked with
+[`update_goal`](/tools#goal-tools), with evidence; only you pause, resume, edit or clear it or change
+its budget. The commands, states and limits are the same as in the terminal: see
+[Session goals](/tui#goals).
+
+> **Cost.** A goal keeps spending tokens by itself, and each turn sends the whole context again. A
+> goal **without a token budget is stopped only by its turn and time limits** (`goal.maxTurns` 50,
+> `goal.maxMinutes` 120): give long objectives a budget (`/goal <objective> budget=50k`).
+
+The bar shows the **status** (Active, Paused, Blocked, Budget reached, Complete), the objective, a
+**progress bar** for the token budget (it turns amber at 80 % and red when spent), the turn `n/max`,
+the time spent in runs and **why the goal waits or stopped** (*Waiting for your answer*, *Waiting for
+permission*, *Waiting for background tasks*, plan mode, or the reason code in words), announced to
+screen readers. Its buttons follow the state: **Pause** (while active), **Resume** (paused or blocked),
+**Edit** and **Clear** (always; Clear asks first). **Edit** opens a form for the objective and the token
+budget (`50k`, `1.5M`, `clear`; Ctrl/Cmd+Enter saves, Esc cancels). A complete or blocked goal shows the
+agent's report and its evidence under *Agent's report*.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/goal_web_ui.webp" alt="The goal bar above the message box of a running goal: the Active chip, the objective, a progress bar of the token budget with 600 of 2k tokens, turn 2 of 50, the time spent in runs and the Pause, Edit and Clear buttons, while the chat shows the agent's goal turns." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>The goal bar of a running goal: budget progress, turns and its buttons (Spanish interface).</figcaption>
+</figure>
+
+In the composer, `/goal` and its subcommands work as in the terminal: typing `/goal` lists `/goal
+pause`, `/goal resume`, `/goal edit` and `/goal clear` (the ones the current state allows) in the
+palette; a new objective over an existing goal asks for confirmation; `/goal edit` without text opens
+the form. Every change is a compare-and-set, so two windows cannot fight: an action based on an
+out-of-date view is refused and the bar reloads the goal.
+
+A goal never continues while an approval, a question or a plan review is open, while background
+tasks of the session run, in plan mode, while you have a turn running, or after you interrupt it
+(Stop pauses the goal). If the server stops while a goal is active it comes back **paused** (reason
+`restart`) after the restart and never resumes by itself. Goals use the session's permission preset
+like any turn and never widen it. `alisio run` has no `/goal` in v1.
+
 ### `/reload` and `/changelog` {#reload-and-changelog}
 
 `/reload` re-reads the configuration, agents, skills, prompt templates and MCP servers of the
@@ -521,6 +586,12 @@ GET  /api/artifacts/:aid/files/*       POST /api/artifacts/:aid/view  POST /api/
 GET  /api/artifacts/:aid/sources?logs=1   DELETE /api/artifacts/:aid
 GET  /artifact-view/:token/*           isolated viewer (signed link, no cookie)
 GET  /api/sessions/:sid/capabilities   DELETE /api/sessions/:sid/capabilities/:gid
+GET  /api/sessions/:sid/tasks          background tasks of the root session (+ read-only subagent mirror)
+GET  /api/sessions/:sid/tasks/:tid/output?offset=&limit=   {text, nextOffset, eof, status}
+POST /api/sessions/:sid/tasks/:tid/stop   the user's stop → {task}; 404 task_not_found for another session's task
+GET  /api/sessions/:sid/goal           the session's goal (GoalInfo or null)  PUT /api/sessions/:sid/goal {objective, tokenBudget?, replace?, expect?}
+PATCH /api/sessions/:sid/goal {objective?, tokenBudget?: number|null, expect?}   DELETE /api/sessions/:sid/goal?goalId=&epoch=
+POST /api/sessions/:sid/goal/pause     POST /api/sessions/:sid/goal/resume   {expect?: {goalId, epoch}} → {goal}; 409 goal_conflict
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
@@ -543,6 +614,15 @@ POST /api/providers/:profile/activate {workspace, model}   GET /api/models?works
 Plugin data views answer `404` for an unknown session, plugin or view or a disabled plugin, `400`
 for invalid parameters and `view_failed` (502), `view_too_large` (502) or `view_timeout` (504) when
 the view fails, answers more than 1 MiB or takes longer than 5 seconds.
+
+A background task that appears or changes state sends a `tasks_changed` frame (`{sessionId, task}`)
+to the stream of its root session; the output is pulled with `offset`.
+
+A goal that is created, changes state or spends tokens sends a `goal_changed` frame (`{sessionId, goal}`,
+`goal: null` once cleared) to the stream of its session, and the snapshot of a (re)connection carries
+the goal. `409 goal_conflict` answers an action based on an out-of-date `expect` or one the state does
+not allow, `404 goal_not_found` a session without a goal and `409 goal_disabled` a new goal while
+`goal.enabled` is `false`; `PUT` over an existing goal needs `replace: true`.
 
 Dataset uploads end with a `dataset_ready` or `dataset_failed` frame to the session's stream. Data
 errors use the codes `dataset_unsupported` (415), `query_rejected` (400) and `query_timeout` (408).
@@ -567,6 +647,11 @@ protocol version is reported by `/api/health` and in the stream's first frame.
   their provider until they reopen. Saved credentials apply the next time the profile is activated.
 - MCP access granted from the web lasts until `alisio serve` stops and covers one workspace, unless
   you choose to remember it for the user.
+- Background tasks are children of the server process: they end when `alisio serve` stops, and a
+  task started from the TUI is only visible (not stoppable) from the web while that TUI runs.
+- A goal started from the TUI is read from the shared database when the session opens, but the web
+  does not see its live changes (like any TUI activity), and only the process that drives a goal
+  continues it; a goal whose server stops comes back paused.
 - The standalone binary serves the API only; the web UI assets ship with the npm package.
 - The web UI keeps command output, notices and reasoning only while the page is open; a reload
   rebuilds the conversation from stored messages.

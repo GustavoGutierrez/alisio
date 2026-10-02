@@ -19,8 +19,13 @@ import {
   type ExternalDirectoryRequest,
   formatChangelogMarkdown,
   formatReloadReport,
+  type GoalHostView,
   generateAgentDraft,
+  goalOptInTools,
+  goalOutcome,
+  goalWaiting,
   IMPLEMENTATION_AGENT_ID,
+  isTaskLive,
   loadChangelog,
   modeFromFlags,
   NOT_SANDBOXED,
@@ -31,6 +36,7 @@ import {
   type PermissionModeLabel,
   PLAN_QUESTION_ID,
   PLAN_TEXT_KEY,
+  parseGoalCommand,
   parsePermissionCommand,
   ReloadFailedError,
   ReloadRefusedError,
@@ -39,6 +45,7 @@ import {
   selectEntries,
   settlePlanRun,
   stateHome,
+  toGoalInfo,
   toGrantWire,
   toRef,
   validateReloadConfig,
@@ -46,6 +53,7 @@ import {
 import type {
   AskQuestionsRequest,
   AskQuestionsResult,
+  GoalInfo,
   ModelInfo,
   PanelNode,
   PlanReview,
@@ -144,6 +152,14 @@ import { ConnectInputPrompt } from "./connect-input.ts";
 import { bounded, EXIT_PENDING_CAP_MS, EXIT_SESSION_END_CAP_MS } from "./exit.ts";
 import { BRANCH_REFRESH_MS, createBranchCache } from "./git-branch.ts";
 import {
+  formatGoalStatus,
+  GoalBar,
+  goalPickerItems,
+  goalPickerPrefill,
+  goalStopNotice,
+  planGoalCommand,
+} from "./goal.ts";
+import {
   agentCycleHint,
   isPermissionMode,
   modeDisplay,
@@ -199,6 +215,7 @@ import {
   validateEffortLevel,
   visibleGroupedItems,
 } from "./state.ts";
+import { TasksView, wakeDecision } from "./tasks.ts";
 import { editorTheme, selectListTheme, style } from "./theme.ts";
 import { readViewerState, writeViewerState } from "./viewer-state.ts";
 
@@ -346,7 +363,22 @@ export async function runTui(options: TuiOptions): Promise<void> {
     onEvent: (event) => dispatch(event),
     approve: (request) => approve(request),
     approveExternalDirectory: (request) => approveExternalDirectory(request),
+    tasks: {
+      // Finished background tasks wake the owner agent through the normal prompt path (bound below).
+      wake: (request) => wakeForTasks(request),
+      onChange: (task, root) => {
+        tasksView?.refresh().catch(() => {});
+        onTaskChange(task, root);
+      },
+    },
+    // A goal changed (a user command, a finished run, the model's `update_goal`): redraw its bar.
+    goals: { onChange: (sessionId) => onGoalChange(sessionId) },
   };
+  let wakeForTasks: import("@alisio/core").TaskWake = () => "busy";
+  let onTaskChange: (task: import("@alisio/sdk").BackgroundTaskInfo, root: string) => void =
+    () => {};
+  let onGoalChange: (sessionId: string) => void = () => {};
+  let tasksView: TasksView | undefined;
   // `let`: `/reload` swaps in a freshly built application (the session id and database persist).
   let app = await createApplication(appOptions);
   let activeProvider = app.providerInfo;
@@ -616,6 +648,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const bottom = new Container();
   bottom.addChild(pickerSlot);
   bottom.addChild(attachmentsBar);
+  bottom.addChild(new GoalBar(() => goalInfoNow()));
   bottom.addChild(editor);
   bottom.addChild(treePanel);
   bottom.addChild(footer);
@@ -793,6 +826,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const interactiveQueue = new InteractiveQueue();
   approve = (request) =>
     interactiveQueue.submit<ApprovalDecision>({
+      kind: "approval",
       sessionId: request.session,
       label: request.label,
       signal: request.signal,
@@ -875,6 +909,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
    */
   approveExternalDirectory = (request) =>
     interactiveQueue.submit<ApprovalDecision>({
+      kind: "approval",
       sessionId: request.session,
       label: request.label,
       signal: request.signal,
@@ -931,6 +966,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     }));
     const withdrawn = (): AskQuestionsResult => ({ [PLAN_QUESTION_ID]: undefined });
     return interactiveQueue.submit<AskQuestionsResult>({
+      kind: "question",
       sessionId: request.session,
       label: request.label,
       signal: request.signal,
@@ -1013,6 +1049,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       return result;
     };
     return interactiveQueue.submit<AskQuestionsResult>({
+      kind: "question",
       sessionId: request.session,
       label: request.label,
       signal: request.signal,
@@ -1053,6 +1090,211 @@ export async function runTui(options: TuiOptions): Promise<void> {
     });
   };
 
+  // ---- Session goal (`/goal`) --------------------------------------------------------------
+  // The goal lives in the shared database and `app.goals` (core) owns its rules; this block only
+  // shows it, asks the core whether it may continue (`kickGoal`) and starts the continuation as a
+  // normal prompt. A claimed continuation can only start once (the core records the claim).
+  let goalCache: GoalInfo | undefined;
+  const goalRoot = () => app.store.rootOf(session);
+  const goalHostView = (): GoalHostView => {
+    const asking = interactiveQueue.current();
+    return {
+      running: busy,
+      // What the user typed but did not send goes first (a goal never talks over a draft).
+      queuedInput: editor.getText().trim().length > 0,
+      ...(asking ? { awaiting: asking.kind ?? "question" } : {}),
+      planMode: currentAgent().id === "plan",
+      liveTasks: app.tasks.liveCount(goalRoot()),
+    };
+  };
+  /** The cached goal with what it waits for NOW (computed live: no database read per render). */
+  const goalInfoNow = (): GoalInfo | undefined => {
+    if (!goalCache) return undefined;
+    const waiting = goalWaiting({
+      ...goalHostView(),
+      status: goalCache.status,
+      enabled: app.goals.enabled,
+      inflight: false,
+    });
+    return { ...goalCache, ...(waiting ? { waiting } : {}) };
+  };
+  /** Re-reads the goal; one transcript line when it stopped by itself. */
+  const refreshGoal = () => {
+    const before = goalCache;
+    goalCache = app.goals.info(goalRoot());
+    if (
+      before &&
+      goalCache &&
+      before.goalId === goalCache.goalId &&
+      before.status === "active" &&
+      goalCache.status !== "active" &&
+      goalCache.reason !== "user_paused"
+    ) {
+      const line = goalStopNotice(goalCache);
+      if (line) notice(line);
+    }
+    tui.requestRender();
+  };
+  onGoalChange = (sessionId) => {
+    if (sessionId === goalRoot()) refreshGoal();
+  };
+  refreshGoal();
+  /** The goal continues if the core says so; otherwise it waits (the bar says for what). */
+  const kickGoal = (): void => {
+    if (stopping || reloading) return;
+    try {
+      const root = goalRoot();
+      if (!app.goals.get(root)) return;
+      const decision = app.goals.next(root, goalHostView());
+      refreshGoal();
+      if (decision.kind !== "continue") return;
+      const timeout = app.config.limits.timeoutMs;
+      void runPrompt(decision.prompt.display, decision.prompt.text, decision.prompt.display, {
+        maxTokens: decision.run.maxTokens,
+        timeoutMs: Math.max(1000, Math.min(decision.run.remainingMs, timeout)),
+      });
+    } catch (cause) {
+      error(cause);
+    }
+  };
+  onTaskChange = (task, root) => {
+    if (root !== goalRoot()) return;
+    // The last background task of a waiting goal ended: it continues.
+    if (!isTaskLive(task.status)) setImmediate(kickGoal);
+    else refreshGoal();
+  };
+  /** After a run: folds it into the goal (tokens, turns, breakers). */
+  const settleGoalRun = (
+    owner: string,
+    run: { runId: string; startedAt: number },
+    outcome: { cancelled: boolean; result?: unknown; error?: unknown },
+  ) => {
+    const root = app.store.rootOf(owner);
+    if (!app.goals.get(root)) return;
+    app.goals.settle(
+      root,
+      goalOutcome({
+        runId: run.runId,
+        startedAt: run.startedAt,
+        endedAt: Date.now(),
+        cancelled: outcome.cancelled,
+        ...(outcome.result
+          ? { result: outcome.result as Parameters<typeof goalOutcome>[0]["result"] }
+          : {}),
+        ...(outcome.error !== undefined ? { error: outcome.error } : {}),
+      }),
+    );
+  };
+  const goalConfirmReplace = (objective: string, tokenBudget?: number) =>
+    showPicker(
+      new Picker(
+        "This session already has a goal. Replace it?",
+        [
+          {
+            value: "replace",
+            label: "Replace it",
+            description: "The current goal is removed and the new one starts",
+          },
+          { value: "keep", label: "Keep the current goal" },
+        ],
+        (item) => {
+          closePicker();
+          if (item.value === "replace") startGoal(objective, tokenBudget, true);
+        },
+        closePicker,
+      ),
+    );
+  const startGoal = (objective: string, tokenBudget: number | undefined, replace: boolean) => {
+    const outcome = app.goals.create(goalRoot(), {
+      objective,
+      ...(tokenBudget ? { tokenBudget } : {}),
+      ...(replace ? { replace: true } : {}),
+    });
+    if (!outcome.ok) return notice(outcome.message);
+    refreshGoal();
+    notice(
+      tokenBudget
+        ? "Goal started with a token budget. The agent works on it until it is done, blocked, paused or out of budget."
+        : "Goal started. Without a token budget only the turn and time limits stop it: /goal budget=50k sets one.",
+    );
+    kickGoal();
+  };
+  /** `/goal …`: everything but the continuation itself. */
+  const goalCommand = (args: string) => {
+    const root = goalRoot();
+    const plan = planGoalCommand(parseGoalCommand(args), {
+      goal: app.goals.info(root),
+      enabled: app.goals.enabled,
+    });
+    const applied = (outcome: ReturnType<typeof app.goals.pause>, done: string) => {
+      if (!outcome.ok) return notice(outcome.message);
+      refreshGoal();
+      notice(done);
+    };
+    switch (plan.kind) {
+      case "say":
+        return plan.tone === "info" ? info(plan.text) : notice(plan.text);
+      case "picker": {
+        const goal = app.goals.info(root);
+        if (!goal) return;
+        return showPicker(
+          new Picker(
+            "Start or manage the current Session Goal",
+            goalPickerItems(goal),
+            (item) => {
+              closePicker();
+              const prefill = goalPickerPrefill(item.value as never, goal);
+              if (prefill !== undefined) {
+                editor.setText(prefill);
+                return tui.requestRender();
+              }
+              if (item.value === "status") {
+                refreshGoal();
+                const current = goalInfoNow();
+                return current ? info(formatGoalStatus(current)) : undefined;
+              }
+              goalCommand(item.value);
+            },
+            closePicker,
+          ),
+        );
+      }
+      case "confirm-replace":
+        return goalConfirmReplace(plan.objective, plan.tokenBudget);
+      case "create":
+        return startGoal(plan.objective, plan.tokenBudget, false);
+      case "act": {
+        const done = {
+          pause: "Goal paused: it will not continue until you resume it.",
+          resume: "Goal resumed.",
+          clear: "Goal cleared.",
+        }[plan.action];
+        const outcome =
+          plan.action === "pause"
+            ? app.goals.pause(root)
+            : plan.action === "resume"
+              ? app.goals.resume(root)
+              : app.goals.clear(root);
+        applied(outcome, done);
+        return plan.action === "resume" ? kickGoal() : undefined;
+      }
+      case "edit": {
+        applied(app.goals.edit(root, plan.objective), "Goal objective updated.");
+        return;
+      }
+      case "edit-prefill":
+        editor.setText(plan.text);
+        return tui.requestRender();
+      case "budget": {
+        applied(
+          app.goals.setBudget(root, plan.tokens),
+          plan.tokens === null ? "Goal token budget removed." : "Goal token budget set.",
+        );
+        return kickGoal();
+      }
+    }
+  };
+
   /**
    * After a run: an approved plan (`exit_plan`) starts its implementation exactly once. The claim is
    * a compare-and-set in the session database, so a double Enter or a second surface cannot start
@@ -1091,17 +1333,24 @@ export async function runTui(options: TuiOptions): Promise<void> {
       error(cause);
     }
   };
-  const task = async (work: (signal: AbortSignal) => Promise<unknown>) => {
+  const task = async (
+    work: (signal: AbortSignal) => Promise<unknown>,
+    goalRun?: { runId: string },
+  ) => {
     busy = true;
     terminalEvent = false;
     controller = new AbortController();
     const signal = controller.signal;
     const owner = session;
+    const startedAt = Date.now();
     const promise = work(signal);
     pending = promise;
+    let result: unknown;
+    let failure: unknown;
     try {
-      await promise;
+      result = await promise;
     } catch (e) {
+      failure = e;
       if (!terminalEvent) error(e);
     } finally {
       busy = false;
@@ -1110,8 +1359,67 @@ export async function runTui(options: TuiOptions): Promise<void> {
       view = { ...view, streaming: false, compacting: false };
       if (!view.context || view.context.estimated) refreshEstimate();
       tui.requestRender();
+      // A finished-task notification held back while this run was busy may go now.
+      app.tasks.sessionIdle(app.store.rootOf(owner));
     }
+    // The run counts for the session's goal (its tokens, turns and breakers) before anything else
+    // starts; an interrupt (Esc) pauses the goal.
+    if (goalRun)
+      try {
+        settleGoalRun(
+          owner,
+          { runId: goalRun.runId, startedAt },
+          {
+            cancelled: signal.aborted,
+            ...(result !== undefined ? { result } : {}),
+            ...(failure !== undefined ? { error: failure } : {}),
+          },
+        );
+      } catch (cause) {
+        error(cause);
+      }
     await followUpPlan(owner, signal.aborted);
+    // The goal continues unless something (a question, a task, plan mode, you) says to wait.
+    if (goalRun) kickGoal();
+  };
+  /** `/tasks`: the background tasks of this session, their live output and the user's stop. */
+  const showTasks = () => {
+    const owner = () => app.store.rootOf(session);
+    const view: TasksView = new TasksView({
+      list: () => app.tasks.list(owner(), { limit: 100, mirror: true }),
+      read: (id, offset) => app.tasks.read(owner(), id, { offset, reader: "user" }),
+      stop: (id) => app.tasks.stop(owner(), id, "user"),
+      rows: () => process.stdout.rows ?? 24,
+      requestRender: () => tui.requestRender(),
+      close: () => {
+        tasksView = undefined;
+        closePicker();
+      },
+      active: () => picker === view,
+      notice,
+    });
+    tasksView = view;
+    view.start();
+    showPicker(view);
+  };
+  /**
+   * The wake-up of a finished background task: ONE run of this session carrying the notification,
+   * started through the normal prompt path (`runner.enqueue` would leave the text waiting for the
+   * next prompt). It waits (answers `busy`, the core retries) while a turn runs, a question or
+   * approval is on screen, or another session is open; it is never started while exiting.
+   */
+  wakeForTasks = (request) => {
+    const decision = wakeDecision({
+      exiting: stopping,
+      reloading,
+      busy,
+      promptPending: !!interactiveQueue.current(),
+      openRoot: app.store.rootOf(session),
+      ownerRoot: request.sessionId,
+    });
+    if (decision !== "start") return decision === "skip" ? "skip" : "busy";
+    void runPrompt(request.display, request.text, request.display);
+    return "started";
   };
   /** `/artifacts [filter]`: the root session's artifacts, newest first, then their actions. */
   const browseArtifacts = (filter: string) => {
@@ -1429,6 +1737,9 @@ export async function runTui(options: TuiOptions): Promise<void> {
     }
     refreshEffort();
     tui.requestRender();
+    // A goal that waited for the plan agent to leave plan mode may continue now.
+    refreshGoal();
+    if (!busy) kickGoal();
   };
   /** `/changelog [version]`: a scrollable panel with the shipped, offline changelog. */
   const showChangelog = (args: string) => {
@@ -1470,6 +1781,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         busy,
         runningChildren: panelNodes().filter((node) => node.status === "running").length,
         queuedPrompts: !!interactiveQueue.current(),
+        backgroundTasks: app.tasks.liveCount(),
       });
     const reason = guard();
     if (reason) return notice(reason);
@@ -1496,7 +1808,13 @@ export async function runTui(options: TuiOptions): Promise<void> {
       flashHint("Reload finished", 1500);
     }
   };
-  const runPrompt = (display: string, prompt: string, persistDisplay?: string) => {
+  const runPrompt = (
+    display: string,
+    prompt: string,
+    persistDisplay?: string,
+    /** The goal's own caps for this run (what is left of its token budget and time). */
+    caps?: { maxTokens?: number; timeoutMs?: number },
+  ) => {
     // Any pending clipboard-pasted images ride along with the very next turn, then are cleared.
     const attachments = pendingAttachments.map(toApiAttachment);
     pendingAttachments = [];
@@ -1508,13 +1826,24 @@ export async function runTui(options: TuiOptions): Promise<void> {
     const agent = currentAgent();
     // An explicit /effort wins; otherwise the agent's own default effort (agentRunOptions) is kept.
     const effort = app.config.agents.effort || !agent.effort ? currentEffort() : undefined;
-    return task((signal) =>
-      app.runner.run(session, prompt, signal, {
-        ...agentRunOptions(agent),
-        ...(effort ? { reasoningEffort: effort } : {}),
-        ...(persistDisplay ? { display: persistDisplay } : {}),
-        ...(attachments.length ? { attachments } : {}),
-      }),
+    // The goal tools are offered while the session has an ACTIVE goal (never to the plan agent).
+    const agentOptions = agentRunOptions(agent);
+    const goalTools = goalOptInTools(app.goals.get(app.store.rootOf(session)), agent.id === "plan");
+    const optInTools = [...(agentOptions.optInTools ?? []), ...goalTools];
+    const runId = crypto.randomUUID();
+    return task(
+      (signal) =>
+        app.runner.run(session, prompt, signal, {
+          ...agentOptions,
+          runId,
+          ...(optInTools.length ? { optInTools } : {}),
+          ...(effort ? { reasoningEffort: effort } : {}),
+          ...(persistDisplay ? { display: persistDisplay } : {}),
+          ...(attachments.length ? { attachments } : {}),
+          ...(caps?.maxTokens !== undefined ? { maxTokens: caps.maxTokens } : {}),
+          ...(caps?.timeoutMs !== undefined ? { timeoutMs: caps.timeoutMs } : {}),
+        }),
+      { runId },
     );
   };
 
@@ -2160,6 +2489,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
         refreshEffort();
         primeModels();
         tui.requestRender();
+        refreshGoal();
+        if (!busy) kickGoal();
       } catch (cause) {
         error(cause);
       }
@@ -2844,6 +3175,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       items: itemsFromHistory(app.store.messages(found.id)),
     });
     notice(`Resumed session ${found.id}`);
+    refreshGoal();
     refreshEstimate();
   };
   const statsReport = () => {
@@ -3064,6 +3396,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return await sideQuestion(parsed.args);
         case "artifacts":
           return browseArtifacts(parsed.args);
+        case "tasks":
+          return showTasks();
+        case "goal":
+          return goalCommand(parsed.args);
         case "permission": {
           const action = parsePermissionCommand(parsed.args);
           if (action.type === "menu") return openPermissionMenu();
@@ -3106,6 +3442,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
           reset(initialViewState(view.model));
           notice(`New session ${session}`);
           void app.herdr.report("idle", session);
+          refreshGoal();
           return refreshEstimate();
         }
         case "resume":
@@ -3205,6 +3542,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     // `select` concurrently with an approval, which previously raced on the shared picker slot.
     select: (request) =>
       interactiveQueue.submit<string | undefined>({
+        kind: "question",
         onWithdrawn: () => undefined,
         run: () =>
           new Promise<string | undefined>((resolve) => {

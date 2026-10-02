@@ -74,6 +74,17 @@ const LEGACY_COMMANDS = [
     description: "Show what changed in recent Alisio releases",
     argumentHint: "[version]",
   },
+  // Phase 3 of the modes spec: background tasks.
+  {
+    name: "tasks",
+    description: "Show this session's background tasks (bg_run) with their output, and stop them",
+  },
+  // Phase 4 of the modes spec: session goals.
+  {
+    name: "goal",
+    description: "Start or manage the current Session Goal",
+    argumentHint: "[objective | pause | resume | edit | clear | help | budget=<n>]",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

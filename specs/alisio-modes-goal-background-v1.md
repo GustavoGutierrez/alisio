@@ -4,7 +4,7 @@
 |---|---|
 | Versión | 1.0 |
 | Proyecto | Alisio |
-| Estado | Especificación técnica ejecutable. **Fases 1 y 2 implementadas (2026-10-02)**; fases 3–4 pendientes |
+| Estado | Especificación técnica ejecutable. **Fases 1, 2, 3 y 4 implementadas (2026-10-02)** |
 | Fecha | 2026-10-02 |
 | Paquetes afectados | `@alisio/sdk`, `@alisio/core`, `@alisio/server`, `@alisio/web` (privado), `@alisio/alisio-code` (CLI/TUI); `@alisio/plugin-subagents` solo en la fase 3 (lista de tareas unificada) |
 | Paquetes nuevos | Ninguno |
@@ -387,7 +387,43 @@ La política del agente `plan` (`bg_*` son `process`: denegadas), `RunScheduler.
 
 ---
 
-## 8. FASE 3 — Tareas en segundo plano (pendiente)
+## 8. FASE 3 — Tareas en segundo plano (IMPLEMENTADA 2026-10-02)
+
+### 8.0 Realidad verificada y decisiones del propietario que corrigen el borrador (2026-10-02)
+
+Lo siguiente **prevalece** sobre el resto de §8, §10, §11 y §12 donde difiera:
+
+- **Estados**: `queued → running → stopping → succeeded | failed | cancelled | lost` (no `completed`,
+  `stopped` ni `timed_out`). Una parada del usuario o del modelo es `cancelled`; el watchdog es
+  `failed` con `error_code='timeout'`; el cierre mata y deja `cancelled` con `abort_origin='shutdown'`.
+  Columnas: `abort_origin` (`user|model|timeout|shutdown`), `error_code`, `delivered_at` (en lugar de
+  `stop_origin`/`notified_at`), `timeout_ms`, `truncated`; `external_id` no existe y no hay filas de
+  `subagent` (el espejo es de solo lectura y vive en memoria). `session_goals` se creó en la misma
+  migración v7, sin lector hasta la fase 4.
+- **Herramientas**: las **cuatro** son `effect: process` (también `bg_list`); `bg_output` devuelve
+  `next_offset` y `eof` (en la API HTTP, `nextOffset`); el filtro de `bg_list` usa los estados nuevos.
+- **Configuración**: `tasks.enabled`, `tasks.maxPerSession` (4), `tasks.maxRunMs` (1 h),
+  `tasks.maxOutputBytes` (2 MiB), `tasks.retentionDays` (7, solo global). Los nombres `background.*`
+  del §12 no existen; la ventana de coalescencia y los límites de ráfaga son constantes del notificador.
+- **Log**: no se trunca por la cabeza: se conserva la cabeza, un marcador y, al terminar la tarea,
+  los últimos 32 KiB (los offsets son estables porque el archivo solo crece).
+- **Espejo de subagentes**: no hizo falta tocar `plugin-subagents`: el host lee
+  `PanelProvider.nodes()` del plugin (`plugins.panels`), que ya existía (§2 «Subagentes»).
+- **Notificación**: ventana de lote 2 s, intervalo mínimo 10 s por sesión, 6 despertares por 10 min,
+  reintento cada 2 s y `poke` al quedar libre la sesión; reclamación de `delivered_at` antes de
+  despertar y liberación si no arrancó; una lectura del modelo de una tarea ya terminada (también
+  `bg_list`) cuenta como entregada; nada para paradas de usuario o modelo, cierres, sesiones hijas ni
+  sesiones archivadas. El despertar es un run normal (`bg-<id>` como id de petición en el servidor).
+- **Ciclo de vida**: `lost` se decide por `owner_pid` al crear la aplicación y al arrancar el servidor;
+  un manejador síncrono de `exit` mata los grupos si el proceso sale sin `close()`. `/reload` y el
+  reciclaje/expulsión de workspaces se rechazan o esperan mientras haya tareas vivas.
+- **Rutas**: `GET /api/sessions/:sid/tasks` devuelve `{tasks}`; el frame es `tasks_changed`
+  (`{sessionId, task}`) en lugar de `background_task`; el código nuevo es `task_not_found`.
+- **Web**: pestaña «Tareas» del Dock (chunk perezoso). Para recuperar presupuesto de bundle el
+  diccionario español pasó a un chunk (`loadLocale`); el bundle inicial quedó en ~78 KB gzip.
+- **Fase 4 necesita**: `app.tasks.liveCount(rootSession)` (o `list(root, {status})`) para el bloqueador
+  «tarea activa del owner», el evento de cambio `tasks.onChange`/`tasks_changed` para reanudar, la tabla
+  `session_goals` ya migrada y el patrón de despertar (`wake` por host).
 
 ### 8.1 Objetivos
 
@@ -401,10 +437,10 @@ Runtime general de tareas (`kind: shell` y espejo de subagentes), herramientas `
 | `packages/core/src/runtime/store.ts` | modificado | **Migración v7** (§10). |
 | `packages/core/src/tools/background.ts` | **nuevo** | `bg_run`, `bg_list`, `bg_output`, `bg_stop`. |
 | `packages/core/src/application.ts` | modificado | Crea el servicio; marca `lost` al arrancar; cierre ordenado (bloquea admisiones, aborta, drena). |
-| `packages/plugin-subagents/src/{index,manager}.ts` | modificado | Publica sus tareas en `pluginState("subagents","tasks")` para el espejo (sin cambiar sus herramientas). |
+| `packages/plugin-subagents/src/{index,manager}.ts` | **sin cambios** | El espejo lee `PanelProvider.nodes()` (ver §8.0). |
 | `packages/server/src/routes/tasks.ts` | **nuevo** | Rutas §11. |
 | `packages/cli/src/tui/tasks.ts`, `app.ts` | **nuevo/mod.** | `/tasks` (picker + visor de salida). |
-| `packages/web/src/components/tasks/TasksPanel.tsx`, `store/tasks.ts` | **nuevo** | Panel con salida en vivo y botón Stop. |
+| `packages/web/src/components/tasks/TasksTab.tsx`, `store/tasks.ts` | **nuevo** | Pestaña del Dock con salida en vivo y botón Stop (§8.0). |
 
 ### 8.3 Herramientas
 
@@ -445,7 +481,64 @@ Proceso hijo que escribe y termina; parada limpia (no `failed`); `lost` tras rei
 
 ---
 
-## 9. FASE 4 — `/goal` (pendiente)
+## 9. FASE 4 — `/goal` (IMPLEMENTADA 2026-10-02)
+
+### 9.0 Realidad verificada y decisiones del propietario que corrigen el borrador (2026-10-02)
+
+Lo siguiente **prevalece** sobre el resto de §9, §10, §11 y §12 donde difiera:
+
+- **Migración**: la v7 ya había creado `session_goals`, pero sin las columnas del runtime. Se añadió una
+  **v8** aditiva (`ALTER TABLE`): `goal_id`, `detail`, `summary`, `blocked_run`, `continuations`,
+  `inflight`, `last_run_id`, `kickoff_sent`, `owner_pid`. (Editar la v7 habría dejado sin columnas a las
+  bases que ya la tenían.)
+- **Hechos verificados**: `runner.enqueue` no despierta una sesión inactiva (la continuación es un
+  `runner.run` normal: TUI `runPrompt`, servidor `RunScheduler`); cada `run` reinicia `maxTurns` y
+  `maxTokens` (el goal lleva sus propios contadores y acota `maxTokens`/`timeoutMs` de cada
+  continuación); las sesiones no tienen uso acumulado (se suma `usage` de cada ejecución al terminar:
+  `runner.run` ahora devuelve también `toolCalls`, y una ejecución que lanza conserva su uso en
+  `core/run-stats.ts`); la TUI y la web usan las mismas funciones del núcleo.
+- **Códigos de motivo** (cerrados): `created`, `resumed`, `edited`, `user_paused`, `user_interrupt`,
+  `model_complete`, `model_blocked`, `policy_denied`, `run_error`, `token_budget`, `max_turns`,
+  `max_wall`, `no_progress` (detalle `repeated_reply` | `no_tool_turns`), `restart`. El borrador
+  distinguía `repeated_reply` y `no_tool_turns` como códigos; la decisión del propietario es un único
+  `no_progress`.
+- **Turno** = una ejecución (kickoff, continuación o mensaje del usuario con el goal activo), no un
+  paso del modelo. El tiempo es el de las ejecuciones. Reanudar tras `max_turns`/`max_wall` concede una
+  asignación más. El estado `blocked` por error de ejecución es `run_error` con el error en `detail`
+  (salvo `RunTimeoutError`, que cuenta como turno).
+- **Presupuesto**: duro, acumulado; cada continuación lleva `maxTokens` = lo que queda y el guardia del
+  runner (antes de cada llamada y tras cada lote) lo hace cumplir; el gasto puede pasar del tope como
+  mucho una petición. **No hay turno de cierre** (decisión: un turno extra rompería el tope duro).
+  Subir o quitar el presupuesto reactiva `budget_limited(token_budget)`; bajarlo a lo gastado detiene un
+  goal activo. Sin `usage` se estima por caracteres (R7).
+- **Disyuntores** (escalón común): la ocurrencia 1 se registra, la 2 añade un aviso a la siguiente
+  continuación y el límite (`goal.repeatedReplyLimit`, `goal.noToolTurnsLimit`, 3) pausa. Para respuestas,
+  «ocurrencia» es una repetición de la respuesta anterior.
+- **`blocked`**: `update_goal(blocked)` exige el mismo informe, con evidencia, en ejecuciones
+  consecutivas (`goal.blockedRepeats`, 2); evidencia de tipo `denied` bloquea de inmediato. El modelo solo
+  puede actuar sobre un goal `active`. Las herramientas son **opt-in** (`OPT_IN_TOOLS`), ofrecidas solo a
+  sesiones con goal activo y agente distinto de `plan`; los esquemas añaden `denied` a `kind`.
+- **Bloqueadores**: una única función (`goalBlocker`) con el orden: no activo, desactivado, ocupado
+  (ejecución o reclamación en curso), entrada sin enviar (TUI), permiso pendiente, pregunta/revisión de
+  plan pendiente, agente `plan`, tareas vivas. `goalWaiting` es la etiqueta de la UI.
+- **Reinicio**: `pauseOrphans` pausa con `restart` los goals `active` cuyo `owner_pid` ya no existe o es
+  desconocido; nunca reanuda. Idempotencia: `inflight` (CAS) reclama la continuación `goal-<goalId>-<n>`;
+  `last_run_id` evita contar una ejecución dos veces.
+- **CAS**: `epoch` cambia con estado, objetivo y presupuesto (no con los totales); los clientes envían
+  `expect: {goalId, epoch}`.
+- **Rutas y frames**: `GET|PUT|PATCH|DELETE /api/sessions/:sid/goal` y `POST …/goal/pause|resume`
+  (`PUT` sobre un goal existente exige `replace: true`); frame **`goal_changed`** (`goal: null` al
+  borrar) en lugar de `goal_updated`; `goal` en el snapshot; el comando `/goal` también viaja por
+  `POST …/commands` (con `confirm`). Códigos `goal_not_found`, `goal_conflict`, `goal_disabled`.
+- **Configuración**: `goal.enabled`, `goal.maxTurns` (50), `goal.maxMinutes` (120),
+  `goal.repeatedReplyLimit` (3), `goal.noToolTurnsLimit` (3) y `goal.blockedRepeats` (2); los nombres
+  `goal.maxWallMs`, `goal.noToolTurns`, `goal.repeatReplies` del §12 no existen. Sin presupuesto por defecto.
+- **Módulos**: `goal/{budget,command,machine,blockers,prompts,format,service,store,host}.ts` (no
+  `controller.ts`), `tools/goal.ts`, `core/run-stats.ts`, `server/host/goal.ts` (`GoalDriver`),
+  `server/routes/goal.ts`, `cli/tui/goal.ts`, web `components/goal/*`, `store/goal.ts`, `store/goal-frame.ts`.
+  El hook `onRunEnd` del §9.2 es el `onChange(…, "finished", outcome)` de `RunScheduler`, que ahora
+  entrega resultado, error y tiempos.
+- **Fuera de alcance v1**: `alisio run` (headless), modelo evaluador, presupuesto por defecto.
 
 ### 9.1 Objetivos
 
@@ -535,6 +628,8 @@ CREATE TABLE IF NOT EXISTS session_goals(
 INSERT OR IGNORE INTO schema_migrations VALUES(7);
 ```
 
+Nota: la fase 4 añadió la **v8** (§9.0).
+
 Salida de tareas: `<stateRoot>/tasks/<root_session>/<id>.log` (acotada por `background.maxOutputBytes`; se trunca por la **cabeza**, conservando la cola). `plan` (fase 2) no necesita tabla: usa `artifacts` y `sessions.options.plan`.
 
 ---
@@ -550,7 +645,7 @@ Salida de tareas: `<stateRoot>/tasks/<root_session>/<id>.log` (acotada por `back
 | `GET/PUT/DELETE /api/sessions/:sid/goal` | 4 | Estado; crear/editar/presupuesto; borrar. |
 | `POST /api/sessions/:sid/goal/{pause,resume}` | 4 | Acciones del usuario (CAS por `epoch`; `409` si cambió). |
 | Frame `{t:"background_task", sessionId, task}` | 3 | Altas y cambios de estado; el cliente refresca la salida con `offset`. |
-| Frame `{t:"goal_updated", sessionId, goal}` | 4 | Estado actual (`GoalInfo`). |
+| Frame `{t:"goal_changed", sessionId, goal}` | 4 | Estado actual (`GoalInfo`, `null` al borrar); ver §9.0. |
 | Códigos `ApiErrorCode` nuevos | 3–4 | `task_not_found`, `goal_conflict`, `goal_not_found`. |
 
 Todas las rutas heredan auth, Host y Origin del servidor; los cuerpos son JSON; las acciones del usuario no están disponibles bajo `--read-only` cuando ejecutan procesos.

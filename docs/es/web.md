@@ -370,6 +370,76 @@ la ejecución o que esta agote su tiempo. La pantalla sustituye al compositor, p
 el selector de agente no hacen nada mientras está abierta. Los clientes que no conocen la revisión
 del plan (un script que use la API) ven una pregunta normal con las mismas tres opciones.
 
+### Tareas en segundo plano {#background-tasks}
+
+Los comandos que el agente inicia con [`bg_run`](/es/tools#background-tasks) siguen corriendo mientras
+usted conversa. El icono de panel de la cabecera abre el panel derecho, cuya pestaña **Tareas** las
+lista (la pestaña indica cuántas corren y el icono de panel muestra un punto mientras haya alguna).
+Elija una para seguir su **salida en vivo**: se lee de forma incremental una vez por segundo, se
+muestra en la misma vista de terminal que los resultados de `shell` (colores, copiar, las últimas
+2 000 líneas) y conserva los últimos 200 000 caracteres. **Detener** termina una tarea en ejecución
+como usted (queda *Detenida*, nunca *Fallida*). La lista también muestra los
+[subagentes](/es/subagents) de la sesión como una vista de **solo lectura** de su estado; se gestionan
+como siempre. `/tasks` en el compositor abre la pestaña, y el panel se carga bajo demanda (no forma
+parte del bundle inicial).
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/background_tasks_web_ui.webp" alt="La pestaña Tareas del panel derecho siguiendo un comando en segundo plano en ejecución: el estado de la tarea, el comando y el tiempo transcurrido, un botón rojo Detener y las líneas de salida en vivo en la vista de terminal, mientras el chat muestra la llamada bg_run del agente." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>La pestaña Tareas siguiendo una tarea en ejecución: salida en vivo y el botón Detener.</figcaption>
+</figure>
+
+Cuando una tarea termina por sí sola, un aviso lo dice (no para una tarea que usted o el agente
+detuvieron) y un mensaje coalescido despierta al agente: aparece en el chat como *Background task
+finished: …* y el agente puede leer la salida con `bg_output`. El mensaje espera mientras la sesión
+corre, hay una aprobación o una pregunta abierta, o la TUI tiene bloqueada la sesión. Las tareas **no
+están aisladas**, **terminan cuando `alisio serve` se detiene** (o se cierra la aplicación del
+workspace) y aparecen como *Perdida* tras una parada abrupta; un workspace con tareas en ejecución no se
+expulsa por inactividad, y `/reload` responde `409` hasta que terminen o se detengan. Una tarea solo es
+accesible a través de la sesión que la posee.
+
+### Objetivos de sesión {#goals}
+
+`/goal <objetivo>` le da al agente un objetivo para la sesión y lo deja seguir trabajando en él, turno
+tras turno, hasta que esté terminado, bloqueado, en pausa o sin presupuesto. La **barra del objetivo**,
+sobre el cuadro de mensaje, lo muestra, se carga bajo demanda (no forma parte del bundle inicial) y
+vuelve tras recargar (el snapshot del stream lleva el objetivo). El agente marca el objetivo como
+completo o bloqueado con [`update_goal`](/es/tools#goal-tools), con evidencia; solo tú lo pausas,
+reanudas, editas o borras, o cambias su presupuesto. Los comandos, los estados y los límites son los
+mismos que en la terminal: véase [Objetivos de sesión](/es/tui#goals).
+
+> **Costo.** Un objetivo sigue gastando tokens por sí solo, y cada turno vuelve a enviar todo el
+> contexto. Un objetivo **sin presupuesto de tokens solo se detiene por sus límites de turnos y de
+> tiempo** (`goal.maxTurns` 50, `goal.maxMinutes` 120): ponle presupuesto a los objetivos largos
+> (`/goal <objetivo> budget=50k`).
+
+La barra muestra el **estado** (Activo, En pausa, Bloqueado, Presupuesto agotado, Completado), el
+objetivo, una **barra de progreso** del presupuesto de tokens (se vuelve ámbar al 80 % y roja al
+agotarse), el turno `n/máx`, el tiempo gastado en ejecuciones y **por qué el objetivo espera o se
+detuvo** (*Esperando tu respuesta*, *Esperando un permiso*, *Esperando tareas en segundo plano*, modo
+plan, o el código de motivo en palabras), anunciado a los lectores de pantalla. Sus botones siguen el
+estado: **Pausar** (mientras está activo), **Reanudar** (en pausa o bloqueado), **Editar** y **Borrar**
+(siempre; Borrar pregunta antes). **Editar** abre un formulario con el objetivo y el presupuesto de
+tokens (`50k`, `1.5M`, `clear`; Ctrl/Cmd+Enter guarda, Esc cancela). Un objetivo completado o bloqueado
+muestra el informe del agente y su evidencia en *Informe del agente*.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/goal_web_ui.webp" alt="La barra del objetivo sobre el cuadro de mensaje de un objetivo en marcha: la etiqueta Activo, el objetivo, una barra de progreso del presupuesto de tokens con 600 de 2k tokens, el turno 2 de 50, el tiempo en ejecuciones y los botones Pausar, Editar y Borrar, mientras el chat muestra los turnos del agente." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>La barra de un objetivo en marcha: progreso del presupuesto, turnos y sus botones.</figcaption>
+</figure>
+
+En el compositor, `/goal` y sus subcomandos funcionan como en la terminal: al escribir `/goal` la paleta
+lista `/goal pause`, `/goal resume`, `/goal edit` y `/goal clear` (los que permite el estado actual);
+un objetivo nuevo sobre uno existente pide confirmación; `/goal edit` sin texto abre el formulario.
+Cada cambio es un compare-and-set, así que dos ventanas no pueden pelearse: una acción basada en una
+vista desactualizada se rechaza y la barra recarga el objetivo.
+
+Un objetivo nunca continúa mientras haya una aprobación, una pregunta o una revisión de plan abiertas,
+mientras corran tareas en segundo plano de la sesión, en modo plan, mientras tengas un turno en curso,
+ni después de que lo interrumpas (Detener pausa el objetivo). Si el servidor se detiene con un objetivo
+activo, vuelve **en pausa** (motivo `restart`) tras el reinicio y nunca se reanuda solo. Los objetivos
+usan el preset de permisos de la sesión como cualquier turno y nunca lo amplían. `alisio run` no tiene
+`/goal` en la v1.
+
 ### `/reload` y `/changelog` {#reload-and-changelog}
 
 `/reload` vuelve a leer la configuración, los agentes, las skills, las plantillas de prompt y los
@@ -555,6 +625,12 @@ GET  /api/artifacts/:aid/files/*       POST /api/artifacts/:aid/view  POST /api/
 GET  /api/artifacts/:aid/sources?logs=1   DELETE /api/artifacts/:aid
 GET  /artifact-view/:token/*           isolated viewer (signed link, no cookie)
 GET  /api/sessions/:sid/capabilities   DELETE /api/sessions/:sid/capabilities/:gid
+GET  /api/sessions/:sid/tasks          background tasks of the root session (+ read-only subagent mirror)
+GET  /api/sessions/:sid/tasks/:tid/output?offset=&limit=   {text, nextOffset, eof, status}
+POST /api/sessions/:sid/tasks/:tid/stop   the user's stop → {task}; 404 task_not_found for another session's task
+GET  /api/sessions/:sid/goal           the session's goal (GoalInfo or null)  PUT /api/sessions/:sid/goal {objective, tokenBudget?, replace?, expect?}
+PATCH /api/sessions/:sid/goal {objective?, tokenBudget?: number|null, expect?}   DELETE /api/sessions/:sid/goal?goalId=&epoch=
+POST /api/sessions/:sid/goal/pause     POST /api/sessions/:sid/goal/resume   {expect?: {goalId, epoch}} → {goal}; 409 goal_conflict
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
@@ -578,6 +654,15 @@ Las vistas de datos de plugins responden `404` ante una sesión, un plugin o una
 o un plugin deshabilitado, `400` ante parámetros no válidos y `view_failed` (502), `view_too_large`
 (502) o `view_timeout` (504) cuando la vista falla, responde más de 1 MiB o tarda más de 5 segundos.
 
+Una tarea en segundo plano que aparece o cambia de estado envía un frame `tasks_changed`
+(`{sessionId, task}`) al stream de su sesión raíz; la salida se obtiene con `offset`.
+
+Un objetivo que se crea, cambia de estado o gasta tokens envía un frame `goal_changed` (`{sessionId, goal}`,
+`goal: null` al borrarlo) al stream de su sesión, y el snapshot de una (re)conexión lleva el objetivo.
+`409 goal_conflict` responde a una acción basada en un `expect` desactualizado o que el estado no permite,
+`404 goal_not_found` a una sesión sin objetivo y `409 goal_disabled` a un objetivo nuevo mientras
+`goal.enabled` es `false`; `PUT` sobre un objetivo existente necesita `replace: true`.
+
 Las subidas de datasets terminan con un frame `dataset_ready` o `dataset_failed` en el stream de la
 sesión. Los errores de datos usan los códigos `dataset_unsupported` (415), `query_rejected` (400) y
 `query_timeout` (408).
@@ -596,6 +681,12 @@ La versión del protocolo aparece en `/api/health` y en el primer frame del stre
 
 - Un solo host: los bloqueos de sesión dependen de ids de proceso, y la web no ve en vivo los
   cambios que una TUI hace en una sesión hasta que la sesión se vuelve a abrir.
+- Las tareas en segundo plano son hijas del proceso del servidor: terminan cuando `alisio serve` se
+  detiene, y una tarea iniciada desde la TUI solo se ve (no se puede detener) desde la web mientras
+  esa TUI corre.
+- Un objetivo iniciado desde la TUI se lee de la base de datos compartida al abrir la sesión, pero la web
+  no ve sus cambios en vivo (como cualquier actividad de la TUI), y solo continúa un objetivo el
+  proceso que lo conduce; un objetivo cuyo servidor se detiene vuelve en pausa.
 - Sin TLS; el acceso remoto es opcional y está pensado para túneles SSH.
 - El proveedor es por workspace: **Activar en este workspace** cambia la aplicación de ese
   workspace (y guarda el perfil como predeterminado para los próximos arranques); los demás

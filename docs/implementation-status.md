@@ -18,7 +18,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
   (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
-  (`specs/alisio-web-memory-tab-v1.md`).
+  (`specs/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
+  `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano.
 - Validación.
 - Pendiente para estabilizar v0.1.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -27,12 +28,12 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
   comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
-  vistas de plugins).
+  vistas de plugins; tareas en segundo plano; objetivos de sesión).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
   Herdr; agente activo y effort; agentes del usuario; servidor web; modos, recarga y novedades;
-  pestaña Memory y vistas de plugins.
+  pestaña Memory y vistas de plugins; tareas en segundo plano; objetivos de sesión.
 
 ## Implementado
 
@@ -814,7 +815,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 
 Primera fase de `specs/alisio-modes-goal-background-v1.md` (decisiones del propietario confirmadas
 el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, migración v7) y 4
-(`/goal`) están especificadas y **no implementadas**.
+(`/goal`, migración v8) están implementadas (ver las secciones siguientes).
 
 - Núcleo (aditivo): `PermissionMode` en el SDK y `PermissionPresetInfo.mode`; la **tabla única**
   `PERMISSION_MODE_TABLE` (`permissions/modes.ts`: `ask` pregunta por todo; `auto` permite escrituras
@@ -876,6 +877,130 @@ Especificada en `specs/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
   (`store/memory.ts`), componente, textos y estilos en un chunk perezoso. Para recuperar presupuesto
   de bundle los cargadores perezosos de `app.tsx` pasaron a un único componente `Lazy` y la pestaña
   Trayectoria también se carga de forma perezosa.
+
+### Tareas en segundo plano (fase 3 de la especificación de modos, goal y tareas)
+
+Especificada en `specs/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.
+
+- Migración **v7** (solo hacia delante, idempotente): `background_tasks` (estados `queued`, `running`,
+  `stopping`, `succeeded`, `failed`, `cancelled`, `lost`; `abort_origin`, `error_code`, `owner_pid`,
+  `pid`, ruta del log relativa a la carpeta de estado, `delivered_at`) y `session_goals` (sin lector
+  hasta la fase 4).
+- Core: `BackgroundTasks` (`background/service.ts`) sobre el ejecutor de procesos compartido
+  (`runProcess`, ahora con `onSpawn` y `killProcessTree`/`isProcessAlive` exportados; no hay un segundo
+  *spawner*). Cada cambio de estado es un compare-and-set en SQL; el origen de la parada (`user`,
+  `model`, `timeout`, `shutdown`) se conserva aparte de su efecto (`cancelled` para el usuario, el
+  modelo y el cierre; `failed` con `timeout` para el watchdog). Logs en
+  `<estado>/tasks/<sesión raíz>/<id>.log` con escrituras síncronas y lecturas por offset (las lecturas
+  nunca parten un carácter UTF-8); tope por log (cabeza + marcador + cola de 32 KiB al terminar).
+  Límites: `tasks.maxPerSession` por sesión raíz y 16 por proceso. Cierre ordenado (`close()`): se
+  rechazan tareas nuevas, se aborta, se espera y se mata el grupo de procesos de las que no mueren;
+  además un manejador síncrono de `exit` mata los grupos si el proceso sale sin `close()`.
+  Recuperación al arrancar (`recover()`, y el servidor al iniciar): `lost` solo para tareas cuyo
+  `owner_pid` ya no existe (nunca las de este proceso ni las de otro proceso vivo).
+- Herramientas `bg_run`, `bg_list`, `bg_output`, `bg_stop` (`tools/background.ts`), **las cuatro con
+  efecto `process`** (decisión del propietario: lo que no puede iniciar un proceso tampoco lo lee ni lo
+  detiene; la especificación original tenía `bg_list` como `read`). Una sesión solo ve las tareas de su
+  árbol. `bg_output` devuelve `next_offset` y `eof`; una lectura del modelo (y un `bg_list`) de una
+  tarea ya terminada la marca como entregada.
+- Notificación (`background/notify.ts`): un mensaje por lote (ventana de 2 s), como mucho uno por
+  sesión cada 10 s y 6 cada 10 min, reintento cada 2 s y al quedar libre la sesión, reclamación de
+  `delivered_at` con compare-and-set antes de despertar y liberación si el despertar no arrancó. Solo
+  para sesiones raíz y tareas que terminaron por sí solas (éxito, fallo, timeout). El despertar lo inicia
+  el host: la TUI por `runPrompt` (`wakeDecision`), el servidor por `RunScheduler` con el id de petición
+  `bg-<id>`; `runner.enqueue` no despierta una sesión inactiva (verificado).
+- Espejo de subagentes: `subagentTasks` lee el panel (`PanelProvider.nodes`) del plugin de subagentes,
+  que ya existía; **no** hizo falta publicar estado nuevo desde `plugin-subagents` (la especificación
+  lo suponía) y su gestor, herramientas y `<task-notification>` no cambian.
+- Retención: `TaskJanitor` (patrón del janitor de análisis: temporizador sin referencia, 30 s tras el
+  arranque y después cada día; nunca con `--read-only` ni `:memory:`).
+- Configuración: sección `tasks` (`enabled`, `maxPerSession`, `maxRunMs`, `maxOutputBytes`,
+  `retentionDays`; esta última solo global y con aviso si un proyecto la define), todas ajustables con
+  etiquetas EN/ES en la web y las principales en `/settings`.
+- Servidor: `GET /api/sessions/:sid/tasks`, `GET …/tasks/:tid/output?offset=&limit=`,
+  `POST …/tasks/:tid/stop`, código `task_not_found` (404), frame `tasks_changed`. Un workspace con
+  tareas vivas no se expulsa por inactividad, un reciclaje diferido espera a que terminen y `/reload`
+  responde `409`.
+- TUI: `/tasks` (`tui/tasks.ts`: reductor puro y `TasksView`) con lista, salida en vivo, parada con
+  confirmación; `/reload` se rechaza con tareas vivas. `alisio run` detiene las tareas que siguen
+  corriendo al terminar y lo dice por stderr.
+- Web: pestaña Tareas del Dock (chunk perezoso con su store y sus textos), contador en la pestaña y
+  punto en el icono del panel, aviso cuando una tarea termina por sí sola, `/tasks`. Para recuperar
+  presupuesto de bundle el diccionario del idioma no activo (español) pasó a un chunk que se carga antes
+  del primer render o al cambiar de idioma; el bundle inicial bajó de ~89,9 KB a ~78 KB gzip.
+
+### Objetivos de sesión `/goal` (fase 4 de la especificación de modos, goal y tareas)
+
+Especificada en `specs/alisio-modes-goal-background-v1.md` (§9). Todo aditivo; decisiones del
+propietario del 2026-10-02 aplicadas tal cual.
+
+- Migración **v8** (aditiva, `ALTER TABLE`): la tabla `session_goals` de la v7 no tenía lector y le
+  faltaban las columnas del runtime (`goal_id`, `detail`, `summary`, `blocked_run`, `continuations`,
+  `inflight`, `last_run_id`, `kickoff_sent`, `owner_pid`); una base que ya estaba en v7 (las
+  alphas de la fase 3) las recibe sin perder filas.
+- Máquina de estados pura (`goal/machine.ts`): `active`, `paused`, `blocked`, `budget_limited`,
+  `complete`, cada una con un código de motivo cerrado (`created`, `resumed`, `user_paused`,
+  `user_interrupt`, `model_complete`, `model_blocked`, `policy_denied`, `run_error`, `token_budget`,
+  `max_turns`, `max_wall`, `no_progress` con detalle `repeated_reply` o `no_tool_turns`, `restart`).
+  Usuario: crear, pausar, reanudar (pausa o bloqueo), editar y borrar en cualquier estado, cambiar el
+  presupuesto en cualquier estado (subirlo o quitarlo reactiva un `budget_limited(token_budget)`; bajarlo
+  a lo gastado detiene uno activo). Modelo: solo `complete` o `blocked`, solo con el objetivo `active`
+  y con evidencia. Sistema: topes y disyuntores, interrupción del usuario, reinicio; nunca reanuda.
+  Reanudar tras `max_turns`/`max_wall` concede una asignación más de ese tope.
+- Servicio (`goal/service.ts`, `app.goals`) sobre `GoalStore` (`goal/store.ts`): cada cambio es
+  lectura-modificación-escritura en una transacción `BEGIN IMMEDIATE`; `epoch` (cambia con estado,
+  objetivo y presupuesto; los totales no lo mueven) más `goalId` permiten que un cliente diga lo que
+  vio (`expect`) y reciba `conflict` si otro lo cambió. Un goal de otra pestaña, ventana o proceso que
+  comparte la base no se pisa.
+- **Una lista ordenada de bloqueadores** (`goal/blockers.ts`, `goalBlocker`): no activo, desactivado,
+  ejecución en curso o continuación reclamada, entrada del usuario sin enviar (TUI), permiso pendiente,
+  pregunta o revisión de plan pendiente, agente `plan`, tareas en segundo plano vivas. Son esperas, no
+  estados; `goalWaiting` da la etiqueta de la UI.
+- Continuación idempotente: `next()` comprueba los topes, aplica la lista y **reclama una** continuación
+  con un compare-and-set (`inflight` = id de petición `goal-<goalId>-<n>`); un segundo disparo ve la
+  reclamación y espera. El host la inicia como una ejecución normal (`RunScheduler` con
+  `beginRun(requestId)` en el servidor; `runPrompt` en la TUI), así que los ids de llamadas y los datos
+  de continuación del proveedor no cambian. Prompts (`goal/prompts.ts`): contrato completo **una vez**
+  (`kickoff`, con el objetivo citado como dato en `<goal_objective>`), después una pista corta y estable
+  (la misma cadena cada turno: prefijo estable para la caché del proveedor), recordatorio tipo auditoría
+  cada 5 turnos y avisos tras la segunda repetición o el segundo turno sin herramientas.
+- Presupuesto **duro y acumulado**: `tokens_used` suma `usage.input + usage.output` de cada ejecución
+  (el mismo recuento que el runner; sin `usage` se estima por caracteres). Cada continuación arranca con
+  `maxTokens` = lo que queda, por lo que el guardia del runner (antes de cada llamada a herramienta y al
+  final de cada lote) detiene la ejecución; como el runner cuenta por petición, el gasto puede pasar del
+  presupuesto como mucho una petición. Una ejecución que lanza (error, tope, timeout) conserva su uso
+  (`core/run-stats.ts`, un `WeakMap` junto al error), de modo que un tope de presupuesto es `budget_limited`
+  y no `run_error`. No hay turno de cierre. «Turno» = una ejecución (kickoff, continuación o mensaje del
+  usuario con el goal activo); el tiempo es el de las ejecuciones (incluye esperar una aprobación dentro
+  de una ejecución, no la espera entre ejecuciones) y el `timeoutMs` de cada continuación se acota a lo
+  que queda.
+- Disyuntores: respuesta final idéntica (huella normalizada) y turnos sin herramientas; la primera
+  ocurrencia se registra (`onLog`), la segunda añade un aviso a la siguiente continuación y el límite
+  pausa con `no_progress`. `blocked` exige el mismo informe en turnos consecutivos
+  (`goal.blockedRepeats`) salvo evidencia `denied`. Un fallo de ejecución bloquea con el error como
+  motivo, salvo un `RunTimeoutError` (cuenta como turno sin herramientas). Esc/Detener/cancelar pausa
+  (`user_interrupt`).
+- Herramientas `get_goal` y `update_goal` (`tools/goal.ts`, efecto `internal`): **opt-in** (se añaden a
+  `OPT_IN_TOOLS`; solo se ofrecen a las ejecuciones de una sesión con goal `active` y agente distinto de
+  `plan`; Code Mode no las ve), por lo que sus descripciones no cuestan tokens en el resto. El modelo no
+  tiene herramienta para pausar, reanudar, editar, borrar ni cambiar el presupuesto.
+- Reinicio: `pauseOrphans` (arranque de aplicación y de servidor) pausa con `restart` los goals `active`
+  cuyo `owner_pid` ya no existe (o es desconocido); nunca los de este proceso ni los de otro proceso
+  vivo, y nunca reanuda. Idempotencia por ejecución: `last_run_id` evita contar dos veces una ejecución.
+- Configuración: sección `goal` (`enabled`, `maxTurns` 50, `maxMinutes` 120, `repeatedReplyLimit` 3,
+  `noToolTurnsLimit` 3, `blockedRepeats` 2), todas ajustables con etiquetas EN/ES en la web y en
+  `/settings`. **No hay presupuesto de tokens por defecto** (se avisa en la documentación).
+- Servidor: `GET|PUT|PATCH|DELETE /api/sessions/:sid/goal`, `POST …/goal/pause|resume`, comando
+  `/goal` en `POST …/commands` (misma gramática que la TUI, `parseGoalCommand`; `confirm` para
+  reemplazar), frame `goal_changed`, `goal` en el snapshot SSE, códigos `goal_not_found`, `goal_conflict`,
+  `goal_disabled`. `GoalDriver` (`host/goal.ts`) es el único camino que inicia continuaciones: tras cada
+  ejecución (`RunScheduler` ahora informa resultado, error y tiempos), al terminar la última tarea,
+  al cambiar opciones de sesión (agente) y tras las acciones del usuario.
+- TUI: `/goal` y su menú (`tui/goal.ts`: `planGoalCommand`, filas del selector, `GoalBar`), confirmación
+  de reemplazo, continuación tras cada `task()`, pausa con Esc, `goal.*` en `/settings`.
+- Web: barra del objetivo (chunk perezoso con su store y sus textos EN/ES), barra de progreso del
+  presupuesto, botones Pausar/Reanudar/Editar/Borrar, filas de la paleta, `/goal` con confirmación;
+  en el bundle inicial solo el signal y el manejo del frame (JS inicial 79,8 KB gzip de 90).
 
 ## Validación
 
@@ -1909,7 +2034,63 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - No verificado: Firefox y Safari, lectores de pantalla reales, Windows y macOS, bases de memoria
   grandes (miles de entradas por sesión) y el comportamiento con varios workspaces abiertos a la vez.
 
+## Tareas en segundo plano (fase 3): alcance de la verificación
+
+- Verificado con Vitest y procesos hijos reales (un script de Node, sin sintaxis específica de shell):
+  salida por offsets sin repetir, marcador y cola de un log truncado, lecturas acotadas sin partir
+  caracteres, código de salida, `cancelled` con origen al detener (usuario y modelo, idempotente) con el
+  árbol de procesos muerto (un nieto), watchdog (`failed`/`timeout`) y tope de `timeoutMs`, carreras
+  parada/salida, compare-and-set sin salir de un estado terminal, `lost` solo para propietarios
+  muertos, límites por sesión y por proceso, alcance por árbol de sesiones, cierre ordenado (incluido
+  un proceso que ignora SIGTERM) y la migración v7 (base nueva, desde v6, idempotente).
+- Política con el ejecutor real: `--read-only` y el agente plan deniegan las cuatro herramientas (en
+  los tres modos), `ask`/`auto` preguntan cada llamada, `full` no pregunta, y esquemas, directorio de
+  trabajo fuera del workspace o inexistente.
+- Notificación: coalescencia, límite de frecuencia y de ráfaga, reintento mientras está ocupada sin
+  pérdidas ni duplicados, `poke`, `skip`, lectura posterior (no se anuncia), sin aviso para tareas
+  detenidas, de sesiones hijas o tras el cierre; de extremo a extremo con el servidor real, el despertar
+  inicia exactamente una ejecución (id `bg-<id>`), espera mientras la sesión corre y no ocurre en una
+  sesión archivada.
+- Rutas (401, 403 por Origen, 415, sesión ajena, offset, límite, parada), frame `tasks_changed`, tareas
+  `lost` al arrancar el servidor, `/reload` rechazado y cierre del servidor sin procesos vivos; lógica
+  de la TUI (reductor, panel con dependencias simuladas, `wakeDecision`, guarda de recarga); store de la
+  web (lista, frames, avisos, salida por offset, parada), textos EN/ES y carga perezosa; paridad del
+  catálogo de comandos; configuración y etiquetas.
+- Navegador: comprobado con Chromium (Playwright) contra `alisio serve` (`packages/cli/dist/main.js`) y
+  un proveedor falso compatible con OpenAI que llama a `bg_run`: salida en vivo, botón Detener, el
+  despertar del agente exactamente una vez al terminar una tarea, ningún despertar tras una parada del
+  usuario y una tarea `lost` tras matar el servidor con SIGKILL.
+- No verificado: la TUI en un terminal real, Windows y macOS (`taskkill /T /F` y el grupo de procesos),
+  otros navegadores, lectores de pantalla reales y cargas con muchas tareas simultáneas.
+
 ## Límites conocidos
+
+## Objetivos de sesión `/goal` (fase 4): alcance de la verificación
+
+- Verificado con Vitest: gramática del comando y del presupuesto (`50k`, `1.5M`, `clear|none|off|0`,
+  `budget=` duplicado, límites), máquina de estados (transiciones por actor, reactivación al subir el
+  presupuesto, reanudación con asignación nueva, reinicio), lista de bloqueadores y su orden, prompts
+  (contrato una vez, pista estable, recordatorio cada 5 turnos, avisos); servicio con SQLite real y reloj
+  falso (recuento acumulado entre ejecuciones, tope duro y por ejecución, turnos, tiempo, disyuntores,
+  auditoría de `blocked`, error → `blocked`, reclamación idempotente, kickoff una vez, carreras de dos
+  superficies por `epoch`/`goalId`, pausa por reinicio); ejecutor real con proveedor guionado (herramientas
+  opt-in, objetivo completado en tres turnos, presupuesto duro, lo que el modelo no puede hacer);
+  servidor real (rutas, frames, snapshot, 401/403, esperas por tarea, modo plan y aprobación pendiente,
+  cancelación, reinicio, comando `/goal`, `goal.enabled`); lógica de la TUI (`planGoalCommand`, selector,
+  barra, aviso de parada); store de la web (acciones con `expect`, conflicto, reemplazo con confirmación,
+  formulario, filas de la paleta, textos EN/ES de cada código, carga perezosa); migración v8; paridad del
+  catálogo de comandos; etiquetas de ajustes.
+- Navegador: Chromium (Playwright, interfaz en español) contra `alisio serve` (`packages/cli/dist/main.js`)
+  y un proveedor falso compatible con OpenAI: un objetivo que continúa 3 turnos y termina con
+  `update_goal complete`; presupuesto pequeño → *Presupuesto agotado* sin más ejecuciones y reactivado al
+  subirlo desde el formulario; respuesta repetida → pausa `no_progress`; botones Pausar, Reanudar, Editar y
+  Borrar; espera por permiso pendiente; espera por una tarea `bg_run` y continuación al terminar; sin
+  continuación en modo plan y continuación al pasar a `build`; recarga de la página y reinicio del servidor
+  con SIGKILL (el objetivo vuelve en pausa, `restart`).
+- No verificado: la TUI en un terminal real (su flujo `task()` → continuación está cubierto por la
+  lógica pura y por las pruebas del núcleo, no por un terminal), otros navegadores, Windows y macOS,
+  lectores de pantalla reales, proveedores reales (el recuento depende de que informen `usage`) y goals de
+  muchas horas.
 
 ## Límites conocidos
 
@@ -2341,6 +2522,48 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   (reclamar, cambiar de agente, lanzar el turno) solo está probado por la lógica pura compartida y
   por el panel; no se ha verificado en un terminal real. En la web se comprobó con Chromium contra
   `alisio serve` y un proveedor falso; no con otros navegadores, Windows ni macOS.
-- El presupuesto inicial de JS de la web quedó en unos 100 bytes de margen: las fases siguientes
-  deben cargar sus textos de forma perezosa (como las etiquetas de ajustes) o cargar bajo demanda el
-  diccionario del idioma no activo.
+- El presupuesto inicial de JS de la web quedó en unos 100 bytes de margen tras esta fase; la fase de
+  tareas lo resolvió cargando bajo demanda el diccionario español (el bundle inicial bajó a ~78 KB).
+
+### Tareas en segundo plano
+
+- Una tarea es un proceso hijo corriente de Alisio: **no es un sandbox** y **no es *detached***. Muere
+  con Alisio (grupo de procesos; `taskkill /T /F` en Windows, sin verificar en una máquina Windows) y
+  no sobrevive a un reinicio. Tras una muerte abrupta (SIGKILL, corte de luz) ningún código puede
+  correr: el siguiente arranque marca `lost` lo que quedó sin terminar y sus procesos pueden seguir
+  vivos (la tarea muestra su `pid`). La detección usa `owner_pid`: un pid reutilizado por otro proceso
+  puede ocultar una tarea perdida hasta que ese proceso termine.
+- Un comando que deja hijos en segundo plano (`cmd &`) los pierde: se mata el grupo. La tarea termina
+  cuando se cierran todas sus salidas.
+- El log conserva la cabeza y los últimos 32 KiB: la parte central de una salida muy larga se pierde.
+  Las lecturas del modelo están acotadas a 64 KiB; el panel web conserva 200 000 caracteres.
+- La notificación solo sale de procesos con un anfitrión que sepa despertar (TUI y servidor); `alisio run`
+  nunca la envía. La TUI espera a que el usuario vuelva a la sesión propietaria; una tarea que termina
+  mientras el servidor está caído no se anuncia. En `ask`/`auto` cada llamada de `bg_*` pide aprobación
+  (también `bg_list` y `bg_output`; «Allow for this session» cubre el resto).
+- No hay `run_in_background` ni cesión a segundo plano de un comando en primer plano: solo `bg_run`
+  explícito. Los subagentes aparecen en la lista solo como espejo de solo lectura.
+- Un workspace con tareas vivas no se expulsa por inactividad y `/reload` se rechaza hasta que
+  terminen; reciclar el workspace (por ejemplo al activar un plugin) espera igual.
+
+### Objetivos de sesión (`/goal`)
+
+- **Sin presupuesto de tokens por defecto**: un goal sin `budget=` solo se detiene por `goal.maxTurns` y
+  `goal.maxMinutes`. El presupuesto es duro pero se aplica por petición: el gasto puede pasar del tope
+  como mucho una petición (más si el proveedor no informa `usage`, donde se estima por caracteres). No
+  hay turno de cierre. Cuenta entrada y salida de cada petición, es decir, un contexto largo se paga de
+  nuevo en cada turno.
+- **No hay modelo evaluador**: el modelo decide cuándo termina o se bloquea, con evidencia que Alisio
+  guarda y muestra pero **no verifica**. Un modelo puede dar por terminado algo que no lo está.
+- Un «turno» es una ejecución, no un paso del modelo; el tiempo cuenta lo gastado dentro de ejecuciones
+  (esperar una aprobación dentro de una ejecución cuenta; esperar entre ejecuciones no).
+- Los disyuntores usan una huella del texto final (normalizada) y el número de llamadas a herramientas
+  (`get_goal`/`update_goal` cuentan como llamadas): un modelo que varía una frase evita el primero.
+- Un goal pausado por reinicio nunca se reanuda solo, y el reinicio se decide por `owner_pid`: un pid
+  reutilizado por otro proceso podría ocultar un goal huérfano hasta que ese proceso termine.
+- La TUI no continúa mientras haya texto sin enviar en el editor ni con otra sesión abierta; la web no ve
+  en vivo los cambios que una TUI hace en un goal. `alisio run` no tiene `/goal` en la v1.
+- Un goal no amplía permisos y nunca se ejecuta en modo plan, pero en `full` el agente actúa sin preguntar
+  durante horas: no es un sandbox. El objetivo se cita como dato, no como instrucción privilegiada, lo que
+  reduce pero no elimina la inyección desde un texto malicioso que el usuario pegue.
+- La TUI se verificó por lógica pura y fake terminal, no en un terminal real; la web, en Chromium.

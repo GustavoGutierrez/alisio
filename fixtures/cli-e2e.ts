@@ -84,6 +84,44 @@ const dataServer = await serve(async (req) => {
     { headers: { "Content-Type": "text/event-stream" } },
   );
 });
+/**
+ * A fake model for the background tasks: start a long-running command with `bg_run`, read its
+ * output with `bg_output`, then answer. `run` waits for no task: it stops the one still running
+ * when it ends and says so on stderr.
+ */
+let bgRequests = 0;
+const bgServer = await serve(async (req) => {
+  const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
+  bgRequests++;
+  const results = body.messages.filter((m) => m.role === "tool");
+  const call = (name: string, input: unknown) => ({
+    delta: {
+      tool_calls: [
+        {
+          index: 0,
+          id: `bg${results.length}`,
+          type: "function",
+          function: { name, arguments: JSON.stringify(input) },
+        },
+      ],
+    },
+    finish_reason: "tool_calls",
+  });
+  const id = /task_[0-9A-Z]+/.exec(String(results[0]?.content ?? ""))?.[0] ?? "task_missing";
+  const choice =
+    results.length === 0
+      ? call("bg_run", {
+          command: `${JSON.stringify(process.execPath)} -e "console.log('bg-ready'); setTimeout(() => {}, 60000)"`,
+          label: "e2e sleeper",
+        })
+      : results.length === 1
+        ? call("bg_list", {})
+        : { delta: { content: `Task ${id} is listed` }, finish_reason: "stop" };
+  return new Response(
+    `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+});
 const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   const [program = "", ...prefix] = command;
   const child = spawn(program, [...prefix, ...args], {
@@ -210,6 +248,45 @@ try {
       },
     }),
   );
+  await writeFile(
+    join(directory, "bg-config.json"),
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${bgServer.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+    }),
+  );
+  // Background tasks: bg_run and bg_list pass the process policy (--allow-process); the task is
+  // still running when `run` ends, so it is stopped and the CLI says so.
+  const bgRun = await executeWithStderr([
+    "run",
+    "Start a sleeper",
+    "--cwd",
+    directory,
+    "--config",
+    join(directory, "bg-config.json"),
+    "--allow-process",
+    "--json",
+  ]);
+  const bgEvents = bgRun.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(bgEvents.at(-1).type, "run_completed");
+  assert.equal(bgRequests, 3);
+  assert.deepEqual(
+    bgEvents.filter((e) => e.type === "tool_completed").map((e) => e.data.name),
+    ["bg_run", "bg_list"],
+  );
+  assert.equal(
+    bgEvents.some((e) => e.type === "tool_failed"),
+    false,
+    bgRun.stdout,
+  );
+  assert.match(bgRun.stderr, /1 background task was still running and was stopped/);
   await writeFile(join(directory, "sales.csv"), "region,revenue\nWest,10\nEast,20\nWest,5\n");
   const dataOut = await execute([
     "run",
@@ -447,7 +524,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 6);
+  assert.equal(sessions.length, 7);
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {
@@ -540,6 +617,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "data_inspect + data_query on a CSV through the data engine process",
         "alisio analysis status (mode, container settings, retention) and analysis sweep",
         "compatible MCP config list/doctor with fake stdio server and redacted direct env",
+        "bg_run + bg_list through the process policy; run stops the task still running and says so",
         "JSONL output",
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
         "built-in memory plugin loaded",
@@ -558,5 +636,6 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
 } finally {
   await server.close();
   await dataServer.close();
+  await bgServer.close();
   await rm(directory, { recursive: true, force: true });
 }

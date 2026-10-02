@@ -27,6 +27,32 @@ export const RIPGREP_INSTALL_HINT =
 export function ripgrepDiagnostic(found: boolean): string | undefined {
   return found ? undefined : RIPGREP_INSTALL_HINT;
 }
+/** Whether a process id belongs to a live process (EPERM still means alive). */
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+/**
+ * Kills a spawned process and everything it started: the process group on POSIX (children are
+ * spawned with `detached`, so the pid leads its own group) and `taskkill /T /F` on Windows.
+ * Synchronous, so it is also safe inside a `process.on("exit")` handler. Never throws.
+ */
+export function killProcessTree(pid: number, fallback?: () => void): void {
+  try {
+    if (process.platform !== "win32") process.kill(-pid, "SIGKILL");
+    else spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+  } catch {
+    try {
+      fallback?.();
+    } catch {
+      /* already gone */
+    }
+  }
+}
 export async function runProcess(
   command: string,
   args: string[],
@@ -48,6 +74,8 @@ export async function runProcess(
     logFiles?: { stdout: string; stderr: string };
     /** Cap of each log file (default 10 MiB); a marker line notes the cut. */
     maxLogBytes?: number;
+    /** Called once with the pid of the spawned process (it leads its own group on POSIX). */
+    onSpawn?: (pid: number) => void;
   },
 ): Promise<ProcessResult> {
   options.signal.throwIfAborted();
@@ -68,6 +96,7 @@ export async function runProcess(
     detached: process.platform !== "win32",
     windowsHide: true,
   });
+  if (child.pid !== undefined) options.onSpawn?.(child.pid);
   const exited = new Promise<number>((resolveExit, reject) => {
     child.once("error", reject);
     child.once("close", (code, sig) => resolveExit(code ?? (sig ? 128 : 1)));
@@ -95,15 +124,8 @@ export async function runProcess(
   };
   const kill = () => {
     if (finished || child.pid === undefined) return;
-    try {
-      if (process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
-      else {
-        spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-        child.kill();
-      }
-    } catch {
-      child.kill("SIGKILL");
-    }
+    killProcessTree(child.pid, () => child.kill("SIGKILL"));
+    if (process.platform === "win32") child.kill();
   };
   signal.addEventListener("abort", terminate, { once: true });
   if (signal.aborted) terminate();

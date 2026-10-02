@@ -1,6 +1,6 @@
 import type { SessionSummary, WorkspaceInfo } from "@alisio/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { setLocale } from "../packages/web/src/i18n/index.ts";
+import { loadLocale, setLocale } from "../packages/web/src/i18n/index.ts";
 import { ApiClient, ApiRequestError } from "../packages/web/src/net/api.ts";
 import { errorText } from "../packages/web/src/store/errors.ts";
 import {
@@ -104,6 +104,7 @@ describe("api client", () => {
     const error = await api.createSession({ workspace: "w1" }).catch((e: unknown) => e);
     expect(error).toMatchObject({ code: "workspace_missing", details: { path: "/gone/app" } });
     vi.stubGlobal("document", { documentElement: {} });
+    await loadLocale("es");
     try {
       setLocale("en");
       expect(errorText(error)).toBe(
@@ -118,8 +119,9 @@ describe("api client", () => {
     }
   });
 
-  it("explains archived workspaces and a busy folder dialog", () => {
+  it("explains archived workspaces and a busy folder dialog", async () => {
     vi.stubGlobal("document", { documentElement: {} });
+    await loadLocale("es");
     try {
       setLocale("en");
       const archived = new ApiRequestError(409, "workspace_archived", "raw", { path: "/w/app" });

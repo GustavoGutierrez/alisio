@@ -167,6 +167,31 @@ export {
   slugify as artifactSlug,
   toRef,
 } from "./artifacts/store.ts";
+export { TaskJanitor } from "./background/janitor.ts";
+export { subagentTasks } from "./background/mirror.ts";
+export {
+  buildTaskNotification,
+  DEFAULT_NOTIFIER_TIMING,
+  type NotifierTiming,
+  TaskNotifier,
+  type TaskWake,
+  type TaskWakeRequest,
+  type WakeOutcome,
+} from "./background/notify.ts";
+export { DEFAULT_READ_BYTES, MAX_READ_BYTES } from "./background/output.ts";
+export {
+  BackgroundTasks,
+  type BackgroundTasksOptions,
+  type TaskAdmissionCode,
+  TaskAdmissionError,
+  TaskForeignError,
+  TaskNotFoundError,
+} from "./background/service.ts";
+export {
+  BackgroundTaskStore,
+  isLive as isTaskLive,
+  isTerminal as isTaskTerminal,
+} from "./background/store.ts";
 export {
   changelogNews,
   compareVersions,
@@ -252,7 +277,7 @@ export type {
   TerminalRunStatus,
   ToolCallMeta,
 } from "./core/contracts.ts";
-export { EXIT_PLAN_TOOL, OPT_IN_TOOLS } from "./core/opt-in.ts";
+export { EXIT_PLAN_TOOL, GOAL_TOOLS, OPT_IN_TOOLS } from "./core/opt-in.ts";
 export {
   DEFAULT_MAX_OUTPUT_TOKENS,
   describeOutputLimitSource,
@@ -271,6 +296,7 @@ export {
   type RunOptions,
 } from "./core/runner.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
+export * from "./goal/index.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
 export {
   McpConnector,
@@ -465,6 +491,7 @@ export {
 } from "./startup/index.ts";
 export { formatBytes, NOT_SANDBOXED } from "./tools/analysis.ts";
 export { ARTIFACT_READ_MAX, exportedPaths } from "./tools/artifacts.ts";
+export { GET_GOAL_TOOL, parseEvidence, UPDATE_GOAL_TOOL } from "./tools/goal.ts";
 export { hash, objectSchema, registerStandard } from "./tools/standard.ts";
 export {
   getTrust,

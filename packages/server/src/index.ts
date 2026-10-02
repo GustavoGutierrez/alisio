@@ -8,19 +8,25 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import {
   AnalysisJobs,
+  type AppOptions,
   ArtifactStore,
+  BackgroundTaskStore,
   BlobStore,
   CapabilityGrants,
+  GoalStore,
   SQLiteStore,
   stateHome,
+  type TaskWakeRequest,
+  type WakeOutcome,
 } from "@alisio/core";
-import type { ServerFrame } from "@alisio/sdk";
+import type { GoalInfo, ServerFrame } from "@alisio/sdk";
 import { AuthGuard, isLoopbackHost } from "./auth/guard.ts";
 import { newSecret } from "./auth/token.ts";
 import { redactViewPath } from "./auth/view-token.ts";
 import { ApprovalBridge } from "./bridges/approval-bridge.ts";
 import { InteractionBridge } from "./bridges/interaction-bridge.ts";
 import { createNativePicker, type FolderPicker } from "./host/folder-picker.ts";
+import { GoalDriver } from "./host/goal.ts";
 import { followUpPlanRun } from "./host/plan.ts";
 import { RunScheduler } from "./host/run-scheduler.ts";
 import { SessionService } from "./host/sessions.ts";
@@ -45,6 +51,7 @@ import { registerDatasetRoutes } from "./routes/datasets.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerFileRoutes } from "./routes/files.ts";
 import { registerFolderRoutes } from "./routes/folders.ts";
+import { registerGoalRoutes } from "./routes/goal.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
@@ -53,6 +60,7 @@ import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerSideQuestionRoutes } from "./routes/side-questions.ts";
+import { registerTaskRoutes } from "./routes/tasks.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 import { SseHub } from "./sse/hub.ts";
 import { InflightTracker } from "./sse/inflight.ts";
@@ -122,6 +130,11 @@ export interface ServerOptions {
   folderPicker?: FolderPicker;
   /** Limits of plugin data views (`GET /api/sessions/:sid/views/…`): 5 s and 1 MiB by default. */
   views?: { timeoutMs?: number; maxBytes?: number };
+  /** Background-task runtime knobs (notification timing, kill grace, limits): tests tune them. */
+  tasks?: Pick<
+    NonNullable<AppOptions["tasks"]>,
+    "timing" | "sweepDelayMs" | "killGraceMs" | "maxPerProcess"
+  >;
 }
 
 export interface RunningServer {
@@ -185,10 +198,16 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   // process become interrupted before any client lists them.
   catalog.interruptRuns();
   catalog.interruptStale();
+  // Background tasks of a dead server or TUI process become `lost` (a live process's are kept).
+  new BackgroundTaskStore(catalog.db).markLost(Date.now());
+  // A goal left `active` by a process that is gone pauses (reason `restart`); it never resumes by
+  // itself, the user decides.
+  new GoalStore(catalog.db).pauseOrphans(Date.now());
   let shutdown: Promise<void> | undefined;
   let sessions: SessionService | undefined;
   const inflight = new InflightTracker();
   let recycler: WorkspaceRecycler | undefined;
+  let goalDriver: GoalDriver | undefined;
   const scheduler = new RunScheduler({
     ...(options.maxConcurrentRuns ? { maxConcurrent: options.maxConcurrentRuns } : {}),
     onChange: (job, status, outcome) => {
@@ -196,6 +215,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         inflight.clear(job.sessionId, job.runId);
         // A deferred plugin change applies once the workspace has no runs left.
         setImmediate(() => recycler?.idle(job.workspaceId));
+        // A finished-task notification held back because this session was busy may go now.
+        setImmediate(() => job.app.tasks.sessionIdle(job.sessionId));
         // An approved plan starts its implementation run once the plan run is over.
         if (sessions && !job.tool)
           try {
@@ -212,8 +233,21 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
               error: error instanceof Error ? error.message : String(error),
             });
           }
+        // The run is folded into the session's goal (tokens, turns, breakers), and the goal may
+        // continue: the pump runs after this tick so the plan follow-up above (if any) goes first.
+        if (outcome && !job.tool)
+          try {
+            goalDriver?.settle(job, outcome);
+          } catch (error) {
+            logger.error("goal_settle_failed", {
+              sessionId: job.sessionId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        setImmediate(() => goalDriver?.pump(job.sessionId));
       } else inflight.mark(job.sessionId, job.runId, status);
       sessions?.notify(job.sessionId);
+      goalDriver?.refresh(job.sessionId);
     },
   });
   const workspaceOf = (sessionId: string) => {
@@ -245,6 +279,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
           approvals: approvals?.pending(sessionId) ?? [],
           interactions: interactions?.pending(sessionId) ?? [],
         },
+        ...(goalDriver?.info(sessionId) ? { goal: goalDriver.info(sessionId) as GoalInfo } : {}),
       };
     },
     messagesAfter: (sessionId, after) => catalog.messagesPage(sessionId, { after, limit: 200 }),
@@ -253,10 +288,60 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     ...(options.heartbeatMs ? { heartbeatMs: options.heartbeatMs } : {}),
     ...(options.coalesceMs ? { coalesceMs: options.coalesceMs } : {}),
   });
+  /** Whether a workspace's application has live background tasks (it must not be closed). */
+  const tasksLive = (id: string): boolean => (workspaces.get(id)?.app.tasks.liveCount() ?? 0) > 0;
+  /**
+   * The finished-task notification: a normal run of the owner session whose request id is the
+   * batch id (like the plan approval's `plan-<id>`), so the same batch can never start two runs.
+   * `runner.enqueue` would only park the text until the next run, so the wake-up goes through the
+   * scheduler. Busy sessions (a run, an approval or question, another process holding the
+   * session) answer `busy` and the core retries; archived or missing ones answer `skip`.
+   */
+  const wakeOwner = (workspaceKey: string, request: TaskWakeRequest): WakeOutcome => {
+    if (closing || !sessions) return "skip";
+    let session: ReturnType<typeof catalog.get>;
+    try {
+      session = catalog.get(request.sessionId);
+    } catch {
+      return "skip";
+    }
+    const opened = workspaces.get(workspaceKey);
+    if (session.parentId || session.archivedAt || !opened) return "skip";
+    if (
+      catalog.lockedBy(session.id) ||
+      scheduler.busy(session.id) ||
+      opened.app.runner.isRunning(session.id) ||
+      approvals?.awaiting(session.id) ||
+      interactions?.awaiting(session.id)
+    )
+      return "busy";
+    const correlationId = randomUUID();
+    const { run, created } = sessions.beginRun({
+      id: randomUUID(),
+      session: session.id,
+      status: "queued",
+      requestId: request.requestId,
+      correlationId,
+      model: session.model,
+    });
+    if (!created) return "started";
+    const service = sessions;
+    scheduler.submit({
+      runId: run.id,
+      sessionId: session.id,
+      workspaceId: opened.id,
+      app: opened.app,
+      text: request.text,
+      display: request.display,
+      correlationId,
+      options: () => service.runOptions(session.id),
+    });
+    return "started";
+  };
   const workspaces = new WorkspaceHost({
     base,
     catalog,
-    wire: () => ({
+    wire: (id) => ({
       onEvent: (event) => {
         inflight.apply(event);
         hub.publish(event);
@@ -272,11 +357,28 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       ...(approvals
         ? { approve: approvals.handler, approveExternalDirectory: approvals.directoryHandler }
         : {}),
+      tasks: {
+        ...(options.tasks ?? {}),
+        onChange: (task, root) => {
+          hub.toSession(root, { t: "tasks_changed", sessionId: root, task });
+          // A goal waiting for background tasks continues once the last one is over.
+          if (task.status !== "running" && task.status !== "queued" && task.status !== "stopping")
+            setImmediate(() => goalDriver?.pump(root));
+          else goalDriver?.refresh(root);
+          // A deferred recycle (a plugin change) goes ahead once the last task is over.
+          if (task.status !== "running" && task.status !== "queued" && task.status !== "stopping") {
+            const owner = workspaceOf(root);
+            if (owner) setImmediate(() => recycler?.idle(owner));
+          }
+        },
+        wake: (request) => wakeOwner(id, request),
+      },
+      goals: { onChange: (sessionId) => goalDriver?.refresh(sessionId) },
     }),
     onOpen: (entry) => {
       if (interactions) entry.app.plugins.setInteractiveUI(interactions.uiFor(entry.id));
     },
-    busy: (id) => scheduler.busyWorkspace(id) || hub.watchesWorkspace(id),
+    busy: (id) => scheduler.busyWorkspace(id) || hub.watchesWorkspace(id) || tasksLive(id),
     ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
     ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
     ...(options.defaultWorkspace ? { defaultWorkspace: options.defaultWorkspace } : {}),
@@ -301,7 +403,10 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     runOf: (id) => scheduler.job(id)?.runId,
     ...(options.approvalGraceMs !== undefined ? { graceMs: options.approvalGraceMs } : {}),
     ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
-    onChange: (root) => service.notify(root),
+    onChange: (root) => {
+      service.notify(root);
+      goalDriver?.refresh(root);
+    },
   });
   interactions = new InteractionBridge({
     hub,
@@ -309,8 +414,37 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     workspaceOf,
     ...(options.approvalGraceMs !== undefined ? { graceMs: options.approvalGraceMs } : {}),
     ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
-    onOpen: (id) => service.notify(id),
-    onChange: (root) => root && service.notify(root),
+    onOpen: (id) => {
+      service.notify(id);
+      goalDriver?.refresh(id);
+    },
+    onChange: (root) => {
+      if (!root) return;
+      service.notify(root);
+      goalDriver?.refresh(root);
+    },
+  });
+  goalDriver = new GoalDriver({
+    catalog,
+    sessions: () => service,
+    scheduler: () => scheduler,
+    workspaces: () => workspaces,
+    awaiting: (root) =>
+      approvals?.awaiting(root)
+        ? "approval"
+        : interactions?.awaiting(root)
+          ? "question"
+          : undefined,
+    toSession: (sessionId, frame) => hub.toSession(sessionId, frame),
+    closing: () => closing,
+    log: (event, data) => logger.error(event, data),
+  });
+  // A session option (the agent, say) changed: the plan-mode wait of a goal may be over.
+  service.bind({
+    onOptions: (sessionId) => {
+      goalDriver?.refresh(sessionId);
+      setImmediate(() => goalDriver?.pump(sessionId));
+    },
   });
   const stats = (): ServerStats => ({
     shuttingDown: closing,
@@ -367,9 +501,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     toSession: (sessionId, frame) => hub.toSession(sessionId, frame),
   });
   registerPromptRoutes(router, { sessions, scheduler });
+  registerGoalRoutes(router, { sessions, goals: goalDriver });
   const management = {
     workspaces,
     scheduler,
+    tasksLive,
     base,
     broadcast: (frame: ServerFrame) => hub.broadcast(frame),
   };
@@ -381,9 +517,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     scheduler,
     workspaces,
     reload: (workspaceId) => reloader.reload(workspaceId),
+    ...(goalDriver ? { goals: goalDriver } : {}),
     version: options.version ?? "dev",
   });
   registerSideQuestionRoutes(router, { sessions });
+  registerTaskRoutes(router, { sessions });
   registerApprovalRoutes(router, { approvals, interactions });
   registerManagementRoutes(router, management, recycler);
   registerAgentDefinitionRoutes(router, management, recycler);

@@ -255,6 +255,8 @@ export const en = {
   "dock.files": "Files",
   "dock.changes": "Changes",
   "dock.preview": "Preview",
+  "dock.tasks": "Tasks",
+  "dock.tasksLive": "{count} running",
   "dock.close": "Close the panel",
   "dock.more": "Show more",
   "dock.symlink": "Symbolic link (not followed)",

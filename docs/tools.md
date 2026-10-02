@@ -30,6 +30,8 @@ each tool (`enabled`, `ask`, `disabled`).
 | `edit_file` | `write` | Replace an exact, unique match in a file |
 | `run_process` | `process` | Run a command with an argument array |
 | `shell` | `process` | Run a shell command |
+| `bg_run` | `process` | Start a shell command in the background and keep working (see [below](#background-tasks)) |
+| `bg_list`, `bg_output`, `bg_stop` | `process` | List the background tasks, read the output of one incrementally, stop one (see [below](#background-tasks)) |
 | `webfetch` | `external` | Read a URL as text/markdown/html (see [below](#webfetch)) |
 | `websearch` | `external` | Search the web (see [below](#websearch)) |
 | `execute` | `process` | Run a JS snippet that calls other tools ("Code Mode", see [below](#execute)) |
@@ -101,6 +103,103 @@ ended the host switches to `build` and starts one implementation turn (see [Term
 and [Web UI](/web#plan-review)). The plan agent is read-only because its run policy allows no write,
 process or external effect, so no [permission mode](#permission-modes) can widen it. `plan_proposed`
 and `plan_decided` are durable run events.
+
+## Running commands in the background: bg_run {#background-tasks}
+
+`bg_run` starts a shell command and returns at once with a task id, so the agent can keep working
+while a dev server, a watcher or a long test suite runs. Four tools, all with `effect: process`:
+
+| Tool | Input | Result |
+| --- | --- | --- |
+| `bg_run` | `command` (up to 8 000 characters), `cwd?` (relative to the workspace), `label?`, `timeoutMs?` (1 s to 24 h, capped by `tasks.maxRunMs`) | `{ id, label, status: "running", timeout_ms, note }` |
+| `bg_list` | `status?`, `limit?` (up to 50) | `{ tasks: [{ id, label, status, exit_code?, error?, stopped_by?, output_bytes, … }] }`, newest first |
+| `bg_output` | `id`, `offset?` (default 0), `limit?` (up to 65 536 bytes, 16 KiB by default) | `{ id, status, exit_code?, text, next_offset, eof, output_truncated? }` |
+| `bg_stop` | `id` | The task as it is after the stop: `cancelled`, `stopped_by: "model"` |
+
+**One policy for all four.** Starting, listing, reading the output of and stopping a task all go
+through the same `process` gate as `shell` and `run_process`: [`--read-only`](#permission-flags) and
+the plan agent deny the whole set (a mode that cannot start a process cannot read or stop one
+either), and in `ask` and `auto` mode each call asks first (`Allow for this session` covers the
+rest). `full` mode runs them without asking. The command, the working directory (checked against the
+[path policy](#external-directories)) and the environment follow the same rules as `shell`: the same
+shell, the same small environment allowlist. A task belongs to the root session that started it;
+another session, even in the same workspace, gets "not found".
+
+**Reading output.** The output (standard output and standard error, in arrival order) is stored in a
+log file with byte offsets: pass `0` the first time and the `next_offset` of the previous call
+afterwards, so nothing is repeated and the model's context is not flooded. `eof` is true only when
+the task has ended and everything was read. A log keeps its first `tasks.maxOutputBytes` bytes
+(2 MiB by default), then one marker line; the **last 32 KiB** are appended when the task ends, so
+the error at the end of a long build is still there.
+
+**States.** `queued → running → stopping → succeeded | failed | cancelled | lost`; every change is a
+compare-and-set in the database, so a terminal state is never left and a stop that races the exit of
+the process ends in exactly one state. A stop by you (UI) or by the model (`bg_stop`) is
+`cancelled`, never `failed`; the watchdog (`tasks.maxRunMs`, 1 hour by default) stops a task that
+runs too long and it ends `failed` with the code `timeout`; stopping sends SIGTERM to the process
+group, SIGKILL after 3 seconds (`taskkill /T /F` on Windows). The origin of a stop (`user`, `model`,
+`timeout`, `shutdown`) is kept.
+
+**Limits.** At most `tasks.maxPerSession` live tasks per session (4 by default) and 16 per Alisio
+process; the settings are in [Configuration](/configuration#tasks).
+
+**The finished-task notification.** When a task ends **on its own** (success, failure or the time
+limit), one message wakes the agent that owns the session: the task ids, their status and how to
+read the output with `bg_output`. It is coalesced and rate-limited, never one per turn:
+
+- tasks that finish within 2 seconds of each other share one message;
+- at most one wake-up per session every 10 seconds and 6 per 10 minutes; what does not fit waits for
+  the next batch (nothing is dropped);
+- while the session is busy (a turn is running, an approval or a question waits, another process
+  holds the session) the message waits and is retried every 2 seconds, and again as soon as the
+  session is idle;
+- delivery is claimed in the database (`delivered_at`) before the wake-up, so it cannot repeat; a
+  task whose output the model already read after it finished is **not** announced;
+- nothing is sent for a task you or the model stopped, for a task that died with Alisio, for tasks of
+  child sessions (subagents) or for an archived session.
+
+The wake-up is a normal run of the session: the terminal starts it through its prompt path and the
+web server through its run scheduler (`runner.enqueue` alone would leave the text waiting for the next
+prompt). In headless `alisio run` nothing wakes the agent (the result of `bg_run` says so): read the
+output with `bg_output`.
+
+**Lifecycle and security.** A task is an ordinary child process of Alisio, started with the shared
+process runner. It is **not sandboxed** (it runs with your permissions) and **not detached**: when
+Alisio exits (`/exit`, the end of `alisio run`, closing the server or a workspace) every live task's
+process group is killed and the task ends `cancelled` with origin `shutdown`; a command that
+backgrounds its own children loses them too. `alisio run` waits for no task: it stops the ones still
+running and says so on stderr. If Alisio is killed abruptly (SIGKILL, power loss) nothing can run,
+so the next start marks the unfinished tasks `lost` — only those whose owner process no longer
+exists, never another live Alisio process's — and their processes may still be running: stop them
+yourself (the task shows its `pid`). Finished tasks and their logs are deleted after
+`tasks.retentionDays` (7 by default). Task ids are ULIDs (80 random bits).
+
+See [Terminal UI](/tui#tasks) and [Web UI](/web#background-tasks) for the `/tasks` panels.
+
+## Working toward a goal: get_goal and update_goal {#goal-tools}
+
+`/goal` ([terminal](/tui#goals), [web](/web#goals)) keeps the agent working on one objective until it
+is done, blocked, paused or out of budget. These two tools are the model's whole handle on it:
+
+- `get_goal` reads the objective, the status and what is left of the token budget, the turn cap and
+  the time cap.
+- `update_goal` reports the goal **`complete`** or **`blocked`**, with a `summary` and a list of
+  `evidence` (1–20 items, each a `kind` — `file`, `test`, `log`, `command`, `denied` or `other` — and a
+  `detail`: a path, a test run, a log line). `complete` without evidence is refused. A `blocked`
+  report must be repeated, with fresh evidence, in the **next** turn (`goal.blockedRepeats`, 2
+  consecutive turns by default) before the goal stops; a turn that does not repeat it clears it. Only
+  evidence of kind `denied` (a permission was denied) blocks at once. Alisio does not verify the
+  evidence: it is recorded and shown so **you** can.
+
+The model cannot pause, resume, edit or clear the goal or change its budget: no tool does, only you.
+`update_goal` only works while the goal is active (a goal you paused stays paused) and changes
+Alisio's own bookkeeping, never the workspace, so it is an `internal` effect and never widens a
+permission.
+
+Both tools are **opt-in**: a run only sees them while its session has an **active** goal and the
+agent is not the plan agent (Code Mode's `execute` never offers them). Everywhere else they are
+neither listed nor callable, so their descriptions cost no tokens on the requests of a session
+without a goal.
 
 ## Reading a URL: webfetch {#webfetch}
 

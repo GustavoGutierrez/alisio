@@ -17,6 +17,8 @@ import type {
   ApiError,
   ApiErrorCode,
   ArtifactRef,
+  BackgroundTaskInfo,
+  BackgroundTaskOutput,
   BlobRef,
   CapabilityGrantWire,
   ChangelogView,
@@ -240,6 +242,22 @@ export class ApiClient {
     this.request<{ resolved: true }>("POST", `/api/interactions/${enc(interactionId)}`, {
       answer,
     });
+  /** Background tasks of a root session (shell tasks plus the read-only subagent mirror). */
+  tasks = (sessionId: string) =>
+    this.request<{ tasks: BackgroundTaskInfo[] }>("GET", `/api/sessions/${enc(sessionId)}/tasks`);
+  /** One incremental read of a task log: pass the previous `nextOffset` as `offset`. */
+  taskOutput = (sessionId: string, taskId: string, offset: number) =>
+    this.request<BackgroundTaskOutput>(
+      "GET",
+      `/api/sessions/${enc(sessionId)}/tasks/${enc(taskId)}/output?offset=${offset}`,
+    );
+  /** Stops a task as the user (it ends `cancelled`). */
+  stopTask = (sessionId: string, taskId: string) =>
+    this.request<{ task: BackgroundTaskInfo }>(
+      "POST",
+      `/api/sessions/${enc(sessionId)}/tasks/${enc(taskId)}/stop`,
+      {},
+    );
   exportUrl = (id: string) => `/api/sessions/${enc(id)}/export`;
   /** Artifacts of a session's root, newest first (including deleted/expired, for cards). */
   artifacts = (sessionId: string) =>

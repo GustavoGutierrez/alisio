@@ -21,6 +21,10 @@ import { AnalysisRerun } from "./analysis/rerun.ts";
 import { AnalysisRuntimeManager } from "./analysis/runtime-manager.ts";
 import { createArtifactPublisher } from "./artifacts/publisher.ts";
 import { ArtifactStore } from "./artifacts/store.ts";
+import { TaskJanitor } from "./background/janitor.ts";
+import { subagentTasks } from "./background/mirror.ts";
+import type { NotifierTiming, TaskWake } from "./background/notify.ts";
+import { BackgroundTasks } from "./background/service.ts";
 import {
   configFile,
   configHome,
@@ -39,6 +43,8 @@ import type { ApprovalHandler } from "./core/contracts.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./core/output-limit.ts";
 import { ToolRegistry } from "./core/registry.ts";
 import { AgentRunner, type CompactionSettings, type RunnerSettingsPatch } from "./core/runner.ts";
+import { GoalService } from "./goal/service.ts";
+import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
@@ -58,6 +64,7 @@ import { findWorkspace } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
 import { ChildSessions } from "./sessions/children.ts";
 import { SideQuestions } from "./sessions/side-questions.ts";
+import { registerGoalTools } from "./tools/goal.ts";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /**
@@ -116,6 +123,36 @@ export interface AppOptions {
    * scoped to the containing directory (allow once / session / deny); ignored in read-only mode.
    */
   approveExternalDirectory?: ExternalDirectoryHandler;
+  /** Host hooks of the goal runtime (`/goal`). */
+  goals?: {
+    /** The goal of a session changed or was removed (`undefined`): UIs refresh. */
+    onChange?: (
+      sessionId: string,
+      goal: import("./goal/machine.ts").GoalRecord | undefined,
+    ) => void;
+    /** A breaker observation (counts only). */
+    onLog?: (sessionId: string, log: import("./goal/machine.ts").GoalLog) => void;
+    /** Pause goals whose driving process is gone at startup (default true; tests turn it off). */
+    recover?: boolean;
+  };
+  /** Host hooks of the background-task runtime (`bg_run`). */
+  tasks?: {
+    /**
+     * Starts a run that tells the owner agent about finished tasks. Absent in headless hosts:
+     * no wake-up is ever sent (the tools say so).
+     */
+    wake?: TaskWake;
+    /** A task appeared or changed state (the server turns it into a `tasks_changed` frame). */
+    onChange?: (task: import("@alisio/sdk").BackgroundTaskInfo, rootSession: string) => void;
+    /** Notification timing (tests). */
+    timing?: Partial<NotifierTiming>;
+    /** Delay before the first retention sweep (default 30 s; tests use a short one). */
+    sweepDelayMs?: number;
+    /** Live tasks allowed across this process (default 16). */
+    maxPerProcess?: number;
+    /** SIGTERM → SIGKILL grace of a stop (default 3 s; tests use a short one). */
+    killGraceMs?: number;
+  };
 }
 export interface BuiltinContext {
   workspace: string;
@@ -498,6 +535,49 @@ export async function createApplication(options: AppOptions = {}) {
         ? { initialDelayMs: options.analysisSweepDelayMs }
         : {}),
     });
+    // Background tasks: a service over the shared database (state change = compare-and-set), logs
+    // under `<state>/tasks/`. Tasks of a dead owner process (a previous run) become `lost` now.
+    const tasks = new BackgroundTasks({
+      db: store.db,
+      stateRoot,
+      rootOf: (id) => store.rootOf(id),
+      limits: () => config.tasks,
+      readOnly: !!options.readOnly,
+      ...(options.tasks?.wake ? { wake: options.tasks.wake } : {}),
+      ...(options.tasks?.onChange ? { onChange: options.tasks.onChange } : {}),
+      ...(options.tasks?.timing ? { timing: options.tasks.timing } : {}),
+      ...(options.tasks?.maxPerProcess ? { maxPerProcess: options.tasks.maxPerProcess } : {}),
+      ...(options.tasks?.killGraceMs ? { killGraceMs: options.tasks.killGraceMs } : {}),
+      mirror: (root) => subagentTasks(plugins.panels, root),
+      onError: (error) =>
+        process.stderr.write(
+          `Background task error: ${error instanceof Error ? error.message : String(error)}\n`,
+        ),
+    });
+    tasks.recover();
+    const taskJanitor = new TaskJanitor({
+      store: tasks.store,
+      stateRoot,
+      retentionDays: () => config.tasks.retentionDays,
+      ...(options.tasks?.sweepDelayMs !== undefined
+        ? { initialDelayMs: options.tasks.sweepDelayMs }
+        : {}),
+    });
+    if (config.tasks.enabled) {
+      const { registerBackgroundTools } = await import("./tools/background.ts");
+      registerBackgroundTools(registry, { tasks, rootOf: (id) => store.rootOf(id) });
+    }
+    // Session goals (`/goal`): one service over the shared database. A goal left `active` by a
+    // process that is gone pauses with reason `restart` now (never auto-resumed). The two goal
+    // tools are opt-in: a run only sees them while its session has an active goal.
+    const goals = new GoalService({
+      store: new GoalStore(store.db),
+      settings: () => config.goal,
+      ...(options.goals?.onChange ? { onChange: options.goals.onChange } : {}),
+      ...(options.goals?.onLog ? { onLog: options.goals.onLog } : {}),
+    });
+    if (options.goals?.recover !== false) goals.recover();
+    registerGoalTools(registry, { goals });
     // R4: nothing is registered with analysis disabled or under --read-only. Startup only looks
     // for candidate interpreters with `stat`; no process is launched until the first call.
     const analysisEnabled = config.analysis.enabled && !options.readOnly;
@@ -990,6 +1070,8 @@ export async function createApplication(options: AppOptions = {}) {
     }
     // Retention runs in the background (unreferenced timer); never for in-memory test databases.
     if (analysisEnabled && options.db !== ":memory:") janitor.start();
+    // Retention is maintenance that deletes files: never under --read-only, never for `:memory:`.
+    if (options.db !== ":memory:" && !options.readOnly) taskJanitor.start();
     return {
       workspace,
       pathAccess,
@@ -1003,6 +1085,10 @@ export async function createApplication(options: AppOptions = {}) {
       artifacts,
       /** Persisted capability grants (`analysis.run`) and their audit rows. */
       capabilityGrants,
+      /** Background tasks (`bg_*` tools, `/tasks` panels): admission, state, output, stop. */
+      tasks,
+      /** Session goals (`/goal`): state, user actions, the continuation controller. */
+      goals,
       /** Python discovery and job folders of `python_run`; `enabled` is false under --read-only. */
       analysis: {
         enabled: analysisEnabled,
@@ -1276,6 +1362,35 @@ export async function createApplication(options: AppOptions = {}) {
             };
             break;
           }
+          case "goal.enabled":
+          case "goal.maxTurns":
+          case "goal.maxMinutes":
+          case "goal.repeatedReplyLimit":
+          case "goal.noToolTurnsLimit":
+          case "goal.blockedRepeats": {
+            // Read live: the next continuation (or the next `/goal`) uses the new value. The caps
+            // of a goal already running were snapshotted when it was created.
+            const leaf = key.slice("goal.".length);
+            config.goal = {
+              ...config.goal,
+              [leaf]: leaf === "enabled" ? value === true : Number(value),
+            };
+            break;
+          }
+          case "tasks.enabled":
+            // Tools are registered when the application starts: the change applies to the next
+            // application (a restart; the web recycles the workspace application).
+            config.tasks = { ...config.tasks, enabled: value === true };
+            break;
+          case "tasks.maxPerSession":
+          case "tasks.maxRunMs":
+          case "tasks.maxOutputBytes":
+          case "tasks.retentionDays": {
+            // Read live: the next task (or the next sweep) uses the new value.
+            const leaf = key.slice("tasks.".length);
+            config.tasks = { ...config.tasks, [leaf]: Number(value) };
+            break;
+          }
           case "websearch.provider":
             // Mutated in place (same object identity) so the tool chain's per-call
             // `websearchCtx.config` sees the new provider on the very next search call.
@@ -1448,8 +1563,10 @@ export async function createApplication(options: AppOptions = {}) {
           Promise.race([work.catch(() => {}), delay(TEARDOWN_STAGE_TIMEOUT_MS)]);
         try {
           janitor.stop();
+          taskJanitor.stop();
           datasets?.close();
-          await capped(Promise.allSettled([herdr.close(), mcp.close()]));
+          // Tasks first in the same stage: they end with Alisio (process groups killed).
+          await capped(Promise.allSettled([herdr.close(), mcp.close(), tasks.close()]));
         } finally {
           try {
             await capped(

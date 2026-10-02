@@ -15,6 +15,7 @@ import {
   cycleAgent,
   detail,
   focusComposer,
+  goalInfo,
   history,
   loadDraft,
   models,
@@ -38,7 +39,7 @@ import {
   readyRefs,
   updateAttachment,
 } from "../../store/attachments.ts";
-import { historyStep, matchCommands } from "../../store/composer.ts";
+import { historyStep, paletteRows } from "../../store/composer.ts";
 import { datasetNotices } from "../../store/datasets.ts";
 import { activeAgentId, needsFullAccessConfirm, shiftTabCycles } from "../../store/modes.ts";
 import { datasetShape } from "../artifacts/DatasetChips.tsx";
@@ -271,7 +272,8 @@ export function Composer() {
   const disabled = !id || locked || child;
   const running = busy.value;
   const query = /^\/(\S*)$/.exec(text)?.[1];
-  const matches = query !== undefined ? matchCommands(commands.value, query).slice(0, 12) : [];
+  const matches =
+    query !== undefined ? paletteRows(commands.value, query, goalInfo.value).slice(0, 12) : [];
   const paletteOpen = query !== undefined && !dismissed && !disabled;
   const index = Math.min(active, Math.max(0, matches.length - 1));
 

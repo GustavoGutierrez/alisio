@@ -18,7 +18,7 @@ export type Application = Awaited<ReturnType<typeof createApplication>>;
 /** `AppOptions` minus what the server owns per workspace (cwd, events, approvals). */
 export type ServerAppOptions = Omit<
   AppOptions,
-  "cwd" | "onEvent" | "approve" | "approveExternalDirectory"
+  "cwd" | "onEvent" | "approve" | "approveExternalDirectory" | "tasks" | "goals"
 >;
 
 /** An open workspace: one `Application` bound to one canonical path. */
@@ -44,11 +44,11 @@ export interface WorkspaceHostOptions {
   wire?: (
     id: string,
     path: string,
-  ) => Pick<AppOptions, "onEvent" | "approve" | "approveExternalDirectory">;
+  ) => Pick<AppOptions, "onEvent" | "approve" | "approveExternalDirectory" | "tasks" | "goals">;
   /** Called once an app is created (e.g. to bind interactive UI) and before it is closed. */
   onOpen?: (workspace: OpenWorkspace) => void;
   onClose?: (workspace: OpenWorkspace) => void;
-  /** A workspace with runs, subscribers or pending approvals is never evicted. */
+  /** A workspace with runs, subscribers, pending approvals or live background tasks is never evicted. */
   busy?: (id: string) => boolean;
   /** Injectable for tests. */
   create?: typeof createApplication;

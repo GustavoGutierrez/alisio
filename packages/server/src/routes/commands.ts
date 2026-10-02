@@ -4,17 +4,21 @@ import {
   describePermissionStatus,
   FULL_ACCESS_WARNING,
   formatChangelogMarkdown,
+  formatGoalStatus,
   formatReloadReport,
+  GOAL_HELP,
   loadChangelog,
   modeToPreset,
   PERMISSION_MODE_TABLE,
   PERMISSION_USAGE,
+  parseGoalCommand,
   parsePermissionCommand,
   presetToMode,
   selectEntries,
 } from "@alisio/core";
 import type { CommandDescriptor, CommandOutcome, ReloadReport } from "@alisio/sdk";
 import { activateSessionAgent } from "../host/agents.ts";
+import type { GoalDriver } from "../host/goal.ts";
 import { presetInfo } from "../host/presets.ts";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { SessionService } from "../host/sessions.ts";
@@ -23,6 +27,7 @@ import { readJson } from "../http/body.ts";
 import { HttpError } from "../http/errors.ts";
 import type { Router } from "../http/router.ts";
 import { is, validate } from "../schemas.ts";
+import { goalError } from "./goal.ts";
 import { RecentRequests } from "./prompts.ts";
 
 /** Commands that change the session's own run state: refused while it runs or compacts. */
@@ -71,6 +76,8 @@ export function registerCommandRoutes(
     reload?: (workspaceId: string) => Promise<ReloadReport>;
     /** The running Alisio version (the CLI's), for `/changelog`. */
     version?: string;
+    /** `/goal`: the driver that makes a goal continue and reports what it waits for. */
+    goals?: Pick<GoalDriver, "info" | "pump" | "refresh">;
   },
 ): void {
   const { sessions, scheduler } = ctx;
@@ -93,12 +100,14 @@ export function registerCommandRoutes(
 
   router.post("/api/sessions/:sid/commands", async ({ req, params }) => {
     const session = sessions.get(params.sid ?? "");
-    const input = validate<{ requestId: string; name: string; args?: string }>(
+    const input = validate<{ requestId: string; name: string; args?: string; confirm?: boolean }>(
       await readJson(req),
       {
         requestId: { check: is.requestId(), required: true },
         name: { check: is.nonEmpty(200), required: true },
         args: { check: is.string(100_000) },
+        // `/goal <objective>` over an existing goal needs the user's confirmation.
+        confirm: { check: is.boolean() },
       },
     );
     if (recent.has(session.id, input.requestId))
@@ -144,6 +153,73 @@ export function registerCommandRoutes(
      * get the status and the saved permissions as text. `ask|auto|full` sets the session preset
      * (the same change as the composer menu), within the server's capability ceiling.
      */
+    /**
+     * `/goal`: the same grammar as the TUI (`parseGoalCommand`). Web clients drive the goal bar
+     * with the goal routes and send the typed command here; `effects: ["goal_edit"]` tells a
+     * client to open its edit field (`/goal edit` without text).
+     */
+    function goalCommand(): CommandOutcome {
+      const parsed = parseGoalCommand(args);
+      const service = opened.app.goals;
+      const done = (output: string, extra: Partial<CommandOutcome> = {}): CommandOutcome => {
+        ctx.goals?.refresh(session.id);
+        setImmediate(() => ctx.goals?.pump(session.id));
+        return { output, tone: "notice", effects: ["goal"], ...extra };
+      };
+      const check = (outcome: ReturnType<typeof service.pause>) => {
+        if (!outcome.ok) throw goalError(outcome.code, outcome.message);
+        return outcome.goal;
+      };
+      switch (parsed.type) {
+        case "error":
+          throw new Error(parsed.message);
+        case "help":
+          return { output: GOAL_HELP };
+        case "show": {
+          const info = ctx.goals?.info(session.id);
+          return info
+            ? { output: formatGoalStatus(info), effects: ["goal"] }
+            : {
+                output: "No goal in this session. Start one with /goal <objective>.",
+                tone: "notice",
+              };
+        }
+        case "pause":
+          check(service.pause(session.id));
+          return done("Goal paused: it will not continue until you resume it.");
+        case "resume":
+          check(service.resume(session.id));
+          return done("Goal resumed.");
+        case "clear":
+          check(service.clear(session.id));
+          return done("Goal cleared.");
+        case "edit":
+          if (parsed.objective === undefined) {
+            const current = service.get(session.id);
+            if (!current) throw goalError("not_found", "This session has no goal.");
+            return { output: current.objective, tone: "notice", effects: ["goal_edit"] };
+          }
+          check(service.edit(session.id, parsed.objective));
+          return done("Goal objective updated.");
+        case "budget":
+          check(service.setBudget(session.id, parsed.tokens));
+          return done(
+            parsed.tokens === null ? "Goal token budget removed." : "Goal token budget set.",
+          );
+        case "create": {
+          const replace = !!input.confirm;
+          check(
+            service.create(session.id, {
+              objective: parsed.objective,
+              ...(parsed.tokenBudget ? { tokenBudget: parsed.tokenBudget } : {}),
+              ...(replace ? { replace: true } : {}),
+            }),
+          );
+          return done("Goal started.");
+        }
+      }
+    }
+
     function permission(): CommandOutcome {
       const parsed = parsePermissionCommand(args);
       if (parsed.type === "invalid") throw new Error(PERMISSION_USAGE);
@@ -219,6 +295,7 @@ export function registerCommandRoutes(
       }
       if (descriptor.name === "help") return { output: helpText(catalog.list("web")) };
       if (descriptor.name === "permission") return permission();
+      if (descriptor.name === "goal") return goalCommand();
       if (descriptor.name === "reload") {
         if (!ctx.reload) throw new Error("/reload is unavailable here");
         return { output: formatReloadReport(await ctx.reload(opened.id)), effects: ["catalog"] };

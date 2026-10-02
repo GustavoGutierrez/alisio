@@ -341,6 +341,59 @@ const configObjectSchema = z
           maxInteractiveRows: 1_000_000,
         },
       })),
+    /**
+     * Background tasks (`bg_run`, `bg_list`, `bg_output`, `bg_stop`). They are ordinary child
+     * processes of Alisio (not detached, not sandboxed): they end when Alisio ends. `enabled:
+     * false` registers none of the tools (applies from the next start). `retentionDays` is
+     * global-only: one sweep covers every workspace, so a project layer cannot shorten it.
+     */
+    tasks: z
+      .object({
+        enabled: z.boolean().default(true),
+        /** Live (queued, running or stopping) tasks per root session. */
+        maxPerSession: z.number().int().min(1).max(32).default(4),
+        /** Watchdog: a task still running after this long is stopped and fails with `timeout`. */
+        maxRunMs: z.number().int().min(1000).max(86_400_000).default(3_600_000),
+        /** Size limit of one task log (the head is kept, a short tail is added when it ends). */
+        maxOutputBytes: z.number().int().min(65_536).max(104_857_600).default(2_097_152),
+        /** Finished task rows and their logs are deleted after this many days (0 keeps them). */
+        retentionDays: z.number().int().min(0).max(3650).default(7),
+      })
+      .strict()
+      .default(() => ({
+        enabled: true,
+        maxPerSession: 4,
+        maxRunMs: 3_600_000,
+        maxOutputBytes: 2_097_152,
+        retentionDays: 7,
+      })),
+    /**
+     * `/goal`: a session objective the runtime keeps working on, with hard caps. The token budget
+     * is NOT a setting (none unless the user gives one with `budget=`); without it only the turn
+     * and time caps stop a goal. `maxTurns` counts runs (a goal turn is one run); `maxMinutes` is
+     * the time spent inside runs. The breakers pause a goal that makes no progress.
+     */
+    goal: z
+      .object({
+        enabled: z.boolean().default(true),
+        maxTurns: z.number().int().min(1).max(1000).default(50),
+        maxMinutes: z.number().int().min(1).max(1440).default(120),
+        /** Pause after this many consecutive identical replies (observed, nudged, then paused). */
+        repeatedReplyLimit: z.number().int().min(2).max(20).default(3),
+        /** Pause after this many consecutive turns without a tool call. */
+        noToolTurnsLimit: z.number().int().min(2).max(20).default(3),
+        /** Consecutive turns in which the model must report the same blocker before it stops. */
+        blockedRepeats: z.number().int().min(1).max(10).default(2),
+      })
+      .strict()
+      .default(() => ({
+        enabled: true,
+        maxTurns: 50,
+        maxMinutes: 120,
+        repeatedReplyLimit: 3,
+        noToolTurnsLimit: 3,
+        blockedRepeats: 2,
+      })),
     tui: z
       .object({
         /** Horizontal padding (columns) around the editor input box. Editor-only. */
@@ -539,9 +592,14 @@ export async function loadConfigWithProvenance(
       object.analysis && typeof object.analysis === "object" && !Array.isArray(object.analysis)
         ? (object.analysis as Record<string, unknown>)
         : {};
-    const ignored = GLOBAL_ONLY_ANALYSIS.filter((key) => key in analysisRaw).map(
-      (key) => `analysis.${key}`,
-    );
+    const tasksRaw =
+      object.tasks && typeof object.tasks === "object" && !Array.isArray(object.tasks)
+        ? (object.tasks as Record<string, unknown>)
+        : {};
+    const ignored = [
+      ...GLOBAL_ONLY_ANALYSIS.filter((key) => key in analysisRaw).map((key) => `analysis.${key}`),
+      ...("retentionDays" in tasksRaw ? ["tasks.retentionDays"] : []),
+    ];
     return { config, keys: new Set(Object.keys(object)), sources, ignored, file };
   };
   const global = await parseLayer(globalFile, "global");
@@ -608,6 +666,14 @@ export async function loadConfigWithProvenance(
           runtime: global.config.analysis.runtime,
           oci: global.config.analysis.oci,
           retention: global.config.analysis.retention,
+        };
+        continue;
+      }
+      if (key === "tasks") {
+        // `retentionDays` is global-only (one sweep deletes the data of every workspace).
+        overlaid.tasks = {
+          ...selected.config.tasks,
+          retentionDays: global.config.tasks.retentionDays,
         };
         continue;
       }
@@ -774,6 +840,8 @@ const SETTABLE_SECTIONS = {
   websearch: configObjectSchema.shape.websearch.removeDefault(),
   agents: configObjectSchema.shape.agents.removeDefault(),
   analysis: configObjectSchema.shape.analysis.removeDefault(),
+  tasks: configObjectSchema.shape.tasks.removeDefault(),
+  goal: configObjectSchema.shape.goal.removeDefault(),
 } as const;
 const ANALYSIS_LIMITS = SETTABLE_SECTIONS.analysis.shape.limits.removeDefault();
 const ANALYSIS_RETENTION = SETTABLE_SECTIONS.analysis.shape.retention.removeDefault();
@@ -803,6 +871,17 @@ const SETTABLE_KEYS = {
   "analysis.retention.jobsDays": ANALYSIS_RETENTION.shape.jobsDays,
   "analysis.retention.intermediateDays": ANALYSIS_RETENTION.shape.intermediateDays,
   "analysis.retention.artifactsDays": ANALYSIS_RETENTION.shape.artifactsDays,
+  "tasks.enabled": SETTABLE_SECTIONS.tasks.shape.enabled,
+  "tasks.maxPerSession": SETTABLE_SECTIONS.tasks.shape.maxPerSession,
+  "tasks.maxRunMs": SETTABLE_SECTIONS.tasks.shape.maxRunMs,
+  "tasks.maxOutputBytes": SETTABLE_SECTIONS.tasks.shape.maxOutputBytes,
+  "tasks.retentionDays": SETTABLE_SECTIONS.tasks.shape.retentionDays,
+  "goal.enabled": SETTABLE_SECTIONS.goal.shape.enabled,
+  "goal.maxTurns": SETTABLE_SECTIONS.goal.shape.maxTurns,
+  "goal.maxMinutes": SETTABLE_SECTIONS.goal.shape.maxMinutes,
+  "goal.repeatedReplyLimit": SETTABLE_SECTIONS.goal.shape.repeatedReplyLimit,
+  "goal.noToolTurnsLimit": SETTABLE_SECTIONS.goal.shape.noToolTurnsLimit,
+  "goal.blockedRepeats": SETTABLE_SECTIONS.goal.shape.blockedRepeats,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

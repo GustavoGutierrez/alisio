@@ -993,6 +993,119 @@ export interface PlanReview {
   /** The published `plan.md` artifact (absent when publishing failed). */
   artifact?: ArtifactRef;
 }
+/** Lifecycle of a background task (`bg_run`); a terminal state is never left. */
+export type BackgroundTaskStatus =
+  | "queued"
+  | "running"
+  | "stopping"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "lost";
+/** `shell` is a `bg_run` command; `subagent` is a read-only mirror of a subagent task. */
+export type BackgroundTaskKind = "shell" | "subagent";
+/** Who aborted a task: the user (UI), the model (`bg_stop`), the watchdog or the shutdown. */
+export type BackgroundTaskAbortOrigin = "user" | "model" | "timeout" | "shutdown";
+/** A background task as shown by tools, routes and UIs (no secrets, no log path). */
+export interface BackgroundTaskInfo {
+  id: string;
+  kind: BackgroundTaskKind;
+  label: string;
+  status: BackgroundTaskStatus;
+  /** Shell tasks: the command line and the directory it ran in. */
+  command?: string;
+  cwd?: string;
+  exitCode?: number;
+  signal?: string;
+  /** `timeout` (watchdog) or `spawn_failed`. */
+  errorCode?: string;
+  abortOrigin?: BackgroundTaskAbortOrigin;
+  /** Session that started it (a child session for delegated work). */
+  sessionId: string;
+  /** Subagent mirrors: the parent task or session. */
+  parentId?: string;
+  /** Operating-system process id (shell tasks, while known; useful to find a `lost` task). */
+  pid?: number;
+  /** Bytes of output stored so far. */
+  bytes: number;
+  /** The stored log was cut at its size limit. */
+  truncated?: boolean;
+  timeoutMs?: number;
+  createdAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  /** The owner agent has been told about the end (or read the output after it). */
+  delivered?: boolean;
+}
+/** One incremental read of a task log (`bg_output`, `GET …/tasks/:tid/output`). */
+export interface BackgroundTaskOutput {
+  text: string;
+  /** Pass it back as `offset` to continue; equals the input offset when nothing new arrived. */
+  nextOffset: number;
+  /** The task is over and everything has been read. */
+  eof: boolean;
+  status: BackgroundTaskStatus;
+  exitCode?: number;
+  truncated?: boolean;
+}
+/** The state of a session goal (`/goal`); `complete` and `budget_limited` are final unless re-armed. */
+export type GoalStatus = "active" | "paused" | "blocked" | "budget_limited" | "complete";
+/** Why a goal is in its state: a closed set of codes (the UIs translate them). */
+export type GoalReason =
+  | "created"
+  | "resumed"
+  | "edited"
+  | "user_paused"
+  | "user_interrupt"
+  | "model_complete"
+  | "model_blocked"
+  | "policy_denied"
+  | "run_error"
+  | "token_budget"
+  | "max_turns"
+  | "max_wall"
+  | "no_progress"
+  | "restart";
+/** What an active goal is waiting for before its next continuation (never stored: computed). */
+export type GoalWaiting = "approval" | "question" | "user_input" | "plan_mode" | "background_tasks";
+/** What the user can do to a goal (the actions the UIs offer per state). */
+export type GoalAction = "pause" | "resume" | "edit" | "clear" | "budget";
+/** One piece of evidence the model gives with `update_goal` (`denied` = a permission denial). */
+export interface GoalEvidence {
+  kind: "file" | "test" | "log" | "command" | "denied" | "other";
+  detail: string;
+}
+/** A session goal as shown by routes and UIs. */
+export interface GoalInfo {
+  sessionId: string;
+  goalId: string;
+  objective: string;
+  status: GoalStatus;
+  reason?: GoalReason;
+  /** Short context of the reason (the error text of a failed run, which breaker paused it). */
+  detail?: string;
+  /** Compare-and-set counter: changes with every status, objective or budget change. */
+  epoch: number;
+  /** Tokens (input + output of every request) the goal may spend; absent = no token budget. */
+  tokenBudget?: number;
+  tokensUsed: number;
+  /** Runs spent (a goal turn is one run: the kickoff, a continuation or a prompt of the user). */
+  turnsUsed: number;
+  maxTurns: number;
+  /** Time spent in runs, in milliseconds, and its cap. */
+  activeMs: number;
+  maxWallMs: number;
+  /** The model's last `update_goal` report. */
+  summary?: string;
+  evidence?: GoalEvidence[];
+  /** What the next continuation waits for (set by the host: it knows the live state). */
+  waiting?: GoalWaiting;
+  /** The user actions allowed in this state. */
+  actions: GoalAction[];
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
 export interface Question {
   id: string;
   /** Short chip label (e.g. shown as a breadcrumb/heading), distinct from the full `question` text. */
@@ -1312,6 +1425,8 @@ export type ServerFrame =
       };
       inflight?: InflightState;
       pending: { approvals: PendingApproval[]; interactions: PendingInteraction[] };
+      /** The session's goal, when it has one (so a reload shows the goal bar at once). */
+      goal?: GoalInfo;
     }
   /** Durable event; its SSE `id` is `event.eventId`. */
   | { t: "event"; sessionId: string; event: RunEvent }
@@ -1360,7 +1475,11 @@ export type ServerFrame =
   /** A dataset uploaded from the web finished ingesting (root session). */
   | { t: "dataset_ready"; sessionId: string; dataset: DatasetRef }
   /** A dataset upload could not be ingested. */
-  | { t: "dataset_failed"; sessionId: string; name: string; error: string };
+  | { t: "dataset_failed"; sessionId: string; name: string; error: string }
+  /** A background task of this root session appeared or changed state (additive; `bg_run`). */
+  | { t: "tasks_changed"; sessionId: string; task: BackgroundTaskInfo }
+  /** The goal of this root session changed (`null` = cleared). Additive; `/goal`. */
+  | { t: "goal_changed"; sessionId: string; goal: GoalInfo | null };
 export type ApiErrorCode =
   | "unauthorized"
   | "forbidden_origin"
@@ -1415,6 +1534,14 @@ export type ApiErrorCode =
   | "view_timeout"
   /** A plugin data view answered more than the host response cap (502). */
   | "view_too_large"
+  /** The background task does not exist or belongs to another session (404). */
+  | "task_not_found"
+  /** The session has no goal (404). */
+  | "goal_not_found"
+  /** The goal changed since the client read it, or the action is not allowed in its state (409). */
+  | "goal_conflict"
+  /** Goals are turned off (`goal.enabled`) (409). */
+  | "goal_disabled"
   | "internal";
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {

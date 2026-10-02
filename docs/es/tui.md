@@ -113,6 +113,8 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/artifacts [filter]` | Recorre los artefactos de la sesión (los más recientes primero, con filtro) y ofrece Vista previa aquí, Abrir con la aplicación predeterminada, Copiar ruta, Mostrar en la carpeta, Copiar al workspace…, Mostrar fuentes del análisis, Detalles o Eliminar; consulta [Artefactos](#artifacts) |
 | `/permission [ask\|auto\|full\|status]` (`/permissions`) | Un único menú con **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** y **Manage saved permissions…** (revisar y revocar los permisos guardados de la sesión, por ejemplo análisis en Python permitido en esta sesión). Con un argumento fija el modo o imprime el estado directamente; véase [Modos de permisos](#permission-modes) |
 | `/reload` | Recarga la configuración, los agentes, las skills, las plantillas de prompt y los servidores MCP entre turnos; una configuración rota deja la sesión intacta; véase [Recarga y novedades](#reload-and-changelog) |
+| `/tasks` | Panel con las [tareas en segundo plano](/es/tools#background-tasks) de esta sesión (`bg_run`) y una vista de solo lectura de sus subagentes: una lista, la salida en vivo de una y una tecla para detener; véase [Tareas en segundo plano](#tasks) |
+| `/goal [objetivo \| pause \| resume \| edit \| clear \| help \| budget=<n>]` | Inicia o gestiona el objetivo de la sesión: con un objetivo abre un menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda); con un texto inicia uno en el que el agente sigue trabajando hasta que esté terminado, bloqueado, en pausa o sin presupuesto; véase [Objetivos de sesión](#goals) |
 | `/changelog [version]` | Panel desplazable con lo que cambió en las versiones recientes (sin conexión); véase [Recarga y novedades](#reload-and-changelog) |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
@@ -322,7 +324,7 @@ tabla gobierna los presets de la web, así que un modo se comporta igual en amba
 
 `/reload` vuelve a leer las capas de configuración, los archivos de agentes, las skills, las
 plantillas de prompt y los servidores MCP sin salir de la sesión. Solo se ejecuta **entre turnos**:
-se rechaza mientras hay un turno, un subagente o una aprobación en espera. Todo se valida **antes**
+se rechaza mientras hay un turno, un subagente, una aprobación o una [tarea en segundo plano](#tasks) en espera. Todo se valida **antes**
 de aplicar nada: primero se analiza la configuración y se construye una aplicación nueva junto a la
 actual, así que un archivo roto deja su sesión exactamente como estaba (el error explica por qué).
 Si todo va bien, el informe lista por área qué cambió (recuentos y nombres añadidos, eliminados o
@@ -341,6 +343,135 @@ paquete. Tras una actualización Alisio imprime **una** línea (*Alisio updated 
 /changelog*); la última versión vista se guarda en `tui-state.json` junto a la base de datos de
 sesiones, así que la primera ejecución no avisa. Las entradas están en inglés en todos los idiomas.
 `alisio run` no tiene `/changelog`.
+
+## Tareas en segundo plano {#tasks}
+
+Cuando el agente inicia un comando con [`bg_run`](/es/tools#background-tasks) sigue trabajando y el
+comando corre en segundo plano. `/tasks` abre un panel con las tareas de la sesión —comandos de shell
+más una vista de **solo lectura** del estado de sus [subagentes](/es/subagents) (su propio [panel de
+agentes](#agent-panel) los gestiona)— y funciona durante un turno.
+
+| Dónde | Tecla | Acción |
+| --- | --- | --- |
+| Lista | ↑ / ↓, Home / End | Mover |
+| Lista | Enter | Abrir la tarea |
+| Lista, detalle | `s` | Detener la tarea (pregunta `y`/`n`; solo una tarea de shell en ejecución) |
+| Lista, detalle | `q` | Cerrar el panel |
+| Lista | Esc | Cerrar el panel |
+| Detalle | ↑ / ↓, PgUp / PgDn, Home | Desplazar la salida (esto deja de seguir el final) |
+| Detalle | End | Volver a seguir el final de la salida (lo hace por defecto mientras la tarea corre) |
+| Detalle | Esc | Volver a la lista |
+
+La vista de detalle muestra el comando, el directorio, el estado (`running`, `done`,
+`failed · exit 2`, `failed · time limit`, `stopped · by user`, `lost`…) y la salida, leída de forma
+incremental una vez por segundo mientras la tarea corre (se quitan los caracteres de control y los
+colores para que la salida no mueva el cursor). Su parada termina la tarea como `cancelled`, nunca
+como `failed`.
+
+Cuando una tarea termina por sí sola, un único mensaje coalescido despierta al agente (una ejecución
+normal de la sesión muestra *Background task finished: …*); espera mientras corre un turno, hay una
+pregunta o aprobación en pantalla o está abierta otra sesión. Las tareas **no están aisladas** y
+**terminan cuando Alisio termina**; si murió de golpe aparecen como `lost` la próxima vez. `/reload` se
+rechaza mientras corren tareas (cerraría la aplicación antigua y las mataría): deténgalas o espere.
+`alisio run` no espera ninguna tarea: detiene las que siguen corriendo y lo dice.
+
+## Objetivos de sesión {#goals}
+
+`/goal <objetivo>` le da al agente un objetivo para toda la sesión y lo deja seguir trabajando en él,
+turno tras turno, hasta que esté terminado, bloqueado, en pausa o sin presupuesto. Escribes el objetivo
+una vez: Alisio envía el contrato completo la primera vez y un recordatorio corto y estable en cada
+turno posterior, y el **runtime** (no el prompt) hace cumplir los límites. El agente decide cuándo
+terminó y lo dice con [`update_goal`](/es/tools#goal-tools), con evidencia; solo **tú** pausas,
+reanudas, editas o borras un objetivo o cambias su presupuesto. En la v1 no hay un modelo evaluador
+aparte.
+
+> **Costo.** Un objetivo sigue gastando tokens por sí solo. Cuenta cada petición de cada turno, y cada
+> turno vuelve a enviar todo el contexto. Un objetivo **sin presupuesto de tokens solo se detiene por
+> sus límites de turnos y de tiempo** (`goal.maxTurns`, 50, y `goal.maxMinutes`, 120): ponle
+> presupuesto (`budget=50k`) a los objetivos largos o abiertos y vigila la barra.
+
+| Comando | Qué hace |
+| --- | --- |
+| `/goal` | Con un objetivo: abre el menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda). Sin uno: explica cómo iniciarlo |
+| `/goal <objetivo>` | Crea el objetivo y empieza a trabajar. Un objetivo por sesión: si ya hay uno, pregunta antes de reemplazarlo |
+| `/goal <objetivo> budget=50k` | Igual, con un presupuesto de tokens (`50k`, `1.5M`, `250000`) |
+| `/goal pause` | Deja de continuar automáticamente; el turno en curso termina |
+| `/goal resume` | Continúa un objetivo en pausa o bloqueado |
+| `/goal edit [<objetivo>]` | Cambia el objetivo (sin texto deja el actual en el editor); el contrato se envía de nuevo en el siguiente turno |
+| `/goal clear` | Elimina el objetivo |
+| `/goal budget=50k` | Fija el presupuesto de tokens del objetivo actual; `budget=clear` (también `none`, `off`, `0`) lo quita |
+| `/goal help` | La sintaxis con ejemplos de presupuesto |
+
+El objetivo puede tener hasta 4 000 caracteres; `budget=` puede aparecer una sola vez (un duplicado se
+rechaza) y nunca forma parte del objetivo. Las filas del menú **Edit objective…** y **Set token
+budget…** dejan `/goal edit …` o `/goal budget=…` en el editor para que lo termines.
+
+### La barra del objetivo {#goal-bar}
+
+Mientras una sesión tiene un objetivo, una barra de dos líneas queda sobre el editor: el **estado** y
+el objetivo, y luego los **tokens** usados frente al presupuesto, el **turno** `n/máx`, el tiempo
+gastado en ejecuciones, **por qué espera o se detuvo** y las acciones de ese estado (`/goal pause ·
+/goal edit · /goal clear`). Cuando un objetivo se detiene por sí solo también aparece una línea en la
+transcripción.
+
+### Estados {#goal-states}
+
+| Estado | Códigos de motivo | Puedes |
+| --- | --- | --- |
+| **Activo** | `created`, `resumed` | pausar, editar, presupuesto, borrar |
+| **En pausa** | `user_paused`, `user_interrupt` (pulsaste Esc), `max_turns`, `max_wall`, `no_progress` (`repeated_reply` o `no_tool_turns`), `restart` | reanudar, editar, presupuesto, borrar |
+| **Bloqueado** | `model_blocked`, `policy_denied`, `run_error` (se muestra el error) | reanudar, editar, presupuesto, borrar |
+| **Presupuesto agotado** | `token_budget` | subir o quitar el presupuesto (continúa); editar, borrar. No se puede reanudar de otro modo |
+| **Completado** | `model_complete` (con el resumen y la evidencia del agente) | editar, presupuesto, borrar. No se puede reanudar: inicia otro objetivo |
+
+Reanudar tras `max_turns` o `max_wall` concede una asignación más de ese límite. Dos ventanas (o la
+terminal y la web) no pueden pelearse: cada cambio es un compare-and-set, así que se rechaza una acción
+basada en una vista desactualizada.
+
+### Límites {#goal-limits}
+
+- **Presupuesto de tokens (duro).** Se cuenta sobre todas las ejecuciones del objetivo: los tokens de
+  entrada y salida de cada petición, de modo que un contexto largo se vuelve a pagar en cada turno. Cada
+  ejecución arranca con lo que queda como tope propio, y el runner rechaza más llamadas a herramientas
+  cuando se agota; entonces el objetivo pasa a *Presupuesto agotado* y **no se ejecuta nada más** (no
+  hay un turno de cierre). Si el proveedor no informa el uso, se usa el texto de las respuestas como
+  estimación. Subir o quitar el presupuesto reactiva un objetivo que se detuvo por eso; bajarlo a lo ya
+  gastado detiene de inmediato uno activo.
+- **Turnos** (`goal.maxTurns`, 50) y **tiempo** (`goal.maxMinutes`, 120, tiempo dentro de ejecuciones):
+  el objetivo se pausa. El timeout propio de una continuación se reduce a lo que queda del tiempo.
+- **Disyuntores.** Pausa con `no_progress` si se repite la misma respuesta final
+  (`goal.repeatedReplyLimit`, 3) o tras turnos consecutivos sin llamar a una herramienta
+  (`goal.noToolTurnsLimit`, 3). La primera ocurrencia se registra, la segunda añade un aviso a la
+  siguiente continuación y el límite pausa.
+- **Bloqueado.** El agente debe informar del mismo bloqueo, con evidencia, en turnos consecutivos
+  (`goal.blockedRepeats`, 2), salvo una denegación de permiso, que bloquea de inmediato. Un turno que
+  **falla** bloquea el objetivo con el error como motivo, salvo un timeout del proveedor (el runner ya
+  lo reintentó), que solo cuenta como un turno.
+
+### Qué nunca continúa solo {#goal-waits}
+
+Una lista ordenada decide, en este orden: el objetivo no está activo (o los objetivos están
+desactivados); hay un turno en curso o una continuación ya reclamada; tienes texto en el editor (tú
+vas primero); espera un **permiso** (*Waiting for permission*); espera una **pregunta** o una revisión
+de plan (*Waiting for your answer*); el agente activo es el **agente plan** (un objetivo nunca se
+ejecuta en modo plan); hay **tareas en segundo plano** de la sesión en curso (*Waiting for background
+tasks*: continúa cuando termina la última, también si la detuviste tú). Pulsar **Esc** durante un turno
+pausa el objetivo (`user_interrupt`). Son esperas, no estados: el objetivo sigue activo y continúa
+cuando desaparece la causa.
+
+### Seguridad y reinicio {#goal-safety}
+
+Un objetivo nunca amplía los permisos: sus turnos usan la misma política, las mismas aprobaciones y el
+mismo modo de permisos que cualquier otro turno, y nunca se ejecutan en modo plan. El objetivo es
+**tu texto** y entra en el prompt como dato citado, nunca como instrucciones que prevalezcan sobre las
+reglas que lo rodean; la transcripción muestra solo sus primeros 140 caracteres. Cada continuación es
+un mensaje de usuario normal y persistido, iniciado con un id de petición idempotente
+(`goal-<id>-<n>`), de modo que un disparo doble inicia una sola ejecución y los ids de llamadas a
+herramientas y los datos de continuación del proveedor se mantienen coherentes.
+
+Si Alisio se detiene mientras un objetivo está activo (se cierra, se mata), en el siguiente arranque
+vuelve **en pausa** con el motivo `restart`: nunca se reanuda solo, ejecuta `/goal resume`. `alisio
+run` (headless) no tiene `/goal` en la v1.
 
 ## Gestor MCP {#mcp}
 

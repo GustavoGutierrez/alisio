@@ -278,3 +278,18 @@
 .manage:hover {
   text-decoration: underline;
 }
+
+.dockToggle {
+  position: relative;
+}
+
+/* Live background tasks: a dot on the dock toggle. */
+.dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}

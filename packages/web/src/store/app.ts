@@ -10,6 +10,7 @@ import type {
   ChangelogView,
   CommandDescriptor,
   DatasetRef,
+  GoalInfo,
   HealthInfo,
   PermissionPresetId,
   PluginInfo,
@@ -33,7 +34,9 @@ import {
 import { LAST_SEEN_KEY, newsAction } from "./changelog.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
 import { pushDatasetNotice } from "./datasets.ts";
+import { liveTasks, openTasks } from "./dock.ts";
 import { errorText } from "./errors.ts";
+import { goalFromFrame } from "./goal-frame.ts";
 import { nextAgentId } from "./modes.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
 import {
@@ -141,6 +144,11 @@ export function failPlugins(workspace: string): void {
 }
 /** The header's permissions popover: modes, status and saved permissions (`/permission`). */
 export const permissionsOpen = signal(false);
+/**
+ * The goal of the open session (`/goal`): kept by the stream (the snapshot after a reload, then
+ * `goal_changed` frames). Everything that shows or edits it is its own chunk (`store/goal.ts`).
+ */
+export const goalInfo = signal<GoalInfo | null>(null);
 /** Bumped by `capabilities_changed` for the open session (permissions are refetched). */
 export const capabilitiesTick = signal(0);
 /** `/artifacts [filter]` from the composer: the panel opens with its switcher. */
@@ -316,6 +324,12 @@ function onFrames(frames: ServerFrame[]): void {
       if (frame.t === "capabilities_changed" && frame.sessionId === currentId.value)
         capabilitiesTick.value++;
       if (frame.t === "dataset_ready" || frame.t === "dataset_failed") pushDatasetNotice(frame);
+      // The tasks store is its own chunk: it loads when the first task frame arrives.
+      if (frame.t === "tasks_changed")
+        void import("./tasks.ts").then((m) => m.receiveTask(frame.sessionId, frame.task));
+      // The goal of the open session: the snapshot after a (re)connect, then every change.
+      const goal = goalFromFrame(frame, currentId.value);
+      if (goal !== undefined) goalInfo.value = goal;
       if (frame.t === "catalog_changed") {
         scopes.add(frame.scope);
         if (frame.scope === "commands") catalog = true;
@@ -381,13 +395,16 @@ export async function openSession(id: string | undefined): Promise<void> {
     context.value = undefined;
     mobileSidebar.value = false;
     btw.value = undefined;
+    goalInfo.value = null;
   });
   const hash = id ? `#/s/${encodeURIComponent(id)}` : "#/";
   if (location.hash !== hash) history_replace(hash);
   stream?.subscribe(id ? [id] : []);
   if (id) writePref("alisio.lastSession", id);
   void refreshCommands();
+  liveTasks.value = 0;
   if (!id) return;
+  void import("./tasks.ts").then((m) => m.loadTasks(id));
   try {
     const next = await api.session(id);
     if (currentId.value === id) detail.value = next;
@@ -762,6 +779,15 @@ export async function submit(
   }
   if (slash?.name === "changelog") {
     changelogRequest.value = { version: slash.args ?? "", at: Date.now() };
+    return;
+  }
+  if (slash?.name === "tasks") {
+    openTasks();
+    return;
+  }
+  if (slash?.name === "goal" && commands.value.some((c) => c.name === "goal")) {
+    // Its own chunk: asks before replacing a goal and opens the edit field.
+    void import("./goal.ts").then((m) => m.runGoalCommand(id, slash.args ?? ""));
     return;
   }
   if (slash?.name === "artifacts") {

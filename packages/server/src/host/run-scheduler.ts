@@ -24,10 +24,31 @@ export interface RunJob {
   tool?: { name: string; input: Record<string, unknown> };
 }
 
+/** What a finished job reports (the goal controller folds it into the session's goal). */
+export interface RunOutcome {
+  /** The job's abort signal fired (a cancel, or the server shutting down). */
+  cancelled: boolean;
+  /** What `runner.run` resolved with, when it did. */
+  result?: {
+    text: string;
+    status: string;
+    usage: { input: number; output: number };
+    toolCalls?: number;
+  };
+  /** Why it failed, when it did (never set for a cancelled job). */
+  error?: unknown;
+  /** When the job started running (ms), and when it ended. */
+  startedAt: number;
+  endedAt: number;
+}
+
 interface Tracked extends RunJob {
   status: "queued" | "running";
   controller: AbortController;
   done?: Promise<void>;
+  startedAt?: number;
+  result?: RunOutcome["result"];
+  error?: unknown;
 }
 
 export interface RunSchedulerOptions {
@@ -37,11 +58,7 @@ export interface RunSchedulerOptions {
    * Called on every job state change (queued, running, finished). `finished` also says whether
    * the job was cancelled (its abort signal fired), so a follow-up never outlives a cancel.
    */
-  onChange?: (
-    job: RunJob,
-    status: "queued" | "running" | "finished",
-    outcome?: { cancelled: boolean },
-  ) => void;
+  onChange?: (job: RunJob, status: "queued" | "running" | "finished", outcome?: RunOutcome) => void;
 }
 
 /**
@@ -82,6 +99,7 @@ export class RunScheduler {
 
   private start(job: Tracked) {
     job.status = "running";
+    job.startedAt = Date.now();
     this.running++;
     this.options.onChange?.(job, "running");
     const { runner, store } = job.app;
@@ -107,8 +125,11 @@ export class RunScheduler {
       run = Promise.reject(error);
     }
     job.done = run.then(
-      () => undefined,
+      (result) => {
+        if (result && typeof result === "object") job.result = result as RunOutcome["result"];
+      },
       (error: unknown) => {
+        job.error = error;
         // A run that never reached the runner's journal (e.g. the session was claimed) must not
         // stay `queued`; terminal rows are never overwritten.
         store.endRun?.(job.runId, {
@@ -120,7 +141,13 @@ export class RunScheduler {
     void job.done.finally(() => {
       this.running--;
       if (this.jobs.get(job.sessionId) === job) this.jobs.delete(job.sessionId);
-      this.options.onChange?.(job, "finished", { cancelled: job.controller.signal.aborted });
+      this.options.onChange?.(job, "finished", {
+        cancelled: job.controller.signal.aborted,
+        ...(job.result ? { result: job.result } : {}),
+        ...(job.error !== undefined && !job.controller.signal.aborted ? { error: job.error } : {}),
+        startedAt: job.startedAt ?? Date.now(),
+        endedAt: Date.now(),
+      });
       this.pump();
     });
   }
@@ -179,7 +206,11 @@ export class RunScheduler {
       this.queue = this.queue.filter((queued) => queued !== job);
       this.jobs.delete(sessionId);
       job.app.store.endRun?.(job.runId, { status: "cancelled", error: "Cancelled" });
-      this.options.onChange?.(job, "finished");
+      this.options.onChange?.(job, "finished", {
+        cancelled: true,
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      });
     }
     return true;
   }

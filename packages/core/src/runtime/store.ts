@@ -18,17 +18,10 @@ import type {
   StoredEvent,
   ToolCallMeta,
 } from "../core/contracts.ts";
+import { isProcessAlive } from "./process.ts";
 import { openDatabase } from "./sqlite.ts";
 
-/** Whether a process id belongs to a live process (EPERM still means alive). */
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-}
+const alive = isProcessAlive;
 const TERMINAL_RUN = "('completed','turns_exceeded','failed','cancelled','interrupted')";
 export class SQLiteStore implements SessionStore {
   readonly db: SqlDatabase;
@@ -199,6 +192,76 @@ export class SQLiteStore implements SessionStore {
             sheets TEXT NOT NULL,
             created_at INTEGER NOT NULL);
           INSERT OR IGNORE INTO schema_migrations VALUES(6);`);
+      });
+    if (!has(7))
+      this.db.transaction(() => {
+        // v7 (additive): background tasks (`bg_run`, with their owner process, so a restart can
+        // tell a dead owner's tasks from another live process's) and the per-session goal
+        // (`session_goals`, written from the goal phase on).
+        this.db.exec(`CREATE TABLE IF NOT EXISTS background_tasks(
+            id TEXT PRIMARY KEY,
+            session TEXT NOT NULL,
+            root_session TEXT NOT NULL,
+            workspace TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('shell','subagent')),
+            label TEXT NOT NULL,
+            command TEXT, cwd TEXT,
+            status TEXT NOT NULL CHECK(status IN
+              ('queued','running','stopping','succeeded','failed','cancelled','lost')),
+            exit_code INTEGER, signal TEXT,
+            error_code TEXT,
+            abort_origin TEXT CHECK(abort_origin IN ('user','model','timeout','shutdown')),
+            pid INTEGER, owner_pid INTEGER NOT NULL,
+            timeout_ms INTEGER,
+            log_path TEXT NOT NULL,
+            bytes INTEGER NOT NULL DEFAULT 0,
+            truncated INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL, started_at INTEGER, ended_at INTEGER,
+            delivered_at INTEGER);
+          CREATE INDEX IF NOT EXISTS background_tasks_owner
+            ON background_tasks(root_session, created_at);
+          CREATE INDEX IF NOT EXISTS background_tasks_status
+            ON background_tasks(status, owner_pid);
+          CREATE TABLE IF NOT EXISTS session_goals(
+            session TEXT PRIMARY KEY REFERENCES sessions(id),
+            objective TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN
+              ('active','paused','blocked','budget_limited','complete')),
+            reason TEXT, evidence TEXT,
+            epoch INTEGER NOT NULL DEFAULT 1,
+            token_budget INTEGER, tokens_used INTEGER NOT NULL DEFAULT 0,
+            turns_used INTEGER NOT NULL DEFAULT 0,
+            max_turns INTEGER NOT NULL, max_wall_ms INTEGER NOT NULL,
+            active_ms INTEGER NOT NULL DEFAULT 0,
+            no_tool_streak INTEGER NOT NULL DEFAULT 0, repeat_streak INTEGER NOT NULL DEFAULT 0,
+            last_reply_hash TEXT, blocked_streak INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, completed_at INTEGER);
+          INSERT OR IGNORE INTO schema_migrations VALUES(7);`);
+      });
+    if (!has(8))
+      this.db.transaction(() => {
+        // v8 (additive): the goal runtime's own columns (the continuation counter and its
+        // in-flight request id, the last settled run, the contract-sent flag, the driving
+        // process). `session_goals` was created by v7 and had no reader until the goal phase.
+        const columns = new Set(
+          (this.db.prepare("PRAGMA table_info(session_goals)").all() as { name: string }[]).map(
+            (c) => c.name,
+          ),
+        );
+        const add = (name: string, type: string) => {
+          if (!columns.has(name))
+            this.db.exec(`ALTER TABLE session_goals ADD COLUMN ${name} ${type}`);
+        };
+        add("goal_id", "TEXT");
+        add("detail", "TEXT");
+        add("summary", "TEXT");
+        add("blocked_run", "TEXT");
+        add("continuations", "INTEGER NOT NULL DEFAULT 0");
+        add("inflight", "TEXT");
+        add("last_run_id", "TEXT");
+        add("kickoff_sent", "INTEGER NOT NULL DEFAULT 0");
+        add("owner_pid", "INTEGER");
+        this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(8)");
       });
   }
   /**

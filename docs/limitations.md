@@ -52,10 +52,9 @@ under `--read-only`. Shift+Tab needs a terminal that reports it as a separate ke
 it intercepts a navigation key, so the agent selector is the accessible path; cycling never applies
 the model an agent declares (use `/agents`). `/reload` rebuilds the whole application: MCP servers
 and plugins restart, plugin code that was already imported is not reloaded (the report says so),
-launch flags keep their startup values and it is refused during a turn, with running subagents or
-with a pending approval. The changelog is English-only and curated by hand. `alisio run` has neither
-command. The later phases of the same spec (plan review, background tasks, `/goal`) are specified
-and not implemented.
+launch flags keep their startup values and it is refused during a turn, with running subagents, with
+running background tasks or with a pending approval. The changelog is English-only and curated by
+hand. `alisio run` has neither command.
 
 **Web Memory tab and plugin data views.** Views are read-only by contract, not by isolation: the
 host only controls the method, validated parameters, time (5 s) and size (1 MiB), cannot stop a
@@ -79,8 +78,46 @@ review nobody answers counts as Skip for now. Without an interactive UI (`alisio
 under `--read-only` the tool returns `unavailable` and asks the model for the plan as its final reply
 (Alisio does not print it itself). The terminal edits the context on one line and its turn flow is
 verified through the shared pure logic and the panel, not in a real terminal; the web was checked in
-Chromium only. The web initial bundle has about 100 bytes of headroom, so later phases must load
-their strings lazily.
+Chromium only. To make room in the web initial bundle (it had about 100 bytes left) the Spanish
+dictionary is now its own chunk, loaded before the first render when Spanish is the stored language
+or when it is chosen in Settings; English stays in the bundle and is the fallback.
+
+**Background tasks (`bg_run`, modes spec phase 3).** A task is an ordinary child process of
+Alisio, not a sandbox: it runs with your permissions, and a subprocess or a permission mode is not
+isolation. All four tools (`bg_run`, `bg_list`, `bg_output`, `bg_stop`) are `process` effects, so
+`--read-only` and the plan agent deny the set, and in `ask`/`auto` mode each call asks. Tasks are
+**not detached**: they die when Alisio exits (the process group is killed; `taskkill /T /F` on
+Windows, which was not verified on a real Windows machine) and they do not survive a restart. After
+an abrupt death of Alisio (SIGKILL, power loss) no code can run, so the next start marks the
+unfinished tasks `lost` by owner pid (a live Alisio process's tasks are never touched; a reused pid
+could hide a lost task until that process ends) and their processes may still be running. Output goes
+to a log file with offsets; it keeps the first `tasks.maxOutputBytes` bytes and the last 32 KiB, so a
+very long output loses its middle. The finished-task notification is coalesced, rate limited and
+retried while the session is busy, and goes only to root sessions for a task that ended on its own:
+`alisio run` never sends it (tasks end with the process and the CLI says so), a TUI whose open session
+is another one holds it until you are back, and a notification of a task that finished while the
+server was down is not sent. The unified `/tasks` list shows subagents read-only through their panel;
+their own manager, tools and `<task-notification>` are unchanged. The panels were checked in
+Chromium (web) and as pure logic plus a fake terminal (TUI), not in a real terminal, and not on
+Windows or macOS. A workspace with running tasks is not evicted by the web server and a `/reload`
+is refused until they end or are stopped.
+
+**Session goals (`/goal`, modes spec phase 4).** There is **no token budget by default**: a goal
+without `budget=` is stopped only by `goal.maxTurns` and `goal.maxMinutes`. The budget is hard but
+checked per request, so spending can pass it by one request (more where the provider reports no
+`usage` and characters are used as an estimate); there is no closing turn, and it counts the input and
+output of every request, so a long context is paid again each turn. There is **no evaluator model**: the
+agent decides when it is done or blocked, and its evidence is stored and shown but **not verified**. A
+"turn" is one run, not one model step, and the time limit counts time spent inside runs. The breakers
+fingerprint the final reply (a model that varies a sentence avoids the first) and count tool calls
+(`get_goal` and `update_goal` count). A goal that was active when Alisio stopped comes back paused
+(`restart`, decided by the driving process id, so a reused pid could hide an orphan until it ends) and
+never resumes by itself. The terminal does not continue while the editor holds unsent text; the web
+does not see a TUI's live changes to a goal; `alisio run` has no `/goal` in v1. A goal never widens
+permissions and never runs in plan mode, but in `full` mode the agent acts without asking for as long as
+the limits allow: that is not a sandbox, and the objective is quoted as data, which reduces but does not
+remove prompt injection from text you paste. The terminal was verified through pure logic and a fake
+terminal, the web in Chromium; not on a real terminal, other browsers, Windows or macOS.
 
 - **Python analysis (phases 1–4)**: managed Python is not a sandbox (it runs with your
   permissions, can read files, use the network and change the repository). The optional container
