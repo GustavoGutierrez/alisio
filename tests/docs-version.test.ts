@@ -65,6 +65,29 @@ describe("docs version helper", () => {
   });
 });
 
+describe("stable release wording", () => {
+  it("states the 0.x policy in both publishing pages and no page calls the project alpha", () => {
+    expect(readFileSync("docs/publishing.md", "utf8")).toContain("## Stability and versioning");
+    expect(readFileSync("docs/es/publishing.md", "utf8")).toContain("## Estabilidad y versionado");
+    for (const file of ["docs/index.md", "docs/es/index.md", "docs/limitations.md", "SECURITY.md"])
+      expect(readFileSync(file, "utf8"), file).not.toMatch(
+        /\b(is|es) (a|an|una)( functional)? \*{0,2}alpha\b/i,
+      );
+  });
+
+  it("keeps plugin and example SDK ranges on the stable ^0.1.0", () => {
+    for (const file of ["docs/plugins.md", "docs/es/plugins.md"])
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/@alisio\/sdk": "\^0\.1\.0-alpha/);
+    for (const name of ["custom-mascot", "custom-websearch"]) {
+      const manifest = JSON.parse(
+        readFileSync(join("examples", "plugins", name, "package.json"), "utf8"),
+      ) as { peerDependencies: Record<string, string>; devDependencies: Record<string, string> };
+      expect(manifest.peerDependencies["@alisio/sdk"], name).toBe("^0.1.0");
+      expect(manifest.devDependencies["@alisio/sdk"], name).toBe("^0.1.0");
+    }
+  });
+});
+
 describe("no stale hardcoded versions in docs", () => {
   const files = [resolve("README.md"), ...markdownFiles(resolve("docs"))];
 
@@ -97,6 +120,10 @@ describe("no stale hardcoded versions in docs", () => {
     const readme = readFileSync("README.md", "utf8");
     expect(readme).not.toMatch(STALE_STATUS);
     expect(readme).toContain("https://img.shields.io/npm/v/@alisio/alisio-code");
-    expect(readme).toMatch(/Status: Usable, tested and documented, but still alpha/);
+    expect(readme).toMatch(
+      /Status: Usable, tested and documented\. First stable release \(0\.1\.0\)/,
+    );
+    expect(readme).toMatch(/minors? .*break|0\.x semver/is);
+    expect(readme).not.toMatch(/still alpha/i);
   });
 });

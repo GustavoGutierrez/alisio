@@ -3,8 +3,9 @@
  *
  * Usage (from the repository root):
  *   pnpm run publish -- --all
- *   pnpm run publish -- --all --version 0.1.0-alpha.5
- *   pnpm run publish -- --package cli --version 0.1.0-alpha.6
+ *   pnpm run publish -- --all --dry-run
+ *   pnpm run publish -- --all --version 0.1.1
+ *   pnpm run publish -- --all --version 0.2.0-rc.1
  *   pnpm run publish -- --package sdk --package core --version 0.2.0 --no-build
  *
  * pnpm forwards a literal `--` separator to the script (`pnpm run publish -- <flags>`); the
@@ -20,7 +21,8 @@
  *
  * The script packs each selected package with pnpm (which applies publishConfig and rewrites
  * workspace: ranges), runs the same leak check as pack-check on the packed manifest, and
- * publishes every tarball with `npm publish <tarball> --access public` in dependency-safe order
+ * publishes every tarball with `npm publish <tarball> --access public` (plus `--tag latest` for a
+ * stable version; a prerelease keeps npm's default tag) in dependency-safe order
  * (sdk -> core -> plugins -> cli) so consumers never resolve a broken range mid-publish.
  * npm may prompt interactively for an OTP; the operator must enter it. On failure the script
  * stops, names the failing package and exits non-zero; it never silently skips a package.
@@ -81,6 +83,34 @@ export function publishOrder(packages: string[]): string[] {
 }
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** Whether `version` is a stable release (no prerelease identifier, e.g. `0.1.0`, not `0.1.0-rc.1`). */
+export function isStableVersion(version: string): boolean {
+  return SEMVER.test(version) && !/^\d+\.\d+\.\d+-/.test(version);
+}
+
+/**
+ * The npm dist-tag passed explicitly to `npm publish`: `latest` for a stable version. A prerelease
+ * returns `undefined`, so the script keeps passing no `--tag` and npm applies its own default
+ * (this predates the stable release and is kept as is).
+ */
+export function distTag(version: string): string | undefined {
+  return isStableVersion(version) ? "latest" : undefined;
+}
+
+/** Arguments of `npm publish` for a packed tarball. */
+export function npmPublishArgs(tarball: string, version: string): string[] {
+  const tag = distTag(version);
+  return ["publish", tarball, "--access", "public", ...(tag ? ["--tag", tag] : [])];
+}
+
+/** Problems when the selected packages do not all share one version (they release together). */
+export function versionSyncProblems(plan: PublishPlanEntry[]): string[] {
+  const versions = new Set(plan.map((entry) => entry.version));
+  return versions.size > 1
+    ? [`packages are out of sync: ${plan.map((e) => `${e.name}@${e.version}`).join(", ")}`]
+    : [];
+}
 
 export interface PublishOptions {
   all: boolean;
@@ -228,8 +258,16 @@ async function main(): Promise<void> {
     console.log(
       `[dry-run] tarballs: ${plan.map((p) => `${p.name}@${p.version} -> ${p.tarball}`).join(", ")}`,
     );
+    const tags = [...new Set(plan.map((p) => distTag(p.version) ?? "(npm default)"))];
+    console.log(`[dry-run] npm dist-tag: ${tags.join(", ")}`);
+    const drift = versionSyncProblems(plan);
+    if (drift.length) console.log(`[dry-run] warning: ${drift.join("; ")}`);
     console.log("[dry-run] no build, no version bump, no pack and no publish were performed.");
     return;
+  }
+  if (options.all) {
+    const drift = versionSyncProblems(plan);
+    if (drift.length) throw new Error(`--all releases every package at one version: ${drift[0]}`);
   }
   if (options.version) {
     const targets = plan.map((p) => join(root, "packages", p.dir, "package.json"));
@@ -258,7 +296,7 @@ async function main(): Promise<void> {
         if (problems.length)
           throw new Error(`packed manifest failed the leak check: ${problems.join("; ")}`);
         console.log(`publishing ${entry.name}@${entry.version} (${packed})`);
-        execFileSync("npm", ["publish", tarball, "--access", "public"], { stdio: "inherit" });
+        execFileSync("npm", npmPublishArgs(tarball, entry.version), { stdio: "inherit" });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         console.error(`Failed: ${entry.name}@${entry.version} (${reason})`);

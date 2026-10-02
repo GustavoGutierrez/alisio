@@ -1,8 +1,9 @@
 # Estado de implementación — `__ALISIO_VERSION__`
 
 La especificación original es la dirección del producto, no una declaración de que todos
-sus criterios de release estén superados. Esta entrega inicia el proyecto con una alpha
-funcional, no solo interfaces o stubs.
+sus criterios de release estén superados. `__ALISIO_VERSION__` es la primera versión estable
+(semver 0.x: las versiones menores pueden incluir cambios incompatibles hasta 1.0.0), funcional
+y no solo interfaces o stubs.
 
 ## Contenido
 
@@ -21,7 +22,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (`specs/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano.
 - Validación.
-- Pendiente para estabilizar v0.1.
+- Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
   skills; plantillas y `/init`; pantalla de inicio y extensiones; TUI y compactación; presupuesto de
   tokens de salida del agente; límite de contexto frente al catálogo; memoria y plugins; pegado y
@@ -1010,7 +1011,7 @@ real en procesos/HTTP locales. El binario Linux ejecuta un ciclo completo, carga
 externo con dependencia y conserva la sesión. La integración Herdr tiene validación de
 contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloqueado por el entorno.
 
-## Pendiente para estabilizar v0.1
+## Pendiente para llegar a 1.0.0
 
 - Ejecutar y ajustar matriz Windows/macOS; CI actual cubre Linux, no certifica otros sistemas.
 - Validar DeepSeek, OpenCode Console/Zen y OpenCode Go con credenciales del usuario. La inferencia
@@ -1019,10 +1020,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 - Validar Herdr con servidor/PTY reales; añadir launcher/resumer nativo si Herdr lo permite.
 - Checkpoints/rewind de sesión y memoria vectorial: no existen.
 - Onboarding interactivo; temas de color configurables; vista de razonamiento expandible.
-- Primera publicación real en npm y release con binarios: el script `pnpm publish`
-  (`scripts/publish.ts`, ver [Publicación](/es/publishing)) está implementado y cubierto por
-  pruebas unitarias, pero no se ha ejecutado contra el registro real; SemVer de rangos de plugins
-  y recarga en sesión inactiva.
+- Release estable con binarios: el script `pnpm publish` (`scripts/publish.ts`, ver
+  [Publicación](/es/publishing)) publica las versiones alpha anteriores y la `0.1.0` estable
+  (dist-tag `latest`); SemVer de rangos de plugins (`@alisio/sdk` como peer `^0.1.0`) y recarga en
+  sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
 - OAuth MCP interactivo y capacidades multimedia MCP. `/mcps` permite reconexión explícita y bearer
   mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.

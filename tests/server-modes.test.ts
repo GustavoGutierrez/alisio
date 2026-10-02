@@ -248,7 +248,7 @@ describe("/changelog", () => {
     const all = (await t.api.get("/api/changelog")).json<ChangelogView>();
     expect(all).toMatchObject({ current: "0.1.0-alpha.28", found: true });
     expect(all.entries.length).toBeLessThanOrEqual(5);
-    expect(all.entries[0]?.version).toBe("Unreleased");
+    expect(all.entries[0]?.version).toBe("0.1.0");
     expect(all.news).toBeUndefined();
 
     const one = (await t.api.get("/api/changelog?version=alpha.26")).json<ChangelogView>();
@@ -263,6 +263,15 @@ describe("/changelog", () => {
     });
     expect(
       (await t.api.get("/api/changelog?lastSeen=0.1.0-alpha.28")).json<ChangelogView>().news,
+    ).toBeUndefined();
+  });
+
+  it("reports the stable release as news to anyone coming from an alpha", async () => {
+    const { t } = await start({ version: "0.1.0" });
+    const news = (await t.api.get("/api/changelog?lastSeen=0.1.0-alpha.28")).json<ChangelogView>();
+    expect(news.news).toEqual({ latest: "0.1.0", versions: ["0.1.0"] });
+    expect(
+      (await t.api.get("/api/changelog?lastSeen=0.1.0")).json<ChangelogView>().news,
     ).toBeUndefined();
   });
 

@@ -6,17 +6,41 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
-      version: "Unreleased",
-      unreleased: true,
+      version: "0.1.0",
+      date: "2026-10-02",
       sections: [
         {
           title: "Added",
           items: [
-            "Shift+Tab cycles the main agents (build, plan and your own primary agents) in the terminal and in the web composer; the web composer also has an agent selector.",
-            "`/permission` (also `/permissions`) switches between ask, auto and full-access modes and shows the current status; saved permissions are managed from the same menu.",
+            "The terminal UI and `alisio serve`, a local web UI with several sessions and workspaces at once, streaming, approvals, themes and English/Spanish; both run the same agent core.",
+            "Agents: define your own in `.agents/agents`, manage them with `/agents` (terminal and web) and switch with `/agent:<id>`; Shift+Tab cycles the main agents (build, plan and your own) in the terminal and the web composer.",
+            "Plan mode with plan review: the agent proposes a plan with `exit_plan` and you approve or revise it before anything changes.",
+            "`/permission` (also `/permissions`) switches between ask, auto and full-access modes, and saved permissions are reviewed and revoked from the same menu.",
+            "Python analysis: the agent writes and runs a script and publishes its outputs as artifacts (dashboards, reports, charts, spreadsheets); `/artifacts` lists them and the web shows them in an artifact panel.",
+            "Tabular datasets: attach CSV, TSV or XLSX files and the agent inspects and queries them; the web has a table viewer.",
+            "Background tasks: long commands keep running while you work; `/tasks` lists, inspects and stops them.",
+            "`/goal <objective>` keeps the agent working on one objective, turn after turn, with a token budget (`budget=50k`), turn and time limits, and breakers for repeated replies; it never runs in plan mode and waits for approvals, questions and background tasks.",
             "`/reload` reloads the configuration, agents, skills, prompt templates and MCP servers between turns; a broken configuration leaves your session untouched.",
             "`/changelog [version]` shows what changed in each release, and Alisio mentions the news once after an upgrade.",
-            "`/goal <objective>` keeps the agent working on one objective, turn after turn, with a token budget (`budget=50k`), turn and time limits, and breakers for repeated replies; it never runs in plan mode and waits for approvals, questions and background tasks. The terminal and the web show its status, and only you pause, resume, edit or clear it.",
+            "A Memory tab in the web UI and plugin-provided data views.",
+            "`/btw` asks a side question about the session without adding it to the conversation.",
+            "Approved access to directories outside the workspace (`--add-dir`, or an approval per directory).",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "Live run progress in the terminal and the web: what the run is doing, how long it has been quiet and the last activity.",
+            "A request that stays silent until the first-token limit is retried once and then ends with a readable error.",
+            "The output limit of each request comes from the maximum the model declares in its catalog, when the provider reports it.",
+            "Rich renderers for code, diffs, terminal output, JSON, test results, Mermaid diagrams and formulas.",
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            "A model reply that is cut off at the output limit is continued automatically instead of failing the turn.",
+            "Project plugins, skills and MCP servers are merged with your global configuration instead of replacing it.",
           ],
         },
       ],

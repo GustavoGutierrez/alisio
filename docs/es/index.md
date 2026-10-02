@@ -83,7 +83,7 @@ Incluye:
 - Un cliente MCP (stdio y Streamable HTTP) y una integración con Herdr.
 - Un SDK de plugins tipado (`@alisio/sdk`) para herramientas, comandos, hooks y almacenamiento.
 
-Alisio es una versión **alpha** (`__ALISIO_VERSION__`). Lea [Limitaciones conocidas](/es/limitations)
+Alisio `__ALISIO_VERSION__` es la primera versión **estable**, todavía anterior a 1.0: las versiones menores pueden incluir cambios incompatibles (consulte [Estabilidad y versionado](/es/publishing#estabilidad-y-versionado)). Lea [Limitaciones conocidas](/es/limitations)
 antes de depender de él, y recuerde que **no es un sandbox**: las herramientas y los plugins se
 ejecutan con sus privilegios de usuario.
 

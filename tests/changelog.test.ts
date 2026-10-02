@@ -97,6 +97,72 @@ describe("version order", () => {
     expect(isVersion("0.1.0-alpha.28")).toBe(true);
     expect(isVersion("dev")).toBe(false);
   });
+
+  it("sorts a stable release above every one of its own prereleases", () => {
+    for (const pre of ["0.1.0-alpha.1", "0.1.0-alpha.9", "0.1.0-alpha.28", "0.1.0-rc.1"]) {
+      expect(compareVersions("0.1.0", pre), pre).toBe(1);
+      expect(compareVersions(pre, "0.1.0"), pre).toBe(-1);
+    }
+    // ...but stays below the next prerelease line, and below Unreleased.
+    expect(compareVersions("0.1.0", "0.2.0-alpha.1")).toBe(-1);
+    expect(compareVersions("0.1.1", "0.1.0")).toBe(1);
+    expect(compareVersions("0.1.0-rc.1", "0.1.0-alpha.28")).toBe(1);
+  });
+});
+
+describe("stable release ordering and news", () => {
+  const release = parseChangelog(`# Changelog
+
+## [0.1.0] - 2026-10-02
+
+### Added
+
+- First stable release.
+
+## [0.1.0-alpha.28] - 2026-10-01
+
+### Added
+
+- Last alpha.
+
+## [0.1.0-alpha.9] - 2026-09-26
+
+### Fixed
+
+- An older alpha.
+`);
+
+  it("lists the stable release first in /changelog, even when it is written below its alphas", () => {
+    expect(selectEntries(release).entries.map((e) => e.version)).toEqual([
+      "0.1.0",
+      "0.1.0-alpha.28",
+      "0.1.0-alpha.9",
+    ]);
+    const shuffled = [...release].reverse();
+    expect(selectEntries(shuffled, { limit: 1 }).entries[0]?.version).toBe("0.1.0");
+    expect(selectEntries(shuffled, { version: "v0.1.0" }).entries[0]?.version).toBe("0.1.0");
+  });
+
+  it("shows the what's new note for 0.1.0 after any 0.1.0-alpha.N", () => {
+    for (const lastSeen of ["0.1.0-alpha.9", "0.1.0-alpha.28"]) {
+      const news = changelogNews({ entries: release, current: "0.1.0", lastSeen });
+      expect(news.show, lastSeen).toBe(true);
+      expect(news.latest, lastSeen).toBe("0.1.0");
+      expect(news.versions[0], lastSeen).toBe("0.1.0");
+    }
+    expect(
+      changelogNews({ entries: release, current: "0.1.0", lastSeen: "0.1.0-alpha.9" }).versions,
+    ).toEqual(["0.1.0", "0.1.0-alpha.28"]);
+  });
+
+  it("does not repeat the note on 0.1.0 and treats going back to an alpha as a silent downgrade", () => {
+    expect(changelogNews({ entries: release, current: "0.1.0", lastSeen: "0.1.0" }).show).toBe(
+      false,
+    );
+    expect(
+      changelogNews({ entries: release, current: "0.1.0-alpha.28", lastSeen: "0.1.0" }),
+    ).toEqual({ show: false, versions: [], record: true });
+  });
 });
 
 describe("selectEntries", () => {
@@ -192,10 +258,11 @@ describe("shipped changelog", () => {
     expect(loadChangelog()).toEqual(parseChangelog(source));
   });
 
-  it("has curated entries for the published alphas and an unreleased section", () => {
+  it("has curated entries for the published alphas and the stable release on top", () => {
     const entries = loadChangelog();
     expect(entries.length).toBeGreaterThan(10);
     expect(entries.some((e) => e.version === "0.1.0-alpha.28")).toBe(true);
+    expect(selectEntries(entries).entries[0]?.version).toBe("0.1.0");
     for (const entry of entries) {
       expect(entry.sections.length, entry.version).toBeGreaterThan(0);
       for (const section of entry.sections)

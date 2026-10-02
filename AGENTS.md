@@ -17,8 +17,8 @@ headless for scripts and CI.
 ## Publishing (skill)
 
 Whenever the user asks to publish/release/bump any Alisio package, load the skill
-`.opencode/skills/alisio-publish/SKILL.md` and follow its canonical flow: manual alpha bump,
-commit+push, `pnpm run publish -- --package …`, verification with HTTP 200 tarballs and real
+`.agents/skills/alisio-publish/SKILL.md` and follow its canonical flow: manual stable semver bump of
+all 7 packages, commit+push, `pnpm run publish -- --all`, verification with HTTP 200 tarballs and real
 install. Never run `npm publish` directly; `package@version` is immutable; npm publishes are
 async; OTP is entered by the operator, never shared in chat. Produce the commands with the
 repo root completed (no absolute user paths inside the skill itself).

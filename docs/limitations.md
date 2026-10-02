@@ -5,19 +5,20 @@ This page is an English translation of the limitations and pending work recorded
 That Spanish file in the repository is the source of truth; the
 [Spanish version of this page](/es/limitations) includes it verbatim.
 
-Alisio `__ALISIO_VERSION__` is a functional alpha. The original specification sets the product direction;
+Alisio `__ALISIO_VERSION__` is the first stable release (pre-1.0: minor versions may include breaking changes). The original specification sets the product direction;
 it is not a statement that all of its release criteria are met.
 
-## Pending to stabilize v0.1
+## Pending to reach 1.0.0
 
 - Run and tune a Windows/macOS matrix; current CI covers Linux and does not certify other systems.
 - Validate real providers and models with the user's credentials.
 - Validate Herdr with a real server/PTY; add a native launcher/resumer if Herdr allows it.
 - Session checkpoints/rewind and vector memory: they do not exist.
 - Interactive onboarding; configurable color themes; expandable reasoning view.
-- First real npm publication and release with binaries: the `pnpm publish` script
-  (`scripts/publish.ts`, see [Publishing](/publishing)) is implemented and unit-tested but has not
-  been run against the real registry; SemVer ranges for plugins and reload in an idle session.
+- Stable release with binaries: the `pnpm publish` script (`scripts/publish.ts`, see
+  [Publishing](/publishing)) published the earlier alpha versions and the stable `0.1.0` (dist-tag
+  `latest`); SemVer ranges for plugins (`@alisio/sdk` as a `^0.1.0` peer) and reload in an idle
+  session.
 - Automatic discovery of Pi paths and incremental watch.
 - Interactive MCP OAuth and MCP multimedia capabilities. `/mcps` supports explicit reconnect and
   environment-referenced bearer tokens, but not browser authentication flows.

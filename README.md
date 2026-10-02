@@ -15,8 +15,11 @@ conversations into structured checkpoints, remembers decisions across sessions w
 persistent memory (a built-in plugin you can disable), and exposes a typed plugin SDK so you can
 extend it without touching the core.
 
-> **Status: Usable, tested and documented, but still alpha.** The npm badge above always shows the
-> latest published version; see the [limitations](https://gustavogutierrez.github.io/alisio/limitations).
+> **Status: Usable, tested and documented. First stable release (0.1.0), still pre-1.0.** Until 1.0.0
+> the usual 0.x semver rules apply: fixes ship as 0.1.x and a minor release (0.2.0) may include
+> breaking changes. The npm badge above always shows the latest published version; see the
+> [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
+> [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
 
 ## Highlights
 

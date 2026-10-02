@@ -5,12 +5,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   bumpVersions,
+  distTag,
+  isStableVersion,
   manifestProblems,
+  npmPublishArgs,
   PUBLISH_ORDER,
   parsePublishArgs,
   planPublish,
   publishOrder,
   tarballName,
+  versionSyncProblems,
 } from "../scripts/publish.ts";
 
 const pkg = (name: string, version: string, extra: Record<string, unknown> = {}) =>
@@ -218,5 +222,105 @@ describe("publish script: argument parsing", () => {
     expect(tarballName("@alisio/alisio-code", "0.1.0-alpha.4")).toBe(
       "alisio-alisio-code-0.1.0-alpha.4.tgz",
     );
+  });
+});
+
+describe("publish script: stable versions", () => {
+  it("accepts stable and prerelease versions and rejects malformed ones", () => {
+    for (const version of ["0.1.0", "0.1.1", "0.2.0", "1.0.0", "0.2.0-rc.1", "0.1.0-alpha.29"])
+      expect(parsePublishArgs(["--all", "--version", version]).version).toBe(version);
+    for (const version of ["0.1", "v0.1.0", "0.1.0-", "latest"])
+      expect(() => parsePublishArgs(["--all", "--version", version]), version).toThrow(
+        /Invalid version/,
+      );
+  });
+
+  it("publishes a stable version under the latest dist-tag and keeps prereleases untagged", () => {
+    expect(isStableVersion("0.1.0")).toBe(true);
+    expect(isStableVersion("0.1.0-alpha.28")).toBe(false);
+    expect(isStableVersion("0.2.0-rc.1")).toBe(false);
+    expect(distTag("0.1.0")).toBe("latest");
+    expect(distTag("0.1.0-rc.1")).toBeUndefined();
+    expect(npmPublishArgs("a.tgz", "0.1.0")).toEqual([
+      "publish",
+      "a.tgz",
+      "--access",
+      "public",
+      "--tag",
+      "latest",
+    ]);
+    expect(npmPublishArgs("a.tgz", "0.1.0-rc.1")).toEqual([
+      "publish",
+      "a.tgz",
+      "--access",
+      "public",
+    ]);
+  });
+
+  it("plans every package at one stable version in dependency order", async () => {
+    const root = await mkdtemp(join(tmpdir(), "alisio-publish-stable-"));
+    try {
+      for (const [dir, name] of Object.entries({
+        sdk: "@alisio/sdk",
+        core: "@alisio/core",
+        "plugin-memory": "@alisio/plugin-memory",
+        "plugin-subagents": "@alisio/plugin-subagents",
+        "plugin-openai-compatible": "@alisio/plugin-openai-compatible",
+        server: "@alisio/server",
+        cli: "@alisio/alisio-code",
+      })) {
+        mkdirSync(join(root, "packages", dir), { recursive: true });
+        writeFileSync(join(root, "packages", dir, "package.json"), pkg(name, "0.1.0-alpha.9"));
+      }
+      const plan = planPublish(
+        { all: true, packages: [], version: "0.1.0", dryRun: true, build: true },
+        root,
+      );
+      expect(plan.map((p) => `${p.name}@${p.version}`)).toEqual([
+        "@alisio/sdk@0.1.0",
+        "@alisio/core@0.1.0",
+        "@alisio/plugin-memory@0.1.0",
+        "@alisio/plugin-openai-compatible@0.1.0",
+        "@alisio/plugin-subagents@0.1.0",
+        "@alisio/server@0.1.0",
+        "@alisio/alisio-code@0.1.0",
+      ]);
+      expect(versionSyncProblems(plan)).toEqual([]);
+      expect(
+        versionSyncProblems(
+          planPublish({ all: true, packages: [], dryRun: true, build: true }, root).slice(0, 1),
+        ),
+      ).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports packages that drifted apart", () => {
+    const entry = (name: string, version: string) => ({
+      dir: name,
+      name,
+      version,
+      tarball: tarballName(name, version),
+    });
+    expect(
+      versionSyncProblems([entry("@alisio/sdk", "0.1.0"), entry("@alisio/core", "0.1.0")]),
+    ).toEqual([]);
+    expect(
+      versionSyncProblems([entry("@alisio/sdk", "0.1.0"), entry("@alisio/core", "0.1.0-alpha.24")])
+        .length,
+    ).toBe(1);
+  });
+});
+
+describe("repository release state", () => {
+  it("keeps the seven publishable packages and the web package on one version", () => {
+    const plan = planPublish({ all: true, packages: [], dryRun: true, build: true });
+    expect(plan).toHaveLength(7);
+    const web = JSON.parse(readFileSync(join("packages", "web", "package.json"), "utf8")) as {
+      version: string;
+    };
+    expect(versionSyncProblems(plan)).toEqual([]);
+    expect(web.version).toBe(plan[0]?.version);
   });
 });
