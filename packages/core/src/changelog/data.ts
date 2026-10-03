@@ -6,6 +6,21 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.2.1",
+      date: "2026-10-02",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            'A run no longer stops with "reached its 600 s limit" while you read a plan or answer a question. The run time limit (`limits.timeoutMs`) now counts only active time: the time the agent waits for you (the plan review, a question, a tool approval) is not counted. A model or tool that really stalls still hits the limit. The same applies to the `goal.maxMinutes` cap of a session goal.',
+            'A run that ended or was stopped during a plan review no longer leaves the next message failing with an "Uncertain tool outcome" error.',
+            "In the web, a plan review or a question can wait up to 60 minutes for your answer (tool approvals still expire after 10 minutes).",
+            'The Settings label of `limits.timeoutMs` said "Provider request timeout"; it now says it is the run time limit.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.2.0",
       date: "2026-10-02",
       sections: [

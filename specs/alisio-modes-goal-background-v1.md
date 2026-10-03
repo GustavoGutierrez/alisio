@@ -503,7 +503,7 @@ Lo siguiente **prevalece** sobre el resto de §9, §10, §11 y §12 donde difier
   distinguía `repeated_reply` y `no_tool_turns` como códigos; la decisión del propietario es un único
   `no_progress`.
 - **Turno** = una ejecución (kickoff, continuación o mensaje del usuario con el goal activo), no un
-  paso del modelo. El tiempo es el de las ejecuciones. Reanudar tras `max_turns`/`max_wall` concede una
+  paso del modelo. El tiempo es el tiempo activo de las ejecuciones (sin las esperas por la persona: aprobaciones, preguntas, revisión del plan). Reanudar tras `max_turns`/`max_wall` concede una
   asignación más. El estado `blocked` por error de ejecución es `run_error` con el error en `detail`
   (salvo `RunTimeoutError`, que cuenta como turno).
 - **Presupuesto**: duro, acumulado; cada continuación lleva `maxTokens` = lo que queda y el guardia del

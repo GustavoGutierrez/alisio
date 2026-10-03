@@ -2249,7 +2249,7 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   efecto se ofrece y se pregunta en cada llamada; ver la tabla de verdad en `docs/tools.md`); los
   modos headless (`run`, `resume "prompt"`, `--json`) nunca tienen un manejador y por tanto nunca
   preguntan — sin flag, el efecto simplemente no está disponible ahí. "Permitir en la sesión" dura
-  mientras viva el proceso. La espera cuenta dentro de `limits.timeoutMs`. El contrato `Policy` no
+  mientras viva el proceso. La espera no cuenta para `limits.timeoutMs` (tiempo activo, ver «Revisión del plan»). El contrato `Policy` no
   cambió: la aprobación es una opción adicional de `RunnerOptions`.
 - Confianza de proyecto: el hash guardado cubre solo el contenido de `.alisio/config.json`; si
   cambia únicamente otro recurso de proyecto (por ejemplo se añade `.alisio/agents` sin tocar
@@ -2512,13 +2512,40 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   la misma transacción que la reclamación. Si el cambio de la TUI falla, la aprobación se pierde y se
   avisa cómo continuar a mano.
 - Cancelar la ejecución retira la revisión pendiente y descarta una aprobación que no había empezado.
-  El tiempo máximo de la ejecución (`limits.timeoutMs`, 10 min por defecto) incluye la espera de la
-  decisión: una revisión sin respuesta al agotarse equivale a «Skip for now». En la web, sin ningún
-  cliente conectado durante 30 s (o 10 min con cliente) la revisión se omite igual que las demás
-  preguntas interactivas.
+  El tiempo máximo de la ejecución (`limits.timeoutMs`, 10 min por defecto) cuenta **tiempo activo**:
+  la espera de la decisión no lo consume (ver abajo). Una revisión sin respuesta equivale a «Skip for
+  now» cuando la ejecución termina por otra causa. En la web, sin ningún cliente conectado durante 30 s
+  (o 60 min con cliente; las aprobaciones de herramientas siguen en 10 min) la revisión se omite igual
+  que las demás preguntas interactivas; en la TUI no hay tope de espera.
 - Sin interfaz interactiva (`alisio run`, `--json`) o con `--read-only`, la herramienta devuelve
   `unavailable` y pide al modelo el plan completo como respuesta final; Alisio no lo imprime por su
   cuenta. El artefacto `plan.md` se crea igualmente cuando hay almacén de artefactos.
+- **Reloj de la ejecución pausable.** `limits.timeoutMs` ya no es un límite de reloj: es un
+  reloj de **tiempo activo** (`RunClock`) que se pausa mientras la ejecución espera a una persona. Una
+  espera se marca en un único registro por aplicación (`HumanWaits`) que comparten el runner (aprobaciones
+  de herramientas e instalación), la interfaz interactiva del host de plugins (`ask_user_question`,
+  `exit_plan`, plugins; envuelta una sola vez en `setInteractiveUI`, así la TUI, el servidor web y
+  cualquier integrador la heredan) y la aprobación de directorios externos. Las esperas simultáneas
+  usan un contador: el reloj se reanuda al cerrarse la última. Una sesión hija que espera a una persona
+  pausa también los relojes de sus ancestros; un padre que espera a su hijo no se pausa (es trabajo). Una
+  espera sin sesión (`ui.select`) pausa todas las ejecuciones activas. `firstTokenTimeoutMs` y su
+  reintento no cambian; `tasks.maxRunMs` tampoco. La ejecución devuelve `activeMs` y `goalOutcome` lo usa
+  para `goal.maxMinutes`. Mensaje: «reached its limit of N s of active time (time spent waiting for you
+  is not counted)».
+- **Estado atascado tras una revisión interrumpida.** Una llamada de efecto `read` (como `exit_plan`)
+  interrumpida por una detención o por el límite mientras lanzaba un error dejaba su fila del diario
+  como `pending`, y el siguiente mensaje fallaba con «Uncertain tool outcome … sessions recover
+  --acknowledge». Ahora una llamada `read` cancelada se cierra en el diario con el error (no pudo dejar
+  efectos); las de `write`/`process`/`external` siguen pendientes a propósito. La propuesta `pending` de
+  una ejecución terminada se marca `skipped` (`settlePlanRun`, en la TUI y en el servidor) y el
+  artefacto del plan se conserva. Un proceso que muere con la revisión abierta deja la propuesta
+  `pending` hasta la siguiente llamada a `exit_plan`, que la sustituye: no bloquea nada.
+- Verificado: Vitest (reloj con fuente de tiempo falsa, registro `HumanWaits`, ejecuciones reales con
+  aprobación, pregunta y revisión del plan que tardan más que el límite, un tope que sigue venciendo con
+  trabajo real, esperas en paralelo, el caso del estado atascado) y Chromium contra `alisio serve` con un
+  proveedor falso. No verificado: una TUI en un terminal real, otros navegadores, Windows/macOS, un
+  proveedor real. No hay un tope duro de tiempo total (incluidas las esperas humanas) como límite
+  aparte; en la web las esperas siguen acotadas por `approvalTimeoutMs` (10 min).
 - La TUI edita el contexto en una línea (sin varias líneas ni historial) y su flujo de turno
   (reclamar, cambiar de agente, lanzar el turno) solo está probado por la lógica pura compartida y
   por el panel; no se ha verificado en un terminal real. En la web se comprobó con Chromium contra
@@ -2603,8 +2630,10 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   nuevo en cada turno.
 - **No hay modelo evaluador**: el modelo decide cuándo termina o se bloquea, con evidencia que Alisio
   guarda y muestra pero **no verifica**. Un modelo puede dar por terminado algo que no lo está.
-- Un «turno» es una ejecución, no un paso del modelo; el tiempo cuenta lo gastado dentro de ejecuciones
-  (esperar una aprobación dentro de una ejecución cuenta; esperar entre ejecuciones no).
+- Un «turno» es una ejecución, no un paso del modelo; el tiempo cuenta el tiempo **activo** de las
+  ejecuciones (esperar a la persona dentro de una ejecución —una aprobación, una pregunta, la revisión
+  del plan— no cuenta; antes sí contaba; esperar entre ejecuciones tampoco). La continuación recibe como
+  límite de ejecución lo que queda de `goal.maxMinutes`, también en tiempo activo.
 - Los disyuntores usan una huella del texto final (normalizada) y el número de llamadas a herramientas
   (`get_goal`/`update_goal` cuentan como llamadas): un modelo que varía una frase evita el primero.
 - Un goal pausado por reinicio nunca se reanuda solo, y el reinicio se decide por `owner_pid`: un pid

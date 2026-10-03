@@ -263,9 +263,9 @@ describe("shipped changelog", () => {
     expect(entries.length).toBeGreaterThan(10);
     expect(entries.some((e) => e.version === "0.1.0-alpha.28")).toBe(true);
     expect(selectEntries(entries, { limit: 3 }).entries.map((e) => e.version)).toEqual([
+      "0.2.1",
       "0.2.0",
       "0.1.1",
-      "0.1.0",
     ]);
     for (const entry of entries) {
       expect(entry.sections.length, entry.version).toBeGreaterThan(0);

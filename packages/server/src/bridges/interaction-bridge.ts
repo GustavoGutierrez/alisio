@@ -21,7 +21,10 @@ export interface InteractionBridgeOptions {
   workspaceOf: (sessionId: string) => string | undefined;
   /** Give up (cancel) when nobody can answer for this long (default 30 s). */
   graceMs?: number;
-  /** Give up after this long even with subscribers (default 10 min; 0 = no limit). */
+  /**
+   * Give up after this long even with subscribers (default 60 min; 0 = no limit). Questions and plan
+   * reviews need time to read, unlike tool approvals (10 min, see `ApprovalBridge`).
+   */
   timeoutMs?: number;
   /** A plugin asked to show a session (`ui.open`). */
   onOpen?: (sessionId: string) => void;
@@ -41,6 +44,9 @@ const RECENT = 500;
 /** Longest free-text answer accepted ("Add context"). */
 const TEXT_MAX = 20_000;
 
+/** Questions and plan reviews wait this long for an answer (tool approvals wait 10 min). */
+export const DEFAULT_INTERACTION_TIMEOUT_MS = 60 * 60_000;
+
 /**
  * Plugin UI requests (`ui.select`, `ui.askQuestions`, `ui.open`) for web clients (RF-18). A
  * request that names a session goes to its root session's streams; otherwise (every `select`)
@@ -55,7 +61,7 @@ export class InteractionBridge {
 
   constructor(private options: InteractionBridgeOptions) {
     this.graceMs = options.graceMs ?? 30_000;
-    this.timeoutMs = options.timeoutMs ?? 10 * 60_000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_INTERACTION_TIMEOUT_MS;
   }
 
   /** The `PluginHost.setInteractiveUI` implementation for one workspace app. */

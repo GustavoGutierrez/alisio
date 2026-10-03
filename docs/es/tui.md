@@ -441,7 +441,7 @@ basada en una vista desactualizada.
   hay un turno de cierre). Si el proveedor no informa el uso, se usa el texto de las respuestas como
   estimación. Subir o quitar el presupuesto reactiva un objetivo que se detuvo por eso; bajarlo a lo ya
   gastado detiene de inmediato uno activo.
-- **Turnos** (`goal.maxTurns`, 50) y **tiempo** (`goal.maxMinutes`, 120, tiempo dentro de ejecuciones):
+- **Turnos** (`goal.maxTurns`, 50) y **tiempo** (`goal.maxMinutes`, 120, tiempo activo dentro de ejecuciones, sin las esperas por ti):
   el objetivo se pausa. El timeout propio de una continuación se reduce a lo que queda del tiempo.
 - **Disyuntores.** Pausa con `no_progress` si se repite la misma respuesta final
   (`goal.repeatedReplyLimit`, 3) o tras turnos consecutivos sin llamar a una herramienta
@@ -790,7 +790,7 @@ correspondientes se ofrecen igualmente al modelo, y Alisio pregunta antes de eje
 Una ruta de herramienta fuera del workspace y de toda raíz extra declarada pregunta igual, acotada al
 directorio contenedor (una aprobación de sesión cubre el subárbol de ese directorio). Con
 `--read-only` no se pregunta y esas herramientas siguen desactivadas. Los modos headless nunca
-preguntan. El tiempo de espera de una aprobación cuenta dentro de `limits.timeoutMs`. Las
+preguntan. El tiempo de espera de una aprobación no lo cuenta `limits.timeoutMs` (el límite de la ejecución cuenta tiempo activo). Las
 aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
 que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte
 [Herramientas y permisos](/es/tools) y [Modos de permisos](#permission-modes), que activan o

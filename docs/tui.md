@@ -423,7 +423,7 @@ out-of-date view is refused.
   *Budget reached* and **nothing more runs** (there is no closing turn). If the provider reports no
   usage, the text of the replies is used as an estimate. Raising or clearing the budget re-arms a goal
   that stopped for it; lowering it to what was already spent stops an active one at once.
-- **Turns** (`goal.maxTurns`, 50) and **time** (`goal.maxMinutes`, 120, time inside runs): the goal
+- **Turns** (`goal.maxTurns`, 50) and **time** (`goal.maxMinutes`, 120, active time inside runs, without the waits for you): the goal
   pauses. A continuation's own timeout shrinks to what is left of the time.
 - **Breakers.** Pause with `no_progress` after the same final reply repeats
   (`goal.repeatedReplyLimit`, 3) or after consecutive turns without a tool call (`goal.noToolTurnsLimit`,
@@ -749,7 +749,7 @@ offered to the model, and Alisio asks before running them:
 A tool path outside the workspace and every declared extra root asks the same way, scoped to the
 containing directory (one session approval covers that directory's subtree). With `--read-only`
 nothing is asked and those tools stay disabled. Headless modes never ask. The time
-spent waiting for an approval counts toward `limits.timeoutMs`. Approvals share the same
+spent waiting for an approval is not counted by `limits.timeoutMs` (the run limit counts active time). Approvals share the same
 [interactive queue](#ask-user-question) as `ask_user_question`, so a subagent's approval prompt and a
 subagent's question never race each other for the screen. See [Tools & permissions](/tools) and
 [Permission modes](#permission-modes), which switch these approvals on or off in one step.

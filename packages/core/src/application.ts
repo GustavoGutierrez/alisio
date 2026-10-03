@@ -40,6 +40,7 @@ import {
 } from "./config.ts";
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
+import { HumanWaits } from "./core/human-wait.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./core/output-limit.ts";
 import { ToolRegistry } from "./core/registry.ts";
 import { AgentRunner, type CompactionSettings, type RunnerSettingsPatch } from "./core/runner.ts";
@@ -247,11 +248,25 @@ export async function createApplication(options: AppOptions = {}) {
           realpath(resolve(cwd, dir)).catch(() => resolve(cwd, dir)),
         ),
       );
+  // Waits for a person (approvals, questions, the plan review) do not count against the run's
+  // time limit. One registry serves the runner, the plugin host's interactive UI and the
+  // external-directory approval, so every host (TUI, web server, embedders) gets it for free.
+  const humanWaits = new HumanWaits((session) => {
+    try {
+      return store.get(session).parentId ?? undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  const askExternalDirectory = options.approveExternalDirectory;
   const pathAccess = new PathAccess({
     workspace,
     extraRoots: [...config.additionalDirectories, ...addDirs],
-    ...(options.approveExternalDirectory && !options.readOnly
-      ? { approve: options.approveExternalDirectory }
+    ...(askExternalDirectory && !options.readOnly
+      ? {
+          approve: (request) =>
+            humanWaits.track(request.session, () => askExternalDirectory(request)),
+        }
       : {}),
     readOnly: !!options.readOnly,
   });
@@ -935,7 +950,9 @@ export async function createApplication(options: AppOptions = {}) {
         : [];
       return declared.length ? Math.min(...declared) : undefined;
     };
+    plugins.setHumanWaits(humanWaits);
     const runner = new AgentRunner({
+      humanWaits,
       provider,
       providerFor,
       registry,

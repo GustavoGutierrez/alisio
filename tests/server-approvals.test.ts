@@ -1,9 +1,12 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ProviderEvent, ServerFrame } from "@alisio/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApprovalBridge } from "../packages/server/src/bridges/approval-bridge.ts";
-import { InteractionBridge } from "../packages/server/src/bridges/interaction-bridge.ts";
+import {
+  DEFAULT_INTERACTION_TIMEOUT_MS,
+  InteractionBridge,
+} from "../packages/server/src/bridges/interaction-bridge.ts";
 import {
   fakeProvider,
   newSession,
@@ -280,6 +283,28 @@ describe("ApprovalBridge", () => {
 });
 
 describe("InteractionBridge", () => {
+  it("lets a question or plan review wait 60 minutes, longer than a tool approval's 10", async () => {
+    expect(DEFAULT_INTERACTION_TIMEOUT_MS).toBe(60 * 60_000);
+    vi.useFakeTimers();
+    try {
+      const hub = fakeHub(new Set(["root"]));
+      const bridge = new InteractionBridge({ hub, rootOf: (id) => id, workspaceOf: () => "w" });
+      const ui = bridge.uiFor("w");
+      const questions = [{ id: "q", question: "Plan?", options: [{ value: "x", label: "X" }] }];
+      let settled: unknown = "pending";
+      void ui.askQuestions({ questions, session: "root" } as never).then((v) => {
+        settled = v;
+      });
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+      expect(settled).toBe("pending");
+      expect(bridge.awaiting("root")).toBe(true);
+      await vi.advanceTimersByTimeAsync(50 * 60_000);
+      expect(settled).toEqual({ q: undefined });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("routes select to the workspace and returns the first valid answer", async () => {
     const hub = fakeHub(new Set(), new Set(["w"]));
     const bridge = new InteractionBridge({ hub, rootOf: (id) => id, workspaceOf: () => "w" });

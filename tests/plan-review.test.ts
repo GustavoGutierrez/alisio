@@ -65,6 +65,7 @@ async function fixture(options: {
   ui?: (request: AskQuestionsRequest) => Promise<AskQuestionsResult> | AskQuestionsResult;
   readOnly?: boolean;
   diagrams?: () => { enabled: boolean; max: number };
+  timeoutMs?: number;
 }) {
   const root = await mkdtemp(join(tmpdir(), "alisio-plan-"));
   roots.push(root);
@@ -117,6 +118,7 @@ async function fixture(options: {
     context: new ProjectContext(root),
     workspace: root,
     policy: { write: false, process: false, external: false },
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     approve: async (request) => {
       approvals.push(request);
       return "once";
@@ -648,6 +650,51 @@ const diagram = (id: string, mermaid = FLOW, extra: Record<string, unknown> = {}
   section: "Steps",
   mermaid,
   ...extra,
+});
+
+describe("a run that ends while its review is pending leaves a usable plan state", () => {
+  it("a run that fails (a UI that does not wait forever) leaves no stuck proposal and the next message plans again", async () => {
+    // The UI here is bound without the human-wait registry, so the run limit still fires while the
+    // review is open: the worst case of a run that ends with a proposal pending.
+    let calls = 0;
+    const fx = await fixture({
+      timeoutMs: 300,
+      script: (turn) =>
+        turn === 0 || turn === 1
+          ? assistant("", [exitPlan(`c${turn}`, PLAN, "Flag plan")])
+          : assistant("Ok."),
+      ui: (request) => {
+        calls++;
+        if (calls > 1) return { plan: "approve" };
+        return new Promise<AskQuestionsResult>((_, reject) =>
+          request.signal?.addEventListener("abort", () => reject(new Error("review closed")), {
+            once: true,
+          }),
+        );
+      },
+    });
+    try {
+      await expect(
+        fx.runner.run(fx.session, "plan it", undefined, agentRunOptions(fx.planAgent)),
+      ).rejects.toThrow();
+      expect(currentPlan(fx.store, fx.session)?.status).toBe("pending");
+      // What both hosts do when a run ends, whatever the reason.
+      expect(settlePlanRun(fx.store, fx.session, { aborted: false }).kind).toBe("none");
+      expect(currentPlan(fx.store, fx.session)?.status).toBe("skipped");
+      // The proposal's artifact is still there and the next message works normally.
+      expect(fx.artifacts.list(fx.session).length).toBeGreaterThan(0);
+      const next = await fx.runner.run(fx.session, "plan again", undefined, {
+        ...agentRunOptions(fx.planAgent),
+        timeoutMs: 30_000,
+      });
+      expect(next.status).toBe("completed");
+      const state = currentPlan(fx.store, fx.session);
+      expect(state?.revision).toBe(2);
+      expect(state?.status).toBe("approved");
+    } finally {
+      fx.close();
+    }
+  });
 });
 
 describe("exit_plan with diagrams", () => {

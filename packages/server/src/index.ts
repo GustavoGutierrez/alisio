@@ -124,6 +124,11 @@ export interface ServerOptions {
   /** Deny an approval after this long even when watched (default 10 min; 0 = no limit). */
   approvalTimeoutMs?: number;
   /**
+   * Cancel a question or plan review after this long even when watched (default 60 min; 0 = no
+   * limit). Separate from `approvalTimeoutMs`: reading a plan takes longer than allowing a tool.
+   */
+  interactionTimeoutMs?: number;
+  /**
    * Native folder dialog for "Open a workspace" (default: detected for this OS). Injectable for
    * tests. Always off when the server is bound for remote access.
    */
@@ -413,7 +418,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     rootOf: (id) => service.rootOf(id),
     workspaceOf,
     ...(options.approvalGraceMs !== undefined ? { graceMs: options.approvalGraceMs } : {}),
-    ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
+    ...(options.interactionTimeoutMs !== undefined
+      ? { timeoutMs: options.interactionTimeoutMs }
+      : {}),
     onOpen: (id) => {
       service.notify(id);
       goalDriver?.refresh(id);

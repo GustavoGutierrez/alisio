@@ -8,6 +8,8 @@
 export interface RunStats {
   usage: { input: number; output: number };
   toolCalls: number;
+  /** Active time of the run (waits for a person excluded). */
+  activeMs?: number;
 }
 
 const STATS = new WeakMap<object, RunStats>();

@@ -167,13 +167,13 @@ export const en = {
   "notice.run_timeout_waiting":
     "{who} did not respond within {seconds} s: no tokens were received. Retry, switch to another model, or raise limits.timeoutMs.",
   "notice.run_timeout_waiting_later":
-    "The run reached its {seconds} s limit while waiting for {who}. What was produced so far is kept: prompt again to continue, switch model, or raise limits.timeoutMs.",
+    "The run reached its limit of {seconds} s of active time (time spent waiting for you is not counted) while waiting for {who}. What was produced so far is kept: prompt again to continue, switch model, or raise limits.timeoutMs.",
   "notice.run_timeout_streaming":
-    "The run reached its {seconds} s limit while {who} was answering. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+    "The run reached its limit of {seconds} s of active time (time spent waiting for you is not counted) while {who} was answering. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
   "notice.run_timeout_tool":
-    "The run reached its {seconds} s limit while running {tool}. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+    "The run reached its limit of {seconds} s of active time (time spent waiting for you is not counted) while running {tool}. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
   "notice.run_timeout_other":
-    "The run reached its {seconds} s limit. What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
+    "The run reached its limit of {seconds} s of active time (time spent waiting for you is not counted). What was produced so far is kept: prompt again to continue or raise limits.timeoutMs.",
   "notice.run_timeout_first_token":
     "{who} sent nothing within {seconds} s of the request, so the run was stopped. Retry, switch to another model, or raise or disable limits.firstTokenTimeoutMs.",
   "notice.run_timeout_first_token_retried":

@@ -13,6 +13,8 @@ export interface RunSummary {
   status: string;
   usage: { input: number; output: number };
   toolCalls?: number;
+  /** Active time of the run: waits for a person are not counted. */
+  activeMs?: number;
 }
 
 /**
@@ -47,7 +49,14 @@ export function goalOutcome(input: {
     text: result?.text ?? "",
     toolCalls: result?.toolCalls ?? stats?.toolCalls ?? 0,
     startedAt: input.startedAt,
-    durationMs: Math.max(0, input.endedAt - input.startedAt),
+    // `goal.maxMinutes` counts the time a run was working, never the time it waited for you.
+    durationMs: Math.max(
+      0,
+      Math.min(
+        input.endedAt - input.startedAt,
+        result?.activeMs ?? stats?.activeMs ?? Number.POSITIVE_INFINITY,
+      ),
+    ),
   };
 }
 

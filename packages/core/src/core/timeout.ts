@@ -58,7 +58,7 @@ export function describeTimeout(info: RunTimeoutInfo): string {
     return info.firstRequest
       ? `${who} did not respond within ${limit}: no tokens were received. ` +
           "Retry, switch to another model, or raise limits.timeoutMs."
-      : `The run reached its ${limit} limit while waiting for ${info.model ? `the model ${info.model}` : "the model"}` +
+      : `The run reached its limit of ${limit} of active time (time spent waiting for you is not counted) while waiting for ${info.model ? `the model ${info.model}` : "the model"}` +
           `${info.provider ? ` (${info.provider})` : ""}. ` +
           "Everything produced so far is kept: prompt again to continue, switch model, or raise limits.timeoutMs.";
   const doing =
@@ -68,7 +68,7 @@ export function describeTimeout(info: RunTimeoutInfo): string {
         ? "while the model was answering"
         : "";
   return (
-    `The run reached its ${limit} limit${doing ? ` ${doing}` : ""}. ` +
+    `The run reached its limit of ${limit} of active time (time spent waiting for you is not counted)${doing ? ` ${doing}` : ""}. ` +
     "Everything produced so far is kept: prompt again to continue, or raise limits.timeoutMs."
   );
 }

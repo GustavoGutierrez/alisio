@@ -1,6 +1,6 @@
 {
   "name": "@alisio/server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local HTTP + SSE server behind `alisio serve`: multi-workspace, multi-session web access to the Alisio agent core with a launch-token cookie, strict Host/Origin checks and fail-closed approvals. node:http only; runs on Node >=22.16 and Bun.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",

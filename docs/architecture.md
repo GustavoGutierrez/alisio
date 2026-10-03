@@ -89,7 +89,12 @@ must ignore unknown fields and event types.
 stream to observers but are never stored, so they carry no `eventId`. Every other event is stored
 before observers see it. `turn_completed` adds `durationMs` (provider request to completed response)
 and `ttftMs` (time to the first streamed delta, absent when the provider streamed nothing).
-`run_failed` is additive for time limits: a run stopped by `limits.timeoutMs` or
+The run limit `limits.timeoutMs` counts **active time**: the runner keeps a pausable clock per run and
+every wait for a person (tool and external-directory approvals, `ask_user_question`, the plan review)
+pauses it through one registry, `HumanWaits`, that the runner, the plugin host's interactive UI and the
+external-directory approval share, so a host that binds a UI gets the behavior without extra code. A
+child session that waits for a person also pauses its ancestors; a parent that waits for a child
+does not pause. `run_failed` is additive for time limits: a run stopped by `limits.timeoutMs` or
 `limits.firstTokenTimeoutMs` ends as `failed` with `code: "timeout"` and a `timeout` object (`kind`,
 `ms`, `model`, `provider`, `stage`, `tool`, `firstRequest`, `attempts`); `error` is always a readable English
 sentence. When a model request stays silent until `limits.firstTokenTimeoutMs` the runner sends the

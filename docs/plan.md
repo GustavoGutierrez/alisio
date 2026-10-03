@@ -59,7 +59,13 @@ Good to know:
   implementation turn.
 - **A reload keeps the review.** If you reload the page while a review is pending, the same decision
   appears again. If you close the browser, the review stays pending for 30 seconds and then counts as
-  **Skip for now**. So do cancelling the run and letting it time out.
+  **Skip for now**. So do cancelling the run and, in the web, leaving the review unanswered for 10
+  minutes.
+- **Take the time you need.** The time you spend on the review is not counted by the run limit
+  (`limits.timeoutMs` counts active time, see [configuration](/configuration#limits)). In the
+  terminal the review stays open as long as you want; in the web it is withdrawn after 60 minutes
+  without an answer. If a run ends while a review is open, the plan artifact stays, the review counts
+  as **Skip for now** and your next message works normally (the agent proposes a new revision).
 - **The screen replaces the composer.** While it is open, Shift+Tab and the agent selector do nothing.
 - **Esc behaves like Skip for now.** While you type context, `Esc` goes back to the three choices.
 - **Scripts.** A client that does not know the plan review (a script using the API) sees a normal

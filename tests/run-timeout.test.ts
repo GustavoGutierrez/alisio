@@ -422,9 +422,11 @@ describe("silent request retry at the runner boundary", () => {
 
   it("the whole-run limit during a retried attempt is reported as the run limit", async () => {
     const provider = flaky(99);
+    // Wide margins: a retry is only allowed while the remaining run time covers the pause plus
+    // one more attempt, and a loaded machine can delay the first timer by hundreds of ms.
     const fx = await harness(provider, {
-      timeoutMs: 700,
-      firstTokenTimeoutMs: 200,
+      timeoutMs: 3000,
+      firstTokenTimeoutMs: 1000,
       firstTokenRetries: 3,
     });
     try {

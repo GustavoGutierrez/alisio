@@ -25,6 +25,7 @@ import type {
 import Ajv, { type ValidateFunction } from "ajv";
 import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
+import type { HumanWaits } from "../core/human-wait.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
@@ -122,13 +123,29 @@ export class PluginHost implements RunnerExtensions {
   setSessions(sessions: PluginAPI["sessions"]) {
     this.sessionsImpl = sessions;
   }
-  /** Binds interactive UI services (the TUI); without them select/askQuestions resolve undefined. */
+  /** Where waits for a person are opened (see `HumanWaits`); bound once the runner exists. */
+  private humanWaits?: HumanWaits;
+  setHumanWaits(waits: HumanWaits) {
+    this.humanWaits = waits;
+  }
+  /**
+   * Binds interactive UI services (the TUI, the web server); without them select/askQuestions
+   * resolve undefined. Every question that reaches the person through here (plugins, the
+   * `ask_user_question` tool, the plan review) is a human wait: the bound UI is wrapped ONCE so no
+   * host and no caller can forget to mark it.
+   */
   setInteractiveUI(ui: {
     select(request: SelectRequest): Promise<string | undefined>;
     askQuestions(request: AskQuestionsRequest): Promise<AskQuestionsResult>;
     open(sessionId: string): boolean;
   }) {
-    this.uiImpl = ui;
+    const wait = <T>(session: string | undefined, ask: () => Promise<T>): Promise<T> =>
+      this.humanWaits ? this.humanWaits.track(session, ask) : ask();
+    this.uiImpl = {
+      select: (request) => wait(undefined, () => ui.select(request)),
+      askQuestions: (request) => wait(request.session, () => ui.askQuestions(request)),
+      open: (sessionId) => ui.open(sessionId),
+    };
   }
   /**
    * Read-only view of one plugin's shared state (written through `api.state.set`). The host layer

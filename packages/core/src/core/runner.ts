@@ -37,9 +37,11 @@ import type {
   SessionStore,
   TerminalRunStatus,
 } from "./contracts.ts";
+import { HumanWaits } from "./human-wait.ts";
 import { EXIT_PLAN_TOOL, optInAllows } from "./opt-in.ts";
 import { type OutputLimit, resolveMaxOutputTokens } from "./output-limit.ts";
 import type { ToolRegistry } from "./registry.ts";
+import { RunClock } from "./run-clock.ts";
 import { attachRunStats } from "./run-stats.ts";
 import { isTimeoutReason, providerLabel, RunTimeoutError } from "./timeout.ts";
 import {
@@ -125,6 +127,13 @@ export interface RunnerOptions {
   compaction?: CompactionSettings;
   /** When set, write/process tools not allowed by the policy are offered and ask first. */
   approve?: ApprovalHandler;
+  /**
+   * Registry of the waits for a person (approvals, questions, the plan review): the run's time
+   * limit does not count them. Share one with the plugin host and every other asking surface so a
+   * wait outside the runner (for example `ask_user_question`) pauses the same clocks. Without it
+   * the runner uses a private one, which still covers every approval it asks itself.
+   */
+  humanWaits?: HumanWaits;
   /**
    * Mediated path policy (workspace plus declared extra directories and external approval).
    * When set, declared tool paths outside the allowed roots ask before the effect gate runs.
@@ -290,7 +299,19 @@ export class AgentRunner {
   private inbox = new Map<string, string[]>();
   /** Last provider-reported context size per session and the history length it covered. */
   private reported = new Map<string, { tokens: number; count: number }>();
-  constructor(private options: RunnerOptions) {}
+  /** Where human waits are opened; the clocks of the active runs listen to it. */
+  readonly humanWaits: HumanWaits;
+  constructor(private options: RunnerOptions) {
+    this.humanWaits =
+      options.humanWaits ??
+      new HumanWaits((session) => {
+        try {
+          return options.store.get(session).parentId ?? undefined;
+        } catch {
+          return undefined;
+        }
+      });
+  }
   /** Current capability policy (may widen when the user approves an effect for the session). */
   get policy(): Readonly<Policy> {
     return this.options.policy;
@@ -712,17 +733,22 @@ export class AgentRunner {
           ...(options.label ? { label: options.label } : {}),
           ...(capability ? { capability } : {}),
         });
-        const decision = await o.approve({
-          call,
-          effect,
-          input: p.input,
-          signal: combined,
-          session: sessionId,
-          ...(options.label ? { label: options.label } : {}),
-          ...(capability ? { capability } : {}),
-          ...(preview !== undefined ? { preview } : {}),
-          ...(capability && gate?.runtime ? { runtime: gate.runtime } : {}),
-        });
+        const approve = o.approve;
+        const callInput = p.input;
+        // Waiting for the person is not work: the run's time limit does not count it.
+        const decision = await this.humanWaits.track(sessionId, () =>
+          approve({
+            call,
+            effect,
+            input: callInput,
+            signal: combined,
+            session: sessionId,
+            ...(options.label ? { label: options.label } : {}),
+            ...(capability ? { capability } : {}),
+            ...(preview !== undefined ? { preview } : {}),
+            ...(capability && gate?.runtime ? { runtime: gate.runtime } : {}),
+          }),
+        );
         combined.throwIfAborted();
         const persisted = !!capability && !!gate && decision === "session";
         if (capability && gate)
@@ -777,16 +803,19 @@ export class AgentRunner {
         });
         let decision: "once" | "session" | "deny" = "deny";
         try {
-          decision = await o.approve({
-            call: installCall,
-            effect: "process",
-            input: { extras: install.extras },
-            signal: combined,
-            session: sessionId,
-            ...(options.label ? { label: options.label } : {}),
-            capability: "analysis.install",
-            install,
-          });
+          const approve = o.approve;
+          decision = await this.humanWaits.track(sessionId, () =>
+            approve({
+              call: installCall,
+              effect: "process",
+              input: { extras: install.extras },
+              signal: combined,
+              session: sessionId,
+              ...(options.label ? { label: options.label } : {}),
+              capability: "analysis.install",
+              install,
+            }),
+          );
         } finally {
           combined.throwIfAborted();
         }
@@ -858,8 +887,12 @@ export class AgentRunner {
       o.store.endCall(sessionId, call, result);
     } catch (error) {
       result = textResult(error instanceof Error ? error.message : String(error), true);
-      // A cancellation after execution may have left effects; journal remains pending.
-      if (!combined.aborted) o.store.endCall(sessionId, call, result);
+      // A cancellation after execution may have left effects, so the journal stays pending for
+      // the user to inspect. A `read` call cannot have left any (and `exit_plan`, which is one,
+      // is exactly what a stop or the run limit interrupts while a person decides): it is closed
+      // with the cancellation, so the next message continues normally instead of asking to
+      // "recover" a call nobody needs to inspect.
+      if (!combined.aborted || p.tool?.effect === "read") o.store.endCall(sessionId, call, result);
     }
     emit("tool_completed", {
       id: call.id,
@@ -904,10 +937,11 @@ export class AgentRunner {
       }
     };
     const runTimeoutMs = options.timeoutMs ?? o.timeoutMs ?? 300_000;
-    const timeout = AbortSignal.timeout(runTimeoutMs);
+    const clock = new RunClock(runTimeoutMs);
+    const unregisterClock = this.humanWaits.register(sessionId, clock);
     const combined = AbortSignal.any([
       controller.signal,
-      timeout,
+      clock.signal,
       ...(options.signal ? [options.signal] : []),
     ]);
     const workspace = options.workspace ?? o.workspace;
@@ -984,6 +1018,8 @@ export class AgentRunner {
       finish(combined.aborted ? "cancelled" : "failed", message);
       throw error;
     } finally {
+      unregisterClock();
+      clock.dispose();
       if (acquired) o.store.release(sessionId);
       this.active.delete(sessionId);
     }
@@ -1000,6 +1036,8 @@ export class AgentRunner {
     usage: { input: number; output: number };
     /** Tool calls the model made during the run (the goal controller's no-progress breaker). */
     toolCalls: number;
+    /** Time the run was really working: wall time minus the waits for a person. */
+    activeMs: number;
   }> {
     const controller = this.claim(sessionId);
     const runId = options.runId ?? crypto.randomUUID();
@@ -1032,9 +1070,14 @@ export class AgentRunner {
     /** Continuation notice and lowered effort for the request that follows a cut-off response. */
     let recoveryNotice: string | undefined;
     let recoveryEffort: string | undefined;
-    const runStartedAt = Date.now();
-    const timeout = AbortSignal.timeout(runTimeoutMs);
-    const combined = AbortSignal.any([controller.signal, timeout, ...(signal ? [signal] : [])]);
+    // Active time only: waits for a person pause it (see `RunClock`).
+    const clock = new RunClock(runTimeoutMs);
+    const unregisterClock = this.humanWaits.register(sessionId, clock);
+    const combined = AbortSignal.any([
+      controller.signal,
+      clock.signal,
+      ...(signal ? [signal] : []),
+    ]);
     // What the run was doing, so a timeout can say where it was stuck (see `RunTimeoutError`).
     let stage: "waiting_model" | "streaming" | "tool" | "other" = "other";
     let stageTool: string | undefined;
@@ -1283,7 +1326,7 @@ export class AgentRunner {
           }
           // Do not start an attempt the whole-run limit could not let finish.
           const retryPauseMs = FIRST_TOKEN_RETRY_PAUSE_MS;
-          if (runTimeoutMs - (Date.now() - runStartedAt) < retryPauseMs + firstTokenMs) {
+          if (clock.remainingMs() < retryPauseMs + firstTokenMs) {
             if (failure !== undefined) throw failure;
             break;
           }
@@ -1391,7 +1434,14 @@ export class AgentRunner {
           }
           emit("run_completed", final);
           finish("completed");
-          return { sessionId, text: lastText, status: "completed", usage: usageTotal, toolCalls };
+          return {
+            sessionId,
+            text: lastText,
+            status: "completed",
+            usage: usageTotal,
+            toolCalls,
+            activeMs: clock.activeMs(),
+          };
         }
         toolCalls += completion.calls.length;
         const prepared = completion.calls.map((call) => {
@@ -1480,7 +1530,14 @@ export class AgentRunner {
       // token budget (`maxTokens`) and the timeout; the turn count is a safety rail.
       emit("run_turns_exceeded", { turns: maxTurns, maxTurns });
       finish("turns_exceeded");
-      return { sessionId, text: lastText, status: "turns-exceeded", usage: usageTotal, toolCalls };
+      return {
+        sessionId,
+        text: lastText,
+        status: "turns-exceeded",
+        usage: usageTotal,
+        toolCalls,
+        activeMs: clock.activeMs(),
+      };
     } catch (error) {
       const timedOut = silentTimedOut
         ? { kind: "first_token" as const, ms: firstTokenMs, attempts: Math.max(1, silentAttempts) }
@@ -1498,7 +1555,11 @@ export class AgentRunner {
         });
         emit("run_failed", { error: failure.message, code: "timeout", timeout: failure.info });
         finish("failed", failure.message);
-        attachRunStats(failure, { usage: { ...usageTotal }, toolCalls });
+        attachRunStats(failure, {
+          usage: { ...usageTotal },
+          toolCalls,
+          activeMs: clock.activeMs(),
+        });
         throw failure;
       }
       if (error instanceof RunTruncationError) {
@@ -1508,7 +1569,7 @@ export class AgentRunner {
           truncation: error.info,
         });
         finish("failed", error.message);
-        attachRunStats(error, { usage: { ...usageTotal }, toolCalls });
+        attachRunStats(error, { usage: { ...usageTotal }, toolCalls, activeMs: clock.activeMs() });
         throw error;
       }
       // On cancellation report the abort reason, not the transport's secondary error.
@@ -1516,9 +1577,11 @@ export class AgentRunner {
       const message = cause instanceof Error ? cause.message : String(cause);
       emit(combined.aborted ? "run_cancelled" : "run_failed", { error: message });
       finish(combined.aborted ? "cancelled" : "failed", message);
-      attachRunStats(error, { usage: { ...usageTotal }, toolCalls });
+      attachRunStats(error, { usage: { ...usageTotal }, toolCalls, activeMs: clock.activeMs() });
       throw error;
     } finally {
+      unregisterClock();
+      clock.dispose();
       if (acquired) o.store.release(sessionId);
       this.active.delete(sessionId);
     }

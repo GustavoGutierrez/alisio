@@ -74,8 +74,12 @@ plan agent's run. The decision is recorded while that run is still going; the sw
 the single implementation turn happen after the plan run ends (the model first gets the `approved`
 result and answers once). State lives in `sessions.options.plan` with compare-and-set transitions,
 so approving twice starts one turn. Cancelling the run withdraws a pending review and drops an
-approval that had not started; the run time limit (`limits.timeoutMs`) includes the wait, and a
-review nobody answers counts as Skip for now. Without an interactive UI (`alisio run`, `--json`) or
+approval that had not started. The run time limit (`limits.timeoutMs`) counts active time, so the
+time you spend on the review is not counted; in the terminal the review stays open as long as you
+want, while in the web a review nobody answers for 60 minutes (30 s with no client connected) is
+withdrawn and counts as Skip for now. A run that ends with a review open keeps the plan artifact and
+the next message works normally; a read call interrupted by a stop or a limit is closed in the
+journal instead of asking you to recover it. Without an interactive UI (`alisio run`, `--json`) or
 under `--read-only` the tool returns `unavailable` and asks the model for the plan as its final reply
 (Alisio does not print it itself). The terminal edits the context on one line and its turn flow is
 verified through the shared pure logic and the panel, not in a real terminal; the web was checked in
@@ -123,7 +127,8 @@ checked per request, so spending can pass it by one request (more where the prov
 `usage` and characters are used as an estimate); there is no closing turn, and it counts the input and
 output of every request, so a long context is paid again each turn. There is **no evaluator model**: the
 agent decides when it is done or blocked, and its evidence is stored and shown but **not verified**. A
-"turn" is one run, not one model step, and the time limit counts time spent inside runs. The breakers
+"turn" is one run, not one model step, and the time limit counts the active time of runs (a wait for
+you inside a run, such as an approval, does not count). The breakers
 fingerprint the final reply (a model that varies a sentence avoids the first) and count tool calls
 (`get_goal` and `update_goal` count). A goal that was active when Alisio stopped comes back paused
 (`restart`, decided by the driving process id, so a reused pid could hide an orphan until it ends) and
@@ -273,7 +278,7 @@ terminal, the web in Chromium; not on a real terminal, other browsers, Windows o
   budget can be cut even when the model itself is not near *its* limit; the exact budget consumed is
   provider-reported and cannot be checked in advance.
 - **Approvals**: only for `write` and `process` effects and only in the TUI; "allow for the session"
-  lasts while the process lives. The wait counts within `limits.timeoutMs`. The `Policy` contract did
+  lasts while the process lives. The wait is not counted by `limits.timeoutMs` (active time, see below). The `Policy` contract did
   not change: approval is an additional `RunnerOptions` option.
 - A `resume` with a different model no longer fails: the session is the source of the model and
   `--model` switches it explicitly for the following turns.

@@ -172,13 +172,13 @@ export const es: Record<MessageKey, string> = {
   "notice.run_timeout_waiting":
     "{who} no respondió en {seconds} s: no llegó ningún token. Reintenta, cambia de modelo o aumenta limits.timeoutMs.",
   "notice.run_timeout_waiting_later":
-    "La ejecución alcanzó su límite de {seconds} s mientras esperaba a {who}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar, cambia de modelo o aumenta limits.timeoutMs.",
+    "La ejecución alcanzó su límite de {seconds} s de tiempo activo (el tiempo de espera a tu respuesta no cuenta) mientras esperaba a {who}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar, cambia de modelo o aumenta limits.timeoutMs.",
   "notice.run_timeout_streaming":
-    "La ejecución alcanzó su límite de {seconds} s mientras {who} respondía. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+    "La ejecución alcanzó su límite de {seconds} s de tiempo activo (el tiempo de espera a tu respuesta no cuenta) mientras {who} respondía. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
   "notice.run_timeout_tool":
-    "La ejecución alcanzó su límite de {seconds} s mientras ejecutaba {tool}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+    "La ejecución alcanzó su límite de {seconds} s de tiempo activo (el tiempo de espera a tu respuesta no cuenta) mientras ejecutaba {tool}. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
   "notice.run_timeout_other":
-    "La ejecución alcanzó su límite de {seconds} s. Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
+    "La ejecución alcanzó su límite de {seconds} s de tiempo activo (el tiempo de espera a tu respuesta no cuenta). Lo producido hasta ahora se conserva: escribe de nuevo para continuar o aumenta limits.timeoutMs.",
   "notice.run_timeout_first_token":
     "{who} no envió nada en {seconds} s desde la petición, por lo que se detuvo la ejecución. Reintenta, cambia de modelo o aumenta o desactiva limits.firstTokenTimeoutMs.",
   "notice.run_timeout_first_token_retried":

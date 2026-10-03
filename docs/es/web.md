@@ -103,8 +103,9 @@ la hora de inicio del servidor; la hora de la *última actualización* se reinic
 porque la página no puede saber cuándo llegó el frame anterior.
 
 Si una ejecución se detiene por su límite de tiempo, la conversación muestra un mensaje que nombra
-el modelo y el proveedor, los segundos y cómo continuar (reintentar, cambiar de modelo, subir
-`limits.timeoutMs`; ver [configuración](/es/configuration#limits)).
+el modelo y el proveedor, los segundos de tiempo activo y cómo continuar (reintentar, cambiar de
+modelo, subir `limits.timeoutMs`; ver [configuración](/es/configuration#limits)). El tiempo que
+tardas en decidir una aprobación, una pregunta o la revisión del plan no cuenta para ese límite.
 
 **Salida de herramientas.** Las herramientas que devuelven bloques estructurados tienen una vista
 nativa, que se carga la primera vez que hace falta: las escrituras y ediciones de archivos muestran

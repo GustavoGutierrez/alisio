@@ -93,7 +93,13 @@ sean aditivos, por lo que los consumidores deben ignorar campos y tipos de event
 transmiten a los observadores pero nunca se guardan, así que no llevan `eventId`. Todos los demás
 eventos se guardan antes de que los observadores los vean. `turn_completed` añade `durationMs` (de la
 petición al proveedor a la respuesta completa) y `ttftMs` (tiempo hasta el primer delta transmitido,
-ausente si el proveedor no transmitió nada). `run_failed` es aditivo para los límites de tiempo: una
+ausente si el proveedor no transmitió nada). El límite de ejecución `limits.timeoutMs` cuenta **tiempo
+activo**: el runner mantiene un reloj pausable por ejecución y toda espera de una persona
+(aprobaciones de herramientas y de directorios externos, `ask_user_question`, la revisión del plan) lo
+pausa mediante un único registro, `HumanWaits`, que comparten el runner, la interfaz interactiva del
+host de plugins y la aprobación de directorios externos, así que un host que enlaza una interfaz
+obtiene el comportamiento sin código adicional. Una sesión hija que espera a una persona también pausa
+a sus ancestros; un padre que espera a su hijo no se pausa. `run_failed` es aditivo para los límites de tiempo: una
 ejecución detenida por `limits.timeoutMs` o `limits.firstTokenTimeoutMs` termina como `failed` con
 `code: "timeout"` y un objeto `timeout` (`kind`, `ms`, `model`, `provider`, `stage`, `tool`,
 `firstRequest`, `attempts`); `error` es siempre una frase legible en inglés. Cuando una petición al

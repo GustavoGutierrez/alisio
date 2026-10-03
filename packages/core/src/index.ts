@@ -279,6 +279,7 @@ export type {
   TerminalRunStatus,
   ToolCallMeta,
 } from "./core/contracts.ts";
+export { HumanWaits } from "./core/human-wait.ts";
 export { EXIT_PLAN_TOOL, GOAL_TOOLS, OPT_IN_TOOLS } from "./core/opt-in.ts";
 export {
   DEFAULT_MAX_OUTPUT_TOKENS,
@@ -289,6 +290,7 @@ export {
   resolveMaxOutputTokens,
 } from "./core/output-limit.ts";
 export { ToolRegistry } from "./core/registry.ts";
+export { RunClock } from "./core/run-clock.ts";
 export {
   AgentRunner,
   type CompactionResult,

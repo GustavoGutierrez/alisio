@@ -58,7 +58,14 @@ Conviene saber:
   turno de implementación.
 - **Una recarga conserva la revisión.** Si recarga la página con una revisión pendiente, vuelve a
   aparecer la misma decisión. Si cierra el navegador, la revisión queda pendiente 30 segundos y después
-  cuenta como **Omitir por ahora**. Lo mismo ocurre al cancelar la ejecución o al agotarse su tiempo.
+  cuenta como **Omitir por ahora**. Lo mismo ocurre al cancelar la ejecución y, en la web, al dejar la
+  revisión sin responder durante 60 minutos.
+- **Tómese el tiempo que necesite.** El tiempo que dedica a la revisión no cuenta para el límite de la
+  ejecución (`limits.timeoutMs` cuenta tiempo activo; ver [configuración](/es/configuration#limits)).
+  En la terminal la revisión permanece abierta tanto tiempo como quiera; en la web se retira tras 10
+  minutos sin respuesta. Si una ejecución termina con una revisión abierta, el artefacto del plan se
+  conserva, la revisión cuenta como **Omitir por ahora** y su siguiente mensaje funciona con
+  normalidad (el agente propone una nueva revisión).
 - **La pantalla sustituye al compositor.** Mientras está abierta, Mayús+Tab y el selector de agente no
   hacen nada.
 - **Esc se comporta como Omitir por ahora.** Mientras escribe el contexto, `Esc` vuelve a las tres

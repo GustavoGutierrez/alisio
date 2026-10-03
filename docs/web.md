@@ -95,8 +95,9 @@ the elapsed time continues from the server's start time; the *last update* time 
 reload because the page cannot know when the previous frame arrived.
 
 If a run is stopped by its time limit, the conversation shows a message that names the model and
-the provider, the number of seconds and how to proceed (retry, switch model, raise
-`limits.timeoutMs`, see [configuration](/configuration#limits)).
+the provider, the number of seconds of active time and how to proceed (retry, switch model, raise
+`limits.timeoutMs`, see [configuration](/configuration#limits)). Time you spend deciding on an
+approval, a question or the plan review is not counted against that limit.
 
 **Tool output.** Tools that return structured blocks get a native view, each loaded the first time
 it is needed: file writes and edits show a diff (unified by default, **Side by side** on demand,
