@@ -6,6 +6,27 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.3.0",
+      date: "2026-10-03",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Decision Intelligence: an optional provider contract that lets a plugin answer small, closed decisions (pick an option, yes/no, a level) without a full model generation. Alisio works the same without a provider; installing a provider plugin does not activate it.",
+            "`/decisions` (terminal and web) shows whether decisions are enabled, the active provider, its health and the session metrics. `/stats` gains a Decision Intelligence section once a decision has run.",
+            "New settings: the `decisions` block (`enabled`, `provider`, `timeoutMs`, `minConfidence`, `telemetry`), plugin options in `pluginOverrides.<id>.options` and `pluginHooks.disposeTimeoutMs`.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "Plugins are shut down in parallel, each with its own time limit, so one slow plugin no longer delays the others.",
+            "`alisio run` now shuts plugins down cleanly on SIGTERM and SIGHUP, not only on Ctrl+C.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.2.1",
       date: "2026-10-02",
       sections: [

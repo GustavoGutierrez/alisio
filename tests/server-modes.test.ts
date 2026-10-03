@@ -248,7 +248,7 @@ describe("/changelog", () => {
     const all = (await t.api.get("/api/changelog")).json<ChangelogView>();
     expect(all).toMatchObject({ current: "0.1.0-alpha.28", found: true });
     expect(all.entries.length).toBeLessThanOrEqual(5);
-    expect(all.entries[0]?.version).toBe("0.2.1");
+    expect(all.entries[0]?.version).toBe("0.3.0");
     expect(all.news).toBeUndefined();
 
     const one = (await t.api.get("/api/changelog?version=alpha.26")).json<ChangelogView>();
