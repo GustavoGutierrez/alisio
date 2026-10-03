@@ -747,7 +747,11 @@ export interface Stats {
   models: string[];
   lastRunMs?: number;
   startedAt: number;
+  /** The latest `decision_*` events of this process (bounded); `/stats` summarizes them. */
+  decisions?: RunEvent[];
 }
+/** Keeps `/stats` memory bounded in very long TUI sessions. */
+const MAX_DECISION_EVENTS = 2000;
 export interface ViewState {
   items: TranscriptItem[];
   streaming: boolean;
@@ -1122,6 +1126,15 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
             : ""
         } — the answer may be incomplete. Raise limits.maxOutputTokens (/settings → Agent max output tokens) to allow longer answers.`,
       });
+    case "decision_completed":
+    case "decision_fallback":
+      return {
+        ...state,
+        stats: {
+          ...state.stats,
+          decisions: [...(state.stats.decisions ?? []), event].slice(-MAX_DECISION_EVENTS),
+        },
+      };
     case "model_changed":
       return {
         ...state,

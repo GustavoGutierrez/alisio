@@ -440,6 +440,11 @@ export interface ToolContext {
    * (headless, `--read-only`), because no flag grants an installation.
    */
   approveInstall?: InstallApprover;
+  /**
+   * Decision Intelligence, consumer side, bound by the host to the current run. Absent when the
+   * host does not offer it: feature-detect with `context.decisions?.tryDecide(...)`.
+   */
+  decisions?: ToolDecisions;
 }
 export interface ToolDefinition {
   name: string;
@@ -660,6 +665,26 @@ export interface RunEventDataMap {
   context_reduced: { messages: number };
   session_context_injected: { tokens: number; sources: string[] };
   plugin_hook_failed: { source: string; hook: string; error: string; continued: true };
+  /** A Decision Intelligence call that produced usable answers. Metadata only, never the state. */
+  decision_completed: {
+    decisionId: string;
+    pack?: { id: string; version: number };
+    provider: string;
+    latencyMs: number;
+    /** Accepted answers. */
+    decisionCount: number;
+    rejectedCount: number;
+    /** Lowest confidence among the accepted answers. */
+    confidenceMin: number;
+  };
+  /** A Decision Intelligence call that fell back to the consumer's deterministic default. */
+  decision_fallback: {
+    decisionId: string;
+    pack?: { id: string; version: number };
+    provider: string;
+    latencyMs: number;
+    reason: DecisionFallbackReason;
+  };
 }
 /** Every `RunEvent.type` the core emits today. `RunEvent.type` itself stays `string`. */
 export type RunEventType = keyof RunEventDataMap;
@@ -802,6 +827,7 @@ export interface MascotProvider {
  * - `"mcp"` — MCP-server management or bundling helpers.
  * - `"storage"` — durable storage backends beyond the default SQLite state.
  * - `"ui"` — TUI presentation providers (startup screens, mascots, panels).
+ * - `"decisions"` — Decision Intelligence providers (`api.decisions.registerProvider`).
  */
 export type PluginCategory =
   | "model-provider"
@@ -814,7 +840,8 @@ export type PluginCategory =
   | "analytics"
   | "mcp"
   | "storage"
-  | "ui";
+  | "ui"
+  | "decisions";
 export interface PluginMetadata {
   id: string;
   version: string;
@@ -1230,6 +1257,179 @@ export class ViewParamsError extends Error {
     this.name = "ViewParamsError";
   }
 }
+// ---- Decision Intelligence. Additive; feature-detect `api.decisions`. ----
+export interface DecisionsApi {
+  /** Registers a provider (does NOT activate it; activation is `decisions.provider` in config). */
+  registerProvider(provider: DecisionProvider): () => void;
+  /** True when decisions are enabled and the configured provider is registered. */
+  available(): boolean;
+  activeProvider(): { id: string; name: string } | null;
+  /**
+   * Never throws for infrastructure problems: resolves null (disabled, no provider, timeout,
+   * provider error, circuit open, or every answer rejected). Throws `DecisionRequestError` (a
+   * `TypeError`) for a malformed request and rethrows an abort requested by the caller.
+   */
+  tryDecide(request: DecisionRequest, options?: DecisionOptions): Promise<DecisionResponse | null>;
+}
+/** What a tool receives in `ToolContext.decisions`: the consumer side, bound to the run. */
+export type ToolDecisions = Omit<DecisionsApi, "registerProvider">;
+export interface DecisionProvider {
+  /** `^[a-z0-9][a-z0-9.-]{0,63}$`, unique among registered providers. */
+  id: string;
+  name: string;
+  capabilities: { select: boolean; boolean: boolean; ordinal: boolean };
+  /** Called ONLY by `/decisions` (own 1 s timeout), never on the decide path. */
+  health?(
+    signal?: AbortSignal,
+  ): Promise<{ status: "ready" | "starting" | "unavailable"; detail?: string }>;
+  /** Called when this provider becomes the active one. Bounded, never fatal, never awaited at startup. Cold start belongs here. */
+  activate?(): void | Promise<void>;
+  /** Called when it stops being the active one (config change, unregister, shutdown). */
+  deactivate?(): void | Promise<void>;
+  /** Fail fast with `DecisionProviderError("not_ready" | "unavailable")` instead of waiting. */
+  decide(
+    request: DecisionRequest,
+    context: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<DecisionProviderResult>;
+}
+export interface DecisionRequest {
+  version: 1;
+  /** BCP 47 hint (for example "es-CO"); providers may ignore it. */
+  language?: string;
+  /** Non-sensitive call-site label (becomes `decisionId` in events), for example "smart-dashboard-v1". Never data-derived. */
+  id: string;
+  pack?: { id: string; version: number };
+  /** JSON sent to the provider. Keep it minimal; a provider may be remote. At most 16 KB serialized (the whole request at most 32 KB). */
+  state: JsonValue;
+  /** 1..16 decisions keyed by `^[A-Za-z][A-Za-z0-9_]{0,63}$`. */
+  decisions: Record<string, DecisionDefinition>;
+}
+export type DecisionDefinition =
+  | { type: "select"; instruction: string; options: Record<string, string> }
+  | { type: "boolean"; instruction: string; trueMeaning?: string; falseMeaning?: string }
+  | { type: "ordinal"; instruction: string; levels: string[] };
+/**
+ * `confidence` is the provider's best estimate, in [0,1], that the answer is correct. The core does
+ * not assume it is calibrated: `minConfidence` is a heuristic filter. Each adapter chooses which
+ * native field feeds it.
+ */
+export type DecisionAnswer =
+  | { type: "select"; value: string; confidence: number; probabilities?: Record<string, number> }
+  | { type: "boolean"; value: boolean; confidence: number; probability: number }
+  | { type: "ordinal"; level: string; index: number; confidence: number; distribution?: number[] };
+export interface DecisionProviderResult {
+  decisions: Record<string, DecisionAnswer>;
+  usage?: { inputUnits?: number; outputUnits?: number };
+}
+export interface DecisionOptions {
+  /** Default: config `decisions.timeoutMs`. */
+  timeoutMs?: number;
+  /** Default: config `decisions.minConfidence`. */
+  minConfidence?: number;
+  signal?: AbortSignal;
+}
+export type DecisionRejection = "low_confidence" | "invalid" | "unsupported" | "missing";
+export interface DecisionResponse {
+  provider: string;
+  latencyMs: number;
+  /** Only validated answers that reached `minConfidence`. */
+  decisions: Record<string, DecisionAnswer>;
+  rejected: Record<string, DecisionRejection>;
+  usage?: { inputUnits?: number; outputUnits?: number };
+}
+export type DecisionFallbackReason =
+  | "timeout"
+  | "not_ready"
+  | "unavailable"
+  | "invalid_response"
+  | "provider_error"
+  | "circuit_open"
+  | "unsupported"
+  | "all_rejected";
+export type DecisionProviderErrorCode =
+  | "not_ready"
+  | "unavailable"
+  | "timeout"
+  | "invalid_response"
+  | "internal";
+/**
+ * Providers throw this. `not_ready` and `unavailable` are fast fallbacks that do NOT count toward
+ * the circuit breaker. Hosts match on `code`/`name` (not `instanceof`), because a plugin may
+ * bundle its own copy of this package.
+ */
+export class DecisionProviderError extends Error {
+  constructor(
+    readonly code: DecisionProviderErrorCode,
+    message?: string,
+  ) {
+    super(message ?? code);
+    this.name = "DecisionProviderError";
+  }
+}
+/** A malformed `DecisionRequest`: a programming error of the consumer, never swallowed by the host. */
+export class DecisionRequestError extends TypeError {
+  readonly code = "decision_invalid_request";
+  constructor(message: string) {
+    super(message);
+    this.name = "DecisionRequestError";
+  }
+}
+export interface DecisionStats {
+  requests: number;
+  completed: number;
+  fallbacks: number;
+  /** Over the completed calls. */
+  avgLatencyMs?: number;
+  p95LatencyMs?: number;
+  lastFallback?: { reason: DecisionFallbackReason; decisionId: string; at: string };
+  /** Calls per pack id. */
+  packs: Record<string, number>;
+  /** Provider of the most recent decision event. */
+  provider?: string;
+}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+/**
+ * Pure: summarizes `decision_completed` / `decision_fallback` events (other events are ignored).
+ * The TUI, the web UI and `/stats` all call this so the three surfaces agree.
+ */
+export function summarizeDecisionEvents(events: readonly RunEvent[]): DecisionStats {
+  const latencies: number[] = [];
+  const packs: Record<string, number> = {};
+  let completed = 0;
+  let fallbacks = 0;
+  let provider: string | undefined;
+  let lastFallback: DecisionStats["lastFallback"];
+  for (const event of events) {
+    if (event.type !== "decision_completed" && event.type !== "decision_fallback") continue;
+    if (!isRecord(event.data)) continue;
+    const data = event.data;
+    if (event.type === "decision_completed") {
+      completed++;
+      if (typeof data.latencyMs === "number" && Number.isFinite(data.latencyMs))
+        latencies.push(data.latencyMs);
+    } else {
+      fallbacks++;
+      lastFallback = {
+        reason: data.reason as DecisionFallbackReason,
+        decisionId: String(data.decisionId),
+        at: event.timestamp,
+      };
+    }
+    if (typeof data.provider === "string") provider = data.provider;
+    if (isRecord(data.pack) && typeof data.pack.id === "string")
+      packs[data.pack.id] = (packs[data.pack.id] ?? 0) + 1;
+  }
+  const stats: DecisionStats = { requests: completed + fallbacks, completed, fallbacks, packs };
+  if (latencies.length) {
+    const sorted = [...latencies].sort((a, b) => a - b);
+    stats.avgLatencyMs = Math.round(sorted.reduce((sum, v) => sum + v, 0) / sorted.length);
+    stats.p95LatencyMs = sorted[Math.ceil(0.95 * sorted.length) - 1] as number;
+  }
+  if (lastFallback) stats.lastFallback = lastFallback;
+  if (provider) stats.provider = provider;
+  return stats;
+}
 export interface PluginAPI {
   tools: { register(tool: ToolDefinition): () => void };
   commands: {
@@ -1274,6 +1474,21 @@ export interface PluginAPI {
    * feature-detect with `api.views?.register(...)` so the plugin keeps working there.
    */
   views?: { register(view: ViewDefinition): () => void };
+  /**
+   * Decision Intelligence: register a `DecisionProvider` or consume decisions. Absent on a core
+   * that predates it: feature-detect with `api.decisions?.registerProvider(...)`.
+   */
+  decisions?: DecisionsApi;
+  /**
+   * Per-plugin directories resolved by the host and created with mode 0700. Absent on a core that
+   * predates it.
+   */
+  paths?: { state: string; config: string; cache: string };
+  /**
+   * Options from `pluginOverrides[id].options` (`{}` when none), frozen at `setup`. Absent on a
+   * core that predates it.
+   */
+  options?: Readonly<Record<string, JsonValue>>;
   /** Provide an implementation for a named extension point (e.g. mascot, startup-screen). */
   extensions: {
     register<K extends keyof ExtensionPoints>(

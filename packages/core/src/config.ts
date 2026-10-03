@@ -1,7 +1,9 @@
 import { chmod, mkdir, open, readFile, realpath, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import type { JsonValue } from "@alisio/sdk";
 import { z } from "zod";
+import { DEFAULT_DECISIONS_CONFIG } from "./decisions/service.ts";
 import { exists, readJson } from "./runtime/fs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 
@@ -87,6 +89,38 @@ const serversSchema = <T extends z.ZodType>(value: T) =>
 export const OCI_IMAGE_PATTERN = /^[a-zA-Z0-9][^\s@]*@sha256:[a-f0-9]{64}$/;
 /** Analysis keys only the user (global) layer decides; a project layer cannot set them. */
 const GLOBAL_ONLY_ANALYSIS = ["runtime", "oci", "retention"] as const;
+/** Decision Intelligence keys only the user (global) layer decides: the provider and telemetry. */
+const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;
+/** JSON values a plugin may receive as options (`pluginOverrides[id].options`). */
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const PLUGIN_OPTION_KEY = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+const PLUGIN_OPTIONS_MAX_BYTES = 8 * 1024;
+const pluginOptionsSchema = z
+  .record(z.string(), jsonValueSchema)
+  .superRefine((options, context) => {
+    for (const key of Object.keys(options))
+      if (!PLUGIN_OPTION_KEY.test(key))
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message:
+            "Plugin option names start with a letter and use letters, digits, dot, underscore or dash",
+        });
+    if (Buffer.byteLength(JSON.stringify(options), "utf8") > PLUGIN_OPTIONS_MAX_BYTES)
+      context.addIssue({
+        code: "custom",
+        message: "Plugin options may not exceed 8 KB serialized",
+      });
+  });
 const configObjectSchema = z
   .object({
     schemaVersion: z.literal(1).default(1),
@@ -119,15 +153,46 @@ const configObjectSchema = z
       .record(z.string(), z.object({ enabled: z.boolean().optional() }).passthrough())
       .default({}),
     /** Project-local enable/disable overrides for configured external plugins, keyed by plugin id. */
-    pluginOverrides: z.record(z.string(), z.object({ enabled: z.boolean() }).strict()).default({}),
+    pluginOverrides: z
+      .record(
+        z.string(),
+        z
+          .object({
+            enabled: z.boolean().optional(),
+            /** Global-only, read-only options handed to the plugin as `api.options` (8 KB). */
+            options: pluginOptionsSchema.optional(),
+          })
+          .strict(),
+      )
+      .default({}),
     /** Host-enforced timeouts for plugin hooks. */
     pluginHooks: z
       .object({
         timeoutMs: z.number().int().min(100).max(120_000).default(15_000),
         sessionEndTimeoutMs: z.number().int().min(100).max(120_000).default(10_000),
+        /** Per-plugin limit for `dispose()` (and the active decision provider's `deactivate()`). */
+        disposeTimeoutMs: z.number().int().min(100).max(10_000).default(2000),
       })
       .strict()
-      .default(() => ({ timeoutMs: 15_000, sessionEndTimeoutMs: 10_000 })),
+      .default(() => ({ timeoutMs: 15_000, sessionEndTimeoutMs: 10_000, disposeTimeoutMs: 2000 })),
+    /**
+     * Decision Intelligence: the active provider is chosen here and only here. `provider` and
+     * `telemetry` are global-only (a repository cannot pick the engine or the telemetry policy).
+     */
+    decisions: z
+      .object({
+        enabled: z.boolean().default(true),
+        provider: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9.-]{0,63}$/)
+          .nullable()
+          .default(null),
+        timeoutMs: z.number().int().min(50).max(10_000).default(DEFAULT_DECISIONS_CONFIG.timeoutMs),
+        minConfidence: z.number().min(0).max(1).default(DEFAULT_DECISIONS_CONFIG.minConfidence),
+        telemetry: z.boolean().default(true),
+      })
+      .strict()
+      .default(() => ({ ...DEFAULT_DECISIONS_CONFIG })),
     context: z
       .object({
         /** Use CLAUDE.md where a directory has no AGENTS.md (off by default). */
@@ -608,8 +673,27 @@ export async function loadConfigWithProvenance(
       object.tasks && typeof object.tasks === "object" && !Array.isArray(object.tasks)
         ? (object.tasks as Record<string, unknown>)
         : {};
+    const decisionsRaw =
+      object.decisions && typeof object.decisions === "object" && !Array.isArray(object.decisions)
+        ? (object.decisions as Record<string, unknown>)
+        : {};
+    const overridesRaw =
+      object.pluginOverrides &&
+      typeof object.pluginOverrides === "object" &&
+      !Array.isArray(object.pluginOverrides)
+        ? (object.pluginOverrides as Record<string, unknown>)
+        : {};
     const ignored = [
       ...GLOBAL_ONLY_ANALYSIS.filter((key) => key in analysisRaw).map((key) => `analysis.${key}`),
+      ...GLOBAL_ONLY_DECISIONS.filter((key) => key in decisionsRaw).map(
+        (key) => `decisions.${key}`,
+      ),
+      ...Object.entries(overridesRaw)
+        .filter(
+          ([, entry]) =>
+            !!entry && typeof entry === "object" && !Array.isArray(entry) && "options" in entry,
+        )
+        .map(([id]) => `pluginOverrides.${id}.options`),
       ...("retentionDays" in tasksRaw ? ["tasks.retentionDays"] : []),
     ];
     return { config, keys: new Set(Object.keys(object)), sources, ignored, file };
@@ -651,10 +735,17 @@ export async function loadConfigWithProvenance(
       }
       // Additive records: merge by key, the selected layer wins per key.
       if (key === "pluginOverrides") {
-        overlaid.pluginOverrides = {
-          ...overlaid.pluginOverrides,
-          ...selected.config.pluginOverrides,
-        };
+        // `options` is global-only: a repository must not inject options into a plugin that has
+        // system access, so the selected entry keeps its `enabled` but never its `options`.
+        const merged = { ...overlaid.pluginOverrides };
+        for (const [id, entry] of Object.entries(selected.config.pluginOverrides)) {
+          const options = global.config.pluginOverrides[id]?.options;
+          const { options: _ignored, ...rest } = entry;
+          merged[id] = { ...global.config.pluginOverrides[id], ...rest };
+          if (options) merged[id].options = options;
+          else delete merged[id].options;
+        }
+        overlaid.pluginOverrides = merged;
         continue;
       }
       if (key === "skillOverrides") {
@@ -678,6 +769,16 @@ export async function loadConfigWithProvenance(
           runtime: global.config.analysis.runtime,
           oci: global.config.analysis.oci,
           retention: global.config.analysis.retention,
+        };
+        continue;
+      }
+      if (key === "decisions") {
+        // `provider` and `telemetry` are global-only (a repository cannot pick the decision
+        // engine nor its telemetry policy); the rest follows the selected layer.
+        overlaid.decisions = {
+          ...selected.config.decisions,
+          provider: global.config.decisions.provider,
+          telemetry: global.config.decisions.telemetry,
         };
         continue;
       }
@@ -848,6 +949,7 @@ const SETTABLE_SECTIONS = {
   context: configObjectSchema.shape.context.removeDefault(),
   limits: configObjectSchema.shape.limits.removeDefault(),
   pluginHooks: configObjectSchema.shape.pluginHooks.removeDefault(),
+  decisions: configObjectSchema.shape.decisions.removeDefault(),
   tui: configObjectSchema.shape.tui.removeDefault(),
   websearch: configObjectSchema.shape.websearch.removeDefault(),
   agents: configObjectSchema.shape.agents.removeDefault(),
@@ -873,6 +975,12 @@ const SETTABLE_KEYS = {
   "limits.firstTokenRetries": SETTABLE_SECTIONS.limits.shape.firstTokenRetries,
   "limits.truncationRecoveries": SETTABLE_SECTIONS.limits.shape.truncationRecoveries,
   "pluginHooks.timeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.timeoutMs,
+  "pluginHooks.disposeTimeoutMs": SETTABLE_SECTIONS.pluginHooks.shape.disposeTimeoutMs,
+  "decisions.enabled": SETTABLE_SECTIONS.decisions.shape.enabled,
+  "decisions.provider": SETTABLE_SECTIONS.decisions.shape.provider,
+  "decisions.timeoutMs": SETTABLE_SECTIONS.decisions.shape.timeoutMs,
+  "decisions.minConfidence": SETTABLE_SECTIONS.decisions.shape.minConfidence,
+  "decisions.telemetry": SETTABLE_SECTIONS.decisions.shape.telemetry,
   "tui.paddingX": SETTABLE_SECTIONS.tui.shape.paddingX,
   "tui.contentPaddingX": SETTABLE_SECTIONS.tui.shape.contentPaddingX,
   "tui.skillSlashCommands": SETTABLE_SECTIONS.tui.shape.skillSlashCommands,
@@ -1045,7 +1153,14 @@ export async function setProjectPluginEnabled(input: {
       !Array.isArray(raw.pluginOverrides)
         ? (raw.pluginOverrides as Record<string, unknown>)
         : {};
-    raw.pluginOverrides = { ...current, [input.id]: { enabled: input.enabled } };
+    const entry =
+      current[input.id] &&
+      typeof current[input.id] === "object" &&
+      !Array.isArray(current[input.id])
+        ? (current[input.id] as Record<string, unknown>)
+        : {};
+    // Keep the other fields of the entry (`options`): toggling a plugin must not erase them.
+    raw.pluginOverrides = { ...current, [input.id]: { ...entry, enabled: input.enabled } };
   }
   raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });

@@ -100,7 +100,8 @@ the file that defined the value.
   "limits": { "maxTurns": 100, "timeoutMs": 600000, "firstTokenTimeoutMs": 90000, "firstTokenRetries": 1 },
   "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
-  "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
+  "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000, "disposeTimeoutMs": 2000 },
+  "decisions": { "enabled": true, "provider": null, "timeoutMs": 1500, "minConfidence": 0.6, "telemetry": true },
   "plugins": [],
   "skills": [],
   "additionalDirectories": [],
@@ -222,7 +223,30 @@ See [Persistent memory](/memory).
 | --- | --- | --- |
 | `timeoutMs` | `15000` | Timeout (100–120000 ms) for compaction and session-start hooks |
 | `sessionEndTimeoutMs` | `10000` | Timeout (100–120000 ms) for session-end hooks |
+| `disposeTimeoutMs` | `2000` | Per-plugin limit (100–10000 ms) for `dispose()` and for the active decision provider's `deactivate()` when Alisio closes. Plugins are disposed in parallel, so one slow plugin does not delay the others. Settable live from **Settings → General** in the web UI; not listed in the terminal `/settings` menu |
 
+## `decisions` {#decisions}
+
+[Decision Intelligence](/decision-intelligence): an optional provider resolves closed choices
+without a full model generation. `provider` and `telemetry` are **global only**: they are read from
+`<config home>/config.json`, and a project or `--config` layer that sets them is ignored with a
+notice (`alisio doctor` lists what was ignored).
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | `false` turns decisions off: calls resolve to nothing and features use their defaults |
+| `provider` | `null` | ID of the plugin provider to use (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` means none. Installing a plugin never activates it. Global only |
+| `timeoutMs` | `1500` | Limit of one decision call (50–10000 ms) |
+| `minConfidence` | `0.6` | Answers below this confidence are rejected (0–1). A heuristic filter: confidence is not assumed to be calibrated |
+| `telemetry` | `true` | `false` stops persisting decision events, so `/stats` shows no decisions section. Global only |
+
+```json
+{ "decisions": { "provider": "my-provider", "timeoutMs": 1500 } }
+```
+
+All five keys are settable from **Settings → General** in [`alisio serve`](/web) (labels in English
+and Spanish) and are read live: the next decision uses the new value. They are not listed in the
+terminal `/settings` menu; edit the file there.
 ## `plugins`
 
 A list of trusted plugins: paths (resolved relative to the configuration file) or npm package names.
@@ -246,6 +270,17 @@ project-installed package per project just like any other external plugin.
 
 ```json
 { "pluginOverrides": { "acme.hello": { "enabled": false } } }
+```
+
+An entry may also carry `options`, a JSON object the plugin reads as `api.options` (see
+[Writing plugins](/plugins#decision-intelligence)). `options` is **global only**: a project layer
+cannot set it (it is ignored with a notice), because a plugin runs with the full privileges of the
+process. Option names start with a letter and use letters, digits, dot, underscore or dash; the
+serialized object is at most 8 KB; do not put secrets in it. Changing it takes effect on restart.
+Toggling a plugin from `/plugins` keeps its `options`.
+
+```json
+{ "pluginOverrides": { "acme.hello": { "options": { "device": "cpu" } } } }
 ```
 
 Built-in toggles use the existing `builtinPlugins.<id>.enabled` field. Both forms apply on restart.

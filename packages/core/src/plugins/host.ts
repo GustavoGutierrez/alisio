@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,6 +11,7 @@ import type {
   CompactionHooks,
   CompletionRequest,
   ExtensionPoints,
+  JsonValue,
   Message,
   PanelProvider,
   Plugin,
@@ -27,9 +29,11 @@ import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
 import type { HumanWaits } from "../core/human-wait.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import type { DecisionRegistry } from "../decisions/registry.ts";
+import type { DecisionService } from "../decisions/service.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
-import { readJson } from "../runtime/fs.ts";
+import { exists, readJson } from "../runtime/fs.ts";
 import { resolvePluginSpec } from "../runtime/modules.ts";
 import { inside } from "../runtime/paths.ts";
 import { openDatabase } from "../runtime/sqlite.ts";
@@ -42,7 +46,24 @@ export interface PluginHostOptions {
   hookTimeoutMs?: number;
   /** Timeout for session-end hooks (for example an automatic summary). */
   sessionEndTimeoutMs?: number;
+  /** Per-plugin limit for `dispose()` on close (default 2000 ms). */
+  disposeTimeoutMs?: number;
 }
+/** What the host needs to hand each plugin its `api.paths` and `api.options`. */
+export interface PluginEnvironment {
+  /** Root of the application state (the one analysis and artifacts use). */
+  stateRoot: string;
+  configHome: string;
+  /** `pluginOverrides[id].options` (external) or `builtinPlugins.<id>` without `enabled`. */
+  options(id: string, builtin: boolean): Record<string, JsonValue>;
+}
+const deepFreeze = <T>(value: T): T => {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+};
 const VIEW_ID = /^[a-z][a-z0-9-]{0,39}$/;
 const VIEW_PARAM_TYPES = new Set(["string", "integer", "number", "boolean"]);
 /** Query strings arrive as text: coerce them to the declared primitives and apply defaults. */
@@ -205,6 +226,22 @@ export class PluginHost implements RunnerExtensions {
   setCompleter(fn: (request: CompletionRequest & { signal: AbortSignal }) => Promise<string>) {
     this.completer = fn;
   }
+  /**
+   * Binds Decision Intelligence. Plugins activated afterwards see `api.decisions`; without it the
+   * member is absent, exactly like on a core that predates the feature.
+   */
+  setDecisions(decisions: { registry: DecisionRegistry; service: DecisionService }) {
+    this.decisionsImpl = decisions;
+  }
+  private decisionsImpl?: { registry: DecisionRegistry; service: DecisionService };
+  /**
+   * Binds the directories and options plugins receive (`api.paths`, `api.options`). Plugins
+   * activated before this call, or on a host without it, see neither member.
+   */
+  setPluginEnvironment(environment: PluginEnvironment) {
+    this.environment = environment;
+  }
+  private environment?: PluginEnvironment;
   /** Binds credential-free model discovery/resolution after provider startup is complete. */
   setModels(models: PluginAPI["models"]) {
     this.modelsImpl = models;
@@ -271,6 +308,7 @@ export class PluginHost implements RunnerExtensions {
             "mcp",
             "storage",
             "ui",
+            "decisions",
           ]),
         )
         .optional(),
@@ -427,6 +465,42 @@ export class PluginHost implements RunnerExtensions {
           });
         },
       },
+      ...(this.environment
+        ? (({ stateRoot, configHome, options }) => {
+            // The id is validated (`^[a-z0-9][a-z0-9.-]{0,63}$`): it cannot be `.`/`..` or hold a
+            // separator, so these stay inside their roots. Created 0700 on first read.
+            const state = join(stateRoot, "plugins", plugin.id);
+            const directories = {
+              state,
+              config: join(configHome, "plugins", plugin.id),
+              cache: join(state, "cache"),
+            };
+            const paths = {} as { state: string; config: string; cache: string };
+            for (const key of ["state", "config", "cache"] as const)
+              Object.defineProperty(paths, key, {
+                enumerable: true,
+                get: () => {
+                  mkdirSync(directories[key], { recursive: true, mode: 0o700 });
+                  return directories[key];
+                },
+              });
+            return {
+              paths: Object.freeze(paths),
+              options: deepFreeze(structuredClone(options(plugin.id, builtin))),
+            };
+          })(this.environment)
+        : {}),
+      ...(this.decisionsImpl
+        ? {
+            decisions: (({ registry, service }) => ({
+              // Registering never activates: `decisions.provider` in the configuration does.
+              registerProvider: (provider) => track(registry.register(plugin.id, provider)),
+              available: () => service.available(),
+              activeProvider: () => service.activeProvider(),
+              tryDecide: (request, options) => service.tryDecide(request, options),
+            }))(this.decisionsImpl) satisfies PluginAPI["decisions"],
+          }
+        : {}),
       compaction: {
         register: (hooks) => {
           const entry = { plugin: plugin.id, hooks };
@@ -748,20 +822,39 @@ export class PluginHost implements RunnerExtensions {
       }
     }
   }
+  /**
+   * Disposes every plugin in parallel, each bounded by `disposeTimeoutMs`: a slow or hung
+   * `dispose()` neither delays the others nor holds the close past its limit. Registrations are
+   * undone either way. Failures (including a timeout) are reported together afterwards.
+   */
   async close(): Promise<void> {
-    const errors: unknown[] = [];
-    for (const { plugin, undo } of [...this.loaded.values()].reverse()) {
-      try {
-        await plugin.dispose?.();
-      } catch (e) {
-        errors.push(e);
-      } finally {
-        for (const fn of undo.reverse()) fn();
-      }
-    }
+    const limit = this.options.disposeTimeoutMs ?? 2000;
+    const entries = [...this.loaded.entries()].reverse();
     this.loaded.clear();
     this.externalCount = 0;
     this.builtins.clear();
+    const results = await Promise.allSettled(
+      entries.map(async ([id, { plugin, undo }]) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            Promise.resolve().then(() => plugin.dispose?.()),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(`Plugin ${id} dispose timed out after ${limit}ms`)),
+                limit,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+          for (const fn of undo.reverse()) fn();
+        }
+      }),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
     if (errors.length) throw new AggregateError(errors, "Plugin disposal failed");
   }
 }
@@ -773,16 +866,24 @@ export async function discoverPlugins(root: string): Promise<string[]> {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw e;
   }
-  return entries
-    .filter(
-      // A root may hold an `npm install --prefix` layout (`node_modules`, package.json/lock);
-      // npm packages there are resolved through the configured `plugins` array instead.
-      (e) =>
-        e.name !== "node_modules" &&
-        e.name !== "package.json" &&
-        e.name !== "package-lock.json" &&
-        ((e.isFile() && /\.[cm]?[jt]s$/.test(e.name)) || e.isDirectory()),
-    )
-    .map((e) => join(root, e.name))
-    .sort();
+  const found = await Promise.all(
+    entries
+      .filter(
+        // A root may hold an `npm install --prefix` layout (`node_modules`, package.json/lock);
+        // npm packages there are resolved through the configured `plugins` array instead.
+        (e) =>
+          e.name !== "node_modules" &&
+          e.name !== "package.json" &&
+          e.name !== "package-lock.json" &&
+          ((e.isFile() && /\.[cm]?[jt]s$/.test(e.name)) || e.isDirectory()),
+      )
+      .map(async (e) => {
+        const path = join(root, e.name);
+        // A directory is a plugin only with its manifest: `<config home>/plugins/<id>` is also
+        // where `api.paths.config` puts a plugin's own files, and those are not plugins.
+        if (e.isDirectory() && !(await exists(join(path, "alisio-plugin.json")))) return undefined;
+        return path;
+      }),
+  );
+  return found.filter((path): path is string => path !== undefined).sort();
 }

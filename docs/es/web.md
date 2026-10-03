@@ -172,8 +172,11 @@ pueden quitar; solo se pueden enviar cuando no hay una ejecución activa.
 **Línea de estadísticas.** Bajo el compositor, una línea resume la última ejecución: turnos, pasos
 (llamadas a herramientas), tiempo en el modelo y en herramientas, tiempo medio hasta el primer
 token, tokens de salida por segundo, la parte de la entrada servida desde la caché de prompts del
-proveedor y los tokens de entrada. Al pasar el ratón se ven los totales de toda la sesión. La caché
-muestra `—` cuando el proveedor no informa de la entrada en caché.
+proveedor y los tokens de entrada. Al pasar el ratón se ven los totales de toda la sesión; cuando hubo decisiones, el tooltip
+también indica cuántas se respondieron y cuántas recurrieron al valor por defecto (consulte
+[Decision Intelligence](/es/decision-intelligence#stats-section)). La caché muestra `—` cuando el
+proveedor no informa de la entrada en caché. El comando `/decisions` funciona en el cuadro de
+mensaje igual que en la terminal: consulte [`/decisions`](/es/decision-intelligence#decisions-command).
 
 **Aprobaciones y preguntas.** Cuando una herramienta necesita aprobación, un panel ocupa el lugar del
 compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Responda con **Denegar**

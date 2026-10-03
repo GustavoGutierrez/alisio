@@ -161,7 +161,10 @@ run is active.
 **Stats line.** Under the composer, one line sums up the latest run: turns, steps (tool calls), time
 spent in the model and in tools, the average time to first token, output tokens per second, the
 share of input served from the provider's prompt cache and the input tokens. Hover it for the
-totals of the whole session. Cache shows `—` when the provider does not report cached input.
+totals of the whole session; when decisions happened, the tooltip also shows how many were
+answered and how many fell back (see [Decision Intelligence](/decision-intelligence#stats-section)).
+Cache shows `—` when the provider does not report cached input. The `/decisions` command works in
+the composer like in the terminal: see [`/decisions`](/decision-intelligence#decisions-command).
 
 **Approvals and questions.** When a tool needs approval, a panel takes the composer's place and
 receives focus: it names the tool, the effect and its input. Answer with **Deny** (`D`), **Allow

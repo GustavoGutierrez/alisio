@@ -160,6 +160,12 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
+    name: "decisions",
+    description: "Show Decision Intelligence status, provider health and session metrics",
+    surfaces: ALL,
+    execution: "core",
+  },
+  {
     name: "exit",
     description: "Exit Alisio",
     aliases: ["quit"],

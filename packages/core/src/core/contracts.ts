@@ -6,7 +6,9 @@ import type {
   CompactionCheckpoint,
   InstallPreview,
   Message,
+  RunEventDataMap,
   ToolCall,
+  ToolDecisions,
   ToolResult,
 } from "@alisio/sdk";
 export interface Session {
@@ -280,6 +282,17 @@ export type ArtifactPublisherFactory = (
   call: { sessionId: string; runId: string; callId: string },
   announce: (published: PublishedArtifactInfo) => void,
 ) => CoreArtifactPublisher | undefined;
+/**
+ * Creates the `ToolContext.decisions` of one tool call; `announce` emits the decision event of
+ * the run (persisted and fanned out like any other). `undefined` leaves the context without it.
+ */
+export type DecisionsFactory = (
+  call: { sessionId: string; runId: string; callId: string },
+  announce: <K extends "decision_completed" | "decision_fallback">(
+    type: K,
+    data: RunEventDataMap[K],
+  ) => void,
+) => ToolDecisions | undefined;
 /** Optional interactive approval for write/process/external tools not pre-allowed by the Policy. */
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalDecision>;
 export interface HookFailure {

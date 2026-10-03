@@ -85,6 +85,11 @@ const LEGACY_COMMANDS = [
     description: "Start or manage the current Session Goal",
     argumentHint: "[objective | pause | resume | edit | clear | help | budget=<n>]",
   },
+  // Added with Decision Intelligence.
+  {
+    name: "decisions",
+    description: "Show Decision Intelligence status, provider health and session metrics",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

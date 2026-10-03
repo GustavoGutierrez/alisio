@@ -126,6 +126,13 @@ siguen ejecutándose, y una respuesta cortada con texto útil y sin llamadas ter
 `run_cancelled`. `RunEventDataMap` y `KnownRunEvent` de `@alisio/sdk` tipan el payload de cada evento que emite el núcleo; `tests/run-events-contract.test.ts` comprueba el
 runner contra ellos.
 
+[Decision Intelligence](/es/decision-intelligence) añade dos eventos persistidos y aditivos:
+`decision_completed` (`decisionId`, `pack?`, `provider`, `latencyMs`, `decisionCount`,
+`rejectedCount`, `confidenceMin`) y `decision_fallback` (`decisionId`, `pack?`, `provider`,
+`latencyMs`, `reason`). Llevan solo metadatos, nunca el `state` enviado al proveedor, y no se
+persisten cuando `decisions.telemetry` es `false`. No hay un evento `decision_started` a propósito:
+la latencia va en el evento final.
+
 ## Base de datos de sesiones (v4) {#session-database}
 
 `SQLiteStore` migra solo hacia delante y de forma aditiva: una base escrita por un Alisio anterior se

@@ -49,6 +49,16 @@ Ejecute estas comprobaciones antes de abrir un pull request:
   en español. `docs/implementation-status.md` se escribe en español y
   registra las limitaciones y el alcance de la verificación; actualícelo cuando cambien.
 
+## Decision Intelligence {#decision-intelligence}
+
+Antes de añadir un Decision Pack o cualquier uso de `ctx.decisions`, el cambio debe pasar la
+[regla de admisión](/es/decision-intelligence#admission-rule): cuatro preguntas sobre si la
+decisión es cerrada, frecuente, vale la pena resolverla así y admite una alternativa segura, y ocho
+respuestas escritas en la pull request (la decisión, el trabajo del LLM que se elimina, la métrica,
+la alternativa, el comportamiento sin proveedor, cómo se valida la salida, por qué el código
+determinista no basta y qué va en `state`). Las funciones que no pueden responderlas no usan el
+motor de decisiones.
+
 ## Versionado
 
 Las versiones y los changelogs se gestionan con [changesets](https://github.com/changesets/changesets).

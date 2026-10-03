@@ -4,7 +4,12 @@
  * TTFT = mean turn `ttftMs`, tok/s = Σ output / LLM time, cache = Σ cachedInput / Σ input over
  * the turns that report it (unknown, never 0 %, when none does). Pure.
  */
-import type { RunEvent, Usage } from "@alisio/sdk";
+import {
+  type DecisionStats,
+  type RunEvent,
+  summarizeDecisionEvents,
+  type Usage,
+} from "@alisio/sdk";
 
 export interface Stats {
   runs: number;
@@ -18,6 +23,8 @@ export interface Stats {
   cacheHit?: number;
   inputTokens: number;
   outputTokens: number;
+  /** Decision Intelligence (same semantics as `/stats`); absent when no decision happened. */
+  decisions?: DecisionStats;
 }
 
 const num = (value: unknown): number | undefined =>
@@ -62,6 +69,7 @@ export function computeStats(events: RunEvent[]): Stats {
       toolMs += num(data.durationMs) ?? 0;
     }
   }
+  const decisions = summarizeDecisionEvents(events);
   return {
     runs: runs.size,
     turns,
@@ -73,8 +81,38 @@ export function computeStats(events: RunEvent[]): Stats {
     ...(cacheReported ? { cacheHit: cacheBase > 0 ? cachedInput / cacheBase : 0 } : {}),
     inputTokens: input,
     outputTokens: output,
+    ...(decisions.requests > 0 ? { decisions } : {}),
   };
 }
+
+/**
+ * The Decision Intelligence part of the session tooltip, e.g. `Decisions 4 (3 ok, 1 fallback) ·
+ * avg 60 ms · p95 80 ms`; undefined when no decision happened. `translate` is `t` in the UI.
+ */
+export function decisionsSummary(
+  decisions: DecisionStats | undefined,
+  translate: (key: DecisionKey, params?: Record<string, string | number>) => string,
+): string | undefined {
+  if (!decisions || decisions.requests <= 0) return undefined;
+  const out = [
+    translate("stats.decisions", {
+      requests: decisions.requests,
+      completed: decisions.completed,
+      fallbacks: decisions.fallbacks,
+    }),
+  ];
+  if (decisions.avgLatencyMs !== undefined)
+    out.push(
+      translate("stats.decisionsLatency", {
+        avg: decisions.avgLatencyMs,
+        p95: decisions.p95LatencyMs ?? decisions.avgLatencyMs,
+      }),
+    );
+  if (decisions.lastFallback)
+    out.push(translate("stats.decisionsFallback", { reason: decisions.lastFallback.reason }));
+  return out.join(" · ");
+}
+type DecisionKey = "stats.decisions" | "stats.decisionsLatency" | "stats.decisionsFallback";
 
 /** Stats of the latest run (the default view) and of the whole session (the hover). */
 export function sessionStats(events: RunEvent[]): { last?: Stats; session: Stats } {

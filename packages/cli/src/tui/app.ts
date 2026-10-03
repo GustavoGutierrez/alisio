@@ -18,6 +18,7 @@ import {
   describePermissionStatus,
   type ExternalDirectoryRequest,
   formatChangelogMarkdown,
+  formatDecisionStatsSection,
   formatReloadReport,
   type GoalHostView,
   generateAgentDraft,
@@ -59,6 +60,7 @@ import type {
   PlanReview,
   RunEvent,
 } from "@alisio/sdk";
+import { summarizeDecisionEvents } from "@alisio/sdk";
 import {
   CombinedAutocompleteProvider,
   type Component,
@@ -3202,6 +3204,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
     const tools = Object.entries(s.tools)
       .map(([name, t]) => `| \`${name}\` | ${t.calls} | ${t.errors} |`)
       .join("\n");
+    const decisionSection = formatDecisionStatsSection(summarizeDecisionEvents(s.decisions ?? []));
     return [
       "**Session statistics**",
       "",
@@ -3214,6 +3217,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       "",
       tools ? `| Tool | Calls | Errors |\n| --- | --- | --- |\n${tools}` : "No tool calls yet.",
       "",
+      ...(decisionSection ? [decisionSection, ""] : []),
       "**Extensions**",
       "",
       `- mascot: ${app.plugins.extensions.resolve("mascot")?.provider.id ?? "alisio.default"} · startup screen: ${app.plugins.extensions.resolve("startup-screen")?.provider.id ?? "alisio.default"}`,
@@ -3381,6 +3385,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         case "stats":
           return info(statsReport());
         case "tools":
+        case "decisions":
         case "sessions": {
           // Text-identical core handlers (parity-tested): output comes from the CommandCatalog.
           const result = await commandCatalog.execute(name, parsed.args, { sessionId: session });

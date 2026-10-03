@@ -263,6 +263,7 @@ export type {
   CapabilityGate,
   ContextSource,
   CoreArtifactPublisher,
+  DecisionsFactory,
   EndRunInput,
   EventPage,
   HookFailure,
@@ -299,6 +300,31 @@ export {
   type RunnerSettingsPatch,
   type RunOptions,
 } from "./core/runner.ts";
+export {
+  CircuitBreaker,
+  type CircuitBreakerOptions,
+  type CircuitState,
+  DECISION_LIMITS,
+  DEFAULT_DECISIONS_CONFIG,
+  type DecisionAttempt,
+  DecisionError,
+  type DecisionMetricEntry,
+  DecisionMetrics,
+  type DecisionMetricsSnapshot,
+  type DecisionOutcome,
+  DecisionRegistry,
+  DecisionService,
+  type DecisionServiceDeps,
+  type DecisionStatus,
+  type DecisionsConfig,
+  formatDecisionStatsSection,
+  formatDecisionsReport,
+  HEALTH_TIMEOUT_MS,
+  type RegisteredDecisionProvider,
+  splitSupported,
+  validateAnswers,
+  validateRequest,
+} from "./decisions/index.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
 export * from "./goal/index.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
@@ -364,6 +390,7 @@ export {
 } from "./plan/state.ts";
 export {
   discoverPlugins,
+  type PluginEnvironment,
   PluginHost,
   type PluginHostOptions,
   pluginPrefix,

@@ -183,7 +183,10 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
   }
   const controller = new AbortController();
   const interrupt = () => controller.abort(new Error("Interrupted"));
-  process.on("SIGINT", interrupt);
+  // Same handler for every termination signal: abort the run and close through `finally`, so
+  // plugins get their (bounded) `dispose()` also on `kill` and a closed terminal.
+  const stopSignals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  for (const signal of stopSignals) process.on(signal, interrupt);
   // `/name args` runs a prompt template (same syntax as the TUI); refuse before creating a session.
   let template: ReturnType<typeof app.expandPrompt>;
   try {
@@ -293,7 +296,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       rl.close();
     }
   } finally {
-    process.off("SIGINT", interrupt);
+    for (const signal of stopSignals) process.off(signal, interrupt);
     // Background tasks end with Alisio: `run` waits for none of them, it stops them and says so.
     const live = app.tasks.liveCount();
     await app.close();

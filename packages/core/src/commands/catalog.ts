@@ -4,7 +4,12 @@
  * The catalog reads its sources live from the host on each call, so plugin/template/skill
  * changes show up without rebuilding it.
  */
-import type { CommandDescriptor, ToolDefinition } from "@alisio/sdk";
+import {
+  type CommandDescriptor,
+  type RunEvent,
+  summarizeDecisionEvents,
+  type ToolDefinition,
+} from "@alisio/sdk";
 import {
   agentCatalogFromState,
   agentCommandDescriptors,
@@ -13,6 +18,13 @@ import {
 import type { PluginCatalogEntry } from "../application.ts";
 import type { SessionStore } from "../core/contracts.ts";
 import type { AgentRunner } from "../core/runner.ts";
+import {
+  type DecisionMetrics,
+  type DecisionService,
+  type DecisionsConfig,
+  formatDecisionStatsSection,
+  formatDecisionsReport,
+} from "../decisions/index.ts";
 import type { McpServerInfo } from "../mcp/connector.ts";
 import type { PromptTemplate } from "../resources/prompts.ts";
 import type { SkillCatalogEntry } from "../resources/skills.ts";
@@ -49,7 +61,15 @@ export interface CommandHost {
   skillCatalog?(): SkillCatalogEntry[];
   pluginCatalog?(): PluginCatalogEntry[];
   mcp?: { list(): McpServerInfo[] };
-  config?: { agents: { active?: string; effort?: string } };
+  config?: {
+    agents: { active?: string; effort?: string };
+    decisions?: Pick<DecisionsConfig, "timeoutMs" | "minConfidence" | "telemetry">;
+  };
+  /** Decision Intelligence (`/decisions`, and the `/stats` section). */
+  decisions?: {
+    service: Pick<DecisionService, "status">;
+    metrics: Pick<DecisionMetrics, "snapshot">;
+  };
   updateSetting?(key: "agents.effort", value: unknown): Promise<string>;
   /** `/btw` side questions (tool-less, outside the conversation). */
   sideQuestions?: Pick<SideQuestions, "ask" | "history">;
@@ -95,7 +115,55 @@ const firstPrompt = (host: CommandHost, id: string) => {
   return first?.role === "user" ? first.text.replace(/\s+/g, " ").slice(0, 60) : "";
 };
 
+const EVENT_PAGE = 5000;
+const MAX_EVENT_PAGES = 20;
+/**
+ * The session's persisted `decision_*` events as `RunEvent`s (`createdAt` becomes the timestamp,
+ * so `lastFallback.at` is right), paged through the store. Empty without a paging store.
+ */
+function decisionEvents(host: CommandHost, sessionId: string): RunEvent[] {
+  const out: RunEvent[] = [];
+  let after = 0;
+  for (let page = 0; page < MAX_EVENT_PAGES; page++) {
+    const result = host.store.eventsPage?.(sessionId, { after, limit: EVENT_PAGE });
+    if (!result?.items.length) break;
+    for (const item of result.items) {
+      if (item.type !== "decision_completed" && item.type !== "decision_fallback") continue;
+      out.push({
+        schemaVersion: 1,
+        runId: item.runId,
+        sessionId,
+        seq: out.length + 1,
+        type: item.type,
+        timestamp: new Date(item.createdAt ?? 0).toISOString(),
+        data: item.data,
+        eventId: item.eventId,
+      });
+    }
+    if (!result.hasMore) break;
+    after = Number(result.items.at(-1)?.eventId);
+    if (!Number.isFinite(after)) break;
+  }
+  return out;
+}
+
 const HANDLERS: Record<string, Handler> = {
+  async decisions(_args, ctx, host) {
+    const decisions = host.decisions;
+    if (!decisions) return { text: "Decision Intelligence is unavailable here", tone: "notice" };
+    const status = await decisions.service.status(ctx.signal);
+    const session = decisions.metrics.snapshot(ctx.sessionId);
+    const processView = decisions.metrics.snapshot();
+    return {
+      text: formatDecisionsReport({
+        status,
+        config: host.config?.decisions ?? { timeoutMs: 0, minConfidence: 0, telemetry: false },
+        session,
+        process: processView,
+      }),
+      data: { status, session, process: processView },
+    };
+  },
   async tools(_args, _ctx, host) {
     const policy = host.runner.policy;
     const rows = host.registry
@@ -193,6 +261,9 @@ const HANDLERS: Record<string, Handler> = {
       }),
       { input: 0, output: 0 },
     );
+    const decisionSection = formatDecisionStatsSection(
+      summarizeDecisionEvents(decisionEvents(host, ctx.sessionId)),
+    );
     return {
       text: [
         "**Session statistics**",
@@ -202,6 +273,7 @@ const HANDLERS: Record<string, Handler> = {
         `- Messages: ${host.store.messages(session.id).length}`,
         `- Runs: ${runs.length}`,
         `- Tokens: in ${tokens.input} · out ${tokens.output}`,
+        ...(decisionSection ? ["", decisionSection] : []),
       ].join("\n"),
       data: { session, runs: runs.length, tokens },
     };

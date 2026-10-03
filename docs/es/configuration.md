@@ -95,7 +95,8 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
   "limits": { "maxTurns": 100, "timeoutMs": 600000, "firstTokenTimeoutMs": 90000, "firstTokenRetries": 1 },
   "compaction": { "auto": true, "threshold": 0.85, "keepTurns": 2, "maxOutputTokens": 16000 },
   "builtinPlugins": { "memory": { "enabled": true } },
-  "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000 },
+  "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000, "disposeTimeoutMs": 2000 },
+  "decisions": { "enabled": true, "provider": null, "timeoutMs": 1500, "minConfidence": 0.6, "telemetry": true },
   "plugins": [],
   "skills": [],
   "additionalDirectories": [],
@@ -222,7 +223,30 @@ Consulte [Memoria persistente](/es/memory).
 | --- | --- | --- |
 | `timeoutMs` | `15000` | Tiempo límite (100–120000 ms) de los hooks de compactación y de inicio de sesión |
 | `sessionEndTimeoutMs` | `10000` | Tiempo límite (100–120000 ms) de los hooks de fin de sesión |
+| `disposeTimeoutMs` | `2000` | Límite por plugin (100–10000 ms) para `dispose()` y para el `deactivate()` del proveedor de decisiones activo cuando Alisio se cierra. Los plugins se liberan en paralelo, así que uno lento no retrasa a los demás. Ajustable en vivo desde **Ajustes → General** en la web; no figura en el menú `/settings` de la terminal |
 
+## `decisions` {#decisions}
+
+[Decision Intelligence](/es/decision-intelligence): un proveedor opcional resuelve elecciones
+cerradas sin una generación completa del modelo. `provider` y `telemetry` son **solo globales**: se
+leen de `<config home>/config.json`, y una capa de proyecto o `--config` que las defina se ignora
+con un aviso (`alisio doctor` lista lo ignorado).
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | `false` desactiva las decisiones: las llamadas se resuelven a nada y las funciones usan sus valores por defecto |
+| `provider` | `null` | ID del proveedor de plugin que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un plugin nunca lo activa. Solo global |
+| `timeoutMs` | `1500` | Límite de una llamada de decisión (50–10000 ms) |
+| `minConfidence` | `0.6` | Las respuestas con menos confianza se rechazan (0–1). Es un filtro heurístico: no se asume que la confianza esté calibrada |
+| `telemetry` | `true` | `false` deja de persistir los eventos de decisión, así que `/stats` no muestra la sección de decisiones. Solo global |
+
+```json
+{ "decisions": { "provider": "my-provider", "timeoutMs": 1500 } }
+```
+
+Las cinco claves se pueden cambiar desde **Ajustes → General** en [`alisio serve`](/es/web) (etiquetas
+en inglés y español) y se leen en vivo: la siguiente decisión usa el nuevo valor. No figuran en el
+menú `/settings` de la terminal; allí edite el archivo.
 ## `plugins`
 
 Lista de plugins de confianza: rutas (resueltas respecto al archivo de configuración) o nombres de
@@ -249,6 +273,18 @@ del plugin:
 
 ```json
 { "pluginOverrides": { "acme.hello": { "enabled": false } } }
+```
+
+Una entrada también puede llevar `options`, un objeto JSON que el plugin lee como `api.options`
+(consulte [Escribir plugins](/es/plugins#decision-intelligence)). `options` es **solo global**: una
+capa de proyecto no puede definirlo (se ignora con un aviso), porque un plugin se ejecuta con todos
+los privilegios del proceso. Los nombres de opción empiezan por una letra y usan letras, dígitos,
+punto, guion bajo o guion; el objeto serializado ocupa como máximo 8 KB; no ponga secretos en él.
+Cambiarlo surte efecto al reiniciar. Activar o desactivar un plugin desde `/plugins` conserva sus
+`options`.
+
+```json
+{ "pluginOverrides": { "acme.hello": { "options": { "device": "cpu" } } } }
 ```
 
 Los cambios de plugins integrados usan el campo existente `builtinPlugins.<id>.enabled`. Ambas

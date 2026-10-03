@@ -41,6 +41,21 @@ pnpm docs:build
 - Code, comments and tests are in English. `docs/implementation-status.md` is in Spanish and records
   limitations and verification scope; update it when those change.
 
+## Decision Intelligence
+
+The decision engine is for closed choices that deterministic code cannot make well. Before creating
+a Decision Pack or using `ctx.decisions`, answer in order: (1) does the decision have a closed set
+of outcomes (if not, use the LLM or ordinary code)? (2) does it come up often enough? (3) does
+resolving it here reduce tokens, cost, latency or variability? (4) is there a safe fallback (if
+not, do not automate it)?
+
+The pull request must also answer in writing: (1) which closed decision it solves; (2) what LLM
+work it removes; (3) which metric improves; (4) its fallback; (5) what happens without a provider;
+(6) how its output is validated; (7) why deterministic code would not be enough; (8) what goes into
+`state` and why a remote provider could receive it. If they cannot be answered clearly, the
+feature does not use the decision engine. Deterministic code comes first. See
+[Decision Intelligence](https://gustavogutierrez.github.io/alisio/decision-intelligence#admission-rule).
+
 ## Versioning
 
 Add a changeset to every pull request that changes a published package:

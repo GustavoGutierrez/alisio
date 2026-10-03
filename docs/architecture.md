@@ -118,6 +118,13 @@ cut response still run, and a cut response with usable text and no calls complet
 `response_truncated`. A user stop stays `run_cancelled`. `RunEventDataMap` and `KnownRunEvent` in `@alisio/sdk` type the payload of every event the core
 emits; `tests/run-events-contract.test.ts` checks the runner against them.
 
+[Decision Intelligence](/decision-intelligence) adds two stored, additive events:
+`decision_completed` (`decisionId`, `pack?`, `provider`, `latencyMs`, `decisionCount`,
+`rejectedCount`, `confidenceMin`) and `decision_fallback` (`decisionId`, `pack?`, `provider`,
+`latencyMs`, `reason`). They carry metadata only, never the `state` sent to the provider, and are
+not stored when `decisions.telemetry` is `false`. There is no `decision_started` event on purpose:
+the latency is in the final event.
+
 ## Session database (v4) {#session-database}
 
 `SQLiteStore` migrates forward only and additively: a database written by an older Alisio opens at

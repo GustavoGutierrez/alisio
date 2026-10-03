@@ -45,6 +45,10 @@ const usage = (v: unknown) =>
   num((v as Record<string, unknown>).input) &&
   num((v as Record<string, unknown>).output) &&
   opt((v as Record<string, unknown>).cachedInput, num);
+const decisionPack = (v: unknown) =>
+  record(v) &&
+  str((v as Record<string, unknown>).id) &&
+  num((v as Record<string, unknown>).version);
 const hookFailure: Check = (d) =>
   str(d.source) && str(d.hook) && str(d.error) && d.continued === true;
 
@@ -169,6 +173,29 @@ const contract: { [K in RunEventType]: Check } = {
   session_context_injected: (d) =>
     num(d.tokens) && Array.isArray(d.sources) && (d.sources as unknown[]).every(str),
   plugin_hook_failed: hookFailure,
+  decision_completed: (d) =>
+    str(d.decisionId) &&
+    opt(d.pack, decisionPack) &&
+    str(d.provider) &&
+    num(d.latencyMs) &&
+    num(d.decisionCount) &&
+    num(d.rejectedCount) &&
+    num(d.confidenceMin),
+  decision_fallback: (d) =>
+    str(d.decisionId) &&
+    opt(d.pack, decisionPack) &&
+    str(d.provider) &&
+    num(d.latencyMs) &&
+    oneOf(
+      "timeout",
+      "not_ready",
+      "unavailable",
+      "invalid_response",
+      "provider_error",
+      "circuit_open",
+      "unsupported",
+      "all_rejected",
+    )(d.reason),
 };
 
 const conforms = (event: RunEvent): boolean => {

@@ -45,6 +45,15 @@ Run these before opening a pull request:
 - Code, comments and tests are written in English; this site is written in English and Spanish.
   `docs/implementation-status.md` is written in Spanish and records limitations and verification scope; update it when those change.
 
+## Decision Intelligence {#decision-intelligence}
+
+Before adding a Decision Pack or any use of `ctx.decisions`, the change has to pass the
+[admission rule](/decision-intelligence#admission-rule): four questions about whether the decision
+is closed, frequent, worth resolving this way and safe to fall back from, and eight written answers
+in the pull request (the decision, the LLM work removed, the metric, the fallback, the behavior
+without a provider, how the output is validated, why deterministic code is not enough, and what goes
+into `state`). Features that cannot answer them do not use the decision engine.
+
 ## Versioning
 
 Versions and changelogs are managed with [changesets](https://github.com/changesets/changesets).

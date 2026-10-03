@@ -95,7 +95,8 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva |
 | `/model`, `/models` | Abre el selector global de proveedor/modelo. Las entradas se agrupan y prefijan con el título del proveedor, se marca la pareja activa y los catálogos no disponibles siguen visibles sin ocultar perfiles sanos. Una pareja distinta se persiste e inicia una sesión nueva; la pareja activa no hace nada. No se lista la configuración raíz heredada |
 | `/compact [focus]` | Resume la historia antigua con el modelo actual, con instrucciones de foco opcionales |
-| `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto y detalles de plugins |
+| `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto, detalles de plugins y, cuando hubo decisiones, una sección de [Decision Intelligence](/es/decision-intelligence#stats-section) |
+| `/decisions` | Estado de [Decision Intelligence](/es/decision-intelligence#decisions-command): proveedor y salud, circuito, tiempo límite y métricas de la sesión y del proceso |
 | `/clear` (`/new`) | Inicia una sesión nueva con el modelo actual |
 | `/sessions` | Sesiones recientes del workspace |
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |

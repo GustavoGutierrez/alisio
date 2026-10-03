@@ -92,7 +92,8 @@ description, and `/resume` suggests matching session IDs.
 | `/connect` | Open a focused provider form with paste-friendly URL input, masked secret input, an API key environment-variable field (the connection remembers its name for the environment fallback), cursor editing and explicit submit/cancel help; then show that provider's titled, provider-prefixed model list, persist the choice globally and start a fresh session |
 | `/model`, `/models` | Open the global provider/model selector. Entries are grouped and prefixed by provider title, the active pair is marked, and unavailable catalogs remain visible without hiding healthy profiles. A different pair is persisted and starts a fresh session; the active pair is a no-op. Legacy root provider configuration is not listed |
 | `/compact [focus]` | Summarize older history with the current model, with optional focus instructions |
-| `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context and plugin details |
+| `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context, plugin details and, when decisions happened, a [Decision Intelligence](/decision-intelligence#stats-section) section |
+| `/decisions` | [Decision Intelligence](/decision-intelligence#decisions-command) status: provider and health, circuit, timeout, and metrics of the session and the process |
 | `/clear` (`/new`) | Start a new session with the current model |
 | `/sessions` | Recent sessions of the workspace |
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |

@@ -223,6 +223,91 @@ const serveSmoke = async () => {
   }
   assert.equal(await exited, 0, stderr);
 };
+/**
+ * `alisio run` + a termination signal: the run is aborted, the application closes and every
+ * plugin's `dispose()` runs (a sentinel file proves it). SIGTERM and SIGHUP behave like SIGINT.
+ */
+const signalDispose = async (signal: "SIGTERM" | "SIGHUP" | "SIGINT") => {
+  const sentinel = join(directory, `disposed-${signal}.txt`);
+  const ext = mode === "binary" ? "ts" : "mjs";
+  const pluginFile = join(directory, `dispose-${signal}.${ext}`);
+  await writeFile(
+    pluginFile,
+    `import { writeFileSync } from "node:fs";export default {id:"disposer",version:"1.0.0",apiVersion:1,setup(){},dispose(){writeFileSync(${JSON.stringify(sentinel)},"disposed")}}`,
+  );
+  let hit: (() => void) | undefined;
+  const requested = new Promise<void>((resolve) => {
+    hit = resolve;
+  });
+  // A model that never answers: the run is still in flight when the signal arrives.
+  const hanging = await serve(async () => {
+    hit?.();
+    await new Promise(() => {});
+    return new Response("");
+  });
+  const config = join(directory, `signal-${signal}.json`);
+  await writeFile(
+    config,
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${hanging.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+    }),
+  );
+  const [program = "", ...prefix] = command;
+  const child = spawn(
+    program,
+    [
+      ...prefix,
+      "run",
+      "Wait forever",
+      "--cwd",
+      directory,
+      "--config",
+      config,
+      "--plugin",
+      pluginFile,
+    ],
+    {
+      cwd: directory,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        ALISIO_CONFIG_HOME: join(directory, "global"),
+        ALISIO_STATE_HOME: join(directory, "state"),
+        ALISIO_MODEL: "",
+        OPENAI_BASE_URL: "",
+        ALISIO_API_MODE: "",
+        HERDR_ENV: "0",
+      },
+    },
+  );
+  let stderr = "";
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  const exited = new Promise<number | null>((done) => child.on("close", (code) => done(code)));
+  try {
+    await Promise.race([
+      requested,
+      new Promise((_, fail) =>
+        setTimeout(() => fail(new Error(`run never asked: ${stderr}`)), 20_000),
+      ),
+    ]);
+    child.kill(signal);
+    await Promise.race([
+      exited,
+      new Promise((_, fail) =>
+        setTimeout(() => fail(new Error(`run ignored ${signal}: ${stderr}`)), 20_000),
+      ),
+    ]);
+    assert.equal(await readFile(sentinel, "utf8"), "disposed", `${signal}: ${stderr}`);
+  } finally {
+    child.kill("SIGKILL");
+    await hanging.close();
+  }
+};
 const rgAvailable = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 try {
   await writeFile(join(directory, "note.txt"), "fixture content");
@@ -570,6 +655,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
     const remoteRefused = await execute(["serve", "--host", "0.0.0.0", "--no-open"], false, 1);
     assert.match(remoteRefused, /--allow-remote/);
     await serveSmoke();
+    for (const signal of ["SIGTERM", "SIGHUP", "SIGINT"] as const) await signalDispose(signal);
 
     // Headless paths (doctor, and `run`/`--json` elsewhere) never prompt for trust and keep the
     // exact pre-existing behavior: without --trust-project, a distinguishing custom baseURL in
@@ -627,6 +713,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "JSONL unchanged with a mascot/startup-screen plugin; no banner in run mode",
         "headless prompt template /init; --read-only refusal",
         "alisio setup scaffolds config; alisio init is now an unknown command",
+        "alisio run: SIGTERM, SIGHUP and SIGINT abort the run and dispose plugins (sentinel file)",
         "alisio serve: --help, --allow-remote refusal, health/token/cookie smoke, SIGTERM exit",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",

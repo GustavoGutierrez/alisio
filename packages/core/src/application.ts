@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type {
   AvailableProviderModel,
+  JsonValue,
   ModelInfo,
   ModelProvider,
   Plugin,
@@ -44,6 +45,12 @@ import { HumanWaits } from "./core/human-wait.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./core/output-limit.ts";
 import { ToolRegistry } from "./core/registry.ts";
 import { AgentRunner, type CompactionSettings, type RunnerSettingsPatch } from "./core/runner.ts";
+import {
+  bindDecisions,
+  DecisionMetrics,
+  DecisionRegistry,
+  DecisionService,
+} from "./decisions/index.ts";
 import { GoalService } from "./goal/service.ts";
 import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
@@ -288,7 +295,27 @@ export async function createApplication(options: AppOptions = {}) {
       maxBytes: config.context.maxBytes,
     }),
     providers = new ProviderRegistry(),
-    plugins = new PluginHost(registry, store, config.pluginHooks, providers),
+    plugins = new PluginHost(
+      registry,
+      store,
+      {
+        hookTimeoutMs: config.pluginHooks.timeoutMs,
+        sessionEndTimeoutMs: config.pluginHooks.sessionEndTimeoutMs,
+        disposeTimeoutMs: config.pluginHooks.disposeTimeoutMs,
+      },
+      providers,
+    ),
+    decisionRegistry = new DecisionRegistry(),
+    decisionMetrics = new DecisionMetrics(),
+    decisionService = new DecisionService({
+      registry: decisionRegistry,
+      // Read per call: `updateSetting("decisions.*")` mutates `config.decisions`.
+      config: () => config.decisions,
+      metrics: decisionMetrics,
+      // Failures never reach the terminal (they would garble the TUI): they are kept as
+      // `lastLifecycleError` in the service status.
+      lifecycle: { timeoutMs: () => config.pluginHooks.timeoutMs },
+    }),
     mcp = new McpConnector(
       config.mcp.servers,
       registry,
@@ -304,6 +331,20 @@ export async function createApplication(options: AppOptions = {}) {
   const herdr = options.noHerdr
     ? new HerdrBridge({}, async () => "")
     : HerdrBridge.fromEnvironment(workspace, (error) => process.stderr.write(`${error}\n`));
+  // Decision providers and per-plugin directories/options are bound before any plugin loads.
+  plugins.setDecisions({ registry: decisionRegistry, service: decisionService });
+  const stateRoot = options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
+  plugins.setPluginEnvironment({
+    stateRoot,
+    configHome: configHome(),
+    options: (id, builtin) => {
+      if (builtin) {
+        const { enabled: _enabled, ...rest } = config.builtinPlugins[id] ?? {};
+        return rest as Record<string, JsonValue>;
+      }
+      return config.pluginOverrides[id]?.options ?? {};
+    },
+  });
   try {
     // First-party built-ins load through the trusted path, also under --read-only.
     const builtinContext = {
@@ -463,6 +504,9 @@ export async function createApplication(options: AppOptions = {}) {
         }
       }
     }
+    // Every plugin has registered its providers: start the configured one in the background
+    // (`activate` is bounded, never fatal and never awaited here).
+    decisionService.syncActive();
     // Project skills follow the config trust model (--trust-project or an explicit --config).
     await skills.discover(
       skillRoots({
@@ -495,7 +539,6 @@ export async function createApplication(options: AppOptions = {}) {
       pathAccess,
     );
     // Python analysis and artifacts live next to the session database (like attachment blobs).
-    const stateRoot = options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
     const artifacts = new ArtifactStore({
       root: stateRoot,
       db: store.db,
@@ -992,6 +1035,8 @@ export async function createApplication(options: AppOptions = {}) {
             },
           }
         : {}),
+      decisions: (call, announce) =>
+        bindDecisions(decisionService, () => config.decisions.telemetry, call, announce),
       artifacts: (call, announce) =>
         createArtifactPublisher(
           artifacts,
@@ -1129,6 +1174,8 @@ export async function createApplication(options: AppOptions = {}) {
       /** Tabular datasets of every session (ingestion, read-only queries, pages). */
       datasets,
       registry,
+      /** Decision Intelligence: the provider catalog, the service and in-memory metrics. */
+      decisions: { registry: decisionRegistry, service: decisionService, metrics: decisionMetrics },
       context,
       skills,
       /** Path- and content-safe metadata for the interactive skills manager. */
@@ -1345,6 +1392,33 @@ export async function createApplication(options: AppOptions = {}) {
             config.pluginHooks = { ...config.pluginHooks, timeoutMs: Number(value) };
             plugins.applyTimeoutSettings({ hookTimeoutMs: Number(value) });
             break;
+          case "pluginHooks.disposeTimeoutMs":
+            config.pluginHooks = { ...config.pluginHooks, disposeTimeoutMs: Number(value) };
+            plugins.applyTimeoutSettings({ disposeTimeoutMs: Number(value) });
+            break;
+          case "decisions.enabled":
+          case "decisions.telemetry": {
+            // Read live by the service on its next call; `enabled` also drives the provider's
+            // activate/deactivate lifecycle.
+            const leaf = key.slice("decisions.".length);
+            config.decisions = { ...config.decisions, [leaf]: value === true };
+            decisionService.syncActive();
+            break;
+          }
+          case "decisions.provider":
+            // `!clear` (undefined) deactivates the feature.
+            config.decisions = {
+              ...config.decisions,
+              provider: value === undefined || value === null ? null : String(value),
+            };
+            decisionService.syncActive();
+            break;
+          case "decisions.timeoutMs":
+          case "decisions.minConfidence": {
+            const leaf = key.slice("decisions.".length);
+            config.decisions = { ...config.decisions, [leaf]: Number(value) };
+            break;
+          }
           case "tui.paddingX":
             config.tui = { ...config.tui, paddingX: Number(value) };
             break;
@@ -1616,7 +1690,11 @@ export async function createApplication(options: AppOptions = {}) {
                   ...[...runtimes]
                     .filter((runtime) => runtime !== provider.currentProvider)
                     .map((runtime) => Promise.resolve(runtime.dispose?.())),
-                  plugins.close(),
+                  // The active decision provider stops first (its own limit), then every plugin
+                  // is disposed in parallel, each bounded by `pluginHooks.disposeTimeoutMs`.
+                  decisionService
+                    .shutdown(config.pluginHooks.disposeTimeoutMs)
+                    .then(() => plugins.close()),
                 ]);
               })(),
             );
@@ -1628,7 +1706,11 @@ export async function createApplication(options: AppOptions = {}) {
     };
   } catch (e) {
     await Promise.race([
-      Promise.allSettled([herdr.close(), mcp.close(), plugins.close()]),
+      Promise.allSettled([
+        herdr.close(),
+        mcp.close(),
+        decisionService.shutdown(config.pluginHooks.disposeTimeoutMs).then(() => plugins.close()),
+      ]),
       delay(TEARDOWN_STAGE_TIMEOUT_MS),
     ]);
     store.close();

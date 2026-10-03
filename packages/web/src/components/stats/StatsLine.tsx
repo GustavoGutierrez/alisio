@@ -3,7 +3,13 @@ import { useEffect } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { currentId, eventsTick } from "../../store/app.ts";
 import { statsFeed } from "../../store/events.ts";
-import { compactNumber, formatSeconds, type Stats, sessionStats } from "../../store/stats.ts";
+import {
+  compactNumber,
+  decisionsSummary,
+  formatSeconds,
+  type Stats,
+  sessionStats,
+} from "../../store/stats.ts";
 import styles from "./stats.module.css";
 
 function parts(stats: Stats): string[] {
@@ -35,7 +41,8 @@ export function StatsLine() {
   const stats = useComputed(() => sessionStats(statsFeed.state.value.items));
   const { last, session } = stats.value;
   if (!id || !last) return null;
-  const total = parts(session).join(" · ");
+  const decisions = decisionsSummary(session.decisions, t);
+  const total = [...parts(session), ...(decisions ? [decisions] : [])].join(" · ");
   return (
     <p
       class={styles.line}

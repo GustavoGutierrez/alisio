@@ -31,6 +31,7 @@ import type {
   ArtifactPublisherFactory,
   CapabilityGate,
   ContextSource,
+  DecisionsFactory,
   HookFailure,
   Policy,
   RunnerExtensions,
@@ -145,6 +146,8 @@ export interface RunnerOptions {
   capabilities?: CapabilityGate;
   /** Artifact publisher of each tool call (`ToolContext.artifacts`). */
   artifacts?: ArtifactPublisherFactory;
+  /** Decision Intelligence bound to each tool call (`ToolContext.decisions`). */
+  decisions?: DecisionsFactory;
   /**
    * Provider-native tool definitions (for example a hosted `web_search` tool) appended to every
    * request's `tools` alongside the registry's function tools. Opt-in, set once for the whole
@@ -786,6 +789,9 @@ export class AgentRunner {
           ...(published.executionId ? { executionId: published.executionId } : {}),
         }),
       );
+      const decisions = o.decisions?.({ sessionId, runId, callId: call.id }, (type, data) =>
+        emit(type, data),
+      );
       /**
        * `analysis.install`: always asks, `once` only, and no flag or earlier grant covers it. Where
        * nobody can be asked (headless, no approval handler) the answer is `deny`.
@@ -847,6 +853,7 @@ export class AgentRunner {
         runId,
         callId: call.id,
         ...(publisher ? { artifacts: publisher } : {}),
+        ...(decisions ? { decisions } : {}),
         approveInstall,
         emit: (data) => emit("tool_progress", { id: call.id, data }),
         // Only the built-in plan tool reports its durable events (never a plugin tool).

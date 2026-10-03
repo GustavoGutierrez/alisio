@@ -311,6 +311,19 @@ terminal, the web in Chromium; not on a real terminal, other browsers, Windows o
   (there is no separate session palette) and finished turns are not folded into an "N steps"
   summary.
 
+**Decision Intelligence.** No provider is bundled: without a provider plugin named in
+`decisions.provider` nothing happens, and this release ships only the infrastructure (plugins can
+use `ctx.decisions` in their tools; the features that consume decisions come later). `confidence` is
+not calibrated (a threshold of 0.6 did not reliably separate clear from ambiguous cases in a small
+hand-labelled sample), so `decisions.minConfidence` is a heuristic filter. `dispose()` is not called
+when a plugin is disabled or on `/reload` (both need a restart), only when Alisio closes; a sudden
+death is not covered, and a `dispose()` over `pluginHooks.disposeTimeoutMs` is abandoned and logged.
+Provider `activate`/`deactivate` errors are visible only in `/decisions`. The terminal `/stats`
+counts only the current terminal process; the web shows decision statistics only in the tooltip of
+the session totals. `pluginHooks.disposeTimeoutMs` and the `decisions.*` keys are not in the terminal
+`/settings` menu (they are in the web Settings → General). A provider's `state` can leave the
+process if its adapter decides so; Alisio only guarantees that events and metrics never contain it.
+
 Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
 overrides and stable/distinct OpenCode session headers. No real credentials were used.
@@ -454,3 +467,15 @@ Vitest (pure pie geometry with the three reported datasets, helper output, the g
 run) and in Chromium through `alisio serve` with the real CSP at 1280 px and 390 px, light and dark,
 with no console errors. Not verified: other browsers, Windows or macOS, a real model using the new
 guidance, screen readers and PDF printing. User guide: [Charts](/analysis#charts).
+
+**Decision Intelligence.** Verified with Vitest and an in-memory fake provider (no network): partial
+results and fallbacks by reason, the timeout with a hung provider, request and answer validation, the
+circuit breaker with an injected clock, events with a sentinel-string privacy test, the core
+boundary, global-only configuration layers, provider `activate`/`deactivate`, per-plugin paths and
+options, parallel bounded plugin shutdown, `alisio run` disposing plugins on `SIGTERM`, `SIGHUP` and
+`SIGINT`, the `/decisions` command and the three `/stats` calculations agreeing. Checked in Chromium
+against a built `alisio serve` with a fake OpenAI-compatible model and a temporary local plugin with a
+fake provider (completed decisions, a fallback and `/decisions`). Not verified: a real provider (none
+is bundled or published), a real terminal for the TUI, other browsers, Windows or macOS, screen
+readers, a remote provider, load with many concurrent decisions, and the quality of any engine's
+decisions. User guide: [Decision Intelligence](/decision-intelligence).

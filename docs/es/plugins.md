@@ -44,7 +44,7 @@ código en el que confíe.
 | `categories` | Categorías de catálogo opcionales (consulte la sección siguiente, Categorías de plugins). El host también deriva `model-provider` de los registros de proveedores |
 | `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
 | `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
-| `dispose()` | Opcional; libera recursos cuando Alisio se cierra |
+| `dispose()` | Opcional; libera recursos cuando Alisio se cierra. Se ejecuta solo al cerrar, nunca al deshabilitar un plugin ni con `/reload`, y lo limita `pluginHooks.disposeTimeoutMs` (consulte [Cierre](#shutdown)) |
 
 `definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de plugin duplicados.
 
@@ -69,6 +69,7 @@ describen qué hace el plugin, así que un mismo plugin puede declarar varias.
 | `mcp` | Gestión de servidores MCP o utilidades para empaquetarlos | — |
 | `storage` | Backends de almacenamiento durable más allá del SQLite por defecto | — |
 | `ui` | Proveedores de presentación TUI (pantallas de inicio, mascotas, paneles) | — |
+| `decisions` | Proveedores de [Decision Intelligence](/es/decision-intelligence) (`api.decisions.registerProvider`) | — |
 
 El único proveedor de modelos integrado es `openai-compatible`. Los proveedores dedicados
 (DeepSeek, OpenCode Console (Zen), OpenCode Go) son plugins independientes publicados desde el
@@ -111,6 +112,9 @@ plugin se elimina automáticamente cuando se descarga.
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
 | `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
+| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()` y `tryDecide(request, options?)`. Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
+| `paths` | `{ state, config, cache }`: directorios por plugin resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
+| `options` | `pluginOverrides[id].options` de solo lectura (o `{}`), congelado cuando se ejecuta `setup`. Ausente en un núcleo anterior |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
 | `session.onStart(handler)` | El texto devuelto se inyecta una vez al comienzo de una sesión nueva y vacía (persistido en la sesión) |
 | `session.onEnd(handler)` | Se llama cuando termina una sesión interactiva (`/clear`, `/exit`, salida) |
@@ -313,6 +317,33 @@ export default definePlugin({
   plugin escriba, y un handler que bloquee el bucle de eventos no se interrumpe con el timeout. Un
   plugin no es un sandbox.
 
+### Decision Intelligence, rutas y opciones {#decision-intelligence}
+
+`api.decisions`, `api.paths` y `api.options` son **opcionales**: un núcleo anterior los omite, así
+que detecte cada uno por presencia y siga funcionando sin él.
+
+```ts
+setup(api) {
+  api.decisions?.registerProvider(myProvider); // Registering never activates it.
+  const cache = api.paths?.cache; // Per-plugin directory, created on first read.
+  const device = api.options?.device ?? "cpu"; // From `pluginOverrides[id].options`.
+}
+```
+
+- **`api.decisions`** registra un proveedor de decisiones y permite que una herramienta de plugin
+  pida decisiones. El usuario activa un proveedor con `decisions.provider` en la configuración
+  global; instalar el plugin no basta. El contrato, los errores y el ciclo de vida están en
+  [Decision Intelligence](/es/decision-intelligence#writing-a-provider). Las herramientas reciben el
+  lado consumidor como `context.decisions?.tryDecide(...)`, ligado a la ejecución actual.
+- **`api.paths`** ofrece `state` (`<raíz de estado>/plugins/<id>`), `config`
+  (`<config home>/plugins/<id>`) y `cache` (`<raíz de estado>/plugins/<id>/cache`). La raíz de estado
+  es la que usan el análisis y los artefactos, así que respeta `--db`. Úselas en lugar de resolver
+  usted mismo las rutas XDG o `ALISIO_*`.
+- **`api.options`** contiene el JSON que usted o el usuario pusieron en `pluginOverrides[id].options`
+  de la configuración global (consulte [`pluginOverrides`](/es/configuration#plugins)). Es solo
+  global, de como máximo 8 KB, y una instantánea tomada en `setup`: cambiarlo requiere reiniciar. No
+  guarde secretos ahí.
+
 ### Sesiones hijas {#child-sessions}
 
 `api.sessions` es un servicio genérico para trabajo delegado: una sesión hija es una conversación
@@ -391,6 +422,18 @@ api.tools.register({
   contribución de ese plugin.
 - Los hooks se ejecutan en el mismo proceso: el timeout detiene la espera y señala el `AbortSignal`,
   pero no puede detener código síncrono bloqueante.
+
+### Cierre {#shutdown}
+
+- `dispose()` se ejecuta cuando Alisio se cierra: salir de la interfaz de terminal, `SIGINT`,
+  `SIGTERM` y `SIGHUP` (interfaz de terminal, `alisio serve` y `alisio run`) y el final de una
+  ejecución. **No** se ejecuta al deshabilitar un plugin ni con `/reload`, porque ambos requieren
+  reiniciar.
+- Los plugins se liberan en paralelo y cada uno está limitado por `pluginHooks.disposeTimeoutMs`
+  (2000 ms por defecto, de 100 a 10000); un `dispose()` lento o colgado no retrasa a los demás, y su
+  fallo se informa sin detenerlos. Termine con holgura dentro de ese límite.
+- Una muerte súbita (`SIGKILL`, una caída) no puede cubrirse: un plugin que posee un proceso del
+  sistema operativo debe limpiar por sí mismo los que queden huérfanos.
 
 ## Puntos de extensión {#extension-points}
 

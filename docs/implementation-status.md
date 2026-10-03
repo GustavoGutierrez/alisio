@@ -19,8 +19,9 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
   (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
-  (`specs/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
-  `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano.
+  (`specs/archive/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
+  `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
+  Intelligence (fases 1 a 5 de `specs/alisio-decision-intelligence-v1.md`).
 - Validación.
 - Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -29,12 +30,13 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
   comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
-  vistas de plugins; tareas en segundo plano; objetivos de sesión).
+  vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision Intelligence).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
   Herdr; agente activo y effort; agentes del usuario; servidor web; modos, recarga y novedades;
-  pestaña Memory y vistas de plugins; tareas en segundo plano; objetivos de sesión.
+  pestaña Memory y vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision
+  Intelligence.
 
 ## Implementado
 
@@ -814,7 +816,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 
 ### Modos de permisos, `/reload` y `/changelog` (fase 1)
 
-Primera fase de `specs/alisio-modes-goal-background-v1.md` (decisiones del propietario confirmadas
+Primera fase de `specs/archive/alisio-modes-goal-background-v1.md` (decisiones del propietario confirmadas
 el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, migración v7) y 4
 (`/goal`, migración v8) están implementadas (ver las secciones siguientes).
 
@@ -853,7 +855,7 @@ el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, mi
 
 ### Pestaña Memory de la web y vistas de datos de plugins
 
-Especificada en `specs/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
+Especificada en `specs/archive/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
 
 - SDK: `api.views?.register({ id, description, params?, handler })` (`ViewDefinition`,
   `ViewContext`, `ViewParamsError`) y los códigos de error `view_failed` (502), `view_timeout`
@@ -881,7 +883,7 @@ Especificada en `specs/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
 
 ### Tareas en segundo plano (fase 3 de la especificación de modos, goal y tareas)
 
-Especificada en `specs/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.
+Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.
 
 - Migración **v7** (solo hacia delante, idempotente): `background_tasks` (estados `queued`, `running`,
   `stopping`, `succeeded`, `failed`, `cancelled`, `lost`; `abort_origin`, `error_code`, `owner_pid`,
@@ -932,7 +934,7 @@ Especificada en `specs/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.
 
 ### Objetivos de sesión `/goal` (fase 4 de la especificación de modos, goal y tareas)
 
-Especificada en `specs/alisio-modes-goal-background-v1.md` (§9). Todo aditivo; decisiones del
+Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§9). Todo aditivo; decisiones del
 propietario del 2026-10-02 aplicadas tal cual.
 
 - Migración **v8** (aditiva, `ALTER TABLE`): la tabla `session_goals` de la v7 no tenía lector y le
@@ -1002,6 +1004,56 @@ propietario del 2026-10-02 aplicadas tal cual.
 - Web: barra del objetivo (chunk perezoso con su store y sus textos EN/ES), barra de progreso del
   presupuesto, botones Pausar/Reanudar/Editar/Borrar, filas de la paleta, `/goal` con confirmación;
   en el bundle inicial solo el signal y el manejo del frame (JS inicial 79,8 KB gzip de 90).
+
+### Decision Intelligence (fases 1 a 5 de la especificación)
+
+Especificada en `specs/alisio-decision-intelligence-v1.md`. Todo aditivo y opcional: sin proveedor
+Alisio se comporta igual. Solo infraestructura: el paquete no incluye ningún proveedor ni ninguna
+función que consuma decisiones (los consumidores son especificaciones posteriores). Guía de usuario:
+[Decision Intelligence](/es/decision-intelligence).
+
+- Contrato en `@alisio/sdk`: `DecisionProvider` (`select`, `boolean`, `ordinal`; `health?`, `activate?`,
+  `deactivate?`, `decide`), `DecisionRequest`, `DecisionResponse`, `DecisionProviderError` (`not_ready`,
+  `unavailable`, `timeout`, `invalid_response`, `internal`), `DecisionRequestError`, `DecisionStats`,
+  el helper puro `summarizeDecisionEvents`, la categoría `"decisions"`, los eventos `decision_completed`
+  y `decision_fallback` en `RunEventDataMap`, `PluginAPI.decisions?`, `PluginAPI.paths?`,
+  `PluginAPI.options?` y `ToolContext.decisions?`. Todos opcionales y detectables por presencia.
+- Núcleo (`packages/core/src/decisions/`): `DecisionRegistry` (registro por plugin que se deshace al
+  descargarlo), `DecisionService` (`tryDecide`, `attempt`, `decide`), validación de la petición (1 a 16
+  decisiones, 2 a 20 opciones, 2 a 12 niveles, `state` de hasta 16 KB y petición de hasta 32 KB, claves
+  e `id` con patrón fijo) y validación por clave de cada respuesta (el resultado parcial es válido; los
+  rechazos se explican con `low_confidence`, `invalid`, `unsupported` o `missing`).
+- Tiempo límite impuesto por el núcleo (`decisions.timeoutMs`, 1500 ms por defecto, resultado de la Fase
+  0) y disyuntor (3 fallos consecutivos abren 30 s; una sonda medio abierta). Cuentan `timeout`,
+  `invalid_response`, `internal` y los errores sin tipo; no cuentan `not_ready`, `unavailable`, la baja
+  confianza ni los rechazos por decisión. El núcleo nunca llama a `health()` en la ruta de `decide`.
+- Fallback por decisión (`tryDecide` devuelve `null` solo ante fallo de infraestructura, desactivación o
+  rechazo total); motivos: `timeout`, `not_ready`, `unavailable`, `invalid_response`, `provider_error`,
+  `circuit_open`, `unsupported`, `all_rejected`.
+- Configuración: bloque `decisions` (`enabled`, `provider`, `timeoutMs`, `minConfidence`, `telemetry`);
+  `provider` y `telemetry` son solo globales (una capa de proyecto o `--config` que las defina se
+  ignora con diagnóstico, sin fallo de arranque); las cinco claves son ajustables en vivo con etiquetas
+  EN/ES en la web. `pluginOverrides[id].options` (solo global, hasta 8 KB, claves con patrón fijo),
+  que alimenta `api.options` como instantánea congelada en `setup`; `setPluginEnabled` conserva las
+  `options`. `api.paths` (`state`, `config`, `cache`) con modo `0700` en la primera lectura, bajo la
+  misma raíz de estado que análisis y artefactos (respeta `--db`).
+- Ciclo de vida del proveedor activo: `activate()` y `deactivate()` se disparan al pasar a ser el activo
+  (arranque, cambio de `decisions.provider` en vivo, registro tardío) y al dejar de serlo; acotados por
+  tiempo, serializados por proveedor, nunca fatales y nunca esperados en el arranque. Un fallo se
+  guarda como error de ciclo de vida y se ve solo en `/decisions`.
+- Cierre acotado de plugins: `PluginHost.close()` libera los plugins en paralelo, cada uno con su tope
+  (`pluginHooks.disposeTimeoutMs`, 100 a 10000, por defecto 2000), y registra los fallos sin impedir el
+  resto; el proveedor activo se desactiva antes. `alisio run` gestiona ahora `SIGTERM` y `SIGHUP` como
+  `SIGINT`, así que un `kill` también ejecuta `dispose()`. `discoverPlugins` solo trata como plugin un
+  directorio con `alisio-plugin.json`, porque `<config home>/plugins/<id>` es también donde
+  `api.paths.config` guarda los archivos de un plugin.
+- Eventos y métricas: `ToolContext.decisions` ligado a la ejecución (las llamadas anidadas de Code Mode no
+  lo reciben); los eventos llevan solo metadatos (nunca `state`, instrucciones ni etiquetas) y no se
+  persisten con `telemetry: false`; métricas en memoria por sesión y por proceso.
+- Comando `/decisions` (TUI y web, mismo texto Markdown) con estado, salud (límite propio de 1 s),
+  capacidades, circuito, ajustes, error de ciclo de vida y métricas; sección «Decision Intelligence» en
+  `/stats` (solo si hubo decisiones) calculada con `summarizeDecisionEvents` en las tres rutas (núcleo,
+  TUI y web). En la web las estadísticas de decisiones van en el tooltip de los totales de la sesión.
 
 ## Validación
 
@@ -1705,7 +1757,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ## Análisis en Python y artefactos (fase 1): alcance de la verificación
 
-Fase 1 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): `python_run`, `artifact_create`,
+Fase 1 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): `python_run`, `artifact_create`,
 `artifact_list`, capability `analysis.run` con permisos persistidos, `--allow-analysis`,
 `--python`, migración v6, rutas de artefactos y permisos, tarjeta de descarga y popover de
 permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
@@ -1748,7 +1800,7 @@ permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
 
 ## Análisis en Python y artefactos (fase 2): alcance de la verificación
 
-Fase 2 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): comodín del router, visor aislado
+Fase 2 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): comodín del router, visor aislado
 `/artifact-view/<token>/*` con enlace firmado (HMAC con el secreto del proceso, 10 min), rutas
 `files/*`, `view`, `export`, `sources` y `DELETE`, `runToolCall` (un run sin modelo con las mismas
 puertas que una llamada del modelo), `artifact_read` y `artifact_export`; en la web "Abrir archivo"
@@ -1790,7 +1842,7 @@ la TUI "Preview here", "Copy to workspace…", "Reveal analysis sources" y "Deta
 
 ## Datos tabulares con `node:sqlite` (fase 3): alcance de la verificación
 
-Fase 3 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): ingesta de CSV, TSV, JSON, JSONL y
+Fase 3 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): ingesta de CSV, TSV, JSON, JSONL y
 XLSX en un archivo SQLite por dataset, `data_inspect` y `data_query`, guardia SQL, rutas de datasets
 y frames `dataset_ready`/`dataset_failed`, subida desde el compositor web con chips y resumen en el
 prompt, `SpreadsheetView` (también para artefactos `spreadsheet`), helper XLSX en Python con la
@@ -1835,7 +1887,7 @@ biblioteca estándar (D6, opción B), `datasetId` en `python_run` y `alisio_runt
 
 ## OCI, extras, retención y rerun (fase 4): alcance de la verificación
 
-Fase 4 de `specs/alisio-data-analysis-runtime-v1.2.md` (§21): runtime `oci` opcional (Docker o
+Fase 4 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): runtime `oci` opcional (Docker o
 Podman, imagen fijada por digest), instalación de extras bajo demanda con la capability
 `analysis.install`, `AnalysisJanitor` (retención de artefactos, datasets, originales en `blobs/` y
 trabajos internos), `Rerun` con procedencia (modelo y proveedor incluidos), la página **Análisis de
@@ -2092,6 +2144,28 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   lógica pura y por las pruebas del núcleo, no por un terminal), otros navegadores, Windows y macOS,
   lectores de pantalla reales, proveedores reales (el recuento depende de que informen `usage`) y goals de
   muchas horas.
+
+## Decision Intelligence: alcance de la verificación
+
+- Verificado con Vitest (sin red; proveedor falso en memoria en `tests/fixtures/decision-provider.ts`):
+  servicio (resultado parcial, fallback por motivo, tiempo límite con proveedor colgado, aborto del
+  llamador), validación de peticiones y respuestas, disyuntor con reloj inyectado, eventos y prueba de
+  privacidad con cadenas centinela sembradas en `state`, frontera del núcleo (el código de decisiones no menciona
+  ningún motor concreto y `runner.ts` y `permissions` no importan `decisions/`), configuración y capas global-only,
+  ciclo de vida `activate`/`deactivate`, rutas y opciones por plugin, cierre en paralelo con tope por
+  plugin, comando `/decisions`, coincidencia de los tres cálculos de `/stats`, contrato de eventos,
+  paridad del catálogo de comandos y etiquetas EN/ES. `fixtures/cli-e2e.ts` comprueba que `alisio run`
+  ejecuta `dispose()` con `SIGTERM`, `SIGHUP` y `SIGINT`.
+- Navegador: Chromium (Playwright, interfaz en español) contra `alisio serve` construido, un modelo
+  falso compatible con OpenAI y un plugin local temporal con un proveedor falso: una sesión con
+  decisiones completadas y una con alternativa, y `/decisions` con las métricas. Es la captura de la
+  documentación; no es una prueba de calidad de decisiones.
+- Fase 0 (E1 a E7, fuera del repositorio, con Laya 0.3.24 y el punto de control `multilingual`, en CPU y
+  CUDA): el valor por defecto de `timeoutMs` (1500 ms) sale de ahí, y E2 mostró que `confidence` no está
+  calibrada.
+- No verificado: un proveedor real (no hay ninguno incluido ni publicado), la TUI en un terminal real,
+  otros navegadores, Windows y macOS, lectores de pantalla, un proveedor remoto, el comportamiento con
+  muchas decisiones concurrentes bajo carga y la calidad de las decisiones de cualquier motor.
 
 ## Límites conocidos
 
@@ -2644,6 +2718,35 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   durante horas: no es un sandbox. El objetivo se cita como dato, no como instrucción privilegiada, lo que
   reduce pero no elimina la inyección desde un texto malicioso que el usuario pegue.
 - La TUI se verificó por lógica pura y fake terminal, no en un terminal real; la web, en Chromium.
+
+### Decision Intelligence
+
+- **No se incluye ningún proveedor**: sin un plugin de proveedor registrado y nombrado en
+  `decisions.provider`, la función no hace nada. El plugin oficial de Laya está previsto en el
+  repositorio `alisio-plugins` y no está publicado. Esta entrega no contiene ninguna función que
+  consuma decisiones, solo la infraestructura; los plugins pueden usar `ctx.decisions` en sus
+  herramientas.
+- **`confidence` no está calibrada** (Fase 0, E2): `decisions.minConfidence` es un filtro heurístico y
+  un umbral de 0.6 no separó de forma fiable los casos claros de los ambiguos en una muestra pequeña
+  etiquetada a mano. Alisio no la trata como probabilidad; la calidad debe medirse en la función que
+  consume la decisión.
+- **`dispose()` no se llama al deshabilitar un plugin ni con `/reload`** (ambos requieren reiniciar);
+  solo al cerrar la aplicación. Una muerte súbita (`SIGKILL`, una caída) no se cubre: un plugin que
+  posee un proceso del sistema debe limpiar los huérfanos él mismo. Un `dispose()` que supera
+  `pluginHooks.disposeTimeoutMs` se abandona y se registra, pero no se puede interrumpir código
+  síncrono bloqueante.
+- **Los errores de ciclo de vida solo se ven en `/decisions`**: un `activate()` o `deactivate()`
+  fallido no genera evento ni aviso en otro sitio.
+- **El `/stats` de la TUI cuenta solo el proceso de TUI actual**, como el resto de sus estadísticas, y
+  conserva como máximo los últimos 2000 eventos de decisión; la web muestra las estadísticas de
+  decisiones solo en el tooltip de los totales de la sesión, no en la línea principal.
+- **Ajustes en la TUI**: `pluginHooks.disposeTimeoutMs` y las claves `decisions.*` no figuran en el menú
+  `/settings` de la terminal; se editan en el archivo de configuración. En la web sí son ajustables
+  (Ajustes → General).
+- Con `decisions.telemetry` en `false` los eventos no se persisten: no hay sección en `/stats` ni
+  estadísticas web, y `/decisions` solo muestra las métricas en memoria del proceso. Un `state` puede
+  salir del proceso si el adaptador del proveedor lo decide; el núcleo solo garantiza que los eventos y
+  las métricas no lo contienen. Los plugins no son un sandbox.
 
 ### Gráficos de los dashboards (`alisio_runtime.charts` y `svg`)
 
