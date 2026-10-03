@@ -1,7 +1,7 @@
 /**
  * Read-only data views of the memory plugin for the web "Memory" tab. They never write: every
  * query is a plain SELECT (no access counters, no timestamps). Ids and shapes are a contract with
- * the web (`records`, `summary`, `context`); see specs/alisio-web-memory-tab-v1.md.
+ * the web (`records`, `summary`, `context`); see specs/archive/alisio-web-memory-tab-v1.md.
  */
 import { type ViewDefinition, ViewParamsError } from "@alisio/sdk";
 import { MEMORY_TYPES, type MemoryStore, type MemoryType, type RecordsCursor } from "./types.ts";

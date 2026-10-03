@@ -1,6 +1,6 @@
 /**
  * Controller of the Memory tab: the memory of the open chat, read through the memory plugin's
- * data views (`records`, `summary`, `context`; see specs/alisio-web-memory-tab-v1.md). Three
+ * data views (`records`, `summary`, `context`; see specs/archive/alisio-web-memory-tab-v1.md). Three
  * independent sections, a cursor-paginated list, filters, and strict discarding of stale answers:
  * every request is aborted when superseded AND carries a sequence number, so an answer that still
  * arrives after the chat (or the filter) changed never reaches the state.
