@@ -4,6 +4,16 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.2] - 2026-10-04
+
+### Added
+
+- A decision provider plugin can now ask Alisio to activate it with the optional
+  `api.decisions.activate(providerId)`. You confirm once and Alisio saves `decisions.provider` in your
+  global configuration and applies it right away, so there is no file to edit by hand. It never
+  replaces a provider you already chose, does nothing without an interactive session, and installing a
+  plugin still never activates it by itself.
+
 ## [0.4.1] - 2026-10-04
 
 A patch release with one fix.

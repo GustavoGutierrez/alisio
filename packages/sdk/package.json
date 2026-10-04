@@ -1,6 +1,6 @@
 {
   "name": "@alisio/sdk",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Typed plugin SDK for Alisio: the stable contract for tools, commands, context, compaction and session hooks, model completions and storage. Types only plus tiny helpers; zero runtime dependencies.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
