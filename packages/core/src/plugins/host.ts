@@ -10,6 +10,7 @@ import type {
   CommandOptions,
   CompactionHooks,
   CompletionRequest,
+  DecisionActivationOptions,
   ExtensionPoints,
   JsonValue,
   Message,
@@ -514,15 +515,20 @@ export class PluginHost implements RunnerExtensions {
               ...(activation
                 ? {
                     // Only providers THIS plugin registered; the user confirms once.
-                    activate: (providerId: string) =>
-                      requestDecisionActivation(plugin.id, providerId, {
-                        registry,
-                        config: activation.config,
-                        interactive: () => !!this.uiImpl,
-                        ask: (request) =>
-                          this.uiImpl ? this.uiImpl.askQuestions(request) : Promise.resolve({}),
-                        persist: activation.persist,
-                      }),
+                    activate: (providerId: string, options?: DecisionActivationOptions) =>
+                      requestDecisionActivation(
+                        plugin.id,
+                        providerId,
+                        {
+                          registry,
+                          config: activation.config,
+                          interactive: () => !!this.uiImpl,
+                          ask: (request) =>
+                            this.uiImpl ? this.uiImpl.askQuestions(request) : Promise.resolve({}),
+                          persist: activation.persist,
+                        },
+                        options,
+                      ),
                   }
                 : {}),
             }))(this.decisionsImpl) satisfies PluginAPI["decisions"],

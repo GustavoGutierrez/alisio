@@ -110,7 +110,7 @@ removed automatically when it is unloaded.
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
 | `views.register(view)` | Registers a named, read-only [data view](#data-views) hosts such as the web UI can read. Absent on a core that predates it: use `api.views?.register(...)` |
-| `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()`, `tryDecide(request, options?)` and the optional `activate(providerId)`. Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
+| `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()`, `tryDecide(request, options?)` and the optional `activate(providerId, options?)` (`options.recommend` pre-selects Yes after an explicit user action). Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: per-plugin directories resolved by the host and created with mode `0700` on first read. Absent on a core that predates it |
 | `options` | Read-only `pluginOverrides[id].options` (or `{}`), frozen when `setup` runs. Absent on a core that predates it |
 | `compaction.register({ beforeCompact, afterCompact })` | Compaction hooks, see below |

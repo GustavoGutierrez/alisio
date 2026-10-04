@@ -71,6 +71,10 @@ const result = await api.decisions?.activate?.("my-provider");
   provider. Dashboards will send your request goal and column names, never values, to it. Activate
   it?" (Yes/No). Without an interactive surface (`alisio run`) the answer is `needs_confirmation`
   and nothing changes; saying No gives `declined`.
+- Pass `{ recommend: true }` as a second argument (`activate("my-provider", { recommend: true })`)
+  only when the call directly follows an explicit user action such as a setup command. The question
+  is the same and is still asked, but Yes is marked recommended and pre-selected instead of No.
+  Without the hint, No stays the recommended, pre-selected answer. The hint changes nothing else.
 - On Yes, Alisio saves `decisions.provider` in the global configuration only (atomically, keeping
   every other setting) and applies it live. If saving fails the result is `unavailable` and nothing
   is activated.

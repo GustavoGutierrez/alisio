@@ -1353,6 +1353,11 @@ export interface DecisionActivationResult {
   /** Short, path-free explanation for `unavailable`. */
   message?: string;
 }
+/** Optional hints for `api.decisions.activate`. */
+export interface DecisionActivationOptions {
+  /** The call follows an explicit user action (for example a setup command): the host recommends and pre-selects "Yes". */
+  recommend?: boolean;
+}
 export interface DecisionsApi {
   /** Registers a provider (does NOT activate it; activation is `decisions.provider` in config). */
   registerProvider(provider: DecisionProvider): () => void;
@@ -1366,7 +1371,10 @@ export interface DecisionsApi {
    * confirmation question) and persists `decisions.provider` in the user's global configuration;
    * it never overwrites a different configured provider. Never throws for expected outcomes.
    */
-  activate?(providerId: string): Promise<DecisionActivationResult>;
+  activate?(
+    providerId: string,
+    options?: DecisionActivationOptions,
+  ): Promise<DecisionActivationResult>;
   /**
    * Never throws for infrastructure problems: resolves null (disabled, no provider, timeout,
    * provider error, circuit open, or every answer rejected). Throws `DecisionRequestError` (a

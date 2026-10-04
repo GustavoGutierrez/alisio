@@ -75,6 +75,11 @@ const result = await api.decisions?.activate?.("my-provider");
   my-provider wants to become the decision provider. Dashboards will send your request goal and column
   names, never values, to it. Activate it?" (Yes/No). Sin superficie interactiva (`alisio run`) la
   respuesta es `needs_confirmation` y no cambia nada; responder No da `declined`.
+- Pase `{ recommend: true }` como segundo argumento (`activate("my-provider", { recommend: true })`)
+  solo cuando la llamada sigue directamente a una acción explícita del usuario, como un comando de
+  configuración. La pregunta es la misma y se sigue haciendo, pero Yes aparece recomendado y
+  preseleccionado en lugar de No. Sin la indicación, No sigue siendo la respuesta recomendada y
+  preseleccionada. La indicación no cambia nada más.
 - Con Yes, Alisio guarda `decisions.provider` solo en la configuración global (de forma atómica y
   conservando el resto de ajustes) y lo aplica en vivo. Si el guardado falla, el resultado es
   `unavailable` y no se activa nada.

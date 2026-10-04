@@ -1,6 +1,7 @@
 import type {
   AskQuestionsRequest,
   AskQuestionsResult,
+  DecisionActivationOptions,
   DecisionActivationResult,
 } from "@alisio/sdk";
 import type { DecisionRegistry } from "./registry.ts";
@@ -27,6 +28,7 @@ export async function requestDecisionActivation(
   owner: string,
   providerId: unknown,
   deps: DecisionActivationDeps,
+  options?: DecisionActivationOptions,
 ): Promise<DecisionActivationResult> {
   if (typeof providerId !== "string" || deps.registry.get(providerId)?.owner !== owner)
     return {
@@ -38,6 +40,11 @@ export async function requestDecisionActivation(
   if (config.provider === providerId) return { status: "already_active", active: providerId };
   if (config.provider) return { status: "other_provider_active", active: config.provider };
   if (!deps.interactive()) return { status: "needs_confirmation" };
+  // Only an explicit `recommend: true` moves the pre-selection to Yes; anything else is ignored.
+  const recommendYes =
+    typeof options === "object" &&
+    options !== null &&
+    (options as { recommend?: unknown }).recommend === true;
   let answer: AskQuestionsResult;
   try {
     answer = await deps.ask({
@@ -48,12 +55,17 @@ export async function requestDecisionActivation(
           header: "Decision provider",
           question: `Plugin ${owner} wants to become the decision provider. Dashboards will send your request goal and column names, never values, to it. Activate it?`,
           options: [
-            { value: "yes", label: "Yes", description: "Save it in your global configuration." },
+            {
+              value: "yes",
+              label: "Yes",
+              description: "Save it in your global configuration.",
+              ...(recommendYes ? { recommended: true } : {}),
+            },
             {
               value: "no",
               label: "No",
               description: "Keep decisions unchanged.",
-              recommended: true,
+              ...(recommendYes ? {} : { recommended: true }),
             },
           ],
         },

@@ -112,7 +112,7 @@ plugin se elimina automáticamente cuando se descarga.
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
 | `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
-| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId)`. Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
+| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId, options?)` (`options.recommend` preselecciona Yes tras una acción explícita del usuario). Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: directorios por plugin resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
 | `options` | `pluginOverrides[id].options` de solo lectura (o `{}`), congelado cuando se ejecuta `setup`. Ausente en un núcleo anterior |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |

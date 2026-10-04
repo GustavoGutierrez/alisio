@@ -1057,7 +1057,7 @@ función que consuma decisiones (los consumidores son especificaciones posterior
   capacidades, circuito, ajustes, error de ciclo de vida y métricas; sección «Decision Intelligence» en
   `/stats` (solo si hubo decisiones) calculada con `summarizeDecisionEvents` en las tres rutas (núcleo,
   TUI y web). En la web las estadísticas de decisiones van en el tooltip de los totales de la sesión.
-- Activación pedida por el plugin: `api.decisions.activate?(providerId)` (opcional, detectable por
+- Activación pedida por el plugin: `api.decisions.activate?(providerId, options?)` (`options.recommend === true` marca y preselecciona Yes en vez de No, sin saltarse la pregunta; opcional, detectable por
   presencia; `DecisionActivationResult` con `activated`, `already_active`, `other_provider_active`,
   `declined`, `needs_confirmation`, `disabled`, `unavailable`). Solo acepta proveedores registrados por
   el propio plugin; nunca sobrescribe un `decisions.provider` distinto; con `decisions.provider` vacío

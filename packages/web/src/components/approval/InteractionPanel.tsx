@@ -2,6 +2,7 @@ import type { PendingInteraction } from "@alisio/sdk";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { answer } from "../../store/app.ts";
+import { initialAnswers } from "../../util/questions.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./approval.module.css";
 
@@ -12,7 +13,7 @@ export function InteractionPanel({ interaction }: { interaction: PendingInteract
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   useEffect(() => {
     setStep(0);
-    setAnswers({});
+    setAnswers(initialAnswers(interaction));
     panel.current?.focus();
   }, [interaction.interactionId]);
 

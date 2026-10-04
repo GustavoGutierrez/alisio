@@ -112,10 +112,12 @@ async function start(
       },
       open: () => false,
     });
-  const activate = (id = "engine"): Promise<DecisionActivationResult> => {
-    const fn = api?.decisions?.activate;
+  const activate = (id = "engine", options?: unknown): Promise<DecisionActivationResult> => {
+    const fn = api?.decisions?.activate as
+      | ((id: string, options?: unknown) => Promise<DecisionActivationResult>)
+      | undefined;
     if (!fn) throw new Error("activate is not offered");
-    return fn.call(api?.decisions, id);
+    return fn.call(api?.decisions, id, options);
   };
   return { app, activate, asked, calls };
 }
@@ -238,6 +240,64 @@ describe("api.decisions.activate", () => {
     expect(await readFile(join(workspace, ".alisio", "config.json"), "utf8")).toBe(
       JSON.stringify(project),
     );
+  });
+
+  it("recommend: true marks Yes (recommended) first and keeps the rest of the question", async () => {
+    const { activate, asked } = await start();
+    expect((await activate("engine", { recommend: true })).status).toBe("activated");
+    const question = asked[0]?.questions[0];
+    expect(question?.question).toBe(PROMPT);
+    expect(question?.options.map((o) => [o.value, o.label, !!o.recommended])).toEqual([
+      ["yes", "Yes", true],
+      ["no", "No", false],
+    ]);
+    expect(question?.options.map((o) => o.description)).toEqual([
+      "Save it in your global configuration.",
+      "Keep decisions unchanged.",
+    ]);
+  });
+
+  it("without the hint, or with an invalid one, No stays the recommended option", async () => {
+    for (const options of [
+      undefined,
+      {},
+      { recommend: false },
+      { recommend: "true" },
+      1,
+      "x",
+      null,
+      [true],
+    ]) {
+      const { activate, asked } = await start({ answer: "no" });
+      await activate("engine", options);
+      expect(asked[0]?.questions[0]?.options.map((o) => [o.label, !!o.recommended])).toEqual([
+        ["Yes", false],
+        ["No", true],
+      ]);
+      await apps.pop()?.close();
+    }
+  });
+
+  it("recommend: true still follows the answer: no or skip declines, headless needs confirmation", async () => {
+    for (const answer of ["no", "none"]) {
+      const { activate, calls } = await start({ answer });
+      expect(await activate("engine", { recommend: true })).toEqual({ status: "declined" });
+      expect(calls).toEqual([]);
+    }
+    const { activate, asked } = await start({ answer: "headless" });
+    expect((await activate("engine", { recommend: true })).status).toBe("needs_confirmation");
+    expect(asked).toEqual([]);
+  });
+
+  it("recommend: true never skips the other rules", async () => {
+    const own = await start({ global: { decisions: { provider: "engine" } } });
+    expect((await own.activate("engine", { recommend: true })).status).toBe("already_active");
+    const other = await start({ global: { decisions: { provider: "x" } } });
+    expect((await other.activate("engine", { recommend: true })).status).toBe(
+      "other_provider_active",
+    );
+    expect(own.asked).toEqual([]);
+    expect(other.asked).toEqual([]);
   });
 
   it("is feature-detected: absent on a host without the decision service wiring", async () => {
