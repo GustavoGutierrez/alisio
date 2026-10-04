@@ -400,12 +400,15 @@ export {
 export {
   type CliInstallOptions,
   cliInstall,
+  cliUpdateAll,
   INSTALL_TIMEOUT_MS,
   type InstallPluginInput,
   type InstallPluginResult,
   type InstallRunner,
+  installedGlobalPluginPackages,
   installedNpmPlugins,
   installPlugin,
+  isPeerConflict,
   npmInstallTarget,
   type PluginSpec,
   parsePluginSpec,
@@ -413,6 +416,7 @@ export {
   printInstallResult,
   registerPluginInstallTool,
   sanitizeNpmError,
+  updateAllPlugins,
 } from "./plugins/install.ts";
 export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 export {

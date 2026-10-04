@@ -694,6 +694,7 @@ alisio install npm:plugin-openrouter          # última versión
 alisio install npm:@scope/plugin-x@1.2.3      # una versión fijada
 alisio install plugin-openrouter              # el nombre pelado es igual que npm:
 alisio install npm:plugin-openrouter --update # actualiza un plugin instalado a @latest
+alisio install --update                       # actualiza TODOS los plugins instalados en una sola llamada de npm
 ```
 
 La especificación se valida antes de cualquier operación de red: `npm:<paquete>[@<versión>]`, o un
@@ -719,11 +720,28 @@ plugins de archivos/directorios.
 | Scripts | `npm install` puede ejecutar scripts de ciclo de vida del paquete con tus privilegios — Alisio avisa y exige confirmación en terminal interactiva |
 | Headless / `--json` | Nunca pregunta: sin un `--yes` explícito (o `--trust-plugin`) falla con un error accionable antes de ejecutar npm |
 | Errores | Salida npm saneada, nombre del paquete y comando de reintento exacto en el mensaje final |
+| `--update` sin spec | Actualiza a `@latest` todos los plugins instalados en el directorio global de plugins con una sola llamada a `npm install --prefix`; mismas reglas de confirmación, `--yes` y `--read-only`; sin plugins instalados lo indica y termina con código 0 |
 
 La instalación es una acción global del usuario: no concede nada a ningún proyecto. La carga sigue la
 política existente de plugins ejecutables — el aviso de confianza de una sola vez (o `--trust-project`)
 es lo que permite a un proyecto cargar su propia configuración y plugins, y `--read-only` desactiva
 los plugins ejecutables por completo.
+
+### Conflictos de dependencias peer (`ERESOLVE`)
+
+Los plugins antiguos ya instalados pueden fijar un `@alisio/sdk` anterior mediante su rango peer,
+por lo que npm rechaza instalar un plugin nuevo que necesita un SDK más reciente (`ERESOLVE ...
+Conflicting peer dependency`). Alisio explica entonces la causa, lista los plugins instalados
+implicados y no muestra la línea genérica de reintento, porque el reintento fallaría igual.
+Actualiza todos los plugins instalados juntos (hacerlo uno a uno vuelve a chocar con el mismo
+conflicto) y luego repite la instalación original:
+
+```sh
+alisio install --update
+alisio install npm:@alisio/plugin-laya
+```
+
+Alisio nunca sugiere `--force` ni `--legacy-peer-deps` para esto.
 
 ### El agente puede instalar un plugin por ti
 

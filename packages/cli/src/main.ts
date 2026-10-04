@@ -721,27 +721,40 @@ program
   .description(
     "Install an npm plugin package into the global plugins directory (~/.config/alisio/plugins)",
   )
-  .argument("<spec>", 'npm package spec, e.g. "npm:plugin-openrouter" or "plugin-openrouter@1.2.3"')
+  .argument(
+    "[spec]",
+    'npm package spec, e.g. "npm:plugin-openrouter" or "plugin-openrouter@1.2.3"; omit it with --update to refresh ALL installed plugins',
+  )
   .option("-y, --yes", "Skip the pre-install confirmation (npm may run lifecycle scripts)")
   .option("--trust-plugin", "Explicit trust for this global install (same as --yes)")
-  .option("--update", "Refresh an already-installed plugin to the latest version, keeping its name")
-  .action(async (spec: string, _options: unknown, cmd: Command) => {
-    const { cliInstall, configHome } = await import("@alisio/core");
+  .option(
+    "--update",
+    "Refresh an installed plugin to the latest version, keeping its name; without a spec, refresh ALL installed plugins in one npm call (fixes peer @alisio/sdk conflicts)",
+  )
+  .action(async (spec: string | undefined, _options: unknown, cmd: Command) => {
+    const { cliInstall, cliUpdateAll, configHome } = await import("@alisio/core");
     const o = options(cmd) as import("@alisio/core").AppOptions & {
       json?: boolean;
       yes?: boolean;
       trustPlugin?: boolean;
       update?: boolean;
     };
-    await cliInstall({
-      spec,
+    const common = {
       configHome: configHome(),
       yes: !!o.yes || !!o.trustPlugin,
-      update: !!o.update,
       readOnly: !!o.readOnly,
       json: !!o.json,
       interactive: !!process.stdin.isTTY && !!process.stdout.isTTY && !o.json,
-    });
+    };
+    if (spec?.trim()) {
+      await cliInstall({ spec, update: !!o.update, ...common });
+      return;
+    }
+    if (!o.update)
+      throw new Error(
+        "Missing plugin spec: use `alisio install npm:<package>[@<version>]`, or `alisio install --update` to refresh every installed plugin.",
+      );
+    await cliUpdateAll(common);
   });
 try {
   await program.parseAsync();

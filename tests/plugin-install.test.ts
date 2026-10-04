@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cliInstall,
+  cliUpdateAll,
   type InstallRunner,
   installedNpmPlugins,
   installPlugin,
@@ -59,16 +60,18 @@ function fakeNpm(
       };
     const prefixIndex = args.indexOf("--prefix");
     const prefix = args[prefixIndex + 1];
-    const target = args[args.length - 1];
-    if (prefix === undefined || target === undefined)
+    const targets = args.slice(prefixIndex + 2);
+    if (prefix === undefined || targets.length === 0)
       throw new Error(`fake npm: unexpected args ${JSON.stringify(args)}`);
-    const name = targetName(target);
-    const dir = join(prefix, "node_modules", name);
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "package.json"),
-      `${JSON.stringify({ name, version: options.version ?? "1.2.3", keywords: ["alisio-plugin"] }, null, 2)}\n`,
-    );
+    for (const target of targets) {
+      const name = targetName(target);
+      const dir = join(prefix, "node_modules", name);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, "package.json"),
+        `${JSON.stringify({ name, version: options.version ?? "1.2.3", keywords: ["alisio-plugin"] }, null, 2)}\n`,
+      );
+    }
     return { stdout: "added 1 package", stderr: "", exitCode: 0, truncated: false };
   };
 }
@@ -509,5 +512,120 @@ describe("npmInstallTarget", () => {
     expect(npmInstallTarget("p", "1.2.3")).toBe("p@1.2.3");
     expect(npmInstallTarget("@acme/p", "1.2.3")).toBe("@acme/p@1.2.3");
     expect(npmInstallTarget("p", undefined, true)).toBe("p@latest");
+  });
+});
+
+const ERESOLVE_OUTPUT = [
+  "npm error code ERESOLVE",
+  "npm error ERESOLVE unable to resolve dependency tree",
+  "npm error Could not resolve dependency:",
+  'npm error peer @alisio/sdk@">=0.1.0-alpha.10 <0.2.0" from @alisio/plugin-old@0.2.1',
+  "npm error Conflicting peer dependency: @alisio/sdk@0.4.0",
+  "npm error _authToken sky-secret-value-123",
+].join("\n");
+
+async function installOld(home: string, names: string[]) {
+  await cliInstallMany(home, names);
+}
+async function cliInstallMany(home: string, names: string[]) {
+  for (const name of names)
+    await installPlugin({ spec: name, configHome: home, runner: fakeNpm([]) });
+}
+
+describe("peer conflict guidance and bulk update", () => {
+  it("ERESOLVE explains the cause, names involved plugins, points to --update and omits the retry line", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["@alisio/plugin-old", "@alisio/plugin-other"]);
+    const runner = fakeNpm([], { failStderr: ERESOLVE_OUTPUT });
+    let error = "";
+    try {
+      await installPlugin({ spec: "npm:@alisio/plugin-laya", configHome: home, runner });
+      expect.unreachable();
+    } catch (e) {
+      error = String(e);
+    }
+    expect(error).toMatch(/already have installed require an older @alisio\/sdk/);
+    expect(error).toContain("Installed plugins involved: @alisio/plugin-old");
+    expect(error).not.toContain("plugin-other");
+    expect(error).toContain("alisio install --update");
+    expect(error).toContain("alisio install npm:@alisio/plugin-laya");
+    expect(error).not.toContain("Retry with");
+    expect(error).not.toContain("--force");
+    expect(error).not.toContain("sky-secret-value-123");
+  });
+
+  it("ERESOLVE without a parsable culprit lists every installed plugin", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["plugin-a", "plugin-b"]);
+    const runner = fakeNpm([], { failStderr: "npm error code ERESOLVE\nnpm error conflict" });
+    await expect(installPlugin({ spec: "plugin-c", configHome: home, runner })).rejects.toThrow(
+      /involved: plugin-a, plugin-b/,
+    );
+  });
+
+  it("a non-ERESOLVE failure keeps the original retry hint", async () => {
+    const { home } = await fixture();
+    const runner = fakeNpm([], { failStderr: "npm error code E404\nnot found" });
+    const error = String(
+      await installPlugin({ spec: "plugin-x", configHome: home, runner }).catch((e) => e),
+    );
+    expect(error).toContain("Retry with: npm install --prefix");
+    expect(error).not.toContain("alisio install --update");
+  });
+
+  it("--update without a spec runs ONE npm call with every installed name @latest", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["@alisio/plugin-old", "plugin-b"]);
+    const calls: NpmCall[] = [];
+    await cliUpdateAll({
+      configHome: home,
+      yes: true,
+      runner: fakeNpm(calls, { version: "2.0.0" }),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args).toEqual([
+      "install",
+      "--prefix",
+      join(home, "plugins"),
+      "@alisio/plugin-old@latest",
+      "plugin-b@latest",
+    ]);
+    expect((await readGlobalConfig(home)).plugins).toEqual(["@alisio/plugin-old", "plugin-b"]);
+  });
+
+  it("--update without a spec and no installed plugins says so and never runs npm", async () => {
+    const { home } = await fixture();
+    const calls: NpmCall[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await cliUpdateAll({ configHome: home, yes: true, runner: fakeNpm(calls) });
+    expect(calls).toHaveLength(0);
+    expect(log.mock.calls.join("\n")).toMatch(/nothing to update/);
+    log.mockRestore();
+  });
+
+  it("bulk update refuses under --read-only and headless without --yes, before npm", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["plugin-a"]);
+    const calls: NpmCall[] = [];
+    await expect(
+      cliUpdateAll({ configHome: home, yes: true, readOnly: true, runner: fakeNpm(calls) }),
+    ).rejects.toThrow(/--read-only/);
+    await expect(
+      cliUpdateAll({ configHome: home, interactive: false, runner: fakeNpm(calls) }),
+    ).rejects.toThrow(/--yes/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("bulk update failure is sanitized and gives no silent rerun", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["plugin-a"]);
+    const calls: NpmCall[] = [];
+    const runner = fakeNpm(calls, { failStderr: ERESOLVE_OUTPUT });
+    const error = String(
+      await cliUpdateAll({ configHome: home, yes: true, runner }).catch((e) => e),
+    );
+    expect(calls).toHaveLength(1);
+    expect(error).not.toContain("sky-secret-value-123");
+    expect(error).not.toContain("Retry with");
   });
 });

@@ -143,18 +143,59 @@ export function sanitizeNpmError(text: string, maxLength = 4000): string {
   return cleaned;
 }
 
+/** True when npm's output is a dependency-resolution (peer conflict) failure. */
+export function isPeerConflict(output: string): boolean {
+  return /\bERESOLVE\b|Conflicting peer dependency|Could not resolve dependency/.test(output);
+}
+
+/**
+ * Package names from the global config `plugins` array that are really installed under
+ * `<pluginsDir>/node_modules` (names only; file/directory entries are ignored).
+ */
+export async function installedGlobalPluginPackages(home: string): Promise<string[]> {
+  const config = (await readJson(join(home, "config.json"))) as { plugins?: unknown } | undefined;
+  const entries = Array.isArray(config?.plugins) ? (config.plugins as unknown[]) : [];
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== "string" || !NAME_RE.test(entry) || entry.includes("..")) continue;
+    if (names.includes(entry)) continue;
+    const manifest = (await readJson(
+      join(home, "plugins", "node_modules", entry, "package.json"),
+    )) as { version?: string } | undefined;
+    if (manifest?.version) names.push(entry);
+  }
+  return names;
+}
+
 function npmInstallError(
-  name: string,
-  version: string | undefined,
-  update: boolean | undefined,
+  label: string,
+  targets: string[],
   pluginsDir: string,
   result: ProcessResult,
+  installed: string[],
+  /** Single-package install the user typed (shows the `alisio install` alternative). */
+  single?: string,
 ): Error {
-  const detail = sanitizeNpmError([result.stdout, result.stderr].filter(Boolean).join("\n"));
-  const retry = `npm install --prefix ${pluginsDir} ${npmInstallTarget(name, version, update)}`;
+  const raw = [result.stdout, result.stderr].filter(Boolean).join("\n");
+  const detail = sanitizeNpmError(raw);
+  const head = `npm install failed for ${label} (exit ${result.exitCode}).\n${detail || "no output"}\n`;
+  if (isPeerConflict(raw)) {
+    const involved = installed.filter((name) => raw.includes(`from ${name}@`));
+    const list = involved.length > 0 ? involved : installed;
+    const next = single
+      ? `Update them all first, then run the install again:\n  alisio install --update\n  alisio install npm:${single}`
+      : `Remove or pin the conflicting plugin(s) listed above, then run \`alisio install --update\` again.`;
+    return new Error(
+      `${head}The install failed because plugins you already have installed require an older ` +
+        `@alisio/sdk than the one this package needs, so npm cannot satisfy both at once.\n` +
+        (list.length > 0 ? `Installed plugins involved: ${list.join(", ")}\n` : "") +
+        next,
+    );
+  }
+  const retry = `npm install --prefix ${pluginsDir} ${targets.join(" ")}`;
   return new Error(
-    `npm install failed for plugin "${name}" (exit ${result.exitCode}).\n${detail || "no output"}\n` +
-      `Retry with: ${retry}\n(or: alisio install npm:${npmInstallTarget(name, version)})`,
+    `${head}Retry with: ${retry}` +
+      (single ? `\n(or: alisio install npm:${single})` : "\n(or: alisio install --update)"),
   );
 }
 
@@ -223,7 +264,14 @@ export async function installPlugin(input: InstallPluginInput): Promise<InstallP
       { cwd: pluginsDir, signal },
     );
     if (npmResult.exitCode !== 0)
-      throw npmInstallError(parsed.name, parsed.version, input.update, pluginsDir, npmResult);
+      throw npmInstallError(
+        `plugin "${parsed.name}"`,
+        [npmInstallTarget(parsed.name, parsed.version, input.update)],
+        pluginsDir,
+        npmResult,
+        await installedGlobalPluginPackages(home),
+        npmInstallTarget(parsed.name, parsed.version),
+      );
     updated = !!input.update && alreadyInstalled;
   }
   const manifest = (await readJson(join(packageDir, "package.json"))) as
@@ -242,6 +290,54 @@ export async function installPlugin(input: InstallPluginInput): Promise<InstallP
     updated,
     trustRemark: pluginTrustRemark(parsed.name),
   };
+}
+
+export interface UpdateAllPluginsInput {
+  configHome?: string;
+  readOnly?: boolean;
+  signal?: AbortSignal;
+  runner?: InstallRunner;
+}
+
+export interface UpdateAllPluginsResult {
+  /** Packages refreshed to `@latest` in one npm call (empty when none were installed). */
+  packages: Array<{ name: string; version: string }>;
+  pluginsDir: string;
+}
+
+/**
+ * Refreshes every plugin package installed in the global plugins directory in ONE
+ * `npm install --prefix <plugins> <pkg>@latest ...` call, which lets npm resolve all peer ranges
+ * together (updating one by one keeps hitting the same peer conflict). The config is untouched.
+ */
+export async function updateAllPlugins(
+  input: UpdateAllPluginsInput,
+): Promise<UpdateAllPluginsResult> {
+  if (input.readOnly)
+    throw new Error(
+      "Updating npm plugins is unavailable under --read-only: it runs npm. Run without --read-only.",
+    );
+  const home = resolve(input.configHome ?? configHome());
+  const pluginsDir = join(home, "plugins");
+  const names = await installedGlobalPluginPackages(home);
+  if (names.length === 0) return { packages: [], pluginsDir };
+  const signal = input.signal ?? AbortSignal.timeout(INSTALL_TIMEOUT_MS);
+  const run = input.runner ?? defaultRunner;
+  const targets = names.map((name) => npmInstallTarget(name, undefined, true));
+  const npmResult = await run("npm", ["install", "--prefix", pluginsDir, ...targets], {
+    cwd: pluginsDir,
+    signal,
+  });
+  if (npmResult.exitCode !== 0)
+    throw npmInstallError("the installed plugins", targets, pluginsDir, npmResult, names);
+  const packages: UpdateAllPluginsResult["packages"] = [];
+  for (const name of names) {
+    const manifest = (await readJson(join(pluginsDir, "node_modules", name, "package.json"))) as
+      | { version?: string }
+      | undefined;
+    packages.push({ name, version: manifest?.version ?? "unknown" });
+  }
+  return { packages, pluginsDir };
 }
 
 /** Final remark about loading and project trust, printed by the CLI and returned by the tool. */
@@ -309,6 +405,49 @@ export async function cliInstall(options: CliInstallOptions): Promise<InstallPlu
   });
   printInstallResult(result, { json: !!options.json });
   return result;
+}
+
+/** `alisio install --update` without a spec: refresh ALL installed plugins in one npm call. */
+export async function cliUpdateAll(
+  options: Omit<CliInstallOptions, "spec" | "update">,
+): Promise<void> {
+  if (options.readOnly)
+    throw new Error(
+      "Refusing to update npm plugins under --read-only: updating runs npm. Run the command without --read-only.",
+    );
+  const home = resolve(options.configHome ?? configHome());
+  const names = await installedGlobalPluginPackages(home);
+  if (names.length === 0) {
+    if (options.json) process.stdout.write(`${JSON.stringify({ updated: [] }, null, 2)}\n`);
+    else
+      console.log("No plugins are installed in the global plugins directory; nothing to update.");
+    return;
+  }
+  if (options.yes) {
+    // Explicit opt-in: no warning, no prompt.
+  } else if (options.interactive) {
+    process.stderr.write(`\n${PREINSTALL_WARNING}\n`);
+    if (!(await (options.confirm ?? defaultConfirm)()))
+      throw new Error("Update of installed plugins cancelled; nothing was changed.");
+  } else {
+    throw new Error(
+      `Refusing to update npm plugins without confirmation: npm install may run lifecycle scripts ` +
+        `from the packages. Re-run with --yes (or --trust-plugin) to confirm, for example: ` +
+        `alisio install --update --yes`,
+    );
+  }
+  const result = await updateAllPlugins({
+    configHome: options.configHome,
+    signal: options.signal,
+    runner: options.runner,
+  });
+  if (options.json)
+    process.stdout.write(`${JSON.stringify({ updated: result.packages }, null, 2)}\n`);
+  else {
+    for (const pkg of result.packages)
+      console.log(`Updated plugin "${pkg.name}" to v${pkg.version}.`);
+    console.log("You can now run your original `alisio install npm:<package>` again.");
+  }
 }
 
 async function defaultConfirm(): Promise<boolean> {

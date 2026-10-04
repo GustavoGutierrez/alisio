@@ -2346,7 +2346,9 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   usuario; la carga sigue la política existente de plugins ejecutables (confianza del proyecto
   para la configuración y plugins del proyecto; `--read-only` impide cargar). No hay sandbox de
   scripts: `npm install` puede ejecutar scripts de ciclo de vida con tus privilegios y la
-  herramienta solo avisa/pide confirmación (headless exige `--yes`/`--trust-plugin`). No se
+  herramienta solo avisa/pide confirmación (headless exige `--yes`/`--trust-plugin`).
+  `alisio install --update` sin spec actualiza todos los plugins instalados en una sola llamada
+  de npm, y un fallo `ERESOLVE` indica ese comando (verificado con un npm falso, sin red). No se
   soportan URLs de registro (`registry:`, `git:`, `file:`), ni resolución de dependencias propia
   de Alisio: el paquete debe declarar la keyword `alisio-plugin` para poder cargarse.
 

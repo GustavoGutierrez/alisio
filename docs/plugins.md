@@ -670,6 +670,7 @@ alisio install npm:plugin-openrouter          # latest version
 alisio install npm:@scope/plugin-x@1.2.3      # a pinned version
 alisio install plugin-openrouter              # bare names are the same as npm:
 alisio install npm:plugin-openrouter --update # refresh an installed plugin to @latest
+alisio install --update                       # refresh ALL installed plugins in one npm call
 ```
 
 The spec is validated before any network operation: `npm:<package>[@<version>]`, or a bare package
@@ -694,11 +695,27 @@ directories.
 | Scripts | `npm install` may run the package's lifecycle scripts with your privileges — Alisio warns and requires confirmation on an interactive terminal |
 | Headless / `--json` | Never prompts: without an explicit `--yes` (or `--trust-plugin`) it fails with an actionable error before running npm |
 | Errors | Sanitized npm output, package name and exact retry command in the final message |
+| `--update` without a spec | Refreshes every plugin installed in the global plugins directory to `@latest` in a single `npm install --prefix` call; same confirmation, `--yes` and `--read-only` rules; with no installed plugins it says so and exits 0 |
 
 The install is a global, per-user action: it grants nothing to any project. Loading follows the
 existing executable-plugin policy — the one-time trust prompt (or `--trust-project`) is what lets a
 project load its own configuration and plugins, and `--read-only` disables executable plugins
 entirely.
+
+### Peer dependency conflicts (`ERESOLVE`)
+
+Older installed plugins can pin an older `@alisio/sdk` through their peer range, so npm refuses to
+install a newer plugin that needs a newer SDK (`ERESOLVE ... Conflicting peer dependency`). Alisio
+then explains the cause, lists the installed plugins involved and does not show the generic retry
+line, because the retry would fail the same way. Update all installed plugins together (updating
+them one by one keeps hitting the same conflict), then run the original install again:
+
+```sh
+alisio install --update
+alisio install npm:@alisio/plugin-laya
+```
+
+Alisio never suggests `--force` or `--legacy-peer-deps` for this.
 
 ### The agent can install a plugin for you
 
