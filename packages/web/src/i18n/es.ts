@@ -305,6 +305,7 @@ export const es: Record<MessageKey, string> = {
   "composer.reject.too-many": "Hasta 8 archivos por mensaje.",
   "composer.reject.empty": "El archivo está vacío.",
   "composer.send": "Enviar",
+  "composer.compacting": "Compactando el contexto. Podrás enviar de nuevo cuando termine.",
   "composer.stop": "Detener la ejecución",
   "composer.preset": "Permisos: {preset}",
   "composer.agent": "Agente: {agent}",

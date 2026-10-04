@@ -8,7 +8,7 @@ import { ArtifactCards } from "../artifacts/ArtifactCard.tsx";
 import { DatasetChips } from "../artifacts/DatasetChips.tsx";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
-import { RunStatus } from "./RunStatus.tsx";
+import { CompactingStatus, RunStatus } from "./RunStatus.tsx";
 import { ThinkRow, ToolRow } from "./ToolRow.tsx";
 import styles from "./transcript.module.css";
 
@@ -209,7 +209,7 @@ export function Transcript() {
           {shown.map((item) => (
             <Item key={item.key} item={item} />
           ))}
-          {state.live ? <RunStatus /> : null}
+          {state.live ? <RunStatus /> : <CompactingStatus />}
         </div>
       </div>
       {!follow ? (

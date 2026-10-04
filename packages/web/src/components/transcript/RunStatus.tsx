@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { cancelRun, runProgress } from "../../store/app.ts";
+import { cancelRun, compacting, runProgress } from "../../store/app.ts";
 import {
   describePhase,
   formatClock,
@@ -130,6 +130,26 @@ function RunStatusLine({ progress, now }: { progress: RunProgress; now: number }
       ) : null}
       <span class="sr-only" role="status" aria-live="polite">
         {announce}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The compaction line for a session with no live run (a manual `/compact`): the same look as the
+ * run status, shown for as long as the compaction events say it is working.
+ */
+export function CompactingStatus() {
+  if (!compacting.value) return null;
+  const label = t("run.phase.compacting");
+  return (
+    <div class={styles.runStatus} data-level="none" data-phase="compacting">
+      <div class={styles.runLine}>
+        <span class={`${styles.spinner} spin`} aria-hidden="true" />
+        <span class={styles.runLabel}>{label}</span>
+      </div>
+      <span class="sr-only" role="status" aria-live="polite">
+        {label}
       </span>
     </div>
   );

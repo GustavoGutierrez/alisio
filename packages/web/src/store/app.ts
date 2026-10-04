@@ -49,7 +49,7 @@ import {
   pluginsFailed,
   type SessionTab,
 } from "./plugins.ts";
-import { applyProgress, type RunProgress } from "./progress.ts";
+import { applyCompacting, applyProgress, type RunProgress } from "./progress.ts";
 import {
   applySessionStatus,
   emptySidebar,
@@ -82,6 +82,8 @@ export const transcript = signal(emptyTranscript(""));
  * the frames received. Undefined when no run is live.
  */
 export const runProgress = signal<RunProgress | undefined>(undefined);
+/** The open session is compacting its context (with or without a run). */
+export const compacting = signal(false);
 export const pending = signal(emptyPending());
 export const commands = signal<CommandDescriptor[]>([]);
 export const models = signal<SessionModels | undefined>(undefined);
@@ -317,6 +319,11 @@ function onFrames(frames: ServerFrame[]): void {
       if (!("sessionId" in frame) || frame.sessionId === transcript.value.sessionId)
         progress = applyProgress(progress, frame, at);
     runProgress.value = progress;
+    let isCompacting = compacting.value;
+    for (const frame of frames)
+      if (!("sessionId" in frame) || frame.sessionId === transcript.value.sessionId)
+        isCompacting = applyCompacting(isCompacting, frame);
+    if (isCompacting !== compacting.value) compacting.value = isCompacting;
     let nextPending = pending.value;
     let nextSidebar = sidebar.value;
     for (const frame of frames) {
@@ -394,6 +401,7 @@ export async function openSession(id: string | undefined): Promise<void> {
     detail.value = undefined;
     transcript.value = emptyTranscript(id ?? "");
     runProgress.value = undefined;
+    compacting.value = false;
     models.value = undefined;
     context.value = undefined;
     mobileSidebar.value = false;

@@ -177,6 +177,34 @@ const fresh = (runId: string, now: number, startedAt = now): RunProgress =>
     now,
   );
 
+/**
+ * Whether the open session is compacting its context. A manual `/compact` has no run (empty
+ * `runId`, no `run_started`), so this reads the compaction events directly instead of the run
+ * progress. Anything that proves the work is over (a run end, a snapshot, a session that is no
+ * longer running) clears it, so a missed `compaction_completed` can never leave the composer
+ * locked.
+ */
+export function applyCompacting(current: boolean, frame: ServerFrame): boolean {
+  if (frame.t === "snapshot") return false;
+  if (frame.t === "session_status")
+    return frame.status === "running" || frame.status === "queued" ? current : false;
+  if (frame.t !== "event") return current;
+  switch (frame.event.type) {
+    case "compaction_started":
+      return true;
+    case "compaction_completed":
+    case "compaction_failed":
+    case "compaction_skipped":
+    case "run_completed":
+    case "run_failed":
+    case "run_cancelled":
+    case "run_turns_exceeded":
+      return false;
+    default:
+      return current;
+  }
+}
+
 const str = (value: unknown): string =>
   value === undefined || value === null ? "" : String(value);
 

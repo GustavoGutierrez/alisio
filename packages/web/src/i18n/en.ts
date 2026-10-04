@@ -299,6 +299,7 @@ export const en = {
   "composer.reject.too-many": "Up to 8 files per message.",
   "composer.reject.empty": "The file is empty.",
   "composer.send": "Send",
+  "composer.compacting": "Compacting the context. You can send again when it finishes.",
   "composer.stop": "Stop the run",
   "composer.preset": "Permissions: {preset}",
   "composer.agent": "Agent: {agent}",

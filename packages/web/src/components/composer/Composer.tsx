@@ -9,6 +9,7 @@ import {
   busy,
   cancelRun,
   commands,
+  compacting,
   composerInsert,
   context,
   currentId,
@@ -39,7 +40,12 @@ import {
   readyRefs,
   updateAttachment,
 } from "../../store/attachments.ts";
-import { historyStep, paletteRows, paletteWindow } from "../../store/composer.ts";
+import {
+  composerSendBlocked,
+  historyStep,
+  paletteRows,
+  paletteWindow,
+} from "../../store/composer.ts";
 import { datasetNotices } from "../../store/datasets.ts";
 import { activeAgentId, needsFullAccessConfirm, shiftTabCycles } from "../../store/modes.ts";
 import { datasetShape } from "../artifacts/DatasetChips.tsx";
@@ -365,8 +371,9 @@ export function Composer() {
   };
 
   const sendable = canSend(text, attachments);
+  const sendBlocked = composerSendBlocked({ disabled, compacting: compacting.value });
   const send = () => {
-    if (disabled || !sendable) return;
+    if (sendBlocked || !sendable) return;
     const value = text;
     const refs = readyRefs(attachments);
     const datasets = readyDatasets(attachments);
@@ -660,9 +667,9 @@ export function Composer() {
             <button
               type="button"
               class={styles.send}
-              aria-label={t("composer.send")}
-              title={t("composer.send")}
-              disabled={disabled || !sendable}
+              aria-label={compacting.value ? t("composer.compacting") : t("composer.send")}
+              title={compacting.value ? t("composer.compacting") : t("composer.send")}
+              disabled={sendBlocked || !sendable}
               onClick={send}
             >
               <Icon name="arrowUp" size={18} />

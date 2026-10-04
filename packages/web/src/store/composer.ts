@@ -91,6 +91,11 @@ export function paletteWindow(
   return [...builtins.slice(0, limit - others.length), ...others];
 }
 
+/** Sending is blocked while the composer is disabled or the session is compacting. */
+export function composerSendBlocked(state: { disabled: boolean; compacting: boolean }): boolean {
+  return state.disabled || state.compacting;
+}
+
 /** Appends a sent prompt to the history (no blanks, no consecutive duplicates, bounded). */
 export function pushHistory(history: string[], text: string, limit = 100): string[] {
   if (!text.trim() || history.at(-1) === text) return history;
