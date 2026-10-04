@@ -312,8 +312,8 @@ terminal, the web in Chromium; not on a real terminal, other browsers, Windows o
   summary.
 
 **Decision Intelligence.** No provider is bundled: without a provider plugin named in
-`decisions.provider` nothing happens, and this release ships only the infrastructure (plugins can
-use `ctx.decisions` in their tools; the features that consume decisions come later). `confidence` is
+`decisions.provider` nothing happens, and the only built-in feature that consumes decisions is Smart
+Dashboard (plugins can also use `ctx.decisions` in their tools). `confidence` is
 not calibrated (a threshold of 0.6 did not reliably separate clear from ambiguous cases in a small
 hand-labelled sample), so `decisions.minConfidence` is a heuristic filter. `dispose()` is not called
 when a plugin is disabled or on `/reload` (both need a restart), only when Alisio closes; a sudden
@@ -323,6 +323,17 @@ counts only the current terminal process; the web shows decision statistics only
 the session totals. `pluginHooks.disposeTimeoutMs` and the `decisions.*` keys are not in the terminal
 `/settings` menu (they are in the web Settings → General). A provider's `state` can leave the
 process if its adapter decides so; Alisio only guarantees that events and metrics never contain it.
+
+**Smart Dashboard.** `dashboard_generate` is not available with `--read-only` (it publishes an
+artifact, like `artifact_create`) and is removed by `analysis.smartDashboard: false` or
+`analysis.enabled: false`; the switch applies at the next start, and a global `false` cannot be undone
+by a project layer. One dataset per call, no joins between sheets or files, no interactive filters
+and no incremental regeneration (each call is independent). Only ISO 8601 dates are treated as time
+columns (other formats give no trend), and zoned timestamps are read in UTC. The widget catalog is
+closed (KPI, line, area, bar, horizontal bar, pie, donut, scatter, table; at most 12 components and
+6 KPIs); anything else needs `python_run`. Currency is not inferred from the data. Dashboard colors follow the browser's `prefers-color-scheme`, like the Python ones. A
+decision provider receives only the goal and column metadata, never values, but Alisio does not
+decide where an adapter sends it.
 
 Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
@@ -479,3 +490,13 @@ fake provider (completed decisions, a fallback and `/decisions`). Not verified: 
 is bundled or published), a real terminal for the TUI, other browsers, Windows or macOS, screen
 readers, a remote provider, load with many concurrent decisions, and the quality of any engine's
 decisions. User guide: [Decision Intelligence](/decision-intelligence).
+
+**Smart Dashboard.** Verified with Vitest (profiling, candidates, the decision pack with a
+sentinel-string privacy test, planner, validator and repair table, query planner on a real SQLite
+dataset, renderer, the tool, golden specs of a few small datasets and the configuration layers) and
+in Chromium against a built `alisio serve` with a fake OpenAI-compatible model: the dashboard in the
+isolated viewer and the progress row. The tool's guidance to the model and the benchmark against the
+Python flow are still pending, so no claim is made about how often a real model chooses it. Not
+verified: a real decision provider, a real terminal for the TUI progress line, other browsers,
+Windows or macOS, screen readers and very large datasets in the browser. User guide:
+[Smart Dashboard](/smart-dashboard).

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "operational",
+  "layout": "operational-grid",
+  "locale": "en",
+  "widgets": [
+    {
+      "id": "kpi-cost",
+      "type": "kpi",
+      "metric": "cost",
+      "aggregation": "sum",
+      "label": "Total cost"
+    },
+    {
+      "id": "kpi-hours",
+      "type": "kpi",
+      "metric": "hours",
+      "aggregation": "sum",
+      "label": "Total hours"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Rows"
+    },
+    {
+      "id": "table",
+      "type": "table",
+      "columns": ["created", "team", "status", "hours", "cost"],
+      "limit": 10,
+      "title": "Detail"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "status",
+      "metric": "cost",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Cost by status"
+    },
+    {
+      "id": "trend",
+      "type": "line",
+      "dimension": "created",
+      "metric": "cost",
+      "aggregation": "sum",
+      "timeBucket": "day",
+      "title": "Cost per day"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "team",
+      "metric": "cost",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Cost share by team"
+    }
+  ]
+}

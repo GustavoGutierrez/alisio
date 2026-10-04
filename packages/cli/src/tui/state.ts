@@ -731,6 +731,8 @@ export type TranscriptItem =
       image?: { mimeType: string; data: string };
       /** Effect-derived kind (grouping label); name-heuristic fallback for replayed history. */
       toolKind?: ToolKind;
+      /** Last non-empty `tool_progress` line while the tool runs (cleared on completion). */
+      progress?: string;
       /** Exit code derived safely from the JSON preview when the tool reports one (run_process/shell/search_text). */
       exitCode?: number;
     }
@@ -856,6 +858,19 @@ function updateTool(
   const items = [...state.items];
   items[index] = { ...item, ...update };
   return { ...state, items };
+}
+/** Longest progress line kept on a running tool row. */
+const PROGRESS_LINE_MAX = 80;
+/** The last non-empty line of a `tool_progress` payload, bounded; empty when it has none. */
+function lastProgressLine(data: unknown): string {
+  const text = typeof data === "string" ? data : "";
+  const line =
+    text
+      .split(/[\r\n]+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .at(-1) ?? "";
+  return line.length > PROGRESS_LINE_MAX ? `${line.slice(0, PROGRESS_LINE_MAX - 1)}…` : line;
 }
 export function reduceEvent(state: ViewState, event: RunEvent): ViewState {
   const next = reduceEventItems(state, event);
@@ -1010,6 +1025,10 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
         toolKind: toolKindOf(name, typeof d.effect === "string" ? d.effect : undefined),
       });
     }
+    case "tool_progress": {
+      const line = lastProgressLine(d.data);
+      return line ? updateTool(state, d.id, { progress: line }) : state;
+    }
     case "approval_requested":
       return updateTool(state, d.id, { status: "approval" });
     case "approval_resolved":
@@ -1017,7 +1036,18 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
     case "tool_completed": {
       const name = String(d.name ?? "tool");
       const current = state.stats.tools[name] ?? { calls: 0, errors: 0 };
-      const next = updateTool(state, d.id, {
+      const index = state.items.findLastIndex((i) => i.kind === "tool" && i.id === d.id);
+      const running = state.items[index];
+      const settledState =
+        running?.kind === "tool" && running.progress !== undefined
+          ? (() => {
+              const { progress: _gone, ...rest } = running;
+              const items = [...state.items];
+              items[index] = rest;
+              return { ...state, items };
+            })()
+          : state;
+      const next = updateTool(settledState, d.id, {
         status: d.isError ? "error" : "ok",
         ...(typeof d.durationMs === "number" ? { durationMs: d.durationMs } : {}),
         ...(typeof d.preview === "string" ? { preview: d.preview } : {}),
@@ -1393,6 +1423,7 @@ const ACRONYM_WORDS = new Set([
  */
 export function humanizeToolName(name: string): string {
   const trimmed = name.trim();
+  if (trimmed === "dashboard_generate") return "Generate Dashboard";
   let rest = trimmed;
   let prefix = "";
   const mcp = /^mcp_/i.exec(rest);
@@ -1447,7 +1478,8 @@ export function toolKindOf(name: string, effect?: string): ToolKind {
   if (/^(read|search|list|git|context|ask|web|fetch)_/.test(name)) return "read";
   if (/^(write|edit|append|delete|rename|move|mkdir|patch)_/.test(name)) return "write";
   if (/^(run|shell|execute)/.test(name)) return "process";
-  if (name === "task" || name.startsWith("task_")) return "internal";
+  if (name === "task" || name.startsWith("task_") || name === "dashboard_generate")
+    return "internal";
   return "other";
 }
 
@@ -1504,6 +1536,8 @@ export interface ToolItemView {
   humanName: string;
   kind: ToolKind;
   summary: string;
+  /** Last progress line while running. */
+  progress?: string;
   status: ToolStatus;
   durationMs?: number;
   preview?: string;
@@ -1536,6 +1570,7 @@ export function toolItemView(item: Extract<TranscriptItem, { kind: "tool" }>): T
     humanName: humanizeToolName(item.name),
     kind: item.toolKind ?? toolKindOf(item.name),
     summary: item.summary,
+    ...(item.progress ? { progress: item.progress } : {}),
     status: item.status,
     ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
     ...(item.preview !== undefined ? { preview: item.preview } : {}),

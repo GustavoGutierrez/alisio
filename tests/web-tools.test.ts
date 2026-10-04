@@ -5,10 +5,24 @@ import {
   toolLabel,
   toolPath,
   toolPlugin,
+  toolProgressLine,
   toolSummary,
 } from "../packages/web/src/util/tools.ts";
 
 describe("tool rows", () => {
+  it("shows the last non-empty progress line of a live tail, bounded", () => {
+    expect(toolProgressLine("")).toBe("");
+    expect(toolProgressLine("Analyzing dataset…\nPlanning dashboard…\n\n")).toBe(
+      "Planning dashboard…",
+    );
+    expect(toolProgressLine("a\rQuery 2/5…\n")).toBe("Query 2/5…");
+    expect(toolProgressLine("x".repeat(200)).length).toBeLessThanOrEqual(80);
+  });
+
+  it("names dashboard_generate", () => {
+    expect(toolLabel("dashboard_generate")).toBe("Dashboard");
+  });
+
   it("names tools like the reference (Read, Shell) and humanizes unknown ones", () => {
     expect(toolLabel("read_file")).toBe("Read");
     expect(toolLabel("run_process")).toBe("Shell");

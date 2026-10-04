@@ -18,6 +18,8 @@ import { safePath } from "../runtime/paths.ts";
 import { objectSchema } from "./standard.ts";
 
 export interface DataToolDeps {
+  /** `analysis.smartDashboard`: the descriptions also point to `dashboard_generate`. */
+  smartDashboard?: boolean;
   datasets: DatasetService;
   rootOf: (sessionId: string) => string;
 }
@@ -56,7 +58,7 @@ export function registerDataTools(registry: ToolRegistry, deps: DataToolDeps): v
       "min/max/mean, top values) and sample rows. Pass a workspace file `path` (CSV, TSV, JSON, " +
       "JSONL or XLSX; ingested once into a SQLite dataset of this session) or the `datasetId` of " +
       "a dataset the user attached. The result gives the datasetId to use with data_query and " +
-      "python_run { inputs: [{ datasetId }] }. XLSX needs Python 3.10+; for the other formats no " +
+      `python_run { inputs: [{ datasetId }] }${deps.smartDashboard ? " or dashboard_generate { datasetId }" : ""}. XLSX needs Python 3.10+; for the other formats no ` +
       "Python is needed.",
     inputSchema: objectSchema({
       path: { type: "string", minLength: 1, maxLength: 1024 },
@@ -161,7 +163,7 @@ export function registerDataTools(registry: ToolRegistry, deps: DataToolDeps): v
       'quote column names ("revenue"). Values are stored exactly: numbers are numbers, other ' +
       "cells (007, 1,234, N/A) are their original text, so cast or filter before arithmetic. At " +
       "most maxRows (default 200, max 1000) rows; statements longer than the time limit are " +
-      "stopped. Heavy analysis belongs in python_run.",
+      `stopped. Heavy analysis belongs in python_run.${deps.smartDashboard ? " A dashboard of a dataset: dashboard_generate." : ""}`,
     inputSchema: objectSchema(
       {
         datasetId: { type: "string", minLength: 1, maxLength: 64 },

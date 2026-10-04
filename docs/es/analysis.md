@@ -22,7 +22,9 @@ alisio run --allow-analysis "Summarize sales.csv into report.md and a bar chart"
 alisio analysis status                   # which interpreter was found
 ```
 
-Pide un resultado, por ejemplo *"analiza data.csv y dame un dashboard HTML"*. El modelo escribe
+Pide un resultado, por ejemplo *"analiza data.csv y dame un dashboard HTML"*. Para un dashboard de un
+dataset el modelo llama a `dashboard_generate` y no hace falta ningún script (consulta
+[Dashboards sin código](#smart-dashboard)); para cualquier otra cosa escribe
 el script, Alisio pide aprobación, lo ejecuta y publica los archivos.
 
 ## Herramientas {#tools}
@@ -34,6 +36,7 @@ el script, Alisio pide aprobación, lo ejecuta y publica los archivos.
 | `artifact_list` | `read` | Lista los artefactos de la sesión. |
 | `artifact_read` | `read` | Lee un artefacto de texto (como máximo 64 KiB; los más largos se recortan y lo indican). |
 | `artifact_export` | `write` | Copia un artefacto al workspace; confinado a él y tras la aprobación de escritura habitual. |
+| `dashboard_generate` | `internal` | Construye un dashboard a partir de un dataset sin código y lo publica como artefacto HTML. Consulta [Dashboards sin código](#smart-dashboard). |
 | `data_inspect` | `read` | Ingiere un archivo CSV, TSV, JSON, JSONL o XLSX en un dataset SQLite y lo describe: hojas, columnas, pistas de tipo, estadísticas y filas de muestra. Consulta [Datos tabulares](#data). |
 | `data_query` | `read` | Ejecuta un `SELECT` de solo lectura sobre un dataset, acotado en filas y tiempo. |
 
@@ -194,6 +197,17 @@ TSV puede estar en UTF-8, UTF-16 (con BOM) o windows-1252.
   <img src="../assets/web-ui/dashboard_generated.webp" alt="Un dashboard ejecutivo de ventas generado por Alisio en el panel de artefactos: ranking de vendedores, ventas por canal, segmentos de clientes y estado de los pedidos." width="1835" height="990" loading="lazy" decoding="async" />
   <figcaption>Un dashboard ejecutivo generado en el panel de artefactos.</figcaption>
 </figure>
+
+## Dashboards sin código {#smart-dashboard}
+
+`dashboard_generate { datasetId }` convierte un dataset de la sesión en un dashboard listo (KPI,
+tendencia, ranking, composición, correlación y una tabla de detalle) y lo publica como
+`dashboard.html`. Los gráficos se eligen a partir de las columnas del dataset con reglas fijas, las
+cifras salen de consultas de solo lectura sobre el dataset y no se escribe ni se ejecuta código, así
+que no necesita Python ni aprobación. Usa `python_run` con [`alisio_runtime.charts`](#charts) para lo
+que el catálogo no cubre: pruebas estadísticas, gráficos personalizados o no admitidos, uniones y
+exportaciones. La guía completa es [Smart Dashboard](/es/smart-dashboard);
+`analysis.smartDashboard: false` elimina la herramienta y restaura la guía solo de Python.
 
 ## Datos tabulares {#data}
 

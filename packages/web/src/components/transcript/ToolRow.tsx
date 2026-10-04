@@ -14,6 +14,7 @@ import {
   toolLabel,
   toolPath,
   toolPlugin,
+  toolProgressLine,
   toolSummary,
 } from "../../util/tools.ts";
 import { Icon, type IconName } from "../icons.tsx";
@@ -82,6 +83,7 @@ export function ToolRow({ tool }: { tool: ToolState }) {
   const plugin = toolPlugin(tool.name, pluginNames.value);
   const summary = toolSummary(tool.arguments);
   const path = toolPath(tool.arguments);
+  const progress = tool.status === "running" ? toolProgressLine(tool.tail) : "";
   const id = `tool-${tool.id}`;
   return (
     <div class={styles.process} data-status={tool.status}>
@@ -109,6 +111,7 @@ export function ToolRow({ tool }: { tool: ToolState }) {
               </span>
             </>
           ) : null}
+          {progress && !expanded ? <span class={styles.progress}>{progress}</span> : null}
           <span class={styles.processState}>
             {tool.status === "running" ? (
               <span class={`${styles.spinner} spin`} title={t("tool.running")} />

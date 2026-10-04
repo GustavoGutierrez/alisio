@@ -733,3 +733,59 @@ describe("token budgets in configuration", () => {
     expect(configSchema.parse({}).limits.maxTurns).toBe(100);
   });
 });
+
+describe("analysis.smartDashboard across layers", () => {
+  it("defaults to true", async () => {
+    const { workspace } = await fixture();
+    expect((await loadConfig(workspace)).analysis.smartDashboard).toBe(true);
+    expect(configSchema.parse({}).analysis.smartDashboard).toBe(true);
+  });
+
+  it("a project analysis block that does not name the key never undoes a global false", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), { analysis: { smartDashboard: false } });
+    await json(join(workspace, ".alisio", "config.json"), {
+      analysis: { limits: { timeoutMs: 5000 } },
+    });
+    const config = await loadConfig(workspace, { trustProject: true });
+    expect(config.analysis.smartDashboard).toBe(false);
+    // the rest of the project block still applies
+    expect(config.analysis.limits.timeoutMs).toBe(5000);
+  });
+
+  it("a project can turn it off, and an explicit project true wins over a global false", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(workspace, ".alisio", "config.json"), { analysis: { smartDashboard: false } });
+    expect((await loadConfig(workspace, { trustProject: true })).analysis.smartDashboard).toBe(
+      false,
+    );
+    await json(join(global, "config.json"), { analysis: { smartDashboard: false } });
+    await json(join(workspace, ".alisio", "config.json"), { analysis: { smartDashboard: true } });
+    expect((await loadConfig(workspace, { trustProject: true })).analysis.smartDashboard).toBe(
+      true,
+    );
+  });
+
+  it("an untrusted project layer is not read at all", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), { analysis: { smartDashboard: false } });
+    await json(join(workspace, ".alisio", "config.json"), { analysis: { smartDashboard: true } });
+    expect((await loadConfig(workspace)).analysis.smartDashboard).toBe(false);
+  });
+
+  it("is a settable boolean key, written next to its siblings", async () => {
+    const { global, workspace } = await fixture();
+    expect(settableSettings().find((s) => s.key === "analysis.smartDashboard")).toEqual({
+      key: "analysis.smartDashboard",
+      kind: "boolean",
+    });
+    await json(join(global, "config.json"), { analysis: { enabled: true } });
+    await setConfigValue({ key: "analysis.smartDashboard", value: false });
+    expect(JSON.parse(await readFile(join(global, "config.json"), "utf8")).analysis).toEqual({
+      enabled: true,
+      smartDashboard: false,
+    });
+    expect((await loadConfig(workspace)).analysis.smartDashboard).toBe(false);
+    await expect(setConfigValue({ key: "analysis.smartDashboard", value: "no" })).rejects.toThrow();
+  });
+});

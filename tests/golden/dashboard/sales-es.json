@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "analytical",
+  "layout": "analytical-grid",
+  "locale": "es",
+  "widgets": [
+    {
+      "id": "kpi-ventas",
+      "type": "kpi",
+      "metric": "ventas",
+      "aggregation": "sum",
+      "label": "Total ventas"
+    },
+    {
+      "id": "kpi-utilidad",
+      "type": "kpi",
+      "metric": "utilidad",
+      "aggregation": "sum",
+      "label": "Total utilidad"
+    },
+    {
+      "id": "kpi-unidades",
+      "type": "kpi",
+      "metric": "unidades",
+      "aggregation": "sum",
+      "label": "Total unidades"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Filas"
+    },
+    {
+      "id": "trend",
+      "type": "line",
+      "dimension": "fecha",
+      "metric": "ventas",
+      "aggregation": "sum",
+      "timeBucket": "week",
+      "title": "Ventas por semana"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "region",
+      "metric": "ventas",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Ventas por region"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "canal",
+      "metric": "ventas",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Participación de ventas por canal"
+    },
+    {
+      "id": "correlation",
+      "type": "scatter",
+      "x": "utilidad",
+      "y": "ventas",
+      "title": "Ventas vs utilidad"
+    },
+    {
+      "id": "table",
+      "type": "table",
+      "columns": ["fecha", "region", "canal", "producto", "unidades", "ventas", "utilidad"],
+      "limit": 10,
+      "title": "Detalle"
+    }
+  ]
+}

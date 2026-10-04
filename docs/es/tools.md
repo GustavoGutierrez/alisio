@@ -477,6 +477,12 @@ ejecución headless no tiene a quién preguntar, así que la llamada falla nombr
 análisis anterior de la sesión (mismo script, entradas verificadas por hash, artefactos nuevos) tras
 la misma puerta `analysis.run`; consulta [Ejecutar de nuevo](/es/analysis#rerun).
 
+`dashboard_generate` (efecto `internal`, como `artifact_create`) construye un dashboard a partir de un
+dataset sin código y lo publica como artefacto; no necesita Python ni aprobación. Se registra cuando
+`analysis.enabled` y `analysis.smartDashboard` son `true`, así que `--read-only` lo elimina (publica
+un artefacto) y `analysis.smartDashboard: false` lo oculta de `/tools`. Consulta
+[Smart Dashboard](/es/smart-dashboard).
+
 ### Datos tabulares {#data-tools}
 
 `data_inspect` y `data_query` (efecto `read`) describen y consultan archivos CSV, TSV, JSON, JSONL y

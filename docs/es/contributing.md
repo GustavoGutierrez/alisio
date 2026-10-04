@@ -39,7 +39,11 @@ Ejecute estas comprobaciones antes de abrir un pull request:
 
 - **TDD estricto**: escriba primero la prueba que falla y después la implementación.
 - Pruebe el comportamiento en los límites de los módulos. No añada pruebas de snapshot que
-  simplemente repitan la implementación.
+  simplemente repitan la implementación. Una excepción: las especificaciones golden pequeñas y
+  revisadas a mano en `tests/golden/dashboard/*.json` (el `DashboardSpec` que devuelve el
+  planificador para unos pocos datasets de como máximo 40 filas, o los CSV de ejemplo). Son
+  comportamiento del planificador en su límite; un cambio de regla que mueva uno exige revisión
+  humana. Nunca haga una instantánea del HTML generado: compruebe su estructura.
 - Mantenga los SDKs de proveedores y los imports específicos de un runtime fuera de `@alisio/sdk` y de
   los contratos del núcleo del agente.
 - Preserve los IDs de llamadas a herramientas, los datos de continuación del proveedor y la

@@ -156,6 +156,8 @@ export interface DatasetServiceOptions {
   python?: { interpreter(signal: AbortSignal): Promise<PythonResolution> };
   engine?: DataEngine;
   now?: () => number;
+  /** `analysis.smartDashboard`: the model-facing descriptions also name `dashboard_generate`. */
+  dashboard?: boolean;
 }
 
 async function sha256Of(path: string, signal?: AbortSignal): Promise<string> {
@@ -541,7 +543,14 @@ export class DatasetService {
     const samples = new Map<string, SampleRows>();
     for (const sheet of detail.sheetDetails.slice(0, 5))
       samples.set(sheet.table, await this.sample(record, sheet.table, sampleRows, signal));
-    return { detail, samples, text: describeDataset(detail, samples, { maxChars }) };
+    return {
+      detail,
+      samples,
+      text: describeDataset(detail, samples, {
+        maxChars,
+        dashboard: this.options.dashboard === true,
+      }),
+    };
   }
 
   /** The ≤ 4 KB summary appended to a prompt that attaches the dataset. */
@@ -550,7 +559,7 @@ export class DatasetService {
     const samples = new Map<string, SampleRows>();
     for (const sheet of detail.sheetDetails.slice(0, 3))
       samples.set(sheet.table, await this.sample(record, sheet.table, 5, signal));
-    return promptSummary(detail, samples);
+    return promptSummary(detail, samples, { dashboard: this.options.dashboard === true });
   }
 
   /**

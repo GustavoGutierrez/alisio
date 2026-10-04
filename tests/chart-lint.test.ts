@@ -34,6 +34,17 @@ describe("chart quality gate", () => {
     expect(warning).toContain("inlines Chart.js");
   });
 
+  it("names dashboard_generate only when asked to (analysis.smartDashboard)", () => {
+    const html = `<body>${HAND_PIE}<script src="https://cdn.example.com/c.js"></script></body>`;
+    const off = chartWarnings(html);
+    expect(off.join("\n")).not.toContain("dashboard_generate");
+    expect(chartWarnings(html, { dashboard: false })).toEqual(off);
+    const on = chartWarnings(html, { dashboard: true });
+    expect(on).toHaveLength(off.length);
+    expect(on.join("\n")).toContain("or dashboard_generate");
+    expect(on.join("\n")).toContain("alisio_runtime.charts");
+  });
+
   it("accepts responsive SVGs, relative scripts and a single arc (an icon)", () => {
     expect(
       chartWarnings(
@@ -89,5 +100,27 @@ describe("publishing warns about broken charts without rejecting them", () => {
       expect(item.artifact.kind).toBe("dashboard");
       expect(item.warnings.join("\n")).toMatch(/hand-written SVG arc paths/);
     }
+  });
+
+  it("names dashboard_generate in the published warnings only when the store is told to", async () => {
+    root = await mkdtemp(join(tmpdir(), "alisio-lint-"));
+    const staging = join(root, "job", "staging");
+    await mkdir(join(staging, "board"), { recursive: true });
+    db = new SQLiteStore(join(root, "state", "sessions.sqlite"));
+    db.db
+      .prepare(
+        `INSERT INTO analysis_executions(id,session,root_session,workspace,runtime,status,script_sha256,rel_dir,created_at)
+         VALUES('exec_1','s','r','/w','managed','completed','x','j',1)`,
+      )
+      .run();
+    await writeFile(join(staging, "single.html"), `<html><body>${HAND_PIE}</body></html>`);
+    await writeFile(join(staging, "board", "index.html"), `<body>${HAND_PIE}</body>`);
+    const origin = { sessionId: "s", rootSessionId: "r", workspace: "/w", executionId: "exec_1" };
+    const warningsOf = async (dashboard: boolean, n: number) => {
+      const store = new ArtifactStore({ root: join(root, `state${n}`), db: db.db, dashboard });
+      return (await store.publishOutputs(staging, origin)).flatMap((p) => p.warnings).join("\n");
+    };
+    expect(await warningsOf(true, 1)).toContain("or dashboard_generate");
+    expect(await warningsOf(false, 2)).not.toContain("dashboard_generate");
   });
 });

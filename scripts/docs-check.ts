@@ -17,6 +17,7 @@ const SITE_EXCLUDE = new Set([
   "implementation-status.md",
   "validation.txt",
   "benchmark.json",
+  "benchmark-dashboard.json",
   "README.md",
 ]);
 /** Pairs whose structure is allowed to differ, with the reason. */

@@ -329,6 +329,48 @@ describe.skipIf(!python)("charts (Chart.js helpers)", () => {
     expect(html).toContain("prefers-color-scheme:dark");
   });
 
+  it("renders the same bytes as before the assets moved into files (non-regression)", () => {
+    const { value } = run<{ chart: string; length: number; base: string; version: string }>(
+      [
+        "import json, hashlib",
+        "import alisio_runtime",
+        "from alisio_runtime import charts, html",
+        'body = charts.kpis(("Orders", "1,204"), ("Revenue", "$1.2M", "+8%")) + charts.grid(',
+        '  charts.card("Status", charts.donut(["Delivered", "In transit", "Cancelled"], [81.7, 14.8, 3.4], center="100"), note="n"),',
+        '  charts.card("Channel", charts.pie(["Online", "Retail"], [34.8, 33.7])),',
+        '  charts.card("Sellers", charts.bar(["Ana", "Luis"], {"Sales": [120000, 95000], "Profit": [30000, 21000]}, stacked=True, fmt="currency:USD", locale="en-US")),',
+        '  charts.card("Rank", charts.hbar(["a<b", "c"], [3, 2], note="Top")),',
+        '  charts.card("Trend", charts.line(["2024-01", "2024-02"], [1, 2], smooth=True, x_title="x")),',
+        '  charts.card("Area", charts.area(["a", "b"], [1, 2])),',
+        '  charts.card("Sc", charts.scatter([1, 2, 3], [3, 1, 2], title="S")),',
+        ")",
+        'page = charts.page("Sales <x>", body, css=".x{color:red}", lang="es")',
+        'base = html.page("T", "<p>x</p>", ".y{}", "en")',
+        "print(json.dumps({'chart': hashlib.sha256(page.encode()).hexdigest(), 'length': len(page),",
+        "  'base': hashlib.sha256(base.encode()).hexdigest(), 'version': alisio_runtime.__version__}))",
+      ].join("\n"),
+    );
+    // Deliberate update: the boot script gained `if(horiz)o.interaction.axis='y';` (35 characters) so hbar
+    // tooltips follow the hovered row. The base page (no chart script) is byte-identical.
+    expect(value.chart).toBe("778f9e762cf054fe7c2f88ea006a2450ed051cb075ae5eebeda25eb96749df1b");
+    expect(value.length).toBe(225904);
+    expect(value.base).toBe("1f8b4f79e6538f1ebf0a12182661b25162b942cdbd4922a6a67148588f13a261");
+    expect(value.version).toBe("3");
+  });
+
+  it("hovers by row in horizontal bars: interaction.axis is 'y' only for hbar", () => {
+    const boot = ALISIO_RUNTIME_FILES["charts-boot.js"] as string;
+    // Chart.js `index` mode searches along x by default, which picks the wrong row when the
+    // categories sit on the y axis. Only hbar sets the axis; every other kind keeps the old config.
+    expect(boot).toContain("o.interaction={mode:'index',intersect:false}");
+    expect(boot).toContain("if(horiz)o.interaction.axis='y'");
+    expect(boot.match(/axis\s*[:=]\s*'y'/g) ?? []).toHaveLength(1);
+    expect(boot.match(/o\.interaction=/g) ?? []).toHaveLength(2);
+    expect(boot).toContain(
+      "if(kind==='line'||kind==='area'){o.interaction={mode:'index',intersect:false}}",
+    );
+  });
+
   it("bundles a Chart.js build that needs no eval (the viewer CSP forbids it)", () => {
     const lib = ALISIO_RUNTIME_FILES["chart.umd.min.js"] as string;
     expect(lib).toContain("Chart.js v4");

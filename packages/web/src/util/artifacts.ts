@@ -65,3 +65,20 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * What `dashboard_generate` records in an artifact's provenance: how the plan was made and which
+ * decision provider (not the model's provider) shaped it. Undefined for any other artifact.
+ */
+export function dashboardProvenance(
+  provenance: Record<string, unknown>,
+): { planner: "rules" | "rules+decisions"; decisionProvider?: string } | undefined {
+  if (provenance.generator !== "dashboard_generate") return undefined;
+  const planner = provenance.planner;
+  if (planner !== "rules" && planner !== "rules+decisions") return undefined;
+  const provider = provenance.decisionProvider;
+  return {
+    planner,
+    ...(typeof provider === "string" && provider ? { decisionProvider: provider } : {}),
+  };
+}

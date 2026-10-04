@@ -155,9 +155,10 @@ describe("setConfigValue with three-level keys", () => {
     }
   });
 
-  it("lists the five analysis keys with their value kinds", () => {
+  it("lists the six analysis keys with their value kinds", () => {
     const byKey = Object.fromEntries(settableSettings().map((s) => [s.key, s.kind]));
     expect(byKey["analysis.enabled"]).toBe("boolean");
+    expect(byKey["analysis.smartDashboard"]).toBe("boolean");
     expect(byKey["analysis.limits.timeoutMs"]).toBe("number");
     expect(byKey["analysis.retention.jobsDays"]).toBe("number");
     expect(byKey["analysis.retention.intermediateDays"]).toBe("number");

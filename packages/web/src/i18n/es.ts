@@ -410,6 +410,9 @@ export const es: Record<MessageKey, string> = {
   "artifactPanel.files": "Archivos",
   "artifactPanel.model": "Modelo",
   "artifactPanel.provider": "Proveedor",
+  "artifactPanel.dashboard": "Dashboard",
+  "artifactPanel.plannerRules": "Reglas",
+  "artifactPanel.plannerDecisions": "Reglas y decisiones",
   "artifactPanel.runtime": "Runtime",
   "artifactPanel.inputs": "Entradas",
   "artifactPanel.execution": "Ejecución",
@@ -785,6 +788,9 @@ export const es: Record<MessageKey, string> = {
   "settings.analysis.enabled": "Activar el análisis de datos",
   "settings.analysis.enabledHint":
     "Activa o desactiva python_run, los artefactos y las herramientas de datos. El workspace recarga sus herramientas cuando terminan sus ejecuciones.",
+  "settings.analysis.smartDashboard": "Smart Dashboard",
+  "settings.analysis.smartDashboardHint":
+    "Ofrece dashboard_generate, que construye un dashboard a partir de un dataset sin código. Desactivado, la herramienta no se ofrece. Se aplica cuando el workspace recarga sus herramientas.",
   "settings.analysis.timeout": "Tiempo máximo de ejecución (segundos)",
   "settings.analysis.retention": "Retención",
   "settings.analysis.retention.lead":

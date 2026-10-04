@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "executive",
+  "layout": "executive-grid",
+  "locale": "en",
+  "widgets": [
+    {
+      "id": "kpi-d",
+      "type": "kpi",
+      "metric": "d",
+      "aggregation": "sum",
+      "label": "Total d"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Rows"
+    },
+    {
+      "id": "trend",
+      "type": "area",
+      "dimension": "b",
+      "metric": "d",
+      "aggregation": "sum",
+      "timeBucket": "month",
+      "title": "D per month"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "c",
+      "metric": "d",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "D by c"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "f",
+      "metric": "d",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "D share by f"
+    }
+  ]
+}

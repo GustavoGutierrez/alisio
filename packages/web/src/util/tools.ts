@@ -19,6 +19,7 @@ const NAMES: Record<string, string> = {
   ask_user_question: "Question",
   exit_plan: "Plan",
   task: "Agent",
+  dashboard_generate: "Dashboard",
 };
 
 /** Argument keys worth showing, in priority order. */
@@ -109,4 +110,15 @@ export function liveCommand(tool: { name: string; arguments: string }): string |
   } catch {
     return "";
   }
+}
+
+/** The last non-empty line of a live progress tail (`Building 5 components…`), bounded. */
+export function toolProgressLine(tail: string, max = 80): string {
+  const line =
+    tail
+      .split(/[\r\n]+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .at(-1) ?? "";
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }

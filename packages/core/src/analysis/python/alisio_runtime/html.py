@@ -1,21 +1,23 @@
 """Self-contained HTML pages. The Alisio viewer blocks network access: inline every asset."""
 
 import html as _html
+import sys
 from pathlib import Path
 from typing import Optional
 
 from . import outputs
 
-_CSS = """
-:root { color-scheme: light; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-body { margin: 0; padding: 24px; background: #fff; color: #1b1f24; line-height: 1.5; }
-h1, h2, h3 { line-height: 1.25; }
-table { border-collapse: collapse; margin: 12px 0; }
-th, td { border: 1px solid #d0d7de; padding: 6px 10px; text-align: left; }
-th { background: #f6f8fa; }
-.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-.card { border: 1px solid #d0d7de; border-radius: 8px; padding: 16px; }
-"""
+
+def _asset(name: str) -> str:
+    """A text asset next to this file, shared with the TypeScript renderer ("" and a warning if missing)."""
+    try:
+        return Path(__file__).with_name(name).read_text(encoding="utf-8")
+    except OSError:
+        print(f"alisio_runtime.html: {name} is missing: the page will be unstyled", file=sys.stderr)
+        return ""
+
+
+_CSS = _asset("html-base.css")
 
 
 def escape(text: object) -> str:

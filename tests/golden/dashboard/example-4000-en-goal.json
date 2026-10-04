@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "executive",
+  "layout": "executive-grid",
+  "locale": "en",
+  "widgets": [
+    {
+      "id": "kpi-net-sales-cop",
+      "type": "kpi",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "label": "Total net sales (COP)"
+    },
+    {
+      "id": "kpi-discount-amount-cop",
+      "type": "kpi",
+      "metric": "discount_amount_cop",
+      "aggregation": "sum",
+      "label": "Total discount amount (COP)"
+    },
+    {
+      "id": "kpi-units",
+      "type": "kpi",
+      "metric": "units",
+      "aggregation": "sum",
+      "label": "Total units"
+    },
+    {
+      "id": "kpi-unit-price-cop",
+      "type": "kpi",
+      "metric": "unit_price_cop",
+      "aggregation": "avg",
+      "label": "Average unit price (COP)"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Rows"
+    },
+    {
+      "id": "trend",
+      "type": "area",
+      "dimension": "order_date",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "timeBucket": "month",
+      "title": "Net sales (COP) per month"
+    },
+    {
+      "id": "by-salesperson",
+      "type": "hbar",
+      "dimension": "salesperson",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Net sales (COP) by salesperson"
+    },
+    {
+      "id": "by-discount-pct",
+      "type": "hbar",
+      "dimension": "discount_pct",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Net sales (COP) by discount (%)"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "region",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Net sales (COP) by region"
+    },
+    {
+      "id": "by-category",
+      "type": "donut",
+      "dimension": "category",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Net sales (COP) share by category"
+    },
+    {
+      "id": "by-order-status",
+      "type": "donut",
+      "dimension": "order_status",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Net sales (COP) share by order status"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "sales_channel",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Net sales (COP) share by sales channel"
+    }
+  ]
+}

@@ -496,7 +496,7 @@ export function registerManagementRoutes(
     if (key.startsWith("agents.")) recycler.announce(opened.id, ["agents"]);
     // Analysis tools are registered when the workspace application starts: rebuild it (after its
     // runs) so `analysis.enabled` applies without restarting the server.
-    if (key === "analysis.enabled" || key === "tasks.enabled")
+    if (key === "analysis.enabled" || key === "analysis.smartDashboard" || key === "tasks.enabled")
       void recycler.request(opened.id).catch(() => undefined);
     return { body: { message: `Saved ${key}` } };
   });

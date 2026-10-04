@@ -21,7 +21,9 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
   (`specs/archive/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
-  Intelligence (fases 1 a 5 de `specs/alisio-decision-intelligence-v1.md`).
+  Intelligence (fases 1 a 5 de `specs/alisio-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
+  de `specs/alisio-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
+  release).
 - Validación.
 - Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -30,13 +32,14 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   adjuntos de imagen; preguntar al usuario; herramientas de red; confianza de proyecto y permisos;
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
   comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
-  vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision Intelligence).
+  vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision Intelligence; Smart
+  Dashboard).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
   Herdr; agente activo y effort; agentes del usuario; servidor web; modos, recarga y novedades;
   pestaña Memory y vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision
-  Intelligence.
+  Intelligence; Smart Dashboard.
 
 ## Implementado
 
@@ -1054,6 +1057,68 @@ función que consuma decisiones (los consumidores son especificaciones posterior
   capacidades, circuito, ajustes, error de ciclo de vida y métricas; sección «Decision Intelligence» en
   `/stats` (solo si hubo decisiones) calculada con `summarizeDecisionEvents` en las tres rutas (núcleo,
   TUI y web). En la web las estadísticas de decisiones van en el tooltip de los totales de la sesión.
+
+### Smart Dashboard (fases 0 a 7 de la especificación)
+
+Especificada en `specs/alisio-smart-dashboard-v1.md` (release previsto 0.4.0). Estado: la fase 0 está
+hecha, las fases 1 a 7 están implementadas y la fase 8 se midió el 2026-10-03 con `deepseek-flash`
+(resultados en `docs/benchmark-dashboard.json`; resumen en la guía de usuario). **La puerta de §11.2
+falla**: B (15 ejecuciones, 1 repetición por dataset) redujo los tokens de salida un 28,5 % (exigido
+50 %) y los turnos un 8,7 % (exigido 40 %), con 15/15 specs válidos y 0 avisos de lint; el modelo
+elige `dashboard_generate` en el 100 % de las ejecuciones (E7), pero sigue usando `python_run` después.
+C (5 ejecuciones, informativa): Laya respondió en 4/5. **Pendiente**: decisión del propietario sobre
+cómo continuar y la fase 9 (release). Guía de
+usuario: [Smart Dashboard](/es/smart-dashboard). El proveedor de decisiones refina solo el propósito
+(`PROVIDER_DECISIONS` en `pack.ts`): con Laya 0.3.24 real acertó el 90 % en el propósito y quedó cerca del azar
+en columnas y gráficos, así que las reglas deciden el resto.
+
+- Herramienta `dashboard_generate` (efecto `internal`): entrada `{ datasetId, goal?, title?, locale?,
+  sheet? }`; construye un dashboard sin código ni llamada al modelo y lo publica como `dashboard.html`
+  con procedencia propia (`generator`, `spec`, `planner`, `decisionProvider?`, `fallbacks`). Errores
+  `dataset_not_found`, `no_usable_columns`, `plan_failed` y `query_failed`, con la indicación de usar
+  `python_run`; un error no deja un artefacto parcial. Una consulta que falla elimina solo su
+  componente y queda anotada en el resultado.
+- Pipeline puro en `packages/core/src/analysis/dashboard/`: perfilador de columnas (roles `time`,
+  `measure`, `dimension`, `identifier`, `boolean` y `unknown`, calculados con las estadísticas de
+  `_alisio_columns` sin una nueva pasada de ingesta), candidatos (medidas ≤ 8, dimensiones ≤ 8, tiempo
+  ≤ 4), planificador «reglas primero, decisiones encima», `DashboardSpec` v1 (tipos en `@alisio/sdk`),
+  validador con tabla de reparación determinista (`valid`, `repaired`, `fallback`; nunca se llama al
+  modelo), planificador de consultas y renderizador en TypeScript. Catálogo cerrado: `kpi`, `line`,
+  `area`, `bar`, `hbar`, `pie`, `donut`, `scatter` y `table`; límites de 12 componentes, 6 KPI y 8
+  columnas de tabla, y de 1 a 20 categorías por ranking.
+- Planificador de consultas: cada componente es un único `SELECT` construido desde un AST con
+  identificadores tomados solo del catálogo de columnas del dataset, siempre entrecomillados y sin
+  literales del modelo ni del proveedor; se ejecuta por `DatasetService.query()` (guardia de sentencia,
+  lector de solo lectura y tiempo límite). La tendencia elige el cubo de tiempo más grueso que deje
+  como máximo 400 cubos en lugar de truncar la cola; los cubos de tiempo exigen una fecha ISO 8601.
+- Pack de decisiones `smart-dashboard-v1`: el `state` lleva solo el objetivo (truncado a 300
+  caracteres) y, por columna preseleccionada, un alias opaco, la etiqueta (≤ 60), el rol, el tipo
+  inferido y el cubo de cardinalidad; nunca valores de celdas. Sin proveedor el plan por reglas es
+  igual de válido.
+- Renderizador con el mismo contrato DOM que `alisio_runtime.charts`: el CSS y el script de arranque
+  pasaron de cadenas de `charts.py` a archivos del runtime (`charts.css`, `charts-boot.js`,
+  `html-base.css`) que leen ambos renderizadores; se subió la versión del runtime. KPI en notación
+  compacta desde un millón (el valor exacto queda en la ayuda emergente), nombres de columna legibles,
+  títulos y etiquetas por plantilla `en`/`es`, y «Otros» en los gráficos de participación.
+- Configuración: `analysis.smartDashboard` (booleano, `true` por defecto). Con `false` la herramienta
+  no se registra. No es solo global, pero un `false` global no lo deshace una capa de proyecto (el
+  bucle de capas conserva el valor global cuando la capa no define la clave). Ajustable en vivo con
+  etiquetas EN/ES en la web y entrada en `/settings` de la TUI; se aplica al siguiente arranque.
+- Registro bajo `analysisEnabled && config.analysis.smartDashboard`, igual que `artifact_create`.
+- Guía al modelo (fase 6, §10.1 de la especificación): con `smartDashboard: true` las descripciones de
+  `python_run`, `data_inspect`, `data_query` y `artifact_create`, la cabecera de `describeDataset` y los
+  avisos de `chart-lint` mencionan `dashboard_generate` y dejan `python_run` para lo que el catálogo no
+  cubre; con `false` son idénticas a las de 0.3.0 (resúmenes SHA-256 en `tests/dashboard-tool.test.ts`).
+  El arnés de benchmark registra ahora el motivo de los fallos (`failureReason`, `failureClass`,
+  `lastTurnTokens`, `endedWithoutDashboard`; `failureReasons` por variante).
+- Progreso: la herramienta emite `Analyzing dataset…`, `Planning dashboard…`, `Building N components…`,
+  `Query i/N…` y `Dashboard ready`; la web muestra la última línea en la fila de la herramienta y la
+  TUI gana el manejo de `tool_progress` (última línea no vacía, ≤ 80 caracteres, borrada al terminar).
+  La ficha del artefacto en la web muestra el planificador y el proveedor de decisiones.
+- Pruebas golden acotadas de `DashboardSpec` en `tests/golden/dashboard/*.json` (excepción documentada
+  en `CONTRIBUTING.md`); el HTML solo con aserciones estructurales.
+- Arnés de benchmark `scripts/bench-dashboard.ts` y `scripts/bench/lib.ts` (fase 0); los resultados
+  irán a `docs/benchmark-dashboard.json`, excluido del sitio.
 
 ## Validación
 
@@ -2167,6 +2232,32 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   otros navegadores, Windows y macOS, lectores de pantalla, un proveedor remoto, el comportamiento con
   muchas decisiones concurrentes bajo carga y la calidad de las decisiones de cualquier motor.
 
+## Smart Dashboard: alcance de la verificación
+
+- Verificado con Vitest (sin red ni proveedor real): perfilador y candidatos, pack de decisiones con
+  una prueba de privacidad de cadenas centinela sembradas en celdas, valores frecuentes, mínimos y
+  máximos, planificador con y sin decisiones, validador y su tabla de reparación, planificador de
+  consultas sobre un dataset SQLite real, renderizador (estructura, escape y formato de KPI), prueba de
+  paridad con `alisio_runtime.charts` (se salta sin Python), la herramienta de extremo a extremo con un
+  publicador real, pruebas golden de los `DashboardSpec` de unos pocos datasets pequeños revisados a
+  mano, capas de configuración (global `false` frente a un bloque `analysis` de proyecto) y paridad de
+  etiquetas EN/ES.
+- Fase 0 (E1 a E5, fuera del repositorio): las reglas de roles funcionan con las estadísticas actuales
+  en 8 datasets; la consulta más lenta tardó 370 ms con 500 000 filas (límite de 5000 ms), así que no
+  hay muestreo; la expresión de semana de SQLite se comprobó sobre 1461 días; `chart-lint` y el visor
+  no dependen del marcado `ac-*`.
+- Navegador: Chromium (Playwright) contra `alisio serve` construido y un modelo falso compatible con
+  OpenAI, con datos de ejemplo: el dashboard en el visor aislado y la fila de progreso. Son las capturas
+  de la documentación; no son una prueba de calidad de los dashboards.
+- Benchmark (fase 8, 2026-10-03, un solo modelo: `deepseek-flash`): A 45 ejecuciones, B 15 (1
+  repetición por dataset), C 5 (informativa, en paralelo con B, tiempos no comparables); la puerta de
+  §11.2 falla en tokens de salida y turnos. La línea base A está limitada por el presupuesto de
+  tokens, y el orden de las llamadas solo se reconstruyó en C.
+- No verificado: otros modelos en el benchmark; la variante C a mayor escala (el plugin de Laya no está
+  publicado); la línea de progreso en
+  un terminal real; otros navegadores, Windows y macOS; lectores de pantalla; y datasets muy grandes
+  en el navegador.
+
 ## Límites conocidos
 
 ### Runtime y empaquetado
@@ -2723,9 +2814,8 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 
 - **No se incluye ningún proveedor**: sin un plugin de proveedor registrado y nombrado en
   `decisions.provider`, la función no hace nada. El plugin oficial de Laya está previsto en el
-  repositorio `alisio-plugins` y no está publicado. Esta entrega no contiene ninguna función que
-  consuma decisiones, solo la infraestructura; los plugins pueden usar `ctx.decisions` en sus
-  herramientas.
+  repositorio `alisio-plugins` y no está publicado. La única función integrada que consume decisiones
+  es Smart Dashboard; los plugins también pueden usar `ctx.decisions` en sus herramientas.
 - **`confidence` no está calibrada** (Fase 0, E2): `decisions.minConfidence` es un filtro heurístico y
   un umbral de 0.6 no separó de forma fiable los casos claros de los ambiguos en una muestra pequeña
   etiquetada a mano. Alisio no la trata como probabilidad; la calidad debe medirse en la función que
@@ -2747,6 +2837,34 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   estadísticas web, y `/decisions` solo muestra las métricas en memoria del proceso. Un `state` puede
   salir del proceso si el adaptador del proveedor lo decide; el núcleo solo garantiza que los eventos y
   las métricas no lo contienen. Los plugins no son un sandbox.
+
+### Smart Dashboard
+
+- **No está disponible con `--read-only`**: la herramienta publica un artefacto, así que se elimina
+  igual que `artifact_create`. También la elimina `analysis.enabled: false` y
+  `analysis.smartDashboard: false`; el interruptor se aplica al siguiente arranque, y un `false`
+  global no lo deshace un proyecto.
+- **Un dataset por llamada**, sin uniones entre hojas ni archivos, sin filtros interactivos y sin
+  regeneración incremental con memoria del dashboard anterior (cada llamada es independiente).
+- **Solo las fechas ISO 8601** son columnas de tiempo: otros formatos de fecha no producen tendencia.
+  Las marcas con zona horaria se normalizan a UTC y un texto como `"2024"` no se trata como fecha.
+- **Catálogo cerrado** (`kpi`, `line`, `area`, `bar`, `hbar`, `pie`, `donut`, `scatter`, `table`; hasta
+  12 componentes y 6 KPI): mapas, embudos, tablas dinámicas y exportación a PDF quedan fuera; lo demás
+  se hace con `python_run`.
+- **La moneda no se infiere de los datos**: el dinero se muestra como número. Los porcentajes solo se
+  formatean como tales si el nombre de la medida lo indica y todos los valores son fracciones.
+- Barras horizontales: la ayuda emergente seguía la fila vecina porque la interacción `index` de
+  Chart.js busca por el eje x. El script compartido `charts-boot.js` fija `interaction.axis = 'y'`
+  solo para `hbar` (Fase 0, E5), igual en los dashboards de Python y en el renderizador TypeScript.
+  Verificado en un navegador real (Chromium, Playwright): 8 de 8 filas en cada uno, serie única (TS)
+  y tres series (Python); la prueba unitaria comprueba la configuración, no el hover.
+- El color sigue `prefers-color-scheme` del navegador, igual que los dashboards de Python.
+- Un componente cuya consulta falla (por ejemplo por tiempo límite) se omite y se anota; si ninguna
+  responde, la herramienta falla y no publica nada.
+- Un proveedor de decisiones recibe solo el objetivo y metadatos de columna, nunca valores; el núcleo
+  no decide adónde envía esos datos un adaptador.
+- Pendiente de esta entrega: la medición E7, los resultados del benchmark B/C y el release.
+- Guía de usuario: [Smart Dashboard](/es/smart-dashboard).
 
 ### Gráficos de los dashboards (`alisio_runtime.charts` y `svg`)
 

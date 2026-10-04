@@ -404,6 +404,9 @@ export const en = {
   "artifactPanel.files": "Files",
   "artifactPanel.model": "Model",
   "artifactPanel.provider": "Provider",
+  "artifactPanel.dashboard": "Dashboard",
+  "artifactPanel.plannerRules": "Rules",
+  "artifactPanel.plannerDecisions": "Rules and decisions",
   "artifactPanel.runtime": "Runtime",
   "artifactPanel.inputs": "Inputs",
   "artifactPanel.execution": "Execution",
@@ -774,6 +777,9 @@ export const en = {
   "settings.analysis.enabled": "Enable data analysis",
   "settings.analysis.enabledHint":
     "Turns python_run, artifacts and the data tools on or off. The workspace reloads its tools when its runs finish.",
+  "settings.analysis.smartDashboard": "Smart Dashboard",
+  "settings.analysis.smartDashboardHint":
+    "Offers dashboard_generate, which builds a dashboard from a dataset with no code. Off removes the tool. Applies the next time the workspace reloads its tools.",
   "settings.analysis.timeout": "Execution timeout (seconds)",
   "settings.analysis.retention": "Retention",
   "settings.analysis.retention.lead":

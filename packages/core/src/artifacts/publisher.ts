@@ -26,7 +26,13 @@ export function createArtifactPublisher(
       return done(await store.publishText(input, owner)).artifact;
     },
     async publishTextDetailed(input) {
-      return done(await store.publishText(input, owner));
+      const { provenance, ...text } = input;
+      return done(
+        await store.publishText(
+          text,
+          provenance ? { ...owner, provenance: { ...owner.provenance, ...provenance } } : owner,
+        ),
+      );
     },
     async publishOutputs(staging, options) {
       const published = await store.publishOutputs(

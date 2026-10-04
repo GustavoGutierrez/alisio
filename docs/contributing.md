@@ -38,7 +38,10 @@ Run these before opening a pull request:
 
 - **Strict TDD**: write the failing test first, then the implementation.
 - Test behavior at module boundaries. Do not add snapshot tests that merely restate the
-  implementation.
+  implementation. One exception: the small hand-reviewed golden specs in
+  `tests/golden/dashboard/*.json` (the `DashboardSpec` the planner returns for a few datasets of at
+  most 40 rows, or the example CSVs). They are planner behavior at its boundary; a rule change that
+  moves one needs a human review. Never snapshot the generated HTML: assert its structure.
 - Keep provider SDKs and runtime-specific imports out of `@alisio/sdk` and the agent-core contracts.
 - Preserve tool call IDs, provider continuation data and persisted session consistency.
 - Never treat a plugin manifest or a subprocess as a sandbox.

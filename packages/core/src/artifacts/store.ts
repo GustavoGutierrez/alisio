@@ -218,6 +218,7 @@ export const toRef = (record: ArtifactRecord): ArtifactRef => ({
 export class ArtifactStore {
   readonly limits: ArtifactLimits;
   private readonly now: () => number;
+  private readonly lint: { dashboard: boolean };
 
   constructor(
     private options: {
@@ -226,10 +227,13 @@ export class ArtifactStore {
       db: SqlDatabase;
       limits?: Partial<ArtifactLimits>;
       now?: () => number;
+      /** `analysis.smartDashboard`: chart warnings also name `dashboard_generate`. */
+      dashboard?: boolean;
     },
   ) {
     this.limits = { ...DEFAULT_ARTIFACT_LIMITS, ...options.limits };
     this.now = options.now ?? Date.now;
+    this.lint = { dashboard: options.dashboard === true };
   }
 
   get root(): string {
@@ -537,7 +541,10 @@ export class ArtifactStore {
           mimeType = type.mimeType;
           fileName = only.path;
           if (kind === "dashboard" && only.bytes <= MAX_LINT_BYTES)
-            for (const note of chartWarnings(await readFile(join(filesDir, only.path), "utf8")))
+            for (const note of chartWarnings(
+              await readFile(join(filesDir, only.path), "utf8"),
+              this.lint,
+            ))
               warnings.push(`${label}: ${note}`);
         } else {
           entry = plan.entry as string;
@@ -552,7 +559,8 @@ export class ArtifactStore {
             const missing = missingReferences(html, entryDir, new Set(files.map((f) => f.path)));
             if (missing.length)
               warnings.push(`${label}: ${entry} references missing files: ${missing.join(", ")}`);
-            for (const note of chartWarnings(html)) warnings.push(`${label}: ${entry} ${note}`);
+            for (const note of chartWarnings(html, this.lint))
+              warnings.push(`${label}: ${entry} ${note}`);
           }
         }
       } else {

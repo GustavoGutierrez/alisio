@@ -293,6 +293,12 @@ const configObjectSchema = z
       .object({
         enabled: z.boolean().default(true),
         /**
+         * Smart Dashboard: offers `dashboard_generate`. `false` registers no such tool (applies
+         * from the next start). Not global-only: a project may turn it off, and a project
+         * `analysis` block that does not name the key never undoes a global `false`.
+         */
+        smartDashboard: z.boolean().default(true),
+        /**
          * Where `python_run` executes. `managed` is the discovered Python (not a sandbox); `oci`
          * is a Docker or Podman container started from a pinned image. GLOBAL ONLY: a project
          * layer cannot choose the runtime or the image (it is ignored with a diagnostic).
@@ -389,6 +395,7 @@ const configObjectSchema = z
       .strict()
       .default(() => ({
         enabled: true,
+        smartDashboard: true,
         runtime: "managed" as const,
         oci: { engine: "docker" as const, memoryMb: 2048, cpus: 2 },
         retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
@@ -696,7 +703,15 @@ export async function loadConfigWithProvenance(
         .map(([id]) => `pluginOverrides.${id}.options`),
       ...("retentionDays" in tasksRaw ? ["tasks.retentionDays"] : []),
     ];
-    return { config, keys: new Set(Object.keys(object)), sources, ignored, file };
+    return {
+      config,
+      keys: new Set(Object.keys(object)),
+      /** Raw keys of the layer's `analysis` block (a defaulted key is not an expressed one). */
+      analysisKeys: new Set(Object.keys(analysisRaw)),
+      sources,
+      ignored,
+      file,
+    };
   };
   const global = await parseLayer(globalFile, "global");
   // Skill activation is deliberately project-local; never carry a similarly named global field
@@ -769,6 +784,10 @@ export async function loadConfigWithProvenance(
           runtime: global.config.analysis.runtime,
           oci: global.config.analysis.oci,
           retention: global.config.analysis.retention,
+          // A defaulted `true` must not undo the global `false`: only a key the layer wrote wins.
+          smartDashboard: selected.analysisKeys.has("smartDashboard")
+            ? selected.config.analysis.smartDashboard
+            : global.config.analysis.smartDashboard,
         };
         continue;
       }
@@ -988,6 +1007,7 @@ const SETTABLE_KEYS = {
   "agents.active": SETTABLE_SECTIONS.agents.shape.active,
   "agents.effort": SETTABLE_SECTIONS.agents.shape.effort,
   "analysis.enabled": SETTABLE_SECTIONS.analysis.shape.enabled,
+  "analysis.smartDashboard": SETTABLE_SECTIONS.analysis.shape.smartDashboard,
   "analysis.limits.timeoutMs": ANALYSIS_LIMITS.shape.timeoutMs,
   "analysis.retention.jobsDays": ANALYSIS_RETENTION.shape.jobsDays,
   "analysis.retention.intermediateDays": ANALYSIS_RETENTION.shape.intermediateDays,

@@ -849,7 +849,8 @@ export class ToolBlock implements Component {
         : i.durationMs !== undefined
           ? style.gray(formatDuration(i.durationMs))
           : "";
-    const head = `${marker}${icon} ${style.bold(humanizeToolName(i.name))} ${style.gray(i.summary)}`;
+    const progress = i.status === "running" && i.progress ? ` ${style.dim(`· ${i.progress}`)}` : "";
+    const head = `${marker}${icon} ${style.bold(humanizeToolName(i.name))} ${style.gray(i.summary)}${progress}`;
     const gap = width - visibleWidth(head) - visibleWidth(right) - 1;
     const lines = [
       gap > 0 ? `${head}${" ".repeat(gap + 1)}${right}` : truncateToWidth(head, width),

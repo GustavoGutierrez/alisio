@@ -270,11 +270,15 @@ export interface CoreArtifactPublisher extends ArtifactPublisher {
   publishDetailed(
     input: ArtifactPublishInput & { fileName?: string },
   ): Promise<PublishedArtifactInfo>;
-  /** Detailed variant of `publishText` (path and warnings). */
+  /**
+   * Detailed variant of `publishText` (path and warnings). `provenance` is extra public
+   * provenance merged after the base one (model, provider); no paths.
+   */
   publishTextDetailed(input: {
     fileName: string;
     title?: string;
     text: string;
+    provenance?: Record<string, unknown>;
   }): Promise<PublishedArtifactInfo>;
 }
 /** Creates the publisher of one tool call; `announce` emits `artifact_published`. */

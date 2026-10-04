@@ -211,6 +211,7 @@ export function AnalysisPage() {
     }
   };
   const enabled = analysisSetting(settings, "analysis.enabled");
+  const smartDashboard = analysisSetting(settings, "analysis.smartDashboard");
   const number = (key: AnalysisKey, fallback: number) => {
     const value = analysisSetting(settings, key);
     return typeof value === "number" ? value : fallback;
@@ -252,6 +253,24 @@ export function AnalysisPage() {
                 }}
               />
             </li>
+            <li class={styles.settingRow}>
+              <label class={styles.settingLabel} for="analysis-smart-dashboard">
+                <span>{t("settings.analysis.smartDashboard")}</span>
+                <code class={styles.settingKey}>analysis.smartDashboard</code>
+              </label>
+              <Switch
+                checked={smartDashboard !== false}
+                label={t("settings.analysis.smartDashboard")}
+                disabled={readOnly}
+                busy={busy}
+                onChange={(value) => {
+                  setBusy(true);
+                  save("analysis.smartDashboard", value)
+                    .catch(() => undefined)
+                    .finally(() => setBusy(false));
+                }}
+              />
+            </li>
             <NumberRow
               id="analysis-timeout"
               label={t("settings.analysis.timeout")}
@@ -265,6 +284,7 @@ export function AnalysisPage() {
             />
           </ul>
           <p class={styles.note}>{t("settings.analysis.enabledHint")}</p>
+          <p class={styles.note}>{t("settings.analysis.smartDashboardHint")}</p>
           <h4 class={styles.sectionTitle}>{t("settings.analysis.retention")}</h4>
           <p class={styles.note}>{t("settings.analysis.retention.lead")}</p>
           <ul class={styles.settingList}>

@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "executive",
+  "layout": "executive-grid",
+  "locale": "es",
+  "widgets": [
+    {
+      "id": "kpi-sales-cop",
+      "type": "kpi",
+      "metric": "sales_cop",
+      "aggregation": "sum",
+      "label": "Total sales (COP)"
+    },
+    {
+      "id": "kpi-units",
+      "type": "kpi",
+      "metric": "units",
+      "aggregation": "sum",
+      "label": "Total units"
+    },
+    {
+      "id": "kpi-unit-price-cop",
+      "type": "kpi",
+      "metric": "unit_price_cop",
+      "aggregation": "avg",
+      "label": "Promedio de unit price (COP)"
+    },
+    {
+      "id": "kpi-cost-cop",
+      "type": "kpi",
+      "metric": "cost_cop",
+      "aggregation": "sum",
+      "label": "Total cost (COP)"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Filas"
+    },
+    {
+      "id": "trend",
+      "type": "area",
+      "dimension": "date",
+      "metric": "sales_cop",
+      "aggregation": "sum",
+      "timeBucket": "week",
+      "title": "Sales (COP) por semana"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "region",
+      "metric": "sales_cop",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Sales (COP) por region"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "channel",
+      "metric": "sales_cop",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Participación de sales (COP) por channel"
+    }
+  ]
+}

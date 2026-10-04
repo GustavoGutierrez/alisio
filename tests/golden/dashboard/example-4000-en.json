@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "analytical",
+  "layout": "analytical-grid",
+  "locale": "en",
+  "widgets": [
+    {
+      "id": "kpi-net-sales-cop",
+      "type": "kpi",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "label": "Total net sales (COP)"
+    },
+    {
+      "id": "kpi-profit-cop",
+      "type": "kpi",
+      "metric": "profit_cop",
+      "aggregation": "sum",
+      "label": "Total profit (COP)"
+    },
+    {
+      "id": "kpi-units",
+      "type": "kpi",
+      "metric": "units",
+      "aggregation": "sum",
+      "label": "Total units"
+    },
+    {
+      "id": "kpi-unit-price-cop",
+      "type": "kpi",
+      "metric": "unit_price_cop",
+      "aggregation": "avg",
+      "label": "Average unit price (COP)"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Rows"
+    },
+    {
+      "id": "trend",
+      "type": "line",
+      "dimension": "order_date",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "timeBucket": "month",
+      "title": "Net sales (COP) per month"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "region",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Net sales (COP) by region"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "sales_channel",
+      "metric": "net_sales_cop",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Net sales (COP) share by sales channel"
+    },
+    {
+      "id": "correlation",
+      "type": "scatter",
+      "x": "profit_cop",
+      "y": "net_sales_cop",
+      "title": "Net sales (COP) vs profit (COP)"
+    },
+    {
+      "id": "table",
+      "type": "table",
+      "columns": [
+        "order_date",
+        "region",
+        "sales_channel",
+        "customer_segment",
+        "units",
+        "unit_price_cop",
+        "net_sales_cop",
+        "profit_cop"
+      ],
+      "limit": 10,
+      "title": "Detail"
+    }
+  ]
+}

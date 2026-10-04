@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 __all__ = ["output_dir", "input_dir", "work_dir", "execution_id", "outputs", "html", "svg", "charts", "datasets"]
-__version__ = "2"
+__version__ = "3"
 
 
 def _dir(name: str, fallback: str) -> Path:

@@ -23,9 +23,10 @@ Lo que obtiene:
 
 ::: tip Esta versión incluye la infraestructura
 Decision Intelligence añade el contrato de proveedor, el servicio, la configuración y las métricas.
-Alisio no incluye ningún proveedor, y las funciones que consumen decisiones (como los dashboards
-inteligentes) llegan en versiones posteriores. Las herramientas de plugins ya pueden usar
-decisiones (consulte [Escribir un plugin de proveedor](#writing-a-provider)).
+Alisio no incluye ningún proveedor. La primera función integrada que consume decisiones es
+[Smart Dashboard](/es/smart-dashboard#how-it-decides), que funciona igual sin uno. Las herramientas
+de plugins también pueden usar decisiones (consulte
+[Escribir un plugin de proveedor](#writing-a-provider)).
 :::
 
 ## Proveedores {#providers}

@@ -1,7 +1,7 @@
 import { Fragment } from "preact";
 import { t } from "../../i18n/index.ts";
 import type { ArtifactDetail } from "../../net/api.ts";
-import { formatSize } from "../../util/artifacts.ts";
+import { dashboardProvenance, formatSize } from "../../util/artifacts.ts";
 import styles from "./panel.module.css";
 
 const str = (value: unknown): string | undefined =>
@@ -27,6 +27,7 @@ export function ArtifactDetails(props: { detail: ArtifactDetail }) {
   const inputs = Array.isArray(p.inputs)
     ? (p.inputs as Array<{ name?: string; sha256?: string }>)
     : [];
+  const dashboard = dashboardProvenance(p);
   const rows: Array<[string, preact.ComponentChildren]> = [
     [t("artifactPanel.created"), new Date(detail.createdAt).toLocaleString()],
     [t("artifactPanel.size"), formatSize(detail.bytes)],
@@ -36,6 +37,23 @@ export function ArtifactDetails(props: { detail: ArtifactDetail }) {
       : []),
     ...(str(p.provider)
       ? ([[t("artifactPanel.provider"), str(p.provider)]] as Array<[string, string]>)
+      : []),
+    ...(dashboard
+      ? ([
+          [
+            t("artifactPanel.dashboard"),
+            [
+              t(
+                dashboard.planner === "rules"
+                  ? "artifactPanel.plannerRules"
+                  : "artifactPanel.plannerDecisions",
+              ),
+              dashboard.decisionProvider,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          ],
+        ] as Array<[string, string]>)
       : []),
     ...(runtime
       ? ([

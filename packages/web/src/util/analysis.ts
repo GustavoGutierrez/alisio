@@ -7,6 +7,7 @@ import type { SettingInfo } from "@alisio/sdk";
 
 export const ANALYSIS_KEYS = [
   "analysis.enabled",
+  "analysis.smartDashboard",
   "analysis.limits.timeoutMs",
   "analysis.retention.jobsDays",
   "analysis.retention.intermediateDays",

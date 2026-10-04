@@ -34,6 +34,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
         "memory",
         "analysis",
         "decision-intelligence",
+        "smart-dashboard",
       ].map(item),
     },
     {
@@ -73,6 +74,7 @@ const en = {
   memory: "Persistent memory",
   analysis: "Python analysis & artifacts",
   "decision-intelligence": "Decision Intelligence",
+  "smart-dashboard": "Smart Dashboard",
   plugins: "Writing plugins",
   architecture: "Architecture",
   mcp: "MCP",
@@ -106,6 +108,7 @@ const es = {
   memory: "Memoria persistente",
   analysis: "Análisis en Python y artefactos",
   "decision-intelligence": "Decision Intelligence",
+  "smart-dashboard": "Smart Dashboard",
   plugins: "Escribir plugins",
   architecture: "Arquitectura",
   mcp: "MCP",
@@ -143,6 +146,7 @@ export default defineConfig({
     "implementation-status.md",
     "validation.txt",
     "benchmark.json",
+    "benchmark-dashboard.json",
     "README.md",
   ],
   themeConfig: {

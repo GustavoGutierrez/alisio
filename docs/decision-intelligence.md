@@ -22,9 +22,9 @@ What you get:
 
 ::: tip This release ships the infrastructure
 Decision Intelligence adds the provider contract, the service, the configuration and the metrics.
-Alisio does not bundle a provider, and the features that consume decisions (such as smart
-dashboards) arrive in later releases. Plugin tools can use decisions today (see
-[Writing a provider plugin](#writing-a-provider)).
+Alisio does not bundle a provider. The first built-in feature that consumes decisions is
+[Smart Dashboard](/smart-dashboard#how-it-decides), which works the same without one. Plugin tools
+can use decisions too (see [Writing a provider plugin](#writing-a-provider)).
 :::
 
 ## Providers {#providers}

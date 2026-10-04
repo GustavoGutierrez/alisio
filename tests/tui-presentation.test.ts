@@ -68,6 +68,11 @@ describe("toolKindOf", () => {
     expect(toolKindOf("unknown_tool", "external")).toBe("other");
   });
 
+  it("classifies dashboard_generate as an internal task, also in replayed history", () => {
+    expect(toolKindOf("dashboard_generate")).toBe("internal");
+    expect(humanizeToolName("dashboard_generate")).toBe("Generate Dashboard");
+  });
+
   it("falls back to name heuristics for replayed history", () => {
     expect(toolKindOf("read_file")).toBe("read");
     expect(toolKindOf("search_text")).toBe("read");

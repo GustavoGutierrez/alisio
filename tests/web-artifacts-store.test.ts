@@ -7,6 +7,7 @@ import {
 } from "../packages/web/src/store/transcript.ts";
 import {
   artifactsOfResult,
+  dashboardProvenance,
   downloadUrl,
   mergeArtifacts,
   primaryAction,
@@ -127,5 +128,30 @@ describe("artifact cards: placement in the transcript", () => {
     expect(items.map((i) => i.kind)).toEqual(["user", "tool", "artifacts", "assistant"]);
     const cards = items[2] as Extract<(typeof items)[number], { kind: "artifacts" }>;
     expect(cards.artifacts.map((a) => a.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("dashboardProvenance", () => {
+  it("reads the planner and the decision provider of a dashboard_generate artifact", () => {
+    expect(
+      dashboardProvenance({
+        generator: "dashboard_generate",
+        planner: "rules+decisions",
+        decisionProvider: "plugin-x",
+        provider: "the-model-provider",
+        fallbacks: [],
+      }),
+    ).toEqual({ planner: "rules+decisions", decisionProvider: "plugin-x" });
+    expect(
+      dashboardProvenance({ generator: "dashboard_generate", planner: "rules", fallbacks: ["a"] }),
+    ).toEqual({ planner: "rules" });
+  });
+
+  it("is undefined for any other artifact or an unknown planner", () => {
+    expect(dashboardProvenance({ model: "m", provider: "p" })).toBeUndefined();
+    expect(
+      dashboardProvenance({ generator: "dashboard_generate", planner: "magic" }),
+    ).toBeUndefined();
+    expect(dashboardProvenance({})).toBeUndefined();
   });
 });

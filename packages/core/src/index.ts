@@ -534,7 +534,8 @@ export {
   visibleWidth,
   welcomeSection,
 } from "./startup/index.ts";
-export { formatBytes, NOT_SANDBOXED } from "./tools/analysis.ts";
+export { NOT_SANDBOXED } from "./tools/analysis.ts";
+export { formatBytes } from "./tools/artifact-blocks.ts";
 export { ARTIFACT_READ_MAX, exportedPaths } from "./tools/artifacts.ts";
 export { GET_GOAL_TOOL, parseEvidence, UPDATE_GOAL_TOOL } from "./tools/goal.ts";
 export { hash, objectSchema, registerStandard } from "./tools/standard.ts";

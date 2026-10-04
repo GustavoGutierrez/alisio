@@ -1,0 +1,28 @@
+
+:root{color-scheme:light dark;--ac-surface:#fcfcfb;--ac-card:#fcfcfb;--ac-text:#0b0b0b;--ac-muted:#52514e;--ac-grid:#e4e3df;--ac-border:#d9d8d3;
+--ac-c1:#2a78d6;--ac-c2:#eb6834;--ac-c3:#1baf7a;--ac-c4:#eda100;--ac-c5:#e87ba4;--ac-c6:#008300;--ac-c7:#4a3aa7;--ac-c8:#e34948;--ac-other:#8a8f98}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){--ac-surface:#1a1a19;--ac-card:#222221;--ac-text:#ffffff;--ac-muted:#c3c2b7;--ac-grid:#3a3a38;--ac-border:#3a3a38;
+--ac-c1:#3987e5;--ac-c2:#d95926;--ac-c3:#199e70;--ac-c4:#c98500;--ac-c5:#d55181;--ac-c6:#008300;--ac-c7:#9085e9;--ac-c8:#e66767;--ac-other:#8a8f98}}
+:root[data-theme="dark"]{color-scheme:dark;--ac-surface:#1a1a19;--ac-card:#222221;--ac-text:#ffffff;--ac-muted:#c3c2b7;--ac-grid:#3a3a38;--ac-border:#3a3a38;
+--ac-c1:#3987e5;--ac-c2:#d95926;--ac-c3:#199e70;--ac-c4:#c98500;--ac-c5:#d55181;--ac-c6:#008300;--ac-c7:#9085e9;--ac-c8:#e66767;--ac-other:#8a8f98}
+body{background:var(--ac-surface);color:var(--ac-text);max-width:1280px;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 16px}
+th{background:transparent;color:var(--ac-muted);font-weight:600}th,td{border-color:var(--ac-border)}
+.ac-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--ac-min,340px)),1fr));margin:16px 0}
+.ac-card{background:var(--ac-card);border:1px solid var(--ac-border);border-radius:10px;padding:16px;min-width:0}
+.ac-card h2,.ac-card h3{font-size:1rem;margin:0 0 12px}
+.ac-note{color:var(--ac-muted);font-size:.85rem;margin:8px 0 0}
+.ac-kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:0 0 16px}
+.ac-kpi{position:relative;background:var(--ac-card);border:1px solid var(--ac-border);border-radius:10px;padding:12px 16px}
+.ac-kpi b{display:block;font-size:1.6rem;line-height:1.2;overflow-wrap:anywhere}.ac-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.ac-kpi>span{color:var(--ac-muted);font-size:.85rem}
+figure.ac-chart{margin:0}
+.ac-title{font-weight:600;margin:0 0 8px}
+.ac-box{position:relative;width:100%;height:var(--ac-h,320px);min-height:220px}
+.ac-box canvas{max-width:100%}
+.ac-pending .ac-box{display:none}
+.ac-data{margin-top:8px;font-size:.85rem;color:var(--ac-muted)}
+.ac-data summary{cursor:pointer}
+.ac-data .ac-scroll{overflow-x:auto}
+.ac-data table{margin:8px 0}
+.ac-empty{color:var(--ac-muted);padding:24px 0;text-align:center}
+@media (max-width:520px){body{padding:12px}.ac-card{padding:12px}}

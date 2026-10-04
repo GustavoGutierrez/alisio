@@ -79,11 +79,11 @@ function sampleLines(sample: SampleRows, columnLimit: number): string[] {
 export function describeDataset(
   detail: DatasetDetailWire,
   samples: Map<string, SampleRows>,
-  options: { maxChars: number },
+  options: { maxChars: number; dashboard?: boolean },
 ): string {
   const header = [
     `Dataset ${datasetHeadline(detail)}`,
-    "Stored in SQLite: query it with data_query (SELECT/WITH only, quote column names) or pass { datasetId } to python_run (alisio_runtime.datasets.open). Values are exact: numbers are numbers, everything else (e.g. 007, 1,234, N/A) is the original text.",
+    `Stored in SQLite: query it with data_query (SELECT/WITH only, quote column names) or pass { datasetId } to python_run (alisio_runtime.datasets.open).${options.dashboard ? " For a dashboard use dashboard_generate { datasetId, goal }." : ""} Values are exact: numbers are numbers, everything else (e.g. 007, 1,234, N/A) is the original text.`,
   ];
   const blocks = detail.sheetDetails.map((sheet) => {
     const lines = [
@@ -122,6 +122,10 @@ export function describeDataset(
 }
 
 /** The summary appended to the user's prompt for an attached dataset (≤ 4 KB). */
-export function promptSummary(detail: DatasetDetailWire, samples: Map<string, SampleRows>): string {
-  return `[Attached ${describeDataset(detail, samples, { maxChars: 3900 })}]`;
+export function promptSummary(
+  detail: DatasetDetailWire,
+  samples: Map<string, SampleRows>,
+  options: { dashboard?: boolean } = {},
+): string {
+  return `[Attached ${describeDataset(detail, samples, { maxChars: 3900, dashboard: options.dashboard === true })}]`;
 }

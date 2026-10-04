@@ -364,7 +364,8 @@ puede elegir el binario que ejecuta los scripts ni acortar la retención de todo
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `enabled` | `true` | `false` no registra `python_run`, `artifact_create`, `artifact_list`, `data_inspect` ni `data_query` |
+| `enabled` | `true` | `false` no registra `python_run`, `artifact_create`, `artifact_list`, `data_inspect`, `data_query` ni `dashboard_generate` |
+| `smartDashboard` | `true` | Registra `dashboard_generate` y orienta al modelo hacia ella para los dashboards; `false` elimina la herramienta y restaura la guía solo de Python. Un `false` global no lo puede deshacer una capa de proyecto. Se aplica al siguiente arranque. Consulta [Smart Dashboard](/es/smart-dashboard#switch) |
 | `runtime` | `"managed"` | `managed` (tu Python, sin sandbox) u `oci` (un contenedor Docker o Podman; consulta [Runtime de contenedor](/es/analysis#oci)). Solo global |
 | `oci.engine` | `"docker"` | `docker` o `podman`. Solo global |
 | `oci.image` | sin definir | La imagen, fijada por digest (`nombre@sha256:<64 hex>`); un valor sin digest se rechaza al cargar la configuración. Solo global |
@@ -387,12 +388,12 @@ puede elegir el binario que ejecuta los scripts ni acortar la retención de todo
 { "analysis": { "limits": { "timeoutMs": 300000 }, "retention": { "artifactsDays": 90 } } }
 ```
 
-`analysis.enabled`, `analysis.limits.timeoutMs` y las tres claves `analysis.retention.*` también se
+`analysis.enabled`, `analysis.smartDashboard`, `analysis.limits.timeoutMs` y las tres claves `analysis.retention.*` también se
 pueden editar en **Ajustes → Análisis de datos** de [`alisio serve`](/es/web) y con `/settings` en
 la [TUI](/es/tui); se escriben en el archivo global con el mismo escritor validado que el resto de
 ajustes (una clave de tres niveles, como `analysis.retention.jobsDays`, conserva sus hermanas). El
-tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; `analysis.enabled` se
-aplica al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
+tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; `analysis.enabled` y `analysis.smartDashboard`
+se aplican al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
 ejecuciones). `runtime` y `oci.*` no se editan desde la interfaz: edita el archivo.
 
 ## `tasks` {#tasks}

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "title": "Golden",
+  "purpose": "executive",
+  "layout": "executive-grid",
+  "locale": "en",
+  "widgets": [
+    {
+      "id": "kpi-amount",
+      "type": "kpi",
+      "metric": "amount",
+      "aggregation": "sum",
+      "label": "Total amount"
+    },
+    {
+      "id": "kpi-units",
+      "type": "kpi",
+      "metric": "units",
+      "aggregation": "sum",
+      "label": "Total units"
+    },
+    {
+      "id": "kpi-profit",
+      "type": "kpi",
+      "metric": "profit",
+      "aggregation": "sum",
+      "label": "Total profit"
+    },
+    {
+      "id": "kpi-rows",
+      "type": "kpi",
+      "metric": "*",
+      "aggregation": "count",
+      "label": "Rows"
+    },
+    {
+      "id": "trend",
+      "type": "area",
+      "dimension": "order_date",
+      "metric": "amount",
+      "aggregation": "sum",
+      "timeBucket": "week",
+      "title": "Amount per week"
+    },
+    {
+      "id": "ranking",
+      "type": "hbar",
+      "dimension": "region",
+      "metric": "amount",
+      "aggregation": "sum",
+      "limit": 10,
+      "title": "Amount by region"
+    },
+    {
+      "id": "composition",
+      "type": "donut",
+      "dimension": "channel",
+      "metric": "amount",
+      "aggregation": "sum",
+      "limit": 5,
+      "other": true,
+      "title": "Amount share by channel"
+    }
+  ]
+}

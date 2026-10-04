@@ -603,6 +603,30 @@ describe("tool presentation", () => {
 });
 
 describe("event reduction", () => {
+  it("shows the last non-empty tool_progress line on the running tool and clears it on completion", () => {
+    let s = reduceEvent(
+      initialViewState("m1"),
+      ev("tool_started", { id: "d1", name: "dashboard_generate", arguments: "{}" }),
+    );
+    s = reduceEvent(s, ev("tool_progress", { id: "d1", data: "Analyzing dataset…\n" }));
+    expect(s.items.at(-1)).toMatchObject({ progress: "Analyzing dataset…" });
+    s = reduceEvent(
+      s,
+      ev("tool_progress", { id: "d1", data: "Planning dashboard…\nBuilding 5 components…\n\n" }),
+    );
+    expect(s.items.at(-1)).toMatchObject({ progress: "Building 5 components…" });
+    s = reduceEvent(s, ev("tool_progress", { id: "d1", data: "\n  \n" }));
+    expect(s.items.at(-1)).toMatchObject({ progress: "Building 5 components…" });
+    s = reduceEvent(s, ev("tool_progress", { id: "d1", data: "x".repeat(200) }));
+    expect((s.items.at(-1) as { progress: string }).progress.length).toBeLessThanOrEqual(80);
+    s = reduceEvent(s, ev("tool_progress", { id: "zz", data: "orphan" }));
+    s = reduceEvent(
+      s,
+      ev("tool_completed", { id: "d1", name: "dashboard_generate", isError: false }),
+    );
+    expect(s.items.at(-1)).not.toHaveProperty("progress");
+  });
+
   it("builds transcript items and statistics from runner events", () => {
     let s = initialViewState("m1");
     s = reduceEvent(s, ev("run_started", { model: "m1" }, "2026-01-01T00:00:00.000Z"));

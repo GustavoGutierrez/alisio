@@ -251,9 +251,10 @@ describe("value display and cycling", () => {
 describe("data analysis rows", () => {
   const analysisRows = () => rows().filter((r) => r.category === "Data analysis");
 
-  it("offers exactly the five analysis keys the config accepts", () => {
+  it("offers exactly the six analysis keys the config accepts", () => {
     expect(analysisRows().map((r) => r.id)).toEqual([
       "analysis.enabled",
+      "analysis.smartDashboard",
       "analysis.limits.timeoutMs",
       "analysis.retention.jobsDays",
       "analysis.retention.intermediateDays",

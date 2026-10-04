@@ -1257,6 +1257,76 @@ export class ViewParamsError extends Error {
     this.name = "ViewParamsError";
   }
 }
+// ---- Smart Dashboard. Types only: UIs and plugins may read the spec from artifact provenance. ----
+export type DashboardPurpose = "executive" | "operational" | "analytical";
+export type DashboardLayout = "executive-grid" | "operational-grid" | "analytical-grid";
+export type DashboardAggregation = "sum" | "avg" | "min" | "max" | "count" | "count_distinct";
+export type DashboardTimeBucket = "day" | "week" | "month" | "quarter" | "year";
+export type DashboardLocale = "en" | "es";
+
+interface DashboardWidgetBase {
+  /** `^[a-z][a-z0-9-]{0,39}$`, unique within the spec. */
+  id: string;
+  /** At most 80 characters; escaped when rendered. */
+  title?: string;
+}
+export interface KpiWidget extends DashboardWidgetBase {
+  type: "kpi";
+  /** A dataset column name, or `"*"` (only with aggregation `count`). */
+  metric: string;
+  aggregation: DashboardAggregation;
+  label?: string;
+}
+export interface SeriesWidget extends DashboardWidgetBase {
+  type: "line" | "area" | "bar" | "hbar" | "pie" | "donut";
+  /** A dataset column name (catalog), never free text. */
+  dimension: string;
+  /** `"*"` only with aggregation `count`. */
+  metric: string;
+  aggregation: DashboardAggregation;
+  /** Required when the dimension is a time column. */
+  timeBucket?: DashboardTimeBucket;
+  /** 1..20 (top-N; default 10). */
+  limit?: number;
+  /** Fold the rest into "Other" (sum/count only). */
+  other?: boolean;
+}
+export interface ScatterWidget extends DashboardWidgetBase {
+  type: "scatter";
+  x: string;
+  y: string;
+}
+export interface TableWidget extends DashboardWidgetBase {
+  type: "table";
+  /** 1..8 dataset column names. */
+  columns: string[];
+  /** 1..20. */
+  limit?: number;
+}
+export type DashboardWidget = KpiWidget | SeriesWidget | ScatterWidget | TableWidget;
+
+export interface DashboardSpec {
+  version: 1;
+  /** At most 120 characters; escaped when rendered. */
+  title: string;
+  purpose: DashboardPurpose;
+  layout: DashboardLayout;
+  locale: DashboardLocale;
+  /** Table name of the sheet (XLSX); absent means `data`. */
+  sheet?: string;
+  /** 1..12 widgets, at most 6 of them `kpi`. */
+  widgets: DashboardWidget[];
+}
+/** Public provenance of an artifact made by `dashboard_generate` (artifact `provenance`). */
+export interface DashboardProvenance {
+  generator: "dashboard_generate";
+  spec: DashboardSpec;
+  planner: "rules" | "rules+decisions";
+  /** Id of the decision provider that answered at least one decision. */
+  decisionProvider?: string;
+  /** Human-readable, metadata only (for example "widget sales-trend dropped: query timeout"). */
+  fallbacks: string[];
+}
 // ---- Decision Intelligence. Additive; feature-detect `api.decisions`. ----
 export interface DecisionsApi {
   /** Registers a provider (does NOT activate it; activation is `decisions.provider` in config). */

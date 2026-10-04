@@ -354,7 +354,8 @@ neither pick the binary that runs scripts nor shorten the retention of every wor
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `enabled` | `true` | `false` registers none of `python_run`, `artifact_create`, `artifact_list`, `data_inspect` and `data_query` |
+| `enabled` | `true` | `false` registers none of `python_run`, `artifact_create`, `artifact_list`, `data_inspect`, `data_query` and `dashboard_generate` |
+| `smartDashboard` | `true` | Registers `dashboard_generate` and steers the model to it for dashboards; `false` removes the tool and restores the Python-only guidance. A global `false` cannot be undone by a project layer. Applies at the next start. See [Smart Dashboard](/smart-dashboard#switch) |
 | `runtime` | `"managed"` | `managed` (your Python, not a sandbox) or `oci` (a Docker or Podman container; see [Container runtime](/analysis#oci)). Global only |
 | `oci.engine` | `"docker"` | `docker` or `podman`. Global only |
 | `oci.image` | unset | The image, pinned by digest (`name@sha256:<64 hex>`); a value without a digest is rejected when the configuration loads. Global only |
@@ -377,11 +378,11 @@ neither pick the binary that runs scripts nor shorten the retention of every wor
 { "analysis": { "limits": { "timeoutMs": 300000 }, "retention": { "artifactsDays": 90 } } }
 ```
 
-`analysis.enabled`, `analysis.limits.timeoutMs` and the three `analysis.retention.*` keys can also be
+`analysis.enabled`, `analysis.smartDashboard`, `analysis.limits.timeoutMs` and the three `analysis.retention.*` keys can also be
 edited from **Settings → Data analysis** in [`alisio serve`](/web) and from `/settings` in the
 [TUI](/tui); they are written to the global file with the same validated writer as the other
 settings (a key with three levels, such as `analysis.retention.jobsDays`, keeps its siblings).
-The timeout and the retention apply from the next call or sweep; `analysis.enabled` applies when
+The timeout and the retention apply from the next call or sweep; `analysis.enabled` and `analysis.smartDashboard` apply when
 Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime` and
 `oci.*` are not editable from the UI: edit the file.
 

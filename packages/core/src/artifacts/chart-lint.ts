@@ -6,6 +6,9 @@
  */
 
 const HELPERS = "alisio_runtime.charts (Chart.js, interactive) or alisio_runtime.svg (static)";
+/** With `analysis.smartDashboard`: the same advice plus the code-free dashboard tool. */
+const HELPERS_DASHBOARD =
+  "alisio_runtime.charts (Chart.js, interactive), alisio_runtime.svg (static) or dashboard_generate";
 
 /** Strips scripts and styles so a bundled library never triggers the markup checks. */
 function markupOf(html: string): string {
@@ -78,13 +81,14 @@ function remoteHosts(markup: string, html: string): string[] {
 }
 
 /** Warnings (empty when the page looks fine) for one HTML document. */
-export function chartWarnings(html: string): string[] {
+export function chartWarnings(html: string, options: { dashboard?: boolean } = {}): string[] {
+  const helpers = options.dashboard ? HELPERS_DASHBOARD : HELPERS;
   const markup = markupOf(html);
   const warnings: string[] = [];
   const hosts = remoteHosts(markup, html);
   if (hosts.length)
     warnings.push(
-      `loads resources from the network (${hosts.slice(0, 3).join(", ")}); the viewer blocks the network, so they will not load. Charts: use ${HELPERS}, which inlines Chart.js`,
+      `loads resources from the network (${hosts.slice(0, 3).join(", ")}); the viewer blocks the network, so they will not load. Charts: use ${helpers}, which inlines Chart.js`,
     );
   const wedges = wedgeCount(markup);
   if (wedges >= 2)
@@ -94,7 +98,7 @@ export function chartWarnings(html: string): string[] {
   const fixed = fixedSvgCount(markup);
   if (fixed)
     warnings.push(
-      `${fixed} SVG chart${fixed === 1 ? "" : "s"} with a fixed width and height and no viewBox will not scale with its container (small text, empty space). Use ${HELPERS}, or give the SVG a viewBox and width:100%`,
+      `${fixed} SVG chart${fixed === 1 ? "" : "s"} with a fixed width and height and no viewBox will not scale with its container (small text, empty space). Use ${helpers}, or give the SVG a viewBox and width:100%`,
     );
   return warnings;
 }

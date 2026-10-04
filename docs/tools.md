@@ -443,6 +443,12 @@ A headless run has nobody to ask, so the call fails naming the optional command
 of the session again (same script, inputs verified by hash, new artifacts) behind the same
 `analysis.run` gate; see [Rerun](/analysis#rerun).
 
+`dashboard_generate` (effect `internal`, like `artifact_create`) builds a dashboard from a dataset with
+no code and publishes it as an artifact; it needs no Python and no approval. It is registered when
+`analysis.enabled` and `analysis.smartDashboard` are `true`, so `--read-only` removes it (it
+publishes an artifact) and `analysis.smartDashboard: false` hides it from `/tools`. See
+[Smart Dashboard](/smart-dashboard).
+
 ### Tabular data {#data-tools}
 
 `data_inspect` and `data_query` (effect `read`) describe and query CSV, TSV, JSON, JSONL and XLSX

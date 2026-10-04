@@ -173,6 +173,15 @@ button.processHead:hover,
   color: var(--muted);
 }
 
+.progress {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--faint);
+}
+
 .fileRef {
   color: var(--text);
   text-decoration: underline;

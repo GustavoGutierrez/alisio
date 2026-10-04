@@ -4,7 +4,7 @@
 |---|---|
 | Versión | 1.0 |
 | Proyecto | Alisio |
-| Estado | **NO implementada. No se ejecuta hasta que el propietario lo ordene** |
+| Estado | **En pausa.** No se ejecuta: la puerta de `specs/alisio-smart-dashboard-v1.md` §11.2 no se superó en 0.4.0 (decisión del propietario, 2026-10-03). Se reabre cuando una entrega posterior reduzca el uso de `python_run` tras `dashboard_generate` y el benchmark B cumpla la puerta. |
 | Fecha | 2026-10-03 |
 | Paquetes afectados | `@alisio/sdk` (`ToolDefinition.family?`, evento `capability_routed`, evento `capability_routing_checked`), `@alisio/core` (`packages/core/src/routing/*`, herramienta `tools_expand`, gancho en `AgentRunner`, familias de las herramientas integradas y de MCP, configuración `decisions.routing.tools`, `/stats` y `/decisions`), `@alisio/plugin-memory` y `@alisio/plugin-subagents` (declaran su familia), `@alisio/web` (privado: estadísticas), `@alisio/alisio-code` (TUI: estadísticas) |
 | Paquetes nuevos | Ninguno |

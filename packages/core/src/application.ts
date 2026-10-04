@@ -542,6 +542,7 @@ export async function createApplication(options: AppOptions = {}) {
     const artifacts = new ArtifactStore({
       root: stateRoot,
       db: store.db,
+      dashboard: config.analysis.smartDashboard,
       limits: {
         maxFiles: config.analysis.limits.maxFiles,
         maxFileBytes: config.analysis.limits.maxFileBytes,
@@ -579,6 +580,7 @@ export async function createApplication(options: AppOptions = {}) {
       db: store.db,
       limits: config.analysis.data,
       python: analysisRuntime,
+      dashboard: config.analysis.smartDashboard,
     });
     const analysisRerun = new AnalysisRerun({ jobs: analysisJobs, store: artifacts, datasets });
     // Retention: a sweep at most every 24 h, launched in the background after the start.
@@ -646,6 +648,7 @@ export async function createApplication(options: AppOptions = {}) {
       ]);
       const { registerAnalysisTools } = await import("./tools/analysis.ts");
       registerAnalysisTools(registry, {
+        smartDashboard: config.analysis.smartDashboard,
         store: artifacts,
         jobs: analysisJobs,
         runtime: analysisRuntime,
@@ -666,6 +669,15 @@ export async function createApplication(options: AppOptions = {}) {
       });
       const { registerArtifactTools } = await import("./tools/artifacts.ts");
       registerArtifactTools(registry, { store: artifacts, rootOf: (id) => store.rootOf(id) });
+      // Publishes artifacts (so it follows `artifact_create`) and needs no Python.
+      if (config.analysis.smartDashboard) {
+        const { DASHBOARD_PROMPT_RULE, registerDashboardTools } = await import(
+          "./tools/dashboard.ts"
+        );
+        registerDashboardTools(registry, { datasets, rootOf: (id) => store.rootOf(id) });
+        // Registered only with the tool: the `false` state keeps the system prompt byte for byte.
+        context.extras.push(async () => DASHBOARD_PROMPT_RULE);
+      }
     }
     // `exit_plan` (opt-in: only the plan agent's run sees it): the plan review hand-over.
     const { registerExitPlan } = await import("./plan/exit-plan.ts");
@@ -681,7 +693,11 @@ export async function createApplication(options: AppOptions = {}) {
     // Data tools only read (effect `read`): they stay available under --read-only.
     if (config.analysis.enabled) {
       const { registerDataTools } = await import("./tools/data.ts");
-      registerDataTools(registry, { datasets, rootOf: (id) => store.rootOf(id) });
+      registerDataTools(registry, {
+        datasets,
+        rootOf: (id) => store.rootOf(id),
+        smartDashboard: config.analysis.smartDashboard,
+      });
     }
     const sessionWorkspace = (sessionId: string) => {
       try {
@@ -1442,6 +1458,10 @@ export async function createApplication(options: AppOptions = {}) {
             // Tools are registered when the application starts: the change applies to the next
             // application (a restart; the web recycles the workspace application).
             config.analysis = { ...config.analysis, enabled: value === true };
+            break;
+          case "analysis.smartDashboard":
+            // Like `analysis.enabled`: the tool is registered when the application starts.
+            config.analysis = { ...config.analysis, smartDashboard: value === true };
             break;
           case "analysis.limits.timeoutMs":
             // Read live by python_run on its next call.

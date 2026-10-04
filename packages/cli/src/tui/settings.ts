@@ -65,6 +65,7 @@ export interface SettingsConfigView {
   pluginHooks: { timeoutMs: number };
   analysis: {
     enabled: boolean;
+    smartDashboard: boolean;
     limits: { timeoutMs: number };
     retention: { jobsDays: number; intermediateDays: number; artifactsDays: number };
   };
@@ -99,6 +100,7 @@ export const defaultConfig: SettingsConfigView = {
   pluginHooks: { timeoutMs: 15_000 },
   analysis: {
     enabled: true,
+    smartDashboard: true,
     limits: { timeoutMs: 120_000 },
     retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
   },
@@ -281,6 +283,16 @@ export const SETTINGS_DEFINITIONS: readonly SettingDefinition[] = [
     read: (config) => config.analysis.enabled,
     description:
       "Python analysis (python_run), downloadable artifacts and tabular data tools. Off removes them. Applies the next time Alisio starts.",
+  },
+  {
+    id: "analysis.smartDashboard",
+    label: "Smart Dashboard",
+    category: "Data analysis",
+    valueType: "boolean",
+    values: [false, true],
+    read: (config) => config.analysis.smartDashboard,
+    description:
+      "dashboard_generate: builds a dashboard from a dataset with no code. Off removes the tool. Applies the next time Alisio starts.",
   },
   {
     id: "analysis.limits.timeoutMs",

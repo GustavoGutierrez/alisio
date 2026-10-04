@@ -6,13 +6,7 @@
  */
 import { open } from "node:fs/promises";
 import { basename, join } from "node:path";
-import {
-  type ArtifactKind,
-  type ToolContext,
-  type ToolResult,
-  textResult,
-  type UiBlock,
-} from "@alisio/sdk";
+import { type ArtifactKind, type ToolContext, type ToolResult, textResult } from "@alisio/sdk";
 import type { DatasetService } from "../analysis/data/datasets.ts";
 import {
   detectHintHost,
@@ -36,6 +30,7 @@ import type { CoreArtifactPublisher, PublishedArtifactInfo } from "../core/contr
 import type { ToolRegistry } from "../core/registry.ts";
 import { safePath } from "../runtime/paths.ts";
 import { runProcess } from "../runtime/process.ts";
+import { artifactBlocks, describeArtifact, formatBytes } from "./artifact-blocks.ts";
 import { objectSchema } from "./standard.ts";
 
 export const NOT_SANDBOXED =
@@ -47,6 +42,8 @@ export interface AnalysisLimits {
 }
 
 export interface AnalysisToolDeps {
+  /** `analysis.smartDashboard`: the descriptions steer dashboards to `dashboard_generate`. */
+  smartDashboard?: boolean;
   store: ArtifactStore;
   jobs: AnalysisJobs;
   /** Discovery (`interpreter`) and, for the optional extras, `hasExtras` / `installExtras`. */
@@ -79,13 +76,6 @@ const KINDS: ArtifactKind[] = [
   "file",
 ];
 
-/** `48 KB`, `1.2 MB`. */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 const tail = (text: string, bytes: number) => {
   const buffer = Buffer.from(text);
   return buffer.byteLength <= bytes
@@ -112,15 +102,6 @@ async function readTail(path: string, bytes: number): Promise<string> {
     return "";
   }
 }
-
-const describeArtifact = (p: PublishedArtifactInfo) =>
-  `${p.artifact.fileName} (${p.artifact.kind}, ${formatBytes(p.artifact.bytes)}, ${p.artifact.id})`;
-
-const artifactBlocks = (published: PublishedArtifactInfo[]) =>
-  published.map((p) => ({
-    type: "ui" as const,
-    block: { kind: "artifact", artifact: p.artifact } as UiBlock,
-  }));
 
 function publisherOf(context: ToolContext): CoreArtifactPublisher {
   const publisher = context.artifacts as CoreArtifactPublisher | undefined;
@@ -178,6 +159,11 @@ function pythonRunDescription(deps: AnalysisToolDeps): string {
       ? `the standard library, alisio_runtime and the "${deps.startup.extras.join(", ")}" extras (pandas, numpy, matplotlib…)`
       : 'the Python standard library and alisio_runtime only (no pandas or numpy; use csv, statistics, sqlite3). Pass extras: ["analysis"] to use pandas, numpy, matplotlib, openpyxl, python-docx, reportlab, plotly and jinja2: if they are not installed the user is asked once to approve a download, and without approval the call fails';
   return [
+    ...(deps.smartDashboard
+      ? [
+          "To build a dashboard from a dataset, prefer dashboard_generate (no code). Use python_run for analysis or visuals the dashboard catalog does not cover (statistical tests, custom or unsupported charts, joins, exports).",
+        ]
+      : []),
     "Write and run a Python 3.10+ script in a job folder managed by Alisio, outside the repository.",
     "Every file the script writes to $ALISIO_OUTPUT_DIR is published as a downloadable artifact",
     "(HTML dashboard, Markdown, PDF, DOCX, XLSX, CSV, PNG/SVG, JSON, ZIP or any other file); a",
@@ -185,10 +171,17 @@ function pythonRunDescription(deps: AnalysisToolDeps): string {
     '$ALISIO_OUTPUT_DIR/outputs.json = {"artifacts":[{"path":"…","title":"…"}]} to publish only',
     "those. The cwd is $ALISIO_WORK_DIR (scratch); inputs are copied to $ALISIO_INPUT_DIR.",
     `Available modules: ${modules}. alisio_runtime offers output_dir(), html.page/table/write,`,
-    "charts (Chart.js bundled; pie/donut/bar/hbar/line/area/scatter(labels, values or {name: values}, title,",
-    "fmt='currency:USD', locale) in charts.card/grid/kpis, then charts.write(name, title, body): responsive, with",
-    "a data table) and svg.* (static, no script). For charts ALWAYS use them: never hand-write SVG arcs or fixed-size",
-    "SVGs, never load a CDN; one chart per card; pie only for 2-5 parts, else donut or hbar. inputs: [{ datasetId }] copies a dataset (see",
+    ...(deps.smartDashboard
+      ? [
+          "charts.* (Chart.js cards: charts.card/grid/kpis/write) and svg.* are for custom visuals beyond dashboard_generate's catalog; never hand-write SVG or load a CDN.",
+        ]
+      : [
+          "charts (Chart.js bundled; pie/donut/bar/hbar/line/area/scatter(labels, values or {name: values}, title,",
+          "fmt='currency:USD', locale) in charts.card/grid/kpis, then charts.write(name, title, body): responsive, with",
+          "a data table) and svg.* (static, no script). For charts ALWAYS use them: never hand-write SVG arcs or fixed-size",
+          "SVGs, never load a CDN; one chart per card; pie only for 2-5 parts, else donut or hbar.",
+        ]),
+    "inputs: [{ datasetId }] copies a dataset (see",
     "data_inspect) to $ALISIO_INPUT_DIR/<name>.sqlite: alisio_runtime.datasets.open(name) returns a",
     "read-only sqlite3 connection (table `data` or `s_<sheet>`). HTML is shown offline: embed data and scripts",
     "inline (no fetch, no CDN). Nothing is published when the script fails unless publishOnError.",
@@ -595,7 +588,7 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
     description:
       "Publish text you already have (Markdown, HTML, CSV, JSON, SVG, plain text…) as a " +
       "downloadable artifact of this session; works without Python. fileName decides the type " +
-      "(e.g. report.md, dashboard.html). HTML is shown offline: inline every script and style.",
+      `(e.g. report.md, dashboard.html).${deps.smartDashboard ? " For a data dashboard use dashboard_generate instead of writing the HTML." : ""} HTML is shown offline: inline every script and style.`,
     inputSchema: objectSchema(
       {
         fileName: { type: "string", minLength: 1, maxLength: 200 },
