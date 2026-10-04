@@ -428,6 +428,16 @@ export class CommandCatalog {
       all.find((c) => c.source !== "builtin" && c.name === name)
     );
   }
+  /**
+   * `/name args` for a registered plugin command, or undefined (built-ins, `/skill:`, prompt
+   * templates and unknown names keep their own handling; the catalog precedence applies).
+   */
+  pluginInvocation(input: string): { name: string; args: string } | undefined {
+    const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(input.trim());
+    const name = match?.[1];
+    if (!name || this.resolve(name)?.source !== "plugin") return undefined;
+    return { name, args: match?.[2] ?? "" };
+  }
   /** Runs an `execution: "core"` command. Surface commands and unknown names throw. */
   async execute(name: string, args: string, ctx: CommandExecutionContext): Promise<CommandResult> {
     const descriptor = this.resolve(name);

@@ -76,6 +76,21 @@ export function paletteRows(
   return at < 0 ? [...rows, ...extra] : [...rows.slice(0, at + 1), ...extra, ...rows.slice(at + 1)];
 }
 
+/**
+ * At most `limit` palette rows. With an empty query the built-ins would fill every slot, so up to
+ * four slots go to the other sources (plugin commands first), shown after the built-ins.
+ */
+export function paletteWindow(
+  rows: CommandDescriptor[],
+  query: string,
+  limit = 12,
+): CommandDescriptor[] {
+  if (query.trim() || rows.length <= limit) return rows.slice(0, limit);
+  const others = rows.filter((row) => row.source !== "builtin").slice(0, 4);
+  const builtins = rows.filter((row) => row.source === "builtin");
+  return [...builtins.slice(0, limit - others.length), ...others];
+}
+
 /** Appends a sent prompt to the history (no blanks, no consecutive duplicates, bounded). */
 export function pushHistory(history: string[], text: string, limit = 100): string[] {
   if (!text.trim() || history.at(-1) === text) return history;

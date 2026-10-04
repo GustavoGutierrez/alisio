@@ -119,7 +119,7 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/changelog [version]` | Panel desplazable con lo que cambió en las versiones recientes (sin conexión); véase [Recarga y novedades](#reload-and-changelog) |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
-| `/command plugin.id:name args` | Ejecuta un comando de plugin |
+| `/plugin.id:name args` (o `/command plugin.id:name args`) | Ejecuta un comando de plugin |
 | `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
 | `/agents …` | Gestión heredada de tareas de subagentes (plugin integrado): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; sigue disponible con un argumento como arriba — consulte [Subagentes](/es/subagents#in-the-tui) |
 | `/agents new [descripción]` | Crea un agente en `.agents/agents` (proyecto o global). Con una descripción, el modelo activo redacta las instrucciones de inmediato ("Building with Alisio", Esc cancela); al terminar Alisio ofrece probarlo en una sesión nueva. Consulte [Agentes](/es/agents#terminal-agents) |
@@ -209,7 +209,7 @@ perfil en `/connect`). El agente activo y el effort de razonamiento viven en `/a
 es porque Alisio no implementa esa función; ninguna fila es un stub.
 
 En el modo `--no-tui` los comandos admitidos son `/exit`, `/new`, `/skill:name request` y
-`/command plugin.id:name args`. Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.
+`/command plugin.id:name args` (o directamente `/plugin.id:name args`). Las líneas se procesan secuencialmente; Ctrl+C cancela y sale.
 
 ### Agente activo y effort {#active-agent-and-effort}
 

@@ -188,9 +188,13 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
   const stopSignals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
   for (const signal of stopSignals) process.on(signal, interrupt);
   // `/name args` runs a prompt template (same syntax as the TUI); refuse before creating a session.
+  // A registered plugin command (`/plugin.id:name args`) runs through the command catalog instead.
+  const { CommandCatalog } = await import("@alisio/core");
+  const catalog = new CommandCatalog(app);
+  const pluginCall = prompt ? catalog.pluginInvocation(prompt) : undefined;
   let template: ReturnType<typeof app.expandPrompt>;
   try {
-    template = prompt ? app.expandPrompt(prompt) : undefined;
+    template = prompt && !pluginCall ? app.expandPrompt(prompt) : undefined;
   } catch (error) {
     await app.close();
     throw error;
@@ -202,6 +206,18 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     if (sessionId && opts.model && app.store.get(session).model !== opts.model)
       app.runner.setModel(session, opts.model);
     await app.herdr.report("idle", session);
+    if (pluginCall) {
+      const result = await catalog.execute(pluginCall.name, pluginCall.args, {
+        sessionId: session,
+        signal: controller.signal,
+      });
+      process.stdout.write(
+        opts.json
+          ? `${JSON.stringify({ type: "command_result", command: pluginCall.name, sessionId: session, text: result.text ?? "" })}\n`
+          : `${result.text ?? ""}\n`,
+      );
+      return;
+    }
     if (prompt) {
       const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(prompt);
       if (match?.[1])
@@ -243,7 +259,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       for (const d of banner.diagnostics) process.stderr.write(`[startup] ${JSON.stringify(d)}\n`);
     }
     if (!opts.quiet)
-      console.log("Alisio · /exit /new /btw question /skill:name /command plugin.id:name args");
+      console.log("Alisio · /exit /new /btw question /skill:name /plugin.id:name args");
     process.stdout.write("\nalisio › ");
     try {
       for await (const rawLine of rl) {
@@ -260,8 +276,7 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
         if (line === "/btw" || line.startsWith("/btw ")) {
           // Side question: printed here only, never added to the conversation.
           try {
-            const { CommandCatalog } = await import("@alisio/core");
-            const result = await new CommandCatalog(app).execute("btw", line.slice(4), {
+            const result = await catalog.execute("btw", line.slice(4), {
               sessionId: session,
               signal: controller.signal,
             });
@@ -276,7 +291,21 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
           const [name, ...args] = line.slice(9).split(" ");
           const handler = app.plugins.commands.get(name ?? "");
           if (!handler) throw new Error("Unknown plugin command");
-          console.log(await handler(args.join(" ")));
+          console.log(await handler(args.join(" "), { sessionId: session }));
+          continue;
+        }
+        const pluginLine = catalog.pluginInvocation(line);
+        if (pluginLine) {
+          try {
+            const result = await catalog.execute(pluginLine.name, pluginLine.args, {
+              sessionId: session,
+              signal: controller.signal,
+            });
+            console.log(result.text ?? "");
+          } catch (e) {
+            console.error(e instanceof Error ? e.message : String(e));
+          }
+          process.stdout.write("\nalisio › ");
           continue;
         }
         const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(line);
@@ -308,7 +337,9 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
 }
 program
   .command("run")
-  .description('Run one prompt headless; "/name args" runs a prompt template (e.g. "/init")')
+  .description(
+    'Run one prompt headless; "/name args" runs a prompt template (e.g. "/init") or a plugin command ("/plugin.id:name")',
+  )
   .argument("<prompt>")
   .action((prompt, _options, cmd) => run(cmd, prompt));
 program

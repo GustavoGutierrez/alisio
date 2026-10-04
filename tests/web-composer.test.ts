@@ -13,6 +13,7 @@ import { RENDERER_KINDS, rendererFor } from "../packages/web/src/renderers/kinds
 import {
   historyStep,
   matchCommands,
+  paletteWindow,
   parseSlash,
   pushHistory,
 } from "../packages/web/src/store/composer.ts";
@@ -25,6 +26,28 @@ const command = (name: string, extra: Partial<CommandDescriptor> = {}): CommandD
   surfaces: ["tui", "web", "api"],
   execution: "core",
   ...extra,
+});
+
+describe("palette window", () => {
+  const builtins = Array.from({ length: 20 }, (_, i) => command(`b${i}`));
+  const plugin = (name: string) => command(name, { source: "plugin" });
+  it("keeps plugin commands visible with an empty query even behind many built-ins", () => {
+    const rows = [...builtins, plugin("laya:status"), plugin("laya:stop")];
+    const shown = paletteWindow(rows, "", 12).map((c) => c.name);
+    expect(shown).toHaveLength(12);
+    expect(shown).toEqual(expect.arrayContaining(["laya:status", "laya:stop"]));
+    expect(shown.slice(0, 10)).toEqual(builtins.slice(0, 10).map((c) => c.name));
+  });
+  it("reserves at most four slots and leaves short or filtered lists alone", () => {
+    const many = Array.from({ length: 9 }, (_, i) => plugin(`p:${i}`));
+    expect(
+      paletteWindow([...builtins, ...many], "", 12).filter((c) => c.source === "plugin"),
+    ).toHaveLength(4);
+    expect(paletteWindow([...builtins.slice(0, 3), plugin("x:y")], "", 12)).toHaveLength(4);
+    expect(paletteWindow([...builtins, plugin("laya:status")], "b", 12)).toEqual(
+      builtins.slice(0, 12),
+    );
+  });
 });
 
 describe("slash palette", () => {

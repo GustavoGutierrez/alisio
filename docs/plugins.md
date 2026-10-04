@@ -197,7 +197,7 @@ block, is shown as labeled JSON instead of failing, so older builds can replay n
 | Item | External plugin | Built-in plugin |
 | --- | --- | --- |
 | Tool name | `p_<hash>_<name>` (10 hex characters of the SHA-256 of the plugin ID), avoiding collisions and meeting provider name limits | Unprefixed |
-| Command | `<plugin id>:<name>`, invoked as `/command acme.hello:name args` or `/acme.hello:name` | Unprefixed (for example `/memory`) |
+| Command | `<plugin id>:<name>`, invoked as `/command acme.hello:name args` or `/acme.hello:name`; also from `alisio run "/acme.hello:name args"`, which prints the result without calling the model (`--json` prints one `command_result` line), and from the web palette | Unprefixed (for example `/memory`) |
 | `internal` effect | Downgraded to `external` | Allowed |
 
 ### Compaction hooks {#compaction-hooks}

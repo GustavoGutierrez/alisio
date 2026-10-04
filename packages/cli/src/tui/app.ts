@@ -3267,7 +3267,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         : []),
       "- `/skill:name request` — load a skill and send the request",
       "- `/init` (above) writes AGENTS.md; the shell command `alisio setup` only scaffolds `.alisio/config.json`",
-      "- `/command plugin.id:name args` — run a plugin command",
+      "- `/plugin.id:name args` or `/command plugin.id:name args` — run a plugin command",
       "",
       "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents · Shift+Tab cycle the main agents (build, plan, your own)",
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
@@ -3362,7 +3362,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         const [command, ...rest] = parsed.args.split(" ");
         const handler = app.plugins.commands.get(command ?? "");
         if (!handler) return error(`Unknown plugin command: ${command ?? ""}`);
-        return info(await handler(rest.join(" ")));
+        return info(await handler(rest.join(" "), { sessionId: session }));
       }
       const agentId = agentIdFromCommand(parsed.name);
       if (agentId) {

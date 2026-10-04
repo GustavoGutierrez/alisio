@@ -511,6 +511,34 @@ try {
   assert.deepEqual(plugins.commands, ["compiled:hi"]);
   assert.deepEqual(plugins.builtin, ["openai-compatible", "memory", "subagents"]);
 
+  // `alisio run "/plugin:name args"` runs a registered plugin command without calling the model;
+  // unknown slash names still reach the model.
+  const pluginArgs = ["--cwd", directory, "--config", join(directory, "config.json")];
+  const before = requests;
+  const direct = await execute([
+    "run",
+    "/compiled:hi there",
+    ...pluginArgs,
+    "--plugin",
+    join(directory, `plugin.${ext}`),
+  ]);
+  assert.equal(direct.trim(), "external");
+  const directJson = JSON.parse(
+    await execute([
+      "run",
+      "/compiled:hi",
+      ...pluginArgs,
+      "--json",
+      "--plugin",
+      join(directory, `plugin.${ext}`),
+    ]),
+  );
+  assert.deepEqual(
+    [directJson.type, directJson.command, directJson.text],
+    ["command_result", "compiled:hi", "external"],
+  );
+  assert.equal(requests, before, "a plugin command must not call the model");
+
   // `alisio install npm:<name>` installs into the global plugins directory through a PATH-shim fake
   // npm (no network), persists the npm name in the global config, refuses headless without --yes
   // and under --read-only, and `plugins list` shows the installed package.
@@ -609,7 +637,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 7);
+  assert.equal(sessions.length, 9); // includes the two plugin-command runs
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {

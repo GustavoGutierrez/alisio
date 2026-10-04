@@ -116,7 +116,7 @@ description, and `/resume` suggests matching session IDs.
 | `/goal [objective \| pause \| resume \| edit \| clear \| help \| budget=<n>]` | Start or manage the current Session Goal: with a goal it opens a menu (status, pause, resume, edit, budget, clear, help); with an objective it starts one that the agent keeps working on until it is done, blocked, paused or out of budget; see [Session goals](#goals) |
 | `/exit` (`/quit`) | Exit |
 | `/skill:name request` | Load a skill and send the request |
-| `/command plugin.id:name args` | Run a plugin command |
+| `/plugin.id:name args` (or `/command plugin.id:name args`) | Run a plugin command |
 | `/memory …` | Command of the built-in memory plugin; see [Persistent memory](/memory) |
 | `/agents …` | Legacy subagent task management (built-in subagents plugin): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; still reachable with an argument as above — see [Subagents](/subagents#in-the-tui) |
 | `/agents new [description]` | Create an agent in `.agents/agents` (project or global). With a description, the active model writes the instructions right away ("Building with Alisio", Esc cancels); afterwards Alisio offers to try it in a new session. See [Agents](/agents#terminal-agents) |
@@ -202,7 +202,7 @@ one is per-profile in `/connect`). The active agent and the reasoning effort liv
 means Alisio does not implement the feature; no row is a stub.
 
 In `--no-tui` mode the supported commands are `/exit`, `/new`, `/skill:name request` and
-`/command plugin.id:name args`. Lines are processed sequentially; Ctrl+C cancels and exits.
+`/command plugin.id:name args` (or just `/plugin.id:name args`). Lines are processed sequentially; Ctrl+C cancels and exits.
 
 ### Active agent and effort
 

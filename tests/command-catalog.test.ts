@@ -203,6 +203,27 @@ describe("CommandCatalog (T-05)", () => {
     }
   });
 
+  it("pluginInvocation matches only registered plugin commands, with built-in precedence", async () => {
+    const fx = await host();
+    try {
+      const catalog = new CommandCatalog(fx.host);
+      expect(catalog.pluginInvocation("/wayfinder:explore north  face")).toEqual({
+        name: "wayfinder:explore",
+        args: "north  face",
+      });
+      expect(catalog.pluginInvocation("/wayfinder:explore")).toEqual({
+        name: "wayfinder:explore",
+        args: "",
+      });
+      // Shadowed by a built-in, prompt template, skill, unknown, or not a slash command.
+      for (const input of ["/help", "/review x", "/skill:tdd x", "/nope", "wayfinder:explore", "/"])
+        expect(catalog.pluginInvocation(input)).toBeUndefined();
+      expect(new CommandCatalog().pluginInvocation("/wayfinder:explore")).toBeUndefined();
+    } finally {
+      fx.close();
+    }
+  });
+
   it("marks core execution for the core handlers and surface for the rest", () => {
     const execution = Object.fromEntries(BUILTIN_COMMANDS.map((c) => [c.name, c.execution]));
     for (const name of [

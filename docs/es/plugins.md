@@ -203,7 +203,7 @@ anteriores pueden reproducir transcripciones más nuevas.
 | Elemento | Plugin externo | Plugin integrado |
 | --- | --- | --- |
 | Nombre de herramienta | `p_<hash>_<name>` (10 caracteres hexadecimales del SHA-256 del ID del plugin), para evitar colisiones y cumplir los límites de nombres del proveedor | Sin prefijo |
-| Comando | `<plugin id>:<name>`, invocado como `/command acme.hello:name args` o `/acme.hello:name` | Sin prefijo (por ejemplo `/memory`) |
+| Comando | `<plugin id>:<name>`, invocado como `/command acme.hello:name args` o `/acme.hello:name`; también desde `alisio run "/acme.hello:name args"`, que imprime el resultado sin llamar al modelo (`--json` imprime una línea `command_result`), y desde la paleta web | Sin prefijo (por ejemplo `/memory`) |
 | Efecto `internal` | Se degrada a `external` | Permitido |
 
 ### Hooks de compactación {#compaction-hooks}
