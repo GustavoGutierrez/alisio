@@ -195,39 +195,57 @@ el agente sabe que debe pasar a Python.
 
 ## Una ejecución real con Laya {#real-run}
 
-Es una sesión real (2026-10-04) en la [interfaz web](/es/web): Alisio 0.4.2, `@alisio/plugin-laya`
-0.1.1 activo, `deepseek-flash` como modelo y un CSV de ventas de 4000 filas. El prompt pedía un
-dashboard ejecutivo con las ventas por canal y región.
+Son dos sesiones reales (2026-10-04) en la [interfaz web](/es/web), con la compilación candidata de
+0.4.3, `@alisio/plugin-laya` 0.1.1 y `deepseek-flash` como modelo. El dataset es un CSV de ventas de
+4000 filas renombrado `ventas.csv`. Ambas ejecuciones usaron el mismo prompt en español, «Crea un
+dashboard ejecutivo con las ventas netas por canal y región a partir de ventas.csv. Usa todos los
+datos, sin filtros, y no me hagas preguntas…», y el modo de permisos «Acceso total», así que el
+agente no hizo preguntas ni mostró solicitudes de aprobación, y nadie esperó al usuario. Una
+ejecución tuvo Laya activo (L) y la otra no tuvo proveedor de decisiones y la memoria desactivada
+(N2).
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="La interfaz web con el workspace demo: el prompt que pide un dashboard ejecutivo de ventas_2025.csv por canal y región, y el dashboard Ventas 2025 · Canal y Región abierto en el panel de artefactos, con seis tarjetas KPI, un gráfico de área por semana, un gráfico de barras horizontales por región y gráficos de anillo." width="1500" height="960" loading="lazy" decoding="async" />
-  <figcaption>El dashboard producido por <code>dashboard_generate</code> con Laya activo, a partir de un CSV de ventas de 4000 filas.</figcaption>
+  <img src="../assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="La interfaz web tras la ejecución con Laya: el prompt pide las ventas netas por canal y región de ventas.csv sin filtros, la línea de resumen de la ejecución muestra 6 turnos, 10 pasos, LLM 30,2 s y herramientas 0,9 s, y el dashboard Ventas netas por canal y región está abierto en el visor." width="1500" height="960" loading="lazy" decoding="async" />
+  <figcaption>La ejecución con Laya: 6 turnos, 10 pasos, LLM 30,2 s, herramientas 0,9 s y el dashboard «Ventas netas por canal y región» en el visor.</figcaption>
 </figure>
 
-| Medida | Valor |
-| --- | --- |
-| `dashboard_generate` en sí | 239 ms |
-| Respuesta de Laya | 196 ms, confianza 0,91, 1 decisión, ninguna rechazada, sin fallback |
-| Procedencia del artefacto | `rules+decisions`, proveedor de decisiones `laya` |
-| Del envío al primer dashboard | 672 s |
-| de los cuales la pregunta del propio agente esperando al usuario | 607 s (período y pedidos cancelados) |
-| de los cuales una solicitud de permiso | 32 s |
-| Tiempo de trabajo del propio agente | unos 33 s (inspeccionar los datos, unas consultas y luego la herramienta) |
+| Medida | Con Laya (L) | Sin proveedor, memoria desactivada (N2) |
+| --- | --- | --- |
+| Del envío al primer dashboard publicado | 5,0 s | 4,5 s |
+| La llamada a `dashboard_generate` en sí | 161 ms | 52 ms |
+| Tiempo del modelo antes de llamar a la herramienta | 4,9 s (2 turnos) | 4,5 s (1+ turnos) |
+| Decisiones | 2 completadas (101 ms y 30 ms, confianza 0,99 o más, ninguna rechazada, sin fallback) | ninguna |
+| Procedencia del artefacto | `rules+decisions`, proveedor de decisiones `laya` | `rules` |
+| Medida principal y gráficos | las ventas netas lideran en ambas; KPI ventas netas, unidades, utilidad, margen, filas; ventas netas en el tiempo, por región, por canal | igual |
+| `python_run` después del dashboard | 0 | 4 llamadas y 1 dashboard extra en Python («Complemento ejecutivo: canal × región») 35,7 s después |
+| Dashboards publicados | 2, ambos de `dashboard_generate` (el modelo llamó a la herramienta una segunda vez, 5,7 s después) | 2 (1 generado + 1 de Python) |
+| Ejecución completa (turnos / llamadas a herramientas / tokens de entrada + salida) | 32,3 s (6 / 10 / 77.919 + 6.223) | 45,2 s (8 / 7 / 111.240 + 9.424) |
+
+Tras la ejecución con Laya, `/decisions` informó 2 peticiones, 2 completadas, 0 fallbacks, latencia
+media de 66 ms y percentil 95 de 101 ms (véase
+[Decision Intelligence](/es/decision-intelligence#decisions-command)).
 
 Qué esperar:
 
-- La herramienta y Laya son rápidas. Casi todo el tiempo de reloj de esta ejecución fue espera del
-  usuario.
-- El modelo construyó después un segundo dashboard con Python 37 s más tarde. Quería ventas netas (el
-  primer dashboard graficó ventas brutas porque la frase en español «ventas netas» no coincidió con
-  la columna de ventas netas; corregido en 0.4.3), un cruce canal x región y un filtro que excluyera
-  los pedidos cancelados, y los dos últimos no están en el catálogo. También escribió un CSV extra
-  en el workspace.
-- Así que el tiempo de punta a punta depende de cuánto necesite su petición más allá del catálogo.
-  Véanse las [Limitaciones](#limitations).
+- El tiempo hasta un dashboard fue de unos 5 s en ambas ejecuciones. La herramienta más la respuesta
+  de Laya tardaron bastante menos de un cuarto de segundo; Laya añade unos 100 ms a la llamada de la
+  herramienta.
+- En la ejecución con Laya el modelo no reconstruyó nada en Python. Sin proveedor sí lo hizo, pero
+  una ejecución por configuración no puede demostrar que Laya sea la causa.
+- El dashboard tiene gráficos por canal y por región, pero no una tabla cruzada canal x región (no
+  está en el catálogo). Cuando la petición la necesita, el agente recurre a Python. Véanse las
+  [Limitaciones](#limitations).
+- Las notas de memoria de sesiones anteriores pueden cambiar lo que hace el agente. Hubo que
+  descartar una tercera ejecución (memoria activada, sin proveedor) porque una nota guardada por una
+  ejecución anterior orientó al agente.
 
-Es una sesión, un dataset y un modelo; no es un benchmark. Para la comparación medida véanse los
-[Resultados del benchmark](#benchmark).
+Es una sesión por configuración, un dataset y un modelo; no demuestra una diferencia estadística ni
+es un benchmark. Para la comparación medida véanse los [Resultados del benchmark](#benchmark).
+
+A modo de comparación, la primera ejecución, con la 0.4.2 publicada, hizo dos preguntas al usuario.
+Tardó 672 s del envío al dashboard, y 607 s fueron el agente esperando las respuestas del usuario.
+Además, el modelo reconstruyó el dashboard en Python porque «ventas netas» no coincidía con la
+columna de ventas netas; está corregido en esta versión.
 
 ## Resultados del benchmark {#benchmark}
 

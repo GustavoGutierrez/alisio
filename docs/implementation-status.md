@@ -2264,13 +2264,20 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   repetición por dataset), C 5 (informativa, en paralelo con B, tiempos no comparables); la puerta de
   §11.2 falla en tokens de salida y turnos. La línea base A está limitada por el presupuesto de
   tokens, y el orden de las llamadas solo se reconstruyó en C.
-- Ejecución real con Laya (2026-10-04, interfaz web, Alisio 0.4.2, `@alisio/plugin-laya` 0.1.1,
-  `deepseek-flash`, un CSV de ventas de 4000 filas; una sola sesión, un solo dataset y un solo
-  modelo): `dashboard_generate` tardó 239 ms; Laya respondió en 196 ms con confianza 0,91 (1 decisión,
-  ninguna rechazada, sin fallback; procedencia `rules+decisions`). Del envío al primer dashboard
-  pasaron 672 s, de los cuales 607 s fueron la pregunta aclaratoria del agente esperando al usuario y
-  32 s una solicitud de permiso; el trabajo propio del agente fue de unos 33 s. El modelo construyó
-  después un segundo dashboard con Python a los 37 s. Capturas en la documentación.
+- Ejecución real con Laya (2026-10-04, interfaz web, compilación candidata de 0.4.3,
+  `@alisio/plugin-laya` 0.1.1, `deepseek-flash`, un CSV de ventas de 4000 filas renombrado
+  `ventas.csv`, prompt en español sin preguntas y modo «Acceso total», sin esperas del usuario; un
+  solo dataset, un solo modelo y una sola sesión por configuración): con Laya el primer dashboard se
+  publicó a los 5,0 s del envío, `dashboard_generate` tardó 161 ms y hubo 2 decisiones completadas
+  (101 ms y 30 ms, ninguna rechazada, sin fallback; procedencia `rules+decisions`); el modelo no usó
+  `python_run` después y la ejecución completa tomó 32,3 s. Sin proveedor y con la memoria
+  desactivada, el primer dashboard llegó a los 4,5 s (52 ms), el modelo hizo 4 llamadas a
+  `python_run` y publicó un dashboard extra en Python (canal x región), 45,2 s en total; con una sola
+  ejecución por configuración no se puede atribuir esa diferencia a Laya. Una tercera ejecución
+  (memoria activada, sin proveedor) se descartó porque una nota guardada por una ejecución anterior
+  orientó al agente. `/decisions` informó 2 peticiones, 0 fallbacks, latencia media de 66 ms y p95 de
+  101 ms. La primera ejecución (0.4.2 publicada) tardó 672 s por las preguntas del agente. Capturas en
+  la documentación.
 - No verificado: otros modelos en el benchmark; la variante C a mayor escala; la línea de progreso en
   un terminal real; otros navegadores, Windows y macOS; lectores de pantalla; y datasets muy grandes
   en el navegador.
@@ -2866,8 +2873,8 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - **Un dataset por llamada**, sin uniones entre hojas ni archivos, sin filtros interactivos y sin
   regeneración incremental con memoria del dashboard anterior (cada llamada es independiente).
 - **Sin tablas cruzadas, sin filtros de filas y sin métricas derivadas** (margen, variación
-  interanual, tasas): en la ejecución real el modelo recurrió a `python_run` para un cruce canal x
-  región y para excluir pedidos cancelados. Además, la frase «ventas netas» no coincidía con la
+  interanual, tasas): en una ejecución real el modelo recurrió a `python_run` para un cruce canal x
+  región y para excluir pedidos cancelados. Además, en la primera ejecución real la frase «ventas netas» no coincidía con la
   columna de ventas netas y el dashboard usó ventas brutas; corregido en 0.4.3.
 - **Solo las fechas ISO 8601** son columnas de tiempo: otros formatos de fecha no producen tendencia.
   Las marcas con zona horaria se normalizan a UTC y un texto como `"2024"` no se trata como fecha.

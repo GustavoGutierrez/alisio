@@ -179,6 +179,11 @@ last fallback with its reason, and the calls per decision pack.
   <figcaption>The <code>/decisions</code> report after a few decisions, one of them a fallback (Spanish interface).</figcaption>
 </figure>
 
+<figure class="doc-shot">
+  <img src="./assets/web-ui/decisions_laya_web_ui.webp" alt="The /decisions report after a Smart Dashboard run: provider laya is ready, the pack is smart-dashboard-v1, and the table shows 2 requests, 2 completed and 0 fallbacks, with latency average 66 ms and 95th percentile 101 ms." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>The <code>/decisions</code> report after a real Smart Dashboard run with Laya: 2 requests completed, 0 fallbacks, latency average 66 ms and p95 101 ms.</figcaption>
+</figure>
+
 ### `/stats` {#stats-section}
 
 When at least one decision happened in the session, `/stats` adds a **Decision Intelligence**

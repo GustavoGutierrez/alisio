@@ -187,37 +187,54 @@ column). If you need a filter or a cut, say so in the prompt: the agent then kno
 
 ## A real run with Laya {#real-run}
 
-This is one real session (2026-10-04) in the [web UI](/web): Alisio 0.4.2, `@alisio/plugin-laya`
-0.1.1 active, `deepseek-flash` as the model and a 4000-row sales CSV. The prompt asked for an
-executive dashboard with sales by channel and region.
+These are two real sessions (2026-10-04) in the [web UI](/web), on the 0.4.3 candidate build with
+`@alisio/plugin-laya` 0.1.1 and `deepseek-flash` as the model. The dataset is a 4000-row sales CSV
+renamed `ventas.csv`. Both runs used the same Spanish prompt, "Crea un dashboard ejecutivo con las
+ventas netas por canal y región a partir de ventas.csv. Usa todos los datos, sin filtros, y no me
+hagas preguntas…", and the permission mode "Acceso total", so the agent asked no questions and
+showed no approval prompts, and nobody waited for the user. One run had Laya active (L) and the
+other had no decision provider and memory off (N2).
 
 <figure class="doc-shot">
-  <img src="./assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="The web UI with the demo workspace: the prompt asking for an executive dashboard of ventas_2025.csv by channel and region, and the dashboard Ventas 2025 · Canal y Región open in the artifact panel, with six KPI tiles, an area chart by week, a horizontal bar chart by region and donut charts." width="1500" height="960" loading="lazy" decoding="async" />
-  <figcaption>The dashboard produced by <code>dashboard_generate</code> with Laya active, from a 4000-row sales CSV.</figcaption>
+  <img src="./assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="The web UI after the run with Laya: the prompt asks for net sales by channel and region from ventas.csv with no filters, the run summary line shows 6 turns, 10 steps, LLM 30.2 s and tools 0.9 s, and the dashboard Ventas netas por canal y región is open in the viewer." width="1500" height="960" loading="lazy" decoding="async" />
+  <figcaption>The run with Laya: 6 turns, 10 steps, LLM 30.2 s, tools 0.9 s, and the dashboard "Ventas netas por canal y región" in the viewer.</figcaption>
 </figure>
 
-| Measure | Value |
-| --- | --- |
-| `dashboard_generate` itself | 239 ms |
-| Laya answer | 196 ms, confidence 0.91, 1 decision, none rejected, no fallback |
-| Artifact provenance | `rules+decisions`, decision provider `laya` |
-| Send to first dashboard | 672 s |
-| of which the agent's own question waiting for you | 607 s (period and cancelled orders) |
-| of which a permission prompt | 32 s |
-| The agent's own working time | about 33 s (inspecting the data, a few queries, then the tool) |
+| Measure | With Laya (L) | Without a provider, memory off (N2) |
+| --- | --- | --- |
+| Send to first dashboard published | 5.0 s | 4.5 s |
+| `dashboard_generate` call itself | 161 ms | 52 ms |
+| Model time before calling the tool | 4.9 s (2 turns) | 4.5 s (1+ turns) |
+| Decisions | 2 completed (101 ms and 30 ms, confidence 0.99 or higher, none rejected, no fallback) | none |
+| Artifact provenance | `rules+decisions`, decision provider `laya` | `rules` |
+| Lead measure and charts | net sales leads in both; KPIs net sales, units, profit, margin, rows; net sales over time, by region, by channel | same |
+| `python_run` after the dashboard | 0 | 4 calls, and 1 extra Python dashboard ("Complemento ejecutivo: canal × región") 35.7 s later |
+| Dashboards published | 2, both from `dashboard_generate` (the model called the tool a second time, 5.7 s later) | 2 (1 generated + 1 Python) |
+| Whole run (turns / tool calls / tokens in + out) | 32.3 s (6 / 10 / 77,919 + 6,223) | 45.2 s (8 / 7 / 111,240 + 9,424) |
+
+After the run with Laya, `/decisions` reported 2 requests, 2 completed, 0 fallbacks, latency average
+66 ms and 95th percentile 101 ms (see
+[Decision Intelligence](/decision-intelligence#decisions-command)).
 
 What to expect:
 
-- The tool and Laya are fast. Most of the wall time in this run was waiting for the user.
-- The model then built a second dashboard with Python 37 s later. It wanted net sales (the first
-  dashboard charted gross sales because the Spanish phrasing "ventas netas" did not match the net
-  sales column; fixed in 0.4.3), a channel x region cross-cut and a filter that excludes cancelled
-  orders, and the last two are not in the catalog. It also wrote an extra CSV into the workspace.
-- So the end-to-end time depends on how much your request needs beyond the catalog. See
-  [Limitations](#limitations).
+- Time to a dashboard was about 5 s in both runs. The tool plus Laya's answer took well under a
+  quarter of a second; Laya adds roughly 100 ms to the tool call.
+- In the run with Laya the model did not rebuild anything in Python. Without a provider it did, but
+  one run each cannot show that Laya is the cause.
+- The dashboard has channel and region charts but not a channel x region cross-tab (it is not in the
+  catalog). When the request needs one, the agent goes to Python. See [Limitations](#limitations).
+- Memory notes from earlier sessions can change what the agent does. A third run (memory on, no
+  provider) had to be discarded because a note saved by an earlier run steered the agent.
 
-This is one session, one dataset and one model; it is not a benchmark. For the measured comparison
-see [Benchmark results](#benchmark).
+This is one session per configuration, one dataset and one model; it does not show a statistical
+difference and it is not a benchmark. For the measured comparison see
+[Benchmark results](#benchmark).
+
+For comparison, the first run, on the published 0.4.2, asked the user two questions. It took 672 s
+from send to dashboard, and 607 s of that was the agent waiting for the user's answers. The model
+also rebuilt the dashboard in Python because "ventas netas" did not match the net sales column; that
+is fixed in this release.
 
 ## Benchmark results {#benchmark}
 

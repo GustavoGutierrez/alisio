@@ -189,6 +189,11 @@ percentil 95), la última alternativa con su motivo y las llamadas por pack de d
   <figcaption>El informe de <code>/decisions</code> tras unas cuantas decisiones, una de ellas con alternativa (interfaz en español).</figcaption>
 </figure>
 
+<figure class="doc-shot">
+  <img src="../assets/web-ui/decisions_laya_web_ui.webp" alt="El informe de /decisions tras una ejecución de Smart Dashboard: el proveedor laya está listo, el pack es smart-dashboard-v1 y la tabla muestra 2 peticiones, 2 completadas y 0 fallbacks, con latencia media de 66 ms y percentil 95 de 101 ms." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>El informe de <code>/decisions</code> tras una ejecución real de Smart Dashboard con Laya: 2 peticiones completadas, 0 fallbacks, latencia media de 66 ms y p95 de 101 ms.</figcaption>
+</figure>
+
 ### `/stats` {#stats-section}
 
 Cuando ha ocurrido al menos una decisión en la sesión, `/stats` añade una sección **Decision
