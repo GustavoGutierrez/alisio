@@ -6,6 +6,34 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.4.0",
+      date: "2026-10-03",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Smart Dashboard: ask for a dashboard of a dataset and `dashboard_generate` builds it from ready-made components (KPIs, trend, ranking, composition, correlation, table) with no generated code. The numbers come from read-only queries on the dataset, the result is validated before it is drawn, and asking again with another goal regenerates it. It follows the columns your request names.",
+            "An optional decision provider can refine the dashboard's purpose; without one the rules decide.",
+            "The `analysis.smartDashboard` setting (on by default) turns the tool and its guidance off.",
+            "Live progress for running tools in the terminal and in the collapsed web transcript row.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "Dashboard KPIs use compact numbers (the full value is kept for tooltips and screen readers) and readable column names.",
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            '`alisio run "/plugin.id:name"` runs the plugin command instead of sending it to the model, and the web command palette lists plugin commands without typing a prefix.',
+            "Horizontal bar charts show the tooltip of the hovered row, in Python and Smart Dashboard dashboards.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.3.0",
       date: "2026-10-03",
       sections: [

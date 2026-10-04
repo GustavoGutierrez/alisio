@@ -4,6 +4,32 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.0] - 2026-10-03
+
+A minor release: while Alisio is 0.x it may include breaking changes. Plugins that declare
+`@alisio/sdk` as a `^0.3.0` peer must update the range (or declare `^0.3.0 || ^0.4.0`).
+
+### Added
+
+- Smart Dashboard: ask for a dashboard of a dataset and `dashboard_generate` builds it from ready-made
+  components (KPIs, trend, ranking, composition, correlation, table) with no generated code. The
+  numbers come from read-only queries on the dataset, the result is validated before it is drawn,
+  and asking again with another goal regenerates it. It follows the columns your request names.
+- An optional decision provider can refine the dashboard's purpose; without one the rules decide.
+- The `analysis.smartDashboard` setting (on by default) turns the tool and its guidance off.
+- Live progress for running tools in the terminal and in the collapsed web transcript row.
+
+### Improved
+
+- Dashboard KPIs use compact numbers (the full value is kept for tooltips and screen readers) and
+  readable column names.
+
+### Fixed
+
+- `alisio run "/plugin.id:name"` runs the plugin command instead of sending it to the model, and the
+  web command palette lists plugin commands without typing a prefix.
+- Horizontal bar charts show the tooltip of the hovered row, in Python and Smart Dashboard dashboards.
+
 ## [0.3.0] - 2026-10-03
 
 A minor release: while Alisio is 0.x it may include breaking changes. Plugins that declare
