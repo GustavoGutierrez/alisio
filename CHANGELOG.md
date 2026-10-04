@@ -4,6 +4,19 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.4] - 2026-10-04
+
+A patch release with two fixes.
+
+### Fixed
+
+- Automatic compaction now also triggers at 85 % of `limits.maxContextChars`, so a long conversation with a
+  large-window model is compacted before the run fails instead of stopping with "Context budget
+  exceeded" until you ran `/compact` yourself. A last-chance compaction runs once before a run fails,
+  and the final error now says whether compaction ran, was skipped, failed or is disabled.
+- The web shows "Compacting context…" during a manual `/compact` or an automatic one, and blocks
+  sending (keeping your draft) until it finishes.
+
 ## [0.4.3] - 2026-10-04
 
 ### Added

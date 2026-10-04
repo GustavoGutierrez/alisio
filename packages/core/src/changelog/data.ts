@@ -6,6 +6,19 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.4.4",
+      date: "2026-10-04",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            'Automatic compaction now also triggers at 85 % of `limits.maxContextChars`, so a long conversation with a large-window model is compacted before the run fails instead of stopping with "Context budget exceeded" until you ran `/compact` yourself. A last-chance compaction runs once before a run fails, and the final error now says whether compaction ran, was skipped, failed or is disabled.',
+            'The web shows "Compacting context…" during a manual `/compact` or an automatic one, and blocks sending (keeping your draft) until it finishes.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.4.3",
       date: "2026-10-04",
       sections: [
