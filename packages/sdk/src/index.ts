@@ -645,9 +645,9 @@ export interface RunEventDataMap {
   };
   run_cancelled: { error: string };
   model_changed: { model: string; previous: string };
-  compaction_started: { reason: "manual" | "auto"; before: number; messages: number };
+  compaction_started: { reason: "manual" | "auto" | "budget"; before: number; messages: number };
   compaction_completed: {
-    reason: "manual" | "auto";
+    reason: "manual" | "auto" | "budget";
     before: number;
     after: number;
     replaced: number;
@@ -659,8 +659,8 @@ export interface RunEventDataMap {
     /** The summary hit its output budget and was accepted as partial. */
     partial?: true;
   };
-  compaction_skipped: { reason: "manual" | "auto"; before: number; detail: string };
-  compaction_failed: { reason: "manual" | "auto"; error: string };
+  compaction_skipped: { reason: "manual" | "auto" | "budget"; before: number; detail: string };
+  compaction_failed: { reason: "manual" | "auto" | "budget"; error: string };
   /** Tool results clipped in place to fit the context budget. */
   context_reduced: { messages: number };
   session_context_injected: { tokens: number; sources: string[] };
@@ -718,7 +718,7 @@ export interface CompactionCheckpoint {
 }
 export interface CompactionStart {
   sessionId: string;
-  reason: "manual" | "auto";
+  reason: "manual" | "auto" | "budget";
   /** Messages about to be replaced by the checkpoint. */
   messages: readonly Message[];
   focus?: string;

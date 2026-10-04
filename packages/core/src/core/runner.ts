@@ -249,6 +249,13 @@ const MAX_INJECT_CHARS = 24_000;
  * fails with an actionable error instead of silently losing the whole history.
  */
 const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
+/**
+ * Fraction of the character limit the conversation must grow beyond its post-compaction size
+ * before the CHARACTER-based auto-compaction trigger may fire again. When the kept tail alone
+ * sits at or above the trigger, summarizing gains nothing, so without this margin every turn
+ * would pay for a summarizer call. The hard-limit last-chance compaction ignores it.
+ */
+const RECOMPACT_GROWTH_MARGIN = 0.1;
 const allowed = (policy: Policy, effect: string) =>
   effect === "read" ||
   effect === "internal" ||
@@ -302,6 +309,8 @@ export class AgentRunner {
   private inbox = new Map<string, string[]>();
   /** Last provider-reported context size per session and the history length it covered. */
   private reported = new Map<string, { tokens: number; count: number }>();
+  /** Conversation size in characters right after the last automatic compaction, per session. */
+  private compactedChars = new Map<string, number>();
   /** Where human waits are opened; the clocks of the active runs listen to it. */
   readonly humanWaits: HumanWaits;
   constructor(private options: RunnerOptions) {
@@ -555,7 +564,7 @@ export class AgentRunner {
     emit: Emit,
     model: string,
     signal: AbortSignal,
-    reason: "manual" | "auto",
+    reason: "manual" | "auto" | "budget",
     focus?: string,
   ): Promise<CompactionResult | undefined> {
     const o = this.options;
@@ -1197,19 +1206,25 @@ export class AgentRunner {
         // unknown (or absurdly large, see MAX_TRUSTED_WINDOW) window falls back to the char
         // estimate (`chars / 4 >= maxContextChars / 4`). `maxContextChars` below stays as the
         // post-compaction hard limit.
+        // The character budget is an independent trigger: `maxContextChars` is a hard limit for
+        // every model, so a large-window model must compact at `limit * threshold` characters
+        // too instead of reaching the hard check with compaction never having run.
+        const threshold = compaction.threshold ?? 0.85;
+        // What automatic compaction did this turn (at most ONE attempt per turn).
+        let attempt: "none" | "ran" | "skipped" | "failed" = "none";
+        let attemptError = "";
         if (
           compaction.auto !== false &&
-          shouldCompactContext(
-            used(),
-            chars(),
-            o.contextWindow?.(model),
-            limit,
-            compaction.threshold ?? 0.85,
-          )
+          (shouldCompactContext(used(), chars(), o.contextWindow?.(model), limit, threshold) ||
+            (charsConversation() >= limit * threshold &&
+              charsConversation() >=
+                (this.compactedChars.get(sessionId) ?? 0) + limit * RECOMPACT_GROWTH_MARGIN))
         ) {
-          await this.compactLocked(sessionId, emit, model, combined, "auto");
+          const result = await this.compactLocked(sessionId, emit, model, combined, "auto");
+          attempt = result ? "ran" : "skipped";
           instructions = await withPersona();
           messages = o.store.messages(sessionId);
+          if (result) this.compactedChars.set(sessionId, charsConversation());
         }
         // A compaction that still leaves the session over the hard limit is reduced in place
         // instead of failing outright: retained content is clipped against a TOTAL character
@@ -1223,17 +1238,45 @@ export class AgentRunner {
         // prompts. Only if even the reduction floor cannot fit (instructions alone crowd out the
         // limit) the run fails with an actionable error.
         if (charsConversation() > limit) {
-          const targetChars = Math.max(MIN_MESSAGE_BUDGET_FLOOR, limit - instructions.length);
-          const reduction = reduceMessagesToBudget(messages, targetChars);
-          if (reduction.truncated > 0) {
-            o.store.overwrite(sessionId, reduction.messages);
-            messages = reduction.messages;
-            emit("context_reduced", { messages: reduction.truncated });
+          const reduceInPlace = () => {
+            const targetChars = Math.max(MIN_MESSAGE_BUDGET_FLOOR, limit - instructions.length);
+            const reduction = reduceMessagesToBudget(messages, targetChars);
+            if (reduction.truncated > 0) {
+              o.store.overwrite(sessionId, reduction.messages);
+              messages = reduction.messages;
+              emit("context_reduced", { messages: reduction.truncated });
+            }
+          };
+          reduceInPlace();
+          // Last chance: clipping alone was not enough and no compaction was attempted this
+          // turn, so summarize history once (reason "budget") and reduce again before failing.
+          if (charsConversation() > limit && compaction.auto !== false && attempt === "none") {
+            try {
+              const result = await this.compactLocked(sessionId, emit, model, combined, "budget");
+              attempt = result ? "ran" : "skipped";
+            } catch (error) {
+              combined.throwIfAborted();
+              attempt = "failed";
+              attemptError = error instanceof Error ? error.message : String(error);
+            }
+            instructions = await withPersona();
+            messages = o.store.messages(sessionId);
+            if (charsConversation() > limit) reduceInPlace();
+            if (attempt === "ran") this.compactedChars.set(sessionId, charsConversation());
           }
-          if (charsConversation() > limit)
+          if (charsConversation() > limit) {
+            const what =
+              compaction.auto === false
+                ? "Automatic compaction is disabled (compaction.auto is false)."
+                : attempt === "ran"
+                  ? "Automatic compaction ran but could not reduce it enough."
+                  : attempt === "failed"
+                    ? `Automatic compaction failed (${attemptError}).`
+                    : "Automatic compaction was skipped because there is no safe boundary to summarize (the conversation is a single long turn or too short).";
             throw new Error(
-              `Context budget exceeded and compaction could not reduce it (approximately ${charsConversation()} characters of conversation; limit ${limit}). Run /compact, trim large tool outputs, start a new session, or disable unneeded MCP servers with /plugins.`,
+              `Context budget exceeded (approximately ${charsConversation()} characters of conversation; limit ${limit}). ${what} Run /compact, trim large tool outputs, start a new session, or disable unneeded MCP servers with /plugins.`,
             );
+          }
         }
         let completion: Extract<Message, { role: "assistant" }> | undefined;
         let truncated = false;

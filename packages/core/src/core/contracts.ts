@@ -311,7 +311,7 @@ export interface HookFailure {
 export interface RunnerExtensions {
   beforeCompact(input: {
     sessionId: string;
-    reason: "manual" | "auto";
+    reason: "manual" | "auto" | "budget";
     messages: readonly Message[];
     focus?: string;
   }): Promise<{
@@ -322,7 +322,7 @@ export interface RunnerExtensions {
   }>;
   afterCompact(input: {
     sessionId: string;
-    reason: "manual" | "auto";
+    reason: "manual" | "auto" | "budget";
     messages: readonly Message[];
     focus?: string;
     model: string;
