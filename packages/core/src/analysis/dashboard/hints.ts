@@ -86,18 +86,21 @@ export const MEASURE_SYNONYMS: ReadonlyArray<{
   column: ReadonlySet<string>;
 }> = [
   {
-    goal: ["sales", "ventas", "venta", "ingreso", "revenue"],
+    goal: ["sales", "ventas", "venta", "ingreso", "revenue", "facturacion"],
     column: words(
-      "sales sale ventas venta ingresos ingreso revenue revenues amount amounts monto montos importe importes",
+      "sales sale ventas venta ingresos ingreso revenue revenues facturacion amount amounts monto montos importe importes",
     ),
   },
   {
-    goal: ["profit", "rentabilidad", "utilidad", "ganancia", "margin", "margen"],
+    goal: ["profit", "rentabilidad", "utilidad", "ganancia", "beneficio", "margin", "margen"],
     column: words(
-      "profit profits rentabilidad utilidad utilidades ganancia ganancias margin margen",
+      "profit profits rentabilidad utilidad utilidades ganancia ganancias beneficio beneficios margin margen",
     ),
   },
-  { goal: ["cost", "costo", "gasto"], column: words("cost costs costo costos gasto gastos") },
+  {
+    goal: ["cost", "costo", "coste", "gasto"],
+    column: words("cost costs costo costos coste costes gasto gastos"),
+  },
   {
     goal: ["quantity", "cantidad", "unidades", "units"],
     column: words("quantity qty cantidad units unidades"),
@@ -111,11 +114,14 @@ export function columnTokens(name: string, label: string): Set<string> {
 
 /** Dimension words that mean the same in English and Spanish (spec 6.2, goal-aware planning). */
 export const DIMENSION_SYNONYMS: ReadonlyArray<ReadonlySet<string>> = [
+  // qualifiers of a measure: a goal that says "ventas netas" names net_sales, never gross_sales
+  words("net neto neta netos netas"),
+  words("gross bruto bruta brutos brutas"),
   words("category categories categoria categorias"),
   words("status estado"),
   words("seller salesperson salesman rep vendedor vendedora vendedores"),
   words("type tipo"),
-  words("region regiones"),
+  words("region regiones regions"),
   words("channel canal"),
   words("segment segmento"),
   words("country pais"),
@@ -123,7 +129,7 @@ export const DIMENSION_SYNONYMS: ReadonlyArray<ReadonlySet<string>> = [
   words("product producto"),
   words("customer client cliente"),
   words("payment pago"),
-  words("discount descuento"),
+  words("discount descuento descuentos"),
   words("date fecha"),
   words("month mes"),
   words("year ano anio"),

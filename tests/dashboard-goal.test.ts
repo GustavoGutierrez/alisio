@@ -206,3 +206,94 @@ describe("goal-aware plan (rules)", () => {
     expect(dimensionsOf(spec)).toContain("late");
   });
 });
+
+describe("goal vocabulary: Spanish phrasing names the same columns", () => {
+  /** Gross first (the default primary), then net and profit; plus the usual dimensions. */
+  function salesSheet() {
+    return sheet(
+      [
+        column("order_date", "date", { distinct: 365, min: "2025-01-01", max: "2025-12-31" }),
+        column("region", "text", { distinct: 5, label: "Region" }),
+        column("channel", "text", { distinct: 3, label: "Channel" }),
+        column("category", "text", { distinct: 6, label: "Category" }),
+        column("order_status", "text", { distinct: 4, label: "Order status" }),
+        column("seller", "text", { distinct: 12, label: "Seller" }),
+        num("gross_sales_cop"),
+        num("net_sales_cop"),
+        num("profit_cop"),
+        num("discount_pct", { label: "Discount (%)" }),
+      ],
+      { rows: 1000 },
+    );
+  }
+  const primaryOf = async (goal: string) =>
+    (await planOf(goal, salesSheet(), "es")).choices.primaryMeasure;
+  const names = (goal: string) =>
+    goalColumns(goal, profileSheet(salesSheet())).map((m) => m.column.name);
+
+  it.each([
+    "dashboard ejecutivo de ventas netas por canal y región",
+    "ingresos netos por canal y región",
+    "ventas neto 2025 por canal",
+    "ventas neta, facturación neta",
+    "Ventas NETAS por Región",
+    "net sales by channel",
+  ])("chooses net sales for %j", async (goal) => {
+    expect(await primaryOf(goal)).toBe("net_sales_cop");
+  });
+
+  it.each([
+    "dashboard de ventas brutas por canal",
+    "ingresos brutos por región",
+    "venta bruta 2025",
+    "ventas brutos y brutas",
+    "gross sales by channel",
+  ])("chooses gross sales for %j", async (goal) => {
+    expect(await primaryOf(goal)).toBe("gross_sales_cop");
+  });
+
+  it("keeps the default for a plain sales goal", async () => {
+    expect(await primaryOf("dashboard de ventas por canal")).toBe("gross_sales_cop");
+    expect(await primaryOf("sales by channel")).toBe("gross_sales_cop");
+  });
+
+  it("names net or gross columns only when the specific word is in the goal", () => {
+    expect(names("ventas netas")).toEqual(["net_sales_cop"]);
+    expect(names("ventas brutas")).toEqual(["gross_sales_cop"]);
+    expect(names("ventas")).toEqual([]);
+    expect(names("neto")).toEqual([]);
+    expect(names("bruta")).toEqual([]);
+  });
+
+  it("maps Spanish measure and dimension words, accents and plurals included", () => {
+    expect(names("utilidades por región")).toEqual(["region", "profit_cop"].sort());
+    expect(names("beneficio")).toEqual(["profit_cop"]);
+    expect(names("ganancias")).toEqual(["profit_cop"]);
+    expect(names("descuentos")).toEqual(["discount_pct"]);
+    expect(names("canales")).toEqual(["channel"]);
+    expect(names("regiones")).toEqual(["region"]);
+    expect(names("categorías")).toEqual(["category"]);
+    expect(names("estados")).toEqual(["order_status"]);
+    expect(names("vendedores")).toEqual(["seller"]);
+    expect(names("vendedora")).toEqual(["seller"]);
+  });
+
+  it("maps cost and units words", () => {
+    const detail = sheet([
+      column("cost_cop", "real", { distinct: 900, min: "1", max: "9" }),
+      column("units", "real", { distinct: 900, min: "1", max: "9" }),
+      column("region", "text", { distinct: 5 }),
+    ]);
+    const of = (goal: string) => goalColumns(goal, profileSheet(detail)).map((m) => m.column.name);
+    expect(of("costos")).toEqual(["cost_cop"]);
+    expect(of("coste")).toEqual(["cost_cop"]);
+    expect(of("unidades")).toEqual(["units"]);
+  });
+
+  it("does not let a region goal name unrelated columns", () => {
+    expect(names("ventas por región")).toEqual(["region"]);
+    expect(names("región")).toEqual(["region"]);
+    expect(names("región")).not.toContain("discount_pct");
+    expect(names("facturación por región")).toEqual(["region"]);
+  });
+});
