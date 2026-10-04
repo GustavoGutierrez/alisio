@@ -6,6 +6,18 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.4.1",
+      date: "2026-10-04",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "`alisio install` no longer dead-ends when plugins you already have installed require an older `@alisio/sdk` than the new plugin needs: it now explains the conflict and the next command, and `alisio install --update` without a package refreshes all installed plugins in one npm call.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.4.0",
       date: "2026-10-03",
       sections: [

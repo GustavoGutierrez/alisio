@@ -4,6 +4,16 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.1] - 2026-10-04
+
+A patch release with one fix.
+
+### Fixed
+
+- `alisio install` no longer dead-ends when plugins you already have installed require an older
+  `@alisio/sdk` than the new plugin needs: it now explains the conflict and the next command, and
+  `alisio install --update` without a package refreshes all installed plugins in one npm call.
+
 ## [0.4.0] - 2026-10-03
 
 A minor release: while Alisio is 0.x it may include breaking changes. Plugins that declare

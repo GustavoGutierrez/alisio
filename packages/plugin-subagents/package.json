@@ -1,6 +1,6 @@
 {
   "name": "@alisio/plugin-subagents",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Subagents for Alisio: delegate tasks to specialized agents in separate child sessions with narrowed permissions, parallel execution, git worktree isolation and a live agent tree. Built-in, disableable plugin.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
