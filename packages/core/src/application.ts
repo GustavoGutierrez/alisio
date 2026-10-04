@@ -332,7 +332,21 @@ export async function createApplication(options: AppOptions = {}) {
     ? new HerdrBridge({}, async () => "")
     : HerdrBridge.fromEnvironment(workspace, (error) => process.stderr.write(`${error}\n`));
   // Decision providers and per-plugin directories/options are bound before any plugin loads.
-  plugins.setDecisions({ registry: decisionRegistry, service: decisionService });
+  plugins.setDecisions({
+    registry: decisionRegistry,
+    service: decisionService,
+    activation: {
+      config: () => config.decisions,
+      // Same atomic, field-preserving GLOBAL writer as `updateSetting("decisions.provider")`;
+      // the live config only changes after the write succeeded.
+      persist: async (providerId) => {
+        if (options.readOnly) throw new Error("Settings changes are unavailable under --read-only");
+        await setConfigValue({ key: "decisions.provider", value: providerId });
+        config.decisions = { ...config.decisions, provider: providerId };
+        decisionService.syncActive();
+      },
+    },
+  });
   const stateRoot = options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
   plugins.setPluginEnvironment({
     stateRoot,

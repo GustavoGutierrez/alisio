@@ -1,3 +1,4 @@
+export { type DecisionActivationDeps, requestDecisionActivation } from "./activation.ts";
 export { bindDecisions, type DecisionAnnouncer, outcomeEvent } from "./bound.ts";
 export { CircuitBreaker, type CircuitBreakerOptions, type CircuitState } from "./breaker.ts";
 export { formatDecisionStatsSection, formatDecisionsReport } from "./format.ts";

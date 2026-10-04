@@ -48,6 +48,36 @@ General); `decisions.provider` is edited as text and cleared to turn the provide
 applies to the next decision, with no restart. An ID that no plugin registered does not stop
 Alisio from starting: `/decisions` reports `provider "x" is not registered`.
 
+Editing the file by hand always works. A provider plugin can also offer to do it for you from a
+step you start yourself (for example a setup command), see
+[asking for activation](#requesting-activation).
+
+### Asking for activation {#requesting-activation}
+
+A provider plugin may call the optional, feature-detected `api.decisions.activate(providerId)` from
+a user-initiated step. Alisio, not the plugin, decides what happens:
+
+```ts
+const result = await api.decisions?.activate?.("my-provider");
+// result.status: "activated" | "already_active" | "other_provider_active" | "declined"
+//   | "needs_confirmation" | "disabled" | "unavailable"
+```
+
+- Only a provider that the calling plugin registered is accepted; anything else is `unavailable`.
+- `decisions.enabled: false` gives `disabled`. A provider already configured gives `already_active`,
+  or `other_provider_active` (with `active`) when it is a different one: your choice is never
+  overwritten.
+- When nothing is configured, Alisio asks you once: "Plugin my-provider wants to become the decision
+  provider. Dashboards will send your request goal and column names, never values, to it. Activate
+  it?" (Yes/No). Without an interactive surface (`alisio run`) the answer is `needs_confirmation`
+  and nothing changes; saying No gives `declined`.
+- On Yes, Alisio saves `decisions.provider` in the global configuration only (atomically, keeping
+  every other setting) and applies it live. If saving fails the result is `unavailable` and nothing
+  is activated.
+
+This adds no new trust boundary: a plugin you installed already runs with your permissions, and the
+confirmation is the safeguard. Installing a plugin still never activates it by itself.
+
 ## Without a provider {#without-a-provider}
 
 Alisio behaves identically. With no provider configured, or with `decisions.enabled` set to

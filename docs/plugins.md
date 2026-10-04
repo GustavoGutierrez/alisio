@@ -110,7 +110,7 @@ removed automatically when it is unloaded.
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
 | `views.register(view)` | Registers a named, read-only [data view](#data-views) hosts such as the web UI can read. Absent on a core that predates it: use `api.views?.register(...)` |
-| `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()` and `tryDecide(request, options?)`. Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
+| `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()`, `tryDecide(request, options?)` and the optional `activate(providerId)`. Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: per-plugin directories resolved by the host and created with mode `0700` on first read. Absent on a core that predates it |
 | `options` | Read-only `pluginOverrides[id].options` (or `{}`), frozen when `setup` runs. Absent on a core that predates it |
 | `compaction.register({ beforeCompact, afterCompact })` | Compaction hooks, see below |
@@ -325,7 +325,11 @@ setup(api) {
   user activates a provider with `decisions.provider` in the global configuration; installing the
   plugin is not enough. The contract, the errors and the lifecycle are in
   [Decision Intelligence](/decision-intelligence#writing-a-provider). Tools receive the consumer
-  side as `context.decisions?.tryDecide(...)`, bound to the current run.
+  side as `context.decisions?.tryDecide(...)`, bound to the current run. The optional
+  `api.decisions?.activate?.(providerId)` lets a plugin ask the host, from a user-initiated step, to
+  make a provider it registered the active one: the user confirms once and the host saves
+  `decisions.provider` globally (see
+  [asking for activation](/decision-intelligence#requesting-activation)).
 - **`api.paths`** gives `state` (`<state root>/plugins/<id>`), `config`
   (`<config home>/plugins/<id>`) and `cache` (`<state root>/plugins/<id>/cache`). The state root is
   the one analysis and artifacts use, so it follows `--db`. Use these instead of resolving XDG or

@@ -1328,12 +1328,45 @@ export interface DashboardProvenance {
   fallbacks: string[];
 }
 // ---- Decision Intelligence. Additive; feature-detect `api.decisions`. ----
+/**
+ * Outcome of `api.decisions.activate`:
+ * - `activated`: the user confirmed; the host saved `decisions.provider` and applied it live.
+ * - `already_active`: `decisions.provider` already names this provider; nothing changed.
+ * - `other_provider_active`: another provider is configured (`active`); never overwritten.
+ * - `declined`: the user answered no (or dismissed the question); nothing changed.
+ * - `needs_confirmation`: there is no interactive surface to ask (headless); nothing changed.
+ * - `disabled`: `decisions.enabled` is false; nothing changed.
+ * - `unavailable`: the id is not registered by this plugin, or saving failed (see `message`).
+ */
+export type DecisionActivationStatus =
+  | "activated"
+  | "already_active"
+  | "other_provider_active"
+  | "declined"
+  | "needs_confirmation"
+  | "disabled"
+  | "unavailable";
+export interface DecisionActivationResult {
+  status: DecisionActivationStatus;
+  /** The provider id that is (or, for `other_provider_active`, already was) configured. */
+  active?: string;
+  /** Short, path-free explanation for `unavailable`. */
+  message?: string;
+}
 export interface DecisionsApi {
   /** Registers a provider (does NOT activate it; activation is `decisions.provider` in config). */
   registerProvider(provider: DecisionProvider): () => void;
   /** True when decisions are enabled and the configured provider is registered. */
   available(): boolean;
   activeProvider(): { id: string; name: string } | null;
+  /**
+   * Optional, feature-detected (`api.decisions?.activate?.(id)`): asks the HOST to make a provider
+   * this plugin registered the active one. Installing a plugin never activates it; this is for a
+   * user-initiated step (for example a setup command). The host mediates consent (one
+   * confirmation question) and persists `decisions.provider` in the user's global configuration;
+   * it never overwrites a different configured provider. Never throws for expected outcomes.
+   */
+  activate?(providerId: string): Promise<DecisionActivationResult>;
   /**
    * Never throws for infrastructure problems: resolves null (disabled, no provider, timeout,
    * provider error, circuit open, or every answer rejected). Throws `DecisionRequestError` (a
@@ -1342,7 +1375,7 @@ export interface DecisionsApi {
   tryDecide(request: DecisionRequest, options?: DecisionOptions): Promise<DecisionResponse | null>;
 }
 /** What a tool receives in `ToolContext.decisions`: the consumer side, bound to the run. */
-export type ToolDecisions = Omit<DecisionsApi, "registerProvider">;
+export type ToolDecisions = Omit<DecisionsApi, "registerProvider" | "activate">;
 export interface DecisionProvider {
   /** `^[a-z0-9][a-z0-9.-]{0,63}$`, unique among registered providers. */
   id: string;

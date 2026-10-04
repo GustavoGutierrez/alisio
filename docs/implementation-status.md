@@ -1057,6 +1057,17 @@ función que consuma decisiones (los consumidores son especificaciones posterior
   capacidades, circuito, ajustes, error de ciclo de vida y métricas; sección «Decision Intelligence» en
   `/stats` (solo si hubo decisiones) calculada con `summarizeDecisionEvents` en las tres rutas (núcleo,
   TUI y web). En la web las estadísticas de decisiones van en el tooltip de los totales de la sesión.
+- Activación pedida por el plugin: `api.decisions.activate?(providerId)` (opcional, detectable por
+  presencia; `DecisionActivationResult` con `activated`, `already_active`, `other_provider_active`,
+  `declined`, `needs_confirmation`, `disabled`, `unavailable`). Solo acepta proveedores registrados por
+  el propio plugin; nunca sobrescribe un `decisions.provider` distinto; con `decisions.provider` vacío
+  pregunta una vez (Sí/No) por la vía interactiva del host y, sin superficie interactiva
+  (`alisio run`), devuelve `needs_confirmation`. Si se acepta, persiste solo `decisions.provider` en la
+  configuración global con el mismo escritor atómico que los ajustes en vivo y aplica el cambio en
+  caliente; si falla el guardado, `unavailable` y sin cambio en memoria. Límites: el texto de la
+  pregunta está en inglés, no hay una confirmación por plugin recordada (cada llamada con la
+  configuración vacía pregunta de nuevo) y no se añade ninguna frontera de confianza (un plugin
+  confiable ya podía actuar con los permisos del usuario; la confirmación es la salvaguarda).
 
 ### Smart Dashboard (fases 0 a 7 de la especificación)
 

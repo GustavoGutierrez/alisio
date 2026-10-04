@@ -52,6 +52,37 @@ General); `decisions.provider` se edita como texto y se borra para desactivar el
 cambio se aplica a la siguiente decisión, sin reiniciar. Un ID que ningún plugin registró no impide
 que Alisio arranque: `/decisions` informa `provider "x" is not registered`.
 
+Editar el archivo a mano siempre funciona. Un plugin proveedor también puede ofrecerse a hacerlo por
+usted desde un paso que usted inicia (por ejemplo un comando de configuración), véase
+[pedir la activación](#requesting-activation).
+
+### Pedir la activación {#requesting-activation}
+
+Un plugin proveedor puede llamar al miembro opcional y detectable por presencia
+`api.decisions.activate(providerId)` desde un paso iniciado por el usuario. Quien decide qué ocurre es
+Alisio, no el plugin:
+
+```ts
+const result = await api.decisions?.activate?.("my-provider");
+// result.status: "activated" | "already_active" | "other_provider_active" | "declined"
+//   | "needs_confirmation" | "disabled" | "unavailable"
+```
+
+- Solo se acepta un proveedor que registró el propio plugin que llama; cualquier otro da `unavailable`.
+- `decisions.enabled: false` da `disabled`. Un proveedor ya configurado da `already_active`, o
+  `other_provider_active` (con `active`) si es otro distinto: su elección nunca se sobrescribe.
+- Si no hay nada configurado, Alisio le pregunta una sola vez (el texto se muestra en inglés): "Plugin
+  my-provider wants to become the decision provider. Dashboards will send your request goal and column
+  names, never values, to it. Activate it?" (Yes/No). Sin superficie interactiva (`alisio run`) la
+  respuesta es `needs_confirmation` y no cambia nada; responder No da `declined`.
+- Con Yes, Alisio guarda `decisions.provider` solo en la configuración global (de forma atómica y
+  conservando el resto de ajustes) y lo aplica en vivo. Si el guardado falla, el resultado es
+  `unavailable` y no se activa nada.
+
+Esto no añade ninguna frontera de confianza nueva: un plugin que usted instaló ya se ejecuta con sus
+permisos, y la confirmación es la salvaguarda. Instalar un plugin sigue sin activarlo nunca por sí
+solo.
+
 ## Sin proveedor {#without-a-provider}
 
 Alisio se comporta igual. Sin proveedor configurado, o con `decisions.enabled` en `false`, una

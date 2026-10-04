@@ -29,8 +29,9 @@ import { z } from "zod";
 import type { HookFailure, RunnerExtensions } from "../core/contracts.ts";
 import type { HumanWaits } from "../core/human-wait.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import { requestDecisionActivation } from "../decisions/activation.ts";
 import type { DecisionRegistry } from "../decisions/registry.ts";
-import type { DecisionService } from "../decisions/service.ts";
+import type { DecisionService, DecisionsConfig } from "../decisions/service.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import { exists, readJson } from "../runtime/fs.ts";
@@ -230,10 +231,22 @@ export class PluginHost implements RunnerExtensions {
    * Binds Decision Intelligence. Plugins activated afterwards see `api.decisions`; without it the
    * member is absent, exactly like on a core that predates the feature.
    */
-  setDecisions(decisions: { registry: DecisionRegistry; service: DecisionService }) {
+  setDecisions(decisions: {
+    registry: DecisionRegistry;
+    service: DecisionService;
+    /**
+     * Enables the optional `api.decisions.activate`: the live decisions config and the global,
+     * atomic persistence of `decisions.provider`. Without it the member is absent.
+     */
+    activation?: { config: () => DecisionsConfig; persist: (providerId: string) => Promise<void> };
+  }) {
     this.decisionsImpl = decisions;
   }
-  private decisionsImpl?: { registry: DecisionRegistry; service: DecisionService };
+  private decisionsImpl?: {
+    registry: DecisionRegistry;
+    service: DecisionService;
+    activation?: { config: () => DecisionsConfig; persist: (providerId: string) => Promise<void> };
+  };
   /**
    * Binds the directories and options plugins receive (`api.paths`, `api.options`). Plugins
    * activated before this call, or on a host without it, see neither member.
@@ -492,12 +505,26 @@ export class PluginHost implements RunnerExtensions {
         : {}),
       ...(this.decisionsImpl
         ? {
-            decisions: (({ registry, service }) => ({
+            decisions: (({ registry, service, activation }) => ({
               // Registering never activates: `decisions.provider` in the configuration does.
               registerProvider: (provider) => track(registry.register(plugin.id, provider)),
               available: () => service.available(),
               activeProvider: () => service.activeProvider(),
               tryDecide: (request, options) => service.tryDecide(request, options),
+              ...(activation
+                ? {
+                    // Only providers THIS plugin registered; the user confirms once.
+                    activate: (providerId: string) =>
+                      requestDecisionActivation(plugin.id, providerId, {
+                        registry,
+                        config: activation.config,
+                        interactive: () => !!this.uiImpl,
+                        ask: (request) =>
+                          this.uiImpl ? this.uiImpl.askQuestions(request) : Promise.resolve({}),
+                        persist: activation.persist,
+                      }),
+                  }
+                : {}),
             }))(this.decisionsImpl) satisfies PluginAPI["decisions"],
           }
         : {}),

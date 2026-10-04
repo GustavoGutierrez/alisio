@@ -112,7 +112,7 @@ plugin se elimina automáticamente cuando se descarga.
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
 | `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
-| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()` y `tryDecide(request, options?)`. Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
+| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId)`. Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: directorios por plugin resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
 | `options` | `pluginOverrides[id].options` de solo lectura (o `{}`), congelado cuando se ejecuta `setup`. Ausente en un núcleo anterior |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
@@ -334,7 +334,11 @@ setup(api) {
   pida decisiones. El usuario activa un proveedor con `decisions.provider` en la configuración
   global; instalar el plugin no basta. El contrato, los errores y el ciclo de vida están en
   [Decision Intelligence](/es/decision-intelligence#writing-a-provider). Las herramientas reciben el
-  lado consumidor como `context.decisions?.tryDecide(...)`, ligado a la ejecución actual.
+  lado consumidor como `context.decisions?.tryDecide(...)`, ligado a la ejecución actual. El
+  miembro opcional `api.decisions?.activate?.(providerId)` permite que un plugin pida al host, desde
+  un paso iniciado por el usuario, que un proveedor que registró pase a ser el activo: el usuario
+  confirma una vez y el host guarda `decisions.provider` en la global (véase
+  [pedir la activación](/es/decision-intelligence#requesting-activation)).
 - **`api.paths`** ofrece `state` (`<raíz de estado>/plugins/<id>`), `config`
   (`<config home>/plugins/<id>`) y `cache` (`<raíz de estado>/plugins/<id>/cache`). La raíz de estado
   es la que usan el análisis y los artefactos, así que respeta `--db`. Úselas en lugar de resolver
