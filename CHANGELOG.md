@@ -4,6 +4,19 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.3] - 2026-10-04
+
+### Added
+
+- When you run the setup command of a decision provider plugin and it asks to become the decision
+  provider, the question now starts on "Yes (recommended)". The web question panel also starts a
+  single-choice question on its recommended option, as the terminal already did.
+
+### Fixed
+
+- Smart Dashboard now understands Spanish net and gross phrasing: asking for "ventas netas" or
+  "ingresos netos" charts the net sales column instead of falling back to gross sales.
+
 ## [0.4.2] - 2026-10-04
 
 ### Added

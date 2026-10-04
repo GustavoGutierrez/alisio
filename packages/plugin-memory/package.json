@@ -1,6 +1,6 @@
 {
   "name": "@alisio/plugin-memory",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Engram-style persistent memory for Alisio: SQLite FTS5 observations with topic-key upserts, memory-aware compaction, session summaries and recall tools. Built-in, disableable plugin.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",

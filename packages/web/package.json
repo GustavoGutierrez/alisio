@@ -1,6 +1,6 @@
 {
   "name": "@alisio/web",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "Alisio web UI (Preact + signals), served by @alisio/server behind `alisio serve`. Not published: the build ships inside @alisio/server.",
   "license": "MIT",

@@ -6,6 +6,24 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.4.3",
+      date: "2026-10-04",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            'When you run the setup command of a decision provider plugin and it asks to become the decision provider, the question now starts on "Yes (recommended)". The web question panel also starts a single-choice question on its recommended option, as the terminal already did.',
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            'Smart Dashboard now understands Spanish net and gross phrasing: asking for "ventas netas" or "ingresos netos" charts the net sales column instead of falling back to gross sales.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.4.2",
       date: "2026-10-04",
       sections: [
