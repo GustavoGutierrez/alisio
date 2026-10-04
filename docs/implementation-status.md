@@ -2264,8 +2264,14 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   repetición por dataset), C 5 (informativa, en paralelo con B, tiempos no comparables); la puerta de
   §11.2 falla en tokens de salida y turnos. La línea base A está limitada por el presupuesto de
   tokens, y el orden de las llamadas solo se reconstruyó en C.
-- No verificado: otros modelos en el benchmark; la variante C a mayor escala (el plugin de Laya no está
-  publicado); la línea de progreso en
+- Ejecución real con Laya (2026-10-04, interfaz web, Alisio 0.4.2, `@alisio/plugin-laya` 0.1.1,
+  `deepseek-flash`, un CSV de ventas de 4000 filas; una sola sesión, un solo dataset y un solo
+  modelo): `dashboard_generate` tardó 239 ms; Laya respondió en 196 ms con confianza 0,91 (1 decisión,
+  ninguna rechazada, sin fallback; procedencia `rules+decisions`). Del envío al primer dashboard
+  pasaron 672 s, de los cuales 607 s fueron la pregunta aclaratoria del agente esperando al usuario y
+  32 s una solicitud de permiso; el trabajo propio del agente fue de unos 33 s. El modelo construyó
+  después un segundo dashboard con Python a los 37 s. Capturas en la documentación.
+- No verificado: otros modelos en el benchmark; la variante C a mayor escala; la línea de progreso en
   un terminal real; otros navegadores, Windows y macOS; lectores de pantalla; y datasets muy grandes
   en el navegador.
 
@@ -2859,6 +2865,10 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   global no lo deshace un proyecto.
 - **Un dataset por llamada**, sin uniones entre hojas ni archivos, sin filtros interactivos y sin
   regeneración incremental con memoria del dashboard anterior (cada llamada es independiente).
+- **Sin tablas cruzadas, sin filtros de filas y sin métricas derivadas** (margen, variación
+  interanual, tasas): en la ejecución real el modelo recurrió a `python_run` para un cruce canal x
+  región y para excluir pedidos cancelados. Además, la frase «ventas netas» no coincidía con la
+  columna de ventas netas y el dashboard usó ventas brutas; corregido en 0.4.3.
 - **Solo las fechas ISO 8601** son columnas de tiempo: otros formatos de fecha no producen tendencia.
   Las marcas con zona horaria se normalizan a UTC y un texto como `"2024"` no se trata como fecha.
 - **Catálogo cerrado** (`kpi`, `line`, `area`, `bar`, `hbar`, `pie`, `donut`, `scatter`, `table`; hasta

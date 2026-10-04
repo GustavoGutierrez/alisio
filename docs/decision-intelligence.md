@@ -30,9 +30,35 @@ can use decisions too (see [Writing a provider plugin](#writing-a-provider)).
 ## Providers {#providers}
 
 A provider is a [plugin](/plugins) that registers a `DecisionProvider` with
-`api.decisions.registerProvider`. **No provider is bundled with Alisio.** An official Laya plugin
-is planned in the [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository;
-it is not published yet, and nothing here depends on it. Any plugin can supply a provider.
+`api.decisions.registerProvider`. **No provider is bundled with Alisio.** The official one is the
+Laya plugin, published as `@alisio/plugin-laya` 0.1.x from the
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository; nothing here depends
+on it. Any plugin can supply a provider. See [Installing the Laya plugin](#laya).
+
+### Installing the Laya plugin {#laya}
+
+```bash
+alisio install npm:@alisio/plugin-laya --yes
+```
+
+Then, inside Alisio:
+
+1. `/laya:setup` asks for consent first. It downloads about 678 MB of model and needs Python 3.10
+   or newer. The managed runtime takes about 6 GB of disk on machines that install the CUDA PyTorch
+   wheels and about 1 GB on CPU-only machines. When setup ends, Laya runs offline on `127.0.0.1`.
+2. At the end of a successful setup Alisio asks once whether to activate Laya and writes
+   `decisions.provider` itself (core 0.4.2 or newer; with "Yes" pre-selected from core 0.4.3).
+   If you decline or it fails, `/laya:activate` retries.
+3. Check it with `/laya:status` and `/decisions`.
+
+Setting `decisions.provider` to `laya` by hand still works (see [Activating a provider](#activating)).
+
+In this release Laya refines only the dashboard purpose, where it measured about 90 % accurate;
+column and yes/no choices were near chance, so the rules decide them.
+
+If `alisio install` fails with a peer `@alisio/sdk` conflict (`ERESOLVE`) because older plugins are
+installed, run `alisio install --update`. Right after a new npm release the first install can get the
+previous version for a few minutes; `alisio install --update` fixes that too.
 
 ### Activating a provider {#activating}
 

@@ -177,10 +177,57 @@ apagarlo para sí mismo. Puede cambiarlo desde **Ajustes → Análisis de datos*
   igual que `artifact_create`. Sin ella, las herramientas de datos siguen funcionando.
 - **Un dataset por llamada** y sin uniones. Cada llamada es independiente de los dashboards anteriores.
 - **Sin filtros interactivos.** El dashboard es una composición estática.
+- **Sin tablas cruzadas.** Un gráfico agrupa por una dimensión; un cruce como canal x región no está
+  en el catálogo.
+- **Sin filtros de filas.** No se pueden excluir filas (por ejemplo los pedidos cancelados) de los
+  datos que lee el dashboard.
+- **Sin métricas derivadas.** No se calculan margen, variación interanual ni tasas; solo se miden
+  columnas que existen en el dataset.
+
+Para cualquiera de estos casos el agente usa `python_run`, después de la herramienta o en su lugar.
+Para mantenerlo en la herramienta, pida columnas o medidas exactas que existan (por ejemplo «ventas
+netas», si el dataset tiene esa columna). Si necesita un filtro o un cruce, dígalo en el prompt: así
+el agente sabe que debe pasar a Python.
 - **Solo las fechas ISO 8601** son columnas de tiempo; otros formatos de fecha no dan tendencia. Las
   horas con zona se muestran en UTC.
 - **Sin moneda.** El dinero se muestra como número; el nombre de la columna (por ejemplo `COP`) se
   conserva en la etiqueta.
+
+## Una ejecución real con Laya {#real-run}
+
+Es una sesión real (2026-10-04) en la [interfaz web](/es/web): Alisio 0.4.2, `@alisio/plugin-laya`
+0.1.1 activo, `deepseek-flash` como modelo y un CSV de ventas de 4000 filas. El prompt pedía un
+dashboard ejecutivo con las ventas por canal y región.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="La interfaz web con el workspace demo: el prompt que pide un dashboard ejecutivo de ventas_2025.csv por canal y región, y el dashboard Ventas 2025 · Canal y Región abierto en el panel de artefactos, con seis tarjetas KPI, un gráfico de área por semana, un gráfico de barras horizontales por región y gráficos de anillo." width="1500" height="960" loading="lazy" decoding="async" />
+  <figcaption>El dashboard producido por <code>dashboard_generate</code> con Laya activo, a partir de un CSV de ventas de 4000 filas.</figcaption>
+</figure>
+
+| Medida | Valor |
+| --- | --- |
+| `dashboard_generate` en sí | 239 ms |
+| Respuesta de Laya | 196 ms, confianza 0,91, 1 decisión, ninguna rechazada, sin fallback |
+| Procedencia del artefacto | `rules+decisions`, proveedor de decisiones `laya` |
+| Del envío al primer dashboard | 672 s |
+| de los cuales la pregunta del propio agente esperando al usuario | 607 s (período y pedidos cancelados) |
+| de los cuales una solicitud de permiso | 32 s |
+| Tiempo de trabajo del propio agente | unos 33 s (inspeccionar los datos, unas consultas y luego la herramienta) |
+
+Qué esperar:
+
+- La herramienta y Laya son rápidas. Casi todo el tiempo de reloj de esta ejecución fue espera del
+  usuario.
+- El modelo construyó después un segundo dashboard con Python 37 s más tarde. Quería ventas netas (el
+  primer dashboard graficó ventas brutas porque la frase en español «ventas netas» no coincidió con
+  la columna de ventas netas; corregido en 0.4.3), un cruce canal x región y un filtro que excluyera
+  los pedidos cancelados, y los dos últimos no están en el catálogo. También escribió un CSV extra
+  en el workspace.
+- Así que el tiempo de punta a punta depende de cuánto necesite su petición más allá del catálogo.
+  Véanse las [Limitaciones](#limitations).
+
+Es una sesión, un dataset y un modelo; no es un benchmark. Para la comparación medida véanse los
+[Resultados del benchmark](#benchmark).
 
 ## Resultados del benchmark {#benchmark}
 

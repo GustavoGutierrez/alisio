@@ -171,9 +171,53 @@ applies the next time Alisio starts. It also needs `analysis.enabled`.
   `artifact_create`. Without it the data tools still work.
 - **One dataset per call** and no joins. Each call is independent of earlier dashboards.
 - **No interactive filters.** The dashboard is a static composition.
+- **No cross-tabs.** A chart groups by one dimension; a cut such as channel x region is not in the
+  catalog.
+- **No row filters.** You cannot exclude rows (for example cancelled orders) from the data the
+  dashboard reads.
+- **No derived metrics.** Margin, year-over-year change and rates are not computed; only columns
+  that exist in the dataset are measured.
+
+For any of these the agent uses `python_run`, after the tool or instead of it. To keep it on the
+tool, ask for exact columns or measures that exist (for example "net sales", if the dataset has that
+column). If you need a filter or a cut, say so in the prompt: the agent then knows to go to Python.
 - **Only ISO 8601 dates** are time columns; other date formats give no trend. Zoned times are
   shown in UTC.
 - **No currency.** Money is shown as a number; the column name (such as `COP`) is kept in the label.
+
+## A real run with Laya {#real-run}
+
+This is one real session (2026-10-04) in the [web UI](/web): Alisio 0.4.2, `@alisio/plugin-laya`
+0.1.1 active, `deepseek-flash` as the model and a 4000-row sales CSV. The prompt asked for an
+executive dashboard with sales by channel and region.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/smart_dashboard_laya_web_ui.webp" alt="The web UI with the demo workspace: the prompt asking for an executive dashboard of ventas_2025.csv by channel and region, and the dashboard Ventas 2025 · Canal y Región open in the artifact panel, with six KPI tiles, an area chart by week, a horizontal bar chart by region and donut charts." width="1500" height="960" loading="lazy" decoding="async" />
+  <figcaption>The dashboard produced by <code>dashboard_generate</code> with Laya active, from a 4000-row sales CSV.</figcaption>
+</figure>
+
+| Measure | Value |
+| --- | --- |
+| `dashboard_generate` itself | 239 ms |
+| Laya answer | 196 ms, confidence 0.91, 1 decision, none rejected, no fallback |
+| Artifact provenance | `rules+decisions`, decision provider `laya` |
+| Send to first dashboard | 672 s |
+| of which the agent's own question waiting for you | 607 s (period and cancelled orders) |
+| of which a permission prompt | 32 s |
+| The agent's own working time | about 33 s (inspecting the data, a few queries, then the tool) |
+
+What to expect:
+
+- The tool and Laya are fast. Most of the wall time in this run was waiting for the user.
+- The model then built a second dashboard with Python 37 s later. It wanted net sales (the first
+  dashboard charted gross sales because the Spanish phrasing "ventas netas" did not match the net
+  sales column; fixed in 0.4.3), a channel x region cross-cut and a filter that excludes cancelled
+  orders, and the last two are not in the catalog. It also wrote an extra CSV into the workspace.
+- So the end-to-end time depends on how much your request needs beyond the catalog. See
+  [Limitations](#limitations).
+
+This is one session, one dataset and one model; it is not a benchmark. For the measured comparison
+see [Benchmark results](#benchmark).
 
 ## Benchmark results {#benchmark}
 

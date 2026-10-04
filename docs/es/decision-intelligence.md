@@ -32,10 +32,39 @@ de plugins también pueden usar decisiones (consulte
 ## Proveedores {#providers}
 
 Un proveedor es un [plugin](/es/plugins) que registra un `DecisionProvider` con
-`api.decisions.registerProvider`. **Alisio no incluye ningún proveedor.** Hay previsto un plugin
-oficial de Laya en el repositorio [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins);
-todavía no está publicado y nada de lo descrito aquí depende de él. Cualquier plugin puede aportar
-un proveedor.
+`api.decisions.registerProvider`. **Alisio no incluye ningún proveedor.** El oficial es el plugin
+de Laya, publicado como `@alisio/plugin-laya` 0.1.x desde el repositorio
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); nada de lo descrito aquí
+depende de él. Cualquier plugin puede aportar un proveedor. Véase
+[Instalar el plugin de Laya](#laya).
+
+### Instalar el plugin de Laya {#laya}
+
+```bash
+alisio install npm:@alisio/plugin-laya --yes
+```
+
+Después, dentro de Alisio:
+
+1. `/laya:setup` pide primero su consentimiento. Descarga unos 678 MB de modelo y requiere Python
+   3.10 o superior. El runtime gestionado ocupa unos 6 GB de disco en máquinas que instalan las
+   ruedas de PyTorch con CUDA y unos 1 GB en máquinas solo con CPU. Al terminar la configuración,
+   Laya funciona sin conexión en `127.0.0.1`.
+2. Al final de una configuración correcta Alisio pregunta una vez si activar Laya y escribe él mismo
+   `decisions.provider` (core 0.4.2 o superior; con «Sí» preseleccionado desde el core 0.4.3). Si lo
+   rechaza o falla, `/laya:activate` lo reintenta.
+3. Compruébelo con `/laya:status` y `/decisions`.
+
+Definir `decisions.provider` como `laya` a mano sigue funcionando (véase
+[Activar un proveedor](#activating)).
+
+En esta versión Laya refina solo el propósito del dashboard, donde midió un 90 % de acierto; las
+elecciones de columna y de sí/no quedaron cerca del azar, así que las reglas las deciden.
+
+Si `alisio install` falla con un conflicto de peer `@alisio/sdk` (`ERESOLVE`) porque hay plugins
+antiguos instalados, ejecute `alisio install --update`. Justo después de una nueva versión en npm, la
+primera instalación puede obtener la versión anterior durante unos minutos; `alisio install --update`
+también lo resuelve.
 
 ### Activar un proveedor {#activating}
 
