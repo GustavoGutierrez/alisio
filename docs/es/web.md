@@ -88,7 +88,7 @@ a demanda.
 conversación dice lo que realmente está haciendo, a partir únicamente de los eventos y la salida en
 streaming que la página ha recibido: *Esperando al modelo…*, *Pensando…*, *Redactando la
 respuesta…*, *Leyendo tus datos (ventas.csv)…*, *Ejecutando Python (analisis.py)…*, *Publicando el
-artefacto (dashboard.html)…*, *Ejecutando* `<herramienta>`*…*, *Compactando el contexto…*, *El modelo no respondió; reintentando (1/1)…* (mientras se reenvía una
+artefacto (dashboard.html)…*, *Ejecutando* `<herramienta>`*…*, *Compactando el contexto…* (también durante un `/compact` manual, cuando no hay ejecución; el envío se bloquea hasta que termina y el borrador se conserva), *El modelo no respondió; reintentando (1/1)…* (mientras se reenvía una
 petición silenciosa, ver `limits.firstTokenRetries`), *La respuesta se cortó; reintentando en pasos más pequeños (1/2)…* (el límite de tokens de salida cortó la respuesta y se vuelve a pedir el turno, ver `limits.truncationRecoveries`) o *Esperando
 tu aprobación / tu respuesta* (estas dos nunca cuentan como bloqueo). Junto a ella aparecen el tiempo
 transcurrido de la ejecución, el del paso actual y cuándo llegó algo por última vez (*última
@@ -101,6 +101,11 @@ lectores de pantalla únicamente cuando cambia el paso o el nivel de silencio (n
 indicador se detiene con *reducir movimiento*. Tras recargar, el tiempo transcurrido continúa desde
 la hora de inicio del servidor; la hora de la *última actualización* se reinicia con la recarga,
 porque la página no puede saber cuándo llegó el frame anterior.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/compacting_web_ui.webp" alt="Una conversación durante un /compact manual: la línea de estado bajo la última respuesta dice Compactando el contexto…, el botón de enviar está deshabilitado y el borrador escrito en el cuadro de mensaje se conserva." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>Un <code>/compact</code> manual en curso: se muestra la línea de estado, el envío queda bloqueado y el borrador permanece en el cuadro de mensaje.</figcaption>
+</figure>
 
 Si una ejecución se detiene por su límite de tiempo, la conversación muestra un mensaje que nombra
 el modelo y el proveedor, los segundos de tiempo activo y cómo continuar (reintentar, cambiar de

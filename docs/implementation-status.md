@@ -2918,3 +2918,24 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   claro y oscuro. No verificado: otros navegadores, Windows o macOS, un modelo real con las nuevas pautas,
   lectores de pantalla ni impresión a PDF.
 - Guía de usuario: [Gráficos](/es/analysis#charts).
+
+### Compactación automática por presupuesto de caracteres
+
+- El presupuesto `limits.maxContextChars` (800000 por defecto) es ahora también un disparador: la
+  compactación automática se ejecuta cuando instrucciones + transcript alcanzan `threshold` (0,85) de
+  ese límite, además del criterio por ventana. Antes, con una ventana grande (DeepSeek, ~1M) el límite
+  duro se alcanzaba mucho antes de que la compactación se disparara y la ejecución fallaba.
+- Último recurso: si tras recortar la conversación sigue sobre el límite y no se intentó compactar en
+  ese turno, se ejecuta una compactación (motivo `budget`, ampliación aditiva de los eventos y hooks
+  del SDK) y se recorta de nuevo; como máximo un intento por turno. Una compactación que falla en este
+  punto se informa en el error final en vez de ocultarlo.
+- El error empieza igual (`Context budget exceeded`) y ahora dice si la compactación se ejecutó, se
+  omitió (sin frontera segura), falló o está desactivada.
+- Web: `compaction_started` y sus finales marcan un indicador `compacting` por sesión (sin ejecución,
+  como en `/compact` manual): muestra «Compactando el contexto…» y bloquea el envío, conservando el
+  borrador. El servidor sigue respondiendo `session_busy`; la TUI no cambió.
+- Límites: el recorte sigue sin tocar los argumentos de las llamadas a herramientas ni `providerData`;
+  un único turno enorme sin frontera segura todavía puede fallar (ahora con un mensaje exacto);
+  tras compactar, si la cola conservada sigue por encima del 85 %, cada turno vuelve a intentarlo.
+  Verificado con tests de módulo (runner y reductor web puro); no verificado con un DeepSeek real
+  ni con una captura del navegador.

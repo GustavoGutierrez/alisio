@@ -82,7 +82,7 @@ latest message; long sessions show the last 30 turns and load older messages on 
 doing, taken only from the events and streamed output the page has received: *Waiting for the
 model…*, *Thinking…*, *Writing the answer…*, *Reading your data (sales.csv)…*, *Running Python
 (analysis.py)…*, *Publishing the artifact (dashboard.html)…*, *Running* `<tool>`*…*, *Compacting
-context…*, *The model did not respond; retrying (1/1)…* (while a silent request is being sent
+context…* (also during a manual `/compact`, when there is no run; sending is blocked until it finishes and the typed draft is kept), *The model did not respond; retrying (1/1)…* (while a silent request is being sent
 again, see `limits.firstTokenRetries`), *The response was cut off; retrying in smaller steps (1/2)…* (the output-token limit cut the response and the turn is requested again, see `limits.truncationRecoveries`), or *Waiting for your approval / your answer* (those two never count as a stall). Next
 to it are the run's elapsed time, the time in the current step and when something last arrived
 (*last update 3 s ago*). If nothing arrives for 15 s the line says how long the run has been quiet
@@ -93,6 +93,11 @@ frames, it never invents activity. It announces itself to screen readers only wh
 quiet level changes (not every second) and its spinner stops with *reduce motion*. After a reload
 the elapsed time continues from the server's start time; the *last update* time restarts at the
 reload because the page cannot know when the previous frame arrived.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/compacting_web_ui.webp" alt="A conversation during a manual /compact: the status line under the last answer reads Compacting context…, the send button is disabled and the draft typed in the message box is kept." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>A manual <code>/compact</code> in progress: the status line is shown, sending is blocked and the draft stays in the message box.</figcaption>
+</figure>
 
 If a run is stopped by its time limit, the conversation shows a message that names the model and
 the provider, the number of seconds of active time and how to proceed (retry, switch model, raise

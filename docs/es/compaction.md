@@ -37,8 +37,11 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
   desconocida — o una ventana declarada es absurdamente grande (más de `2_000_000` tokens, para que
   `ventana × threshold` no oculte la presión real) — Alisio recurre a `limits.maxContextChars`:
   los tokens estimados (≈ caracteres / 4) que alcanzan `maxContextChars / 4` también compactan.
-  Aplica exactamente uno de los dos criterios, de modo que la barra de contexto de la TUI y el motor
-  siempre coinciden sobre cuándo se compacta. Ambos criterios miden la **petición completa**
+  Independientemente de eso, el presupuesto de caracteres es **también un disparador para todos los
+  modelos**: cuando la conversación (instrucciones + transcript) alcanza `threshold` (85 %) de
+  `limits.maxContextChars`, Alisio compacta, aunque una ventana grande (por ejemplo 1M de tokens)
+  indique que sobra espacio. La regla de la ventana y la de caracteres son alternativas: cualquiera
+  de las dos dispara la compactación. Los criterios de ventana y de reserva miden la **petición completa**
   (instrucciones, transcript y el catálogo fijo de herramientas), porque protegen lo que el modelo
   ve realmente. `maxContextChars` además sigue siendo el límite duro
   posterior a la compactación — pero allí cuenta solo el **contenido reducible**
@@ -47,6 +50,9 @@ Si el resumidor no devuelve JSON válido, su texto se usa tal cual (un checkpoin
   conversación por debajo, la cola conservada se reduce (ver más abajo) y solo una sesión
   irreducible falla con un error accionable en vez de enviar una petición descomunal. `auto: false` desactiva la
   compactación automática por completo.
+- **Último recurso**: si la conversación sigue por encima de `maxContextChars` tras el recorte
+  descrito abajo, Alisio ejecuta **una** compactación automática (motivo `"budget"`) y recorta de
+  nuevo antes de fallar. Se intenta como máximo una vez por turno.
 
 El respaldo por defecto es de `800000` caracteres (≈ `200000` tokens): una **suposición para
 ventanas desconocidas**, el mismo presupuesto de ~200k tokens que OpenCode asume para proveedores
@@ -121,7 +127,11 @@ duro y, si sigue superado, **reduce los mensajes conservados en su sitio** antes
   que ya superan el límite, de modo que ni siquiera el suelo de la reducción cabe — falla con un
   error accionable que nombra el tamaño aproximado de la conversación y sugiere `/compact`, recortar
   salidas grandes de herramientas, iniciar una sesión nueva o desactivar con `/plugins` los
-  servidores MCP innecesarios. La reducción igualmente se persiste, así que la sesión sigue
+  servidores MCP innecesarios. El mensaje dice qué hizo la compactación: `Context budget exceeded
+  (approximately N characters of conversation; limit L). Automatic compaction ran but could not
+  reduce it enough.` (o `was skipped because there is no safe boundary to summarize`, `failed
+  (<error>)` o `is disabled`). Un único turno enorme sin frontera segura todavía puede fallar, ahora
+  con ese mensaje exacto. La reducción igualmente se persiste, así que la sesión sigue
   funcionando para prompts posteriores.
 
 Los checkpoints (`summary: true`) están acotados por diseño y este paso nunca los corta.

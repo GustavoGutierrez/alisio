@@ -36,8 +36,11 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
   or `GET /models`). When the window is unknown — or a
   declared window is absurdly large (beyond `2_000_000` tokens, so `window × threshold` cannot hide
   real pressure) — Alisio falls back to `limits.maxContextChars`: est. tokens (≈ characters / 4)
-  reaching `maxContextChars / 4` also compacts. Exactly one of the two applies, so the TUI context
-  bar and the engine always agree on when compaction triggers. Both triggers measure the **full
+  reaching `maxContextChars / 4` also compacts. Independently of that, the character budget is
+  **also a trigger for every model**: once the conversation (instructions + transcript) reaches
+  `threshold` (85 %) of `limits.maxContextChars`, Alisio compacts, even when a large window (for
+  example 1M tokens) says there is plenty of room. The window rule and the character rule are
+  alternatives: either one fires compaction. Both window and fallback triggers measure the **full
   request** (instructions, transcript and the fixed tool catalog), because they protect what the
   model really sees. `maxContextChars` additionally stays as the post-compaction hard limit — but
   there it counts only **reducible content** (instructions + transcript), never the tool catalog
@@ -45,6 +48,9 @@ If the summarizer does not return valid JSON, its text is used as-is (a text-onl
   it, the retained tail is reduced (see below), and only an irreducible session fails with an
   actionable error instead of sending an oversized request. `auto: false` disables automatic
   compaction entirely.
+- **Last chance**: if the conversation is still over `maxContextChars` after the clipping below,
+  Alisio runs **one** automatic compaction (reason `"budget"`) and clips again before failing. It
+  is attempted at most once per turn.
 
 The fallback default is `800000` characters (≈ `200000` tokens): an **assumption for unknown
 windows**, the same ~200k-token budget OpenCode assumes for custom providers, so local servers that
@@ -114,7 +120,11 @@ messages in place** before sending anything:
 - Only a pathological session — `instructions` alone (plus the 4 000-character floor) still
   exceeding the limit, so even the reduction floor cannot fit — fails with an actionable error
   naming the approximate conversation size and suggesting `/compact`, trimming large tool
-  outputs, starting a new session, or disabling unneeded MCP servers with `/plugins`. The
+  outputs, starting a new session, or disabling unneeded MCP servers with `/plugins`. The message
+  says what compaction did: `Context budget exceeded (approximately N characters of conversation;
+  limit L). Automatic compaction ran but could not reduce it enough.` (or `was skipped because
+  there is no safe boundary to summarize`, `failed (<error>)`, or `is disabled`). A single huge turn
+  with no safe boundary can still fail, now with that accurate message. The
   reduction is still persisted, so the session keeps working for later prompts.
 
 Checkpoint summaries (`summary: true`) are bounded by design and are never cut by this step.
