@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Alisio
-  text: Velocidad y eficiencia para construir
-  tagline: Un arnés de agentes de programación extensible y agnóstico del proveedor para su terminal.
+  text: Construye con agentes que tú controlas
+  tagline: Un arnés de agentes agnóstico del proveedor, con su propio ciclo de herramientas: terminal, interfaz web y modo headless, herramientas con permisos, planes, subagentes, plugins y paneles de datos.
   image:
     src: /assets/logo.png
     alt: Mascota de Alisio

@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Alisio
-  text: Speed and efficiency for building
-  tagline: An extensible, provider-agnostic coding-agent harness for your terminal.
+  text: Build with agents you control
+  tagline: A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards.
   image:
     src: /assets/logo.png
     alt: Alisio mascot

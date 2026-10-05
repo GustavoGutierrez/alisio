@@ -2,7 +2,8 @@
 
 **Alisio es un arnés de agentes de programación con núcleo propio en TypeScript.** Se conecta a
 cualquier endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en
-su terminal, como TUI interactiva o en modo headless para scripts y CI.
+su terminal (como TUI interactiva o en modo headless para scripts y CI) o en su navegador con
+`alisio serve`.
 
 ## Quién lo hizo
 

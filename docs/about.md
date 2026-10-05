@@ -1,8 +1,8 @@
 # About Alisio
 
 **Alisio is a coding-agent harness with its own TypeScript core.** It connects to any
-OpenAI-compatible endpoint, drives its own tool loop and runs in your terminal, either as an
-interactive TUI or headless for scripts and CI.
+OpenAI-compatible endpoint, drives its own tool loop and runs in your terminal (an interactive TUI,
+or headless for scripts and CI) or in your browser with `alisio serve`.
 
 ## Who made it
 

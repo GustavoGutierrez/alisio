@@ -123,7 +123,7 @@ const es = {
 export default defineConfig({
   base: "/alisio/",
   title: "Alisio",
-  description: "An extensible, provider-agnostic coding-agent harness for your terminal.",
+  description: "A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards.",
   cleanUrls: true,
   lastUpdated: true,
   head: [["link", { rel: "icon", href: "/alisio/assets/favicon.png" }]],
@@ -210,7 +210,7 @@ export default defineConfig({
       label: "Español",
       lang: "es",
       link: "/es/",
-      description: "Un arnés de agentes de programación extensible y agnóstico del proveedor.",
+      description: "Un arnés de agentes agnóstico del proveedor, con su propio ciclo de herramientas: terminal, interfaz web y modo headless, herramientas con permisos, planes, subagentes, plugins y paneles de datos.",
       themeConfig: {
         nav: [
           { text: "Guía", link: "/es/quick-start" },
