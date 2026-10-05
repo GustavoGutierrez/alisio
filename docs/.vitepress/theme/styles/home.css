@@ -25,66 +25,6 @@
   border-top: 0;
 }
 
-.VPHome [data-component="brand-banner"] {
-  display: block;
-  width: min(50%, 724px);
-  height: auto;
-  margin: 24px auto;
-}
-
-.VPHome [data-component="web-ui-preview"],
-.VPHome [data-component="video"] {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 16px;
-  margin-block: 32px;
-  overflow: hidden;
-  background: var(--vp-c-bg-elv);
-  box-shadow: 0 18px 42px rgba(3, 28, 54, 0.12);
-}
-
-.VPHome [data-component="preview-copy"],
-.VPHome [data-component="video-copy"] {
-  padding: 24px 24px 0;
-}
-
-.VPHome [data-component="preview-copy"] h2,
-.VPHome [data-component="video-copy"] h2 {
-  margin: 0;
-}
-
-.VPHome [data-component="preview-copy"] p,
-.VPHome [data-component="video-copy"] p {
-  margin: 8px 0 20px;
-  color: var(--vp-c-text-2);
-}
-
-.VPHome [data-component="web-ui-preview"] figure {
-  margin: 0;
-}
-
-.VPHome [data-component="web-ui-preview"] img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  border-block: 1px solid var(--vp-c-divider);
-}
-
-.VPHome [data-component="web-ui-preview"] figcaption {
-  padding: 12px 24px 14px;
-  color: var(--vp-c-text-2);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.VPHome [data-component="video"] video {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  background: var(--alisio-deep-navy);
-}
-
 .VPNavBar.home.top {
   background-color: var(--vp-c-bg);
 }
@@ -105,21 +45,6 @@
 }
 
 @media (max-width: 959px) {
-  .VPHome [data-component="web-ui-preview"],
-  .VPHome [data-component="video"] {
-    margin-block: 24px;
-    border-radius: 12px;
-  }
-
-  .VPHome [data-component="preview-copy"],
-  .VPHome [data-component="video-copy"] {
-    padding: 20px 20px 0;
-  }
-
-  .VPHome [data-component="web-ui-preview"] figcaption {
-    padding-inline: 20px;
-  }
-
   .VPHome .VPHero {
     background-image:
       linear-gradient(
@@ -134,12 +59,6 @@
   }
 }
 
-@media (max-width: 639px) {
-  .VPHome [data-component="brand-banner"] {
-    width: min(72%, 360px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -148,11 +67,5 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-  }
-
-  .VPHome [data-component="video"] video {
-    visibility: hidden;
-    min-height: min(52vw, 500px);
-    background: center / cover no-repeat url("/assets/alisio-cli-demo-poster.jpg");
   }
 }

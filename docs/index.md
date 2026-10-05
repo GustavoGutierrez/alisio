@@ -76,50 +76,79 @@ more:
     link: "/tools#mcp"
 ---
 
+<div class="alisio-whatis" data-component="whatis">
+
 ## What is Alisio?
 
-<img data-component="brand-banner" src="/assets/banner.png" alt="Alisio — coding-agent harness" width="1447" height="680" />
+<div class="whatis-intro whatis-item" style="--i: 0">
+<div class="whatis-logo">
+<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — coding-agent harness" width="1000" height="470" decoding="async" />
+</div>
+<div class="whatis-def">
 
 Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
 endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
 headless for scripts and CI.
 
-<section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading">
+</div>
+</div>
+
+<div class="whatis-media">
+<section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading" class="whatis-item whatis-card" style="--i: 1">
   <div data-component="preview-copy">
-    <h2 id="alisio-web-ui-heading">Work across sessions in the Web UI</h2>
+    <h3 id="alisio-web-ui-heading">Work across sessions in the Web UI</h3>
     <p>Run <code>alisio serve</code> for a local browser workspace with streaming conversations, approvals and file context.</p>
   </div>
   <figure>
+    <div class="shot-frame">
     <img src="/assets/alisio-harness-web-ui.webp" alt="Alisio Harness Web UI showing workspace navigation, an active coding conversation and the file explorer" width="1833" height="990" loading="lazy" decoding="async" />
+    <button type="button" class="media-btn media-expand" data-expand="image" hidden data-label-close="Close" aria-label="View the Web UI screenshot larger"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg></button>
+    </div>
     <figcaption>The same agent core, available in a focused multi-workspace browser interface.</figcaption>
   </figure>
 </section>
-
-<section data-component="video" aria-labelledby="alisio-cli-demo-heading">
+<section data-component="video" aria-labelledby="alisio-cli-demo-heading" class="whatis-item whatis-card" style="--i: 2">
   <div data-component="video-copy">
-    <h2 id="alisio-cli-demo-heading">See the CLI in action</h2>
+    <h3 id="alisio-cli-demo-heading">See the CLI in action</h3>
     <p>A short look at Alisio running in the terminal, from a prompt to tool-assisted work.</p>
   </div>
-  <video autoplay playsinline loop muted preload="auto" poster="/assets/alisio-cli-demo-poster.jpg">
-    <source src="/assets/alisio-cli-demo.mp4" type="video/mp4" />
-    Your browser does not support the Alisio CLI demonstration video.
-  </video>
+  <div class="video-frame">
+    <video autoplay playsinline loop muted preload="metadata" width="960" height="500" poster="/assets/alisio-cli-demo-poster.jpg">
+      <source src="/assets/alisio-cli-demo.mp4" type="video/mp4" />
+      Your browser does not support the Alisio CLI demonstration video.
+    </video>
+    <button type="button" class="media-btn media-expand" data-expand="video" hidden data-label-close="Close" aria-label="View the CLI demo larger"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg></button>
+    <button type="button" class="media-btn video-toggle" data-video-toggle hidden data-label-pause="Pause the CLI demo video" data-label-play="Play the CLI demo video" aria-label="Pause the CLI demo video">
+      <svg class="icon-pause" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14M16 5v14" /></svg>
+      <svg class="icon-play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
+    </button>
+  </div>
 </section>
+</div>
 
-It includes:
+<h3 class="whatis-sub whatis-item" style="--i: 3">Under the hood</h3>
 
-- An interactive TUI and a headless CLI (`alisio run`, JSONL events, session resume).
-- Local tools for reading, searching, editing, running processes and Git, gated by explicit permissions.
-- Context compaction and a built-in persistent memory plugin.
-- [Agents](/agents): model-assisted creation, templates, project/global `.agents/agents` files and switching from the web UI and the TUI.
-- [Plan mode and plan review](/plan): a read-only plan agent, optional diagrams and a plan viewer in the web UI.
-- Python analysis with dashboards and [charts](/analysis#charts) published as artifacts.
-- Subagents: delegation to specialized agents in child sessions, with a live agent tree.
-- Hierarchical [`AGENTS.md` instructions and Agent Skills](/context).
-- An MCP client (stdio and Streamable HTTP) and a Herdr integration.
-- A typed plugin SDK (`@alisio/sdk`) for tools, commands, hooks and storage.
+<div class="whatis-facts">
+
+- **[Headless runs](/tui)** `alisio run` with JSONL events and session resume, for scripts and CI.
+- **[Local tools](/tools)** Read, search, edit, run processes and Git, all gated by explicit permissions.
+- **[Project context](/context)** Hierarchical `AGENTS.md` instructions and Agent Skills.
+
+</div>
+
+<div class="whatis-closing whatis-item" style="--i: 7">
+<div class="whatis-note">
 
 Alisio `__ALISIO_VERSION__` is a **stable** release, still pre-1.0: minor versions may include breaking changes (see [Stability and versioning](/publishing#stability-and-versioning)). Read [Known limitations](/limitations) before relying
 on it, and remember that it is **not a sandbox**: tools and plugins run with your user privileges.
 
-Next steps: [Installation](/installation) · [Quick start](/quick-start) · [Configuration](/configuration).
+</div>
+<div class="whatis-next">
+<h3>Next steps</h3>
+
+[Installation](/installation) [Quick start](/quick-start) [Configuration](/configuration)
+
+</div>
+</div>
+
+</div>

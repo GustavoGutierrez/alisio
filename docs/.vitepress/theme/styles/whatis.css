@@ -1,0 +1,666 @@
+/*
+ * Home "What is Alisio?": an opening piece, two media pieces, compact facts and
+ * a closing note. Same language as the features bento (bento.css): large pieces
+ * at 22px with a tinted shadow, compact ones at 10px and flat. Markup lives in
+ * the home markdown; content is visible by default and the hidden start state
+ * exists only under `.is-ready`, which whatis.ts sets when JS can reveal it.
+ */
+.alisio-whatis {
+  --whatis-gap: 16px;
+  --whatis-radius-lg: 22px;
+  --whatis-radius-sm: 10px;
+  --whatis-pad: 24px;
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 28px 24px 8px;
+  color: var(--vp-c-text-1);
+}
+
+.alisio-whatis ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alisio-whatis h2,
+.alisio-whatis h3,
+.alisio-whatis p,
+.alisio-whatis figure {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.alisio-whatis h2 {
+  margin-bottom: 18px;
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.alisio-whatis h2 .header-anchor {
+  display: none;
+}
+
+.alisio-whatis h3 {
+  color: var(--vp-c-text-1);
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.alisio-whatis p {
+  color: var(--vp-c-text-2);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.alisio-whatis img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.alisio-whatis a:not(.header-anchor) {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.alisio-whatis code {
+  font-size: 0.85em;
+}
+
+/* ---------- Opening piece ---------- */
+
+.whatis-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-lg);
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 14px 34px -20px rgba(3, 28, 54, 0.35);
+}
+
+.dark .whatis-intro,
+.dark .whatis-card {
+  box-shadow: 0 16px 36px -20px rgba(0, 0, 0, 0.6);
+}
+
+.whatis-logo {
+  display: grid;
+  place-items: center;
+  padding: 28px var(--whatis-pad);
+  background: var(--alisio-code-bg);
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.whatis-logo img {
+  width: min(78%, 340px);
+}
+
+.whatis-def {
+  display: flex;
+  align-items: center;
+  padding: 22px var(--whatis-pad) 26px;
+}
+
+.alisio-whatis .whatis-def p {
+  max-width: 44ch;
+  color: var(--vp-c-text-1);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+/* ---------- Media pieces ---------- */
+
+.whatis-media {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--whatis-gap);
+  margin-top: var(--whatis-gap);
+}
+
+.whatis-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-lg);
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 14px 34px -20px rgba(3, 28, 54, 0.35);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 0.8, 0.3, 1),
+    border-color 0.2s ease;
+}
+
+.whatis-card:hover,
+.whatis-card:focus-within {
+  border-color: var(--alisio-border-strong);
+}
+
+.whatis-card:hover {
+  transform: translateY(-3px);
+}
+
+.whatis-card [data-component="preview-copy"],
+.whatis-card [data-component="video-copy"] {
+  padding: 18px var(--whatis-pad) 16px;
+}
+
+.whatis-card h3 + p {
+  margin-top: 8px;
+  max-width: 52ch;
+}
+
+.whatis-card figure {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.whatis-card figure img {
+  width: 100%;
+  border-block: 1px solid var(--vp-c-divider);
+  background: var(--alisio-code-bg);
+  transition: transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.whatis-card figcaption {
+  padding: 12px var(--whatis-pad) 14px;
+  color: var(--vp-c-text-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* The frame reserves the video's own ratio, so nothing shifts when it loads. */
+.video-frame {
+  position: relative;
+  flex: 1;
+  aspect-ratio: 960 / 500;
+  overflow: hidden;
+  border-top: 1px solid var(--vp-c-divider);
+  background: var(--alisio-midnight);
+}
+
+.video-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  background: var(--alisio-midnight);
+}
+
+.media-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(168, 205, 221, 0.4);
+  border-radius: var(--whatis-radius-sm);
+  background: rgba(2, 14, 28, 0.78);
+  color: var(--alisio-panel-text);
+  cursor: pointer;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 0.8, 0.3, 1),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.media-btn[hidden] {
+  display: none;
+}
+
+.media-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.video-toggle .icon-play,
+.video-toggle[data-state="paused"] .icon-pause {
+  display: none;
+}
+
+.video-toggle[data-state="paused"] .icon-play {
+  display: block;
+  fill: currentColor;
+  stroke-width: 1.6;
+}
+
+.media-btn:hover {
+  background: rgba(8, 56, 95, 0.92);
+  border-color: var(--alisio-cyan-light);
+}
+
+.media-btn:active {
+  transform: scale(0.94);
+}
+
+.media-btn:focus-visible {
+  outline: 3px solid var(--alisio-cyan-light);
+  outline-offset: 3px;
+}
+
+.media-expand {
+  top: 12px;
+  bottom: auto;
+}
+
+.shot-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+}
+
+.shot-frame img {
+  cursor: zoom-in;
+}
+
+/* ---------- Lightbox (native dialog, built by whatis.ts) ---------- */
+
+.whatis-lightbox {
+  width: min(96vw, 1400px);
+  max-width: none;
+  max-height: 94vh;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--alisio-border);
+  border-radius: var(--whatis-radius-lg);
+  background: var(--alisio-midnight);
+  color: var(--alisio-panel-text);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+}
+
+.whatis-lightbox[open] {
+  display: flex;
+  flex-direction: column;
+  animation: whatis-zoom 0.28s cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+.whatis-lightbox::backdrop {
+  background: rgba(2, 14, 28, 0.94);
+}
+
+.lightbox-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px 10px 20px;
+  border-bottom: 1px solid #0a456e;
+}
+
+.lightbox-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lightbox-bar .media-btn {
+  position: static;
+  flex: none;
+}
+
+.lightbox-body {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.lightbox-body img {
+  display: block;
+  width: 900px;
+  max-width: none;
+  height: auto;
+}
+
+.lightbox-body video {
+  display: block;
+  width: 100%;
+  max-width: calc((94vh - 64px) * 1.92);
+  height: auto;
+  aspect-ratio: 960 / 500;
+  background: var(--alisio-midnight);
+}
+
+html.whatis-locked {
+  overflow: hidden;
+}
+
+@keyframes whatis-zoom {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Facts: compact, flat tiles ---------- */
+
+.alisio-whatis .whatis-sub {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 28px 0 12px;
+  color: var(--vp-c-text-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.whatis-sub::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--vp-c-divider);
+}
+
+.whatis-facts ul {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.whatis-facts li {
+  position: relative;
+  min-height: 56px;
+  padding: 12px 14px 12px 58px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-sm);
+  background: var(--vp-c-bg-elv);
+  color: var(--vp-c-text-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.whatis-facts li:hover,
+.whatis-facts li:focus-within {
+  background: var(--alisio-surface-hover);
+  border-color: var(--alisio-border-strong);
+}
+
+.whatis-facts li strong {
+  display: block;
+  color: var(--vp-c-text-1);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Icon box and glyph, drawn like the bento tiles (soft box, brand glyph). */
+.whatis-facts li::before,
+.whatis-facts li::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.whatis-facts li::before {
+  background: var(--vp-c-brand-soft);
+}
+
+.whatis-facts li::after {
+  background: var(--vp-c-brand-1);
+  -webkit-mask: var(--glyph) center / 18px 18px no-repeat;
+  mask: var(--glyph) center / 18px 18px no-repeat;
+  border-radius: 0;
+  transition: transform 0.2s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.whatis-facts li:hover::after {
+  transform: scale(1.1);
+}
+
+.whatis-facts li:nth-child(1) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v14H4zM7.5 10l3 2.5-3 2.5M13 15h4'/%3E%3C/svg%3E");
+}
+
+.whatis-facts li:nth-child(2) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14'/%3E%3C/svg%3E");
+}
+
+.whatis-facts li:nth-child(3) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6h11M9 12h11M9 18h11M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2'/%3E%3C/svg%3E");
+}
+
+/* ---------- Closing: stability note and next steps ---------- */
+
+.whatis-closing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: var(--whatis-gap);
+  padding: 18px var(--whatis-pad);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-sm);
+  background: var(--vp-c-bg-elv);
+}
+
+.alisio-whatis .whatis-note p {
+  max-width: 62ch;
+}
+
+.whatis-next {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alisio-whatis .whatis-next h3 {
+  color: var(--vp-c-text-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.alisio-whatis .whatis-next p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.alisio-whatis .whatis-next p a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--alisio-border-strong);
+  border-radius: var(--whatis-radius-sm);
+  color: var(--vp-c-brand-1);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 0.2s cubic-bezier(0.22, 0.8, 0.3, 1),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.alisio-whatis .whatis-next p a:hover {
+  background: var(--alisio-surface-hover);
+  border-color: var(--vp-c-brand-1);
+}
+
+.alisio-whatis .whatis-next p a:active {
+  transform: scale(0.97);
+}
+
+/* ---------- Entrance: one staggered reveal ---------- */
+
+.alisio-whatis.is-ready .whatis-item,
+.alisio-whatis.is-ready .whatis-facts li {
+  opacity: 0;
+}
+
+.alisio-whatis.is-ready.is-in .whatis-item,
+.alisio-whatis.is-ready.is-in .whatis-facts li {
+  animation: whatis-rise 0.6s cubic-bezier(0.22, 0.8, 0.3, 1) calc(var(--i, 0) * 70ms) both;
+}
+
+.alisio-whatis .whatis-facts li:nth-child(1) {
+  --i: 4;
+}
+
+.alisio-whatis .whatis-facts li:nth-child(2) {
+  --i: 5;
+}
+
+.alisio-whatis .whatis-facts li:nth-child(3) {
+  --i: 6;
+}
+
+@keyframes whatis-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Breakpoints ---------- */
+
+@media (min-width: 640px) {
+  .alisio-whatis {
+    padding-inline: 48px;
+  }
+
+  .lightbox-body img {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(94vh - 64px);
+    object-fit: contain;
+  }
+
+  .whatis-intro {
+    grid-template-columns: 5fr 6fr;
+  }
+
+  .whatis-logo {
+    border-bottom: 0;
+    border-right: 1px solid var(--vp-c-divider);
+  }
+}
+
+@media (min-width: 960px) {
+  .alisio-whatis {
+    padding-inline: 64px;
+  }
+
+  .alisio-whatis .whatis-def p {
+    font-size: 1.1875rem;
+  }
+
+  .whatis-facts ul {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .whatis-media {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .whatis-media > [data-component="web-ui-preview"] {
+    grid-column: 1 / 7;
+  }
+
+  .whatis-media > [data-component="video"] {
+    grid-column: 7 / 13;
+  }
+
+  .whatis-closing {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 32px;
+    align-items: center;
+  }
+
+  .whatis-next {
+    padding-left: 32px;
+    border-left: 1px solid var(--vp-c-divider);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alisio-whatis .whatis-item,
+  .alisio-whatis .whatis-facts li {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+
+  .alisio-whatis *,
+  .alisio-whatis *::before,
+  .alisio-whatis *::after {
+    transition: none !important;
+  }
+
+  .whatis-lightbox[open] {
+    animation: none;
+  }
+
+  .whatis-card:hover,
+  .media-btn:active,
+  .whatis-next p a:active {
+    transform: none;
+  }
+}
+
+/* Fact tiles: the title link covers the whole tile, like the bento tiles. */
+.whatis-facts li a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.whatis-facts li a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--whatis-radius-sm);
+}
+
+.whatis-facts li a:focus-visible {
+  outline: none;
+}
+
+.whatis-facts li a:focus-visible::after {
+  outline: 3px solid var(--alisio-focus-ring);
+  outline-offset: -3px;
+}
+
+.lightbox-body:has(video) {
+  overflow: hidden;
+}
+
+/* VitePress' .vp-doc adds a top margin between list items; the grid owns spacing. */
+.alisio-whatis .whatis-facts li + li {
+  margin-top: 0;
+}
