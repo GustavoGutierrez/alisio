@@ -1,9 +1,11 @@
 import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
+import BentoFeatures from "./components/BentoFeatures.vue";
 import HeroInstall from "./components/HeroInstall.vue";
 import "./styles/vars.css";
 import "./styles/home.css";
+import "./styles/bento.css";
 import "./styles/docs.css";
 
 /**
@@ -12,7 +14,11 @@ import "./styles/docs.css";
  */
 export default {
   extends: DefaultTheme,
-  Layout: () => h(DefaultTheme.Layout, null, { "home-hero-info-after": () => h(HeroInstall) }),
+  Layout: () =>
+    h(DefaultTheme.Layout, null, {
+      "home-hero-info-after": () => h(HeroInstall),
+      "home-features-before": () => h(BentoFeatures),
+    }),
   enhanceApp({ router }) {
     if (typeof window === "undefined") return;
 

@@ -19,31 +19,61 @@ hero:
       text: Escribir un plugin
       link: /es/plugins
 
-features:
-  - title: Cualquier API compatible con OpenAI
-    details: Chat Completions o Responses, con URL base, modelo, variable de la clave y parámetro de tokens configurables. Sin modelo ni credenciales incluidos.
-  - title: Interfaz de terminal y modo headless
-    details: Una TUI completa con Markdown en streaming, bloques de herramientas, barra de contexto y aprobaciones, además de un modo run headless con eventos JSONL versionados.
-  - title: Interfaz web con alisio serve
-    details: Una interfaz de navegador local, protegida con token, para varios workspaces y sesiones a la vez, con streaming, aprobaciones, la paleta de comandos / y el mismo núcleo de agente que la terminal.
-  - title: Permisos explícitos
-    details: La lectura está disponible por defecto. Escritura, procesos, MCP y mensajería entre agentes requieren flags o una aprobación interactiva.
-  - title: Compactación de contexto
-    details: Checkpoints estructurados reemplazan la historia antigua sin separar nunca una llamada a herramienta de su resultado.
-  - title: Memoria persistente
-    details: Un plugin integrado de memoria persistente sobre SQLite y FTS5, que sobrevive entre sesiones y proyectos.
-  - title: SDK de plugins tipado
-    details: Herramientas, comandos, eventos, contexto, hooks de compactación y sesión, completados del modelo y un puerto de almacenamiento SQLite.
-  - title: Agentes
-    details: Crea agentes con ayuda del modelo activo, desde plantillas o a mano, guárdalos como Markdown portable en .agents/agents y cámbialos con /agents o /agent:&lt;id&gt; en la web y la TUI.
-  - title: Modo plan y visor del plan
-    details: Un agente de plan de solo lectura propone un plan que aprueba antes de que cambie nada, con diagramas Mermaid opcionales en un visor del plan en la web.
-  - title: Dashboards y gráficos
-    details: El análisis en Python publica dashboards, informes y hojas de cálculo como artefactos; los gráficos interactivos usan un Chart.js incrustado, sin conexión.
-  - title: Subagentes
-    details: Delegación en agentes especializados en sesiones hijas, con árbol de agentes en vivo, worktrees git en paralelo y cancelación en cascada.
-  - title: MCP y Herdr
-    details: Un cliente MCP (stdio y Streamable HTTP) con conexiones perezosas sujetas a consentimiento, más una integración de reportes de Herdr.
+# Home features (rendered by BentoFeatures.vue). Keep EN and ES identical in order and keys.
+# featured: exactly 3 large cards; the 1st is the tall one. more: any number of compact tiles.
+# icon: terminal browser chart api shield layers memory plugin agent plan subagent mcp (see the component).
+featuresHeading: "Qué incluye"
+moreHeading: "También incluye"
+featured:
+  - icon: terminal
+    title: "Interfaz de terminal y modo headless"
+    details: "Una TUI completa con Markdown en streaming, bloques de herramientas y aprobaciones, más modo headless con eventos JSONL."
+    link: "/es/tui"
+  - icon: browser
+    title: "Interfaz web con alisio serve"
+    details: "Una interfaz de navegador local, con token, para varios workspaces y sesiones, sobre el mismo núcleo de agente."
+    link: "/es/web"
+  - icon: chart
+    title: "Dashboards y gráficos"
+    details: "El análisis en Python publica dashboards e informes como artefactos, con gráficos interactivos sin conexión."
+    link: "/es/smart-dashboard"
+more:
+  - icon: api
+    title: "Cualquier API compatible con OpenAI"
+    details: "Chat Completions o Responses"
+    link: "/es/configuration"
+  - icon: shield
+    title: "Permisos explícitos"
+    details: "Escribir requiere tu aprobación"
+    link: "/es/tools#permission-flags"
+  - icon: layers
+    title: "Compactación de contexto"
+    details: "Historia antigua en checkpoints seguros"
+    link: "/es/compaction"
+  - icon: memory
+    title: "Memoria persistente"
+    details: "SQLite y FTS5 entre proyectos"
+    link: "/es/memory"
+  - icon: plugin
+    title: "SDK de plugins tipado"
+    details: "Herramientas, comandos y eventos"
+    link: "/es/plugins"
+  - icon: agent
+    title: "Agentes"
+    details: "Agentes en Markdown; usa /agents"
+    link: "/es/agents"
+  - icon: plan
+    title: "Modo plan y visor del plan"
+    details: "Plan de solo lectura que apruebas"
+    link: "/es/plan"
+  - icon: subagent
+    title: "Subagentes"
+    details: "Sesiones hijas con árbol de agentes"
+    link: "/es/subagents"
+  - icon: mcp
+    title: "MCP y Herdr"
+    details: "MCP por stdio y HTTP, más Herdr"
+    link: "/es/tools#mcp"
 ---
 
 ## ¿Qué es Alisio?

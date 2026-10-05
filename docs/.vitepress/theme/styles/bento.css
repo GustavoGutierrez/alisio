@@ -1,0 +1,412 @@
+/*
+ * Home features: three large cards plus a dense field of compact tiles.
+ * Data comes from the home front matter (`featured`, `more`); layout is pure
+ * CSS so any number of tiles still fills its rows. Content is visible by
+ * default: the hidden start state exists only under `.is-ready`, which the
+ * component sets after JS is running and only when motion is allowed.
+ */
+.alisio-bento {
+  --bento-gap: 16px;
+  --bento-radius-lg: 22px;
+  --bento-radius-sm: 10px;
+  --bento-pad: 24px;
+  max-width: 1152px;
+  margin: 64px auto 0;
+  padding: 28px 24px;
+  color: var(--vp-c-text-1);
+}
+
+.alisio-bento ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alisio-bento h2,
+.alisio-bento h3,
+.alisio-bento h4 {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--vp-c-text-1);
+}
+
+.alisio-bento p {
+  margin: 0;
+}
+
+.alisio-bento .bento-heading {
+  margin-bottom: 18px;
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+/* Stretched link: the title is the link, its ::after covers the whole card. */
+.alisio-bento a.stretched {
+  color: inherit;
+  text-decoration: none;
+}
+
+.alisio-bento a.stretched::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-r, 0);
+}
+
+.alisio-bento a.stretched:focus-visible {
+  outline: none;
+}
+
+.alisio-bento a.stretched:focus-visible::after {
+  outline: 3px solid var(--alisio-focus-ring);
+  outline-offset: -3px;
+}
+
+.alisio-bento .icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+}
+
+/* ---------- Featured ---------- */
+
+.bento-featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--bento-gap);
+}
+
+.bento-featured > li {
+  min-width: 0;
+}
+
+.feature-card {
+  --card-r: var(--bento-radius-lg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--bento-radius-lg);
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 14px 34px -20px rgba(3, 28, 54, 0.35);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 0.8, 0.3, 1),
+    border-color 0.2s ease;
+}
+
+.dark .feature-card {
+  box-shadow: 0 16px 36px -20px rgba(0, 0, 0, 0.6);
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--alisio-border-strong);
+}
+
+.feature-card:active {
+  transform: translateY(0) scale(0.995);
+}
+
+.feature-copy {
+  padding: 18px var(--bento-pad);
+}
+
+.feature-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feature-copy .icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+.feature-copy h3 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.feature-copy p {
+  margin-top: 10px;
+  max-width: 46ch;
+  color: var(--vp-c-text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.visual {
+  position: relative;
+  overflow: hidden;
+  min-height: 150px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.visual img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: top left;
+  transition: transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.feature-card:hover .visual img {
+  transform: scale(1.03);
+}
+
+.visual-shot {
+  background: var(--alisio-code-bg);
+}
+
+.visual-shot img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 125%;
+  height: 125%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.visual-terminal {
+  display: flex;
+  align-items: flex-start;
+  background: var(--alisio-midnight);
+  border-top-color: #0a456e;
+}
+
+.visual-terminal pre {
+  margin: 0;
+  padding: 18px 20px;
+  overflow: hidden;
+  color: var(--alisio-panel-text);
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre;
+}
+
+.visual-terminal .dim {
+  color: var(--alisio-panel-text-muted);
+}
+
+.visual-terminal .ok {
+  color: var(--alisio-success);
+}
+
+.visual-terminal .ask {
+  color: var(--alisio-warning);
+}
+
+/* ---------- More: compact tiles ---------- */
+
+.alisio-bento .bento-more-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0 12px;
+  color: var(--vp-c-text-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.bento-more-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--vp-c-divider);
+}
+
+.bento-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bento-more > li {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.tile {
+  --card-r: var(--bento-radius-sm);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+  height: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--bento-radius-sm);
+  background: var(--vp-c-bg-elv);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 0.8, 0.3, 1),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.tile:hover {
+  background: var(--alisio-surface-hover);
+  border-color: var(--alisio-border-strong);
+}
+
+.tile:active {
+  transform: scale(0.985);
+}
+
+.tile .icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  transition: transform 0.2s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.tile:hover .icon {
+  transform: scale(1.1);
+}
+
+.tile h4 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tile p {
+  margin-top: 2px;
+  color: var(--vp-c-text-2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+/* ---------- Entrance: one staggered reveal ---------- */
+
+.alisio-bento.is-ready .bento-item {
+  opacity: 0;
+}
+
+.alisio-bento.is-ready.is-in .bento-item {
+  animation: bento-rise 0.6s cubic-bezier(0.22, 0.8, 0.3, 1) calc(var(--i, 0) * 70ms) both;
+}
+
+@keyframes bento-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Breakpoints ---------- */
+
+@media (min-width: 640px) {
+  .alisio-bento {
+    padding-inline: 48px;
+  }
+
+  .feature-card {
+    display: grid;
+    grid-template-columns: 6fr 5fr;
+    min-height: 0;
+  }
+
+  .visual {
+    min-height: 0;
+    border-top: 0;
+    border-left: 1px solid var(--vp-c-divider);
+  }
+
+  .visual-terminal {
+    border-left-color: #0a456e;
+  }
+
+  .bento-more > li {
+    flex-basis: 40%;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 959px) {
+  .visual-terminal pre {
+    padding-inline: 16px;
+    font-size: 11.5px;
+  }
+}
+
+@media (min-width: 960px) {
+  .alisio-bento {
+    padding-inline: 64px;
+  }
+
+  .bento-featured {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .bento-featured > [data-slot="1"] {
+    grid-column: 1 / 6;
+    grid-row: 1 / 3;
+  }
+
+  .bento-featured > [data-slot="2"],
+  .bento-featured > [data-slot="3"] {
+    grid-column: 6 / 13;
+  }
+
+  /* The tall card stacks its copy over a terminal that bleeds off the corner. */
+  .bento-featured > [data-slot="1"] .feature-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .bento-featured > [data-slot="1"] .visual {
+    flex: 1;
+    margin: 0 0 0 var(--bento-pad);
+    border: 1px solid #0a456e;
+    border-right: 0;
+    border-bottom: 0;
+    border-top-left-radius: 14px;
+  }
+
+  .bento-more > li {
+    flex-basis: 28%;
+  }
+
+  /* Alternating wider tiles give the field rhythm without hand placement. */
+  .bento-more > li:nth-child(6n + 2),
+  .bento-more > li:nth-child(6n + 4) {
+    flex-grow: 1.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alisio-bento .bento-item {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+
+  .alisio-bento *,
+  .alisio-bento *::before,
+  .alisio-bento *::after {
+    transition: none !important;
+  }
+
+  .feature-card:hover,
+  .feature-card:active,
+  .tile:active,
+  .tile:hover .icon,
+  .feature-card:hover .visual img {
+    transform: none;
+  }
+}
