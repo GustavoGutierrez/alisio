@@ -191,8 +191,10 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: top left;
+  /* The terminal text is the point: show the whole frame, never crop its edges. The card can be
+     stretched to match its neighbour, so any spare height is filled with the video's own navy. */
+  object-fit: contain;
+  object-position: center top;
   background: var(--alisio-midnight);
 }
 
