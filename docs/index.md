@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Alisio
   text: Build with agents you control
-  tagline: A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards.
+  tagline: "A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards."
   image:
     src: /assets/logo.png
     alt: Alisio mascot

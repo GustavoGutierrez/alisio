@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Alisio
   text: Construye con agentes que tú controlas
-  tagline: Un arnés de agentes agnóstico del proveedor, con su propio ciclo de herramientas: terminal, interfaz web y modo headless, herramientas con permisos, planes, subagentes, plugins y paneles de datos.
+  tagline: "Un arnés de agentes agnóstico del proveedor, con su propio ciclo de herramientas: terminal, interfaz web y modo headless, herramientas con permisos, planes, subagentes, plugins y paneles de datos."
   image:
     src: /assets/logo.png
     alt: Mascota de Alisio
