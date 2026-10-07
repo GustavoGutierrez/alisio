@@ -2,6 +2,7 @@ import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
 import BentoFeatures from "./components/BentoFeatures.vue";
+import HeroBackground from "./components/HeroBackground.vue";
 import HeroInstall from "./components/HeroInstall.vue";
 import { initWhatIs } from "./whatis";
 import "./styles/vars.css";
@@ -18,6 +19,7 @@ export default {
   extends: DefaultTheme,
   Layout: () =>
     h(DefaultTheme.Layout, null, {
+      "home-hero-before": () => h(HeroBackground),
       "home-hero-info-after": () => h(HeroInstall),
       "home-features-before": () => h(BentoFeatures),
     }),

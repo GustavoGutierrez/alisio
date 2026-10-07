@@ -2,11 +2,39 @@
 .VPHome .VPHero {
   position: relative;
   background-color: var(--alisio-deep-navy);
-  background-image: var(--alisio-panel-overlay), url("/assets/background-box.jpg");
+  /* Static fallback while the video loads, without JS or under reduced motion. */
+  background-image: url("/assets/background-box.jpg");
   background-repeat: no-repeat;
   background-position: center;
   background-size: cover;
   border-bottom: 0;
+}
+
+/* The looping winds video fills the hero (object-fit: cover), behind the overlay and content. */
+.alisio-hero-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  background-color: var(--alisio-deep-navy);
+}
+
+/* Dimming gradient above the video (and the static fallback), below the hero content. */
+.VPHome .VPHero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image: var(--alisio-panel-overlay);
+  pointer-events: none;
+}
+
+.VPHome .VPHero > .container {
+  position: relative;
+  z-index: 2;
 }
 
 .VPHome .VPHero .text {
@@ -45,17 +73,16 @@
 }
 
 @media (max-width: 959px) {
-  .VPHome .VPHero {
-    background-image:
-      linear-gradient(
-        180deg,
-        rgba(2, 14, 28, 0.3) 0%,
-        rgba(2, 14, 28, 0.42) 32%,
-        rgba(2, 14, 28, 0.82) 44%,
-        rgba(2, 14, 28, 0.9) 58%,
-        rgba(2, 14, 28, 0.92) 100%
-      ),
-      url("/assets/background-box.jpg");
+  /* A stronger top-to-bottom scrim keeps the stacked hero copy readable over the video. */
+  .VPHome .VPHero::after {
+    background-image: linear-gradient(
+      180deg,
+      rgba(2, 14, 28, 0.3) 0%,
+      rgba(2, 14, 28, 0.42) 32%,
+      rgba(2, 14, 28, 0.82) 44%,
+      rgba(2, 14, 28, 0.9) 58%,
+      rgba(2, 14, 28, 0.92) 100%
+    );
   }
 }
 
@@ -67,5 +94,10 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  /* No autoplaying background: the static fallback image shows instead of the video. */
+  .alisio-hero-video {
+    display: none;
   }
 }
