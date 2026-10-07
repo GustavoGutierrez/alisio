@@ -6,6 +6,19 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.4.5",
+      date: "2026-10-07",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "The chat agent selector, the Agents page and Shift+Tab list a plugin's `primary` agents on the first open, instead of only the built-ins until you visited the Agents window and came back.",
+            'Choosing "Full access" applies to the session that is already running: it stops asking for approvals from the next tool call, not only on the following turn.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.4.4",
       date: "2026-10-04",
       sections: [

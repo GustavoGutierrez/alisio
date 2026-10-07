@@ -15,6 +15,7 @@ import {
   settled,
   startTestServer,
   type TestServer,
+  until,
 } from "./server-helpers.ts";
 
 let t: TestServer | undefined;
@@ -172,6 +173,66 @@ describe("ApprovalBridge over HTTP (T-10)", () => {
       decision: "deny",
     });
     await settled(t, b.id);
+  });
+  it("applies a preset chosen mid-run to the run in flight (from its next tool call)", async () => {
+    // Two process calls in one run: the policy change must land between them.
+    const twoCalls = fakeProvider(async function* (request): AsyncGenerator<ProviderEvent> {
+      const tools = request.messages.filter((m) => m.role === "tool").length;
+      if (tools >= 2) {
+        yield* reply("done");
+        return;
+      }
+      yield {
+        type: "completed",
+        message: {
+          role: "assistant",
+          text: "",
+          calls: [
+            { id: `c${tools}`, name: "shell", arguments: JSON.stringify({ command: "echo hi" }) },
+          ],
+        },
+      };
+    });
+    t = await startTestServer({
+      provider: twoCalls,
+      app: { allowWrite: true, allowProcess: true, allowExternal: true },
+    });
+    const session = await newSession(t); // workspace-write: processes ask
+    const s = stream([session.id]);
+    await s.next((e) => e.frame.t === "snapshot");
+    const run = (
+      await t.api.post(`/api/sessions/${session.id}/prompts`, { requestId: "r1", text: "run" })
+    ).json<{ runId: string }>();
+    const first = (await s.next((e) => e.frame.t === "approval")).frame as Frame<"approval">;
+    expect(first.approval.name).toBe("shell");
+    // Full access is chosen while the run waits: the in-flight run holds the session's live
+    // policy object, so it must stop asking from its next tool call.
+    await t.api.patch(`/api/sessions/${session.id}`, { preset: "full-access" });
+    await t.api.post(`/api/approvals/${encodeURIComponent(first.approval.approvalId)}`, {
+      decision: "once",
+    });
+    const outcome = await until(async () => {
+      const askedAgain = s
+        .frames()
+        .some(
+          (f) =>
+            f.t === "approval" &&
+            (f as Frame<"approval">).approval.approvalId !== first.approval.approvalId,
+        );
+      if (askedAgain) return "asked_again";
+      if (!t) return undefined;
+      const runs = (await t.api.get(`/api/sessions/${session.id}/runs`)).json<
+        Array<{ id: string; status: string }>
+      >();
+      const current = runs.find((r) => r.id === run.runId);
+      return current && current.status !== "running" && current.status !== "queued"
+        ? "settled"
+        : undefined;
+    });
+    expect(outcome).toBe("settled");
+    expect((await t.api.get(`/api/sessions/${session.id}`)).json<{ preset: string }>().preset).toBe(
+      "full-access",
+    );
   });
 });
 

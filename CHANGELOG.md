@@ -4,6 +4,17 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.4.5] - 2026-10-07
+
+A patch release with two web fixes.
+
+### Fixed
+
+- The chat agent selector, the Agents page and Shift+Tab list a plugin's `primary` agents on the
+  first open, instead of only the built-ins until you visited the Agents window and came back.
+- Choosing "Full access" applies to the session that is already running: it stops asking for
+  approvals from the next tool call, not only on the following turn.
+
 ## [0.4.4] - 2026-10-04
 
 A patch release with two fixes.

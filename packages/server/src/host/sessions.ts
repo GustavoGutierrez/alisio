@@ -167,9 +167,30 @@ export class SessionService {
     return { policy, approvals: info?.approvals ?? false };
   }
 
-  /** Drops session-scoped grants (after a preset change). */
+  /**
+   * Applies the session's current preset to its live policy. The cached object is updated IN
+   * PLACE because an in-flight run holds that exact reference: the new effects take effect from
+   * its next tool call (like `AgentRunner.setPolicy`), not only from the next run. It also drops
+   * any "allow for this session" widening the preset no longer grants.
+   */
   resetPolicy(sessionId: string): void {
-    this.policies.delete(sessionId);
+    const policy = this.policies.get(sessionId);
+    if (!policy) return;
+    const info = presetInfos(this.ceiling).find(
+      (p) => p.id === sessionPreset(this.get(sessionId).options, this.ceiling),
+    );
+    if (!info) {
+      this.policies.delete(sessionId);
+      return;
+    }
+    policy.write = info.policy.write;
+    policy.process = info.policy.process;
+    policy.external = info.policy.external;
+    // `analysis` is a ceiling pre-grant the preset may add (full access + `--allow-analysis`);
+    // the sdk preset type omits it, but `presetInfo` sets it at runtime.
+    const analysis = (info.policy as Policy).analysis;
+    if (analysis) policy.analysis = true;
+    else delete policy.analysis;
   }
 
   /**

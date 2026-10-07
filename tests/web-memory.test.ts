@@ -11,6 +11,7 @@ import { es } from "../packages/web/src/i18n/es.ts";
 import { locale } from "../packages/web/src/i18n/index.ts";
 import {
   activeTab,
+  catalogTick,
   detail,
   failPlugins,
   isPluginEnabled,
@@ -107,6 +108,7 @@ describe("app wiring of the plugin list", () => {
     detail.value = { id: "s1", workspaceId: "w1" } as SessionDetail;
     pluginsState.value = emptyPlugins;
     sessionTab.value = "conversation";
+    catalogTick.value = {};
   });
 
   it("derives the selector and the active tab from the plugin list of the open workspace", () => {
@@ -115,6 +117,15 @@ describe("app wiring of the plugin list", () => {
     expect(isPluginEnabled("memory")).toBe(true);
     sessionTab.value = "memory";
     expect(activeTab()).toBe("memory");
+  });
+
+  it("invalidates the agent catalog when the plugin list finishes loading", () => {
+    // Plugins may register main agents: the picker and the Agents page listen on this tick, so the
+    // list they fetched before the plugins resolved is refetched instead of staying partial.
+    receivePlugins("w1", [plugin("evalua")]);
+    expect(catalogTick.value.agents).toBe(1);
+    receivePlugins("w1", [plugin("evalua")]);
+    expect(catalogTick.value.agents).toBe(2);
   });
 
   it("falls back to Conversation when the plugin gets disabled while the tab is active", () => {

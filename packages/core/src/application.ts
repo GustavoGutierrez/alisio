@@ -518,6 +518,21 @@ export async function createApplication(options: AppOptions = {}) {
         }
       }
     }
+    /**
+     * Plugin resources (`api.resources.agents`) register during activation, but the built-in
+     * subagents plugin discovers agent files in its own setup, which runs BEFORE external plugins
+     * (config, command line, plugin directories) are activated. Re-run its discovery once every
+     * plugin has registered, so the first `/api/agents` (web selector and Agents page, TUI cycle)
+     * already lists the plugin primary agents instead of waiting for a manual `/agents reload`.
+     */
+    const rediscoverAgents = plugins.commands.get("agents");
+    if (rediscoverAgents) {
+      try {
+        await rediscoverAgents("reload");
+      } catch {
+        /* keeps the built-ins: agent discovery is best-effort */
+      }
+    }
     // Every plugin has registered its providers: start the configured one in the background
     // (`activate` is bounded, never fatal and never awaited here).
     decisionService.syncActive();

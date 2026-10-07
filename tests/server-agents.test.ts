@@ -4,18 +4,21 @@
  * create → new session flow.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  AgentDefinitionInfo,
-  AgentDefinitionsOverview,
-  AgentDraft,
-  AgentInfo,
-  AgentModelOption,
-  AgentSaveResult,
-  AgentTemplateInfo,
-  CommandDescriptor,
-  SessionSummary,
+import type { BuiltinPlugin } from "@alisio/core";
+import {
+  type AgentDefinitionInfo,
+  type AgentDefinitionsOverview,
+  type AgentDraft,
+  type AgentInfo,
+  type AgentModelOption,
+  type AgentSaveResult,
+  type AgentTemplateInfo,
+  type CommandDescriptor,
+  definePlugin,
+  type SessionSummary,
 } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BUILTIN_PLUGINS } from "../packages/cli/src/builtin.ts";
@@ -42,12 +45,17 @@ afterEach(async () => {
   t = undefined;
 });
 
-async function start(options: { subagents?: boolean; readOnly?: boolean; trusted?: boolean } = {}) {
+async function start(
+  options: {
+    subagents?: boolean;
+    readOnly?: boolean;
+    trusted?: boolean;
+    extraBuiltins?: BuiltinPlugin[];
+  } = {},
+) {
   const provider = fakeProvider((request) =>
     reply(request.instructions.includes("Writing agent instructions") ? DRAFT : "ok"),
   );
-  const { mkdtemp } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
   const home = await mkdtemp(join(tmpdir(), "alisio-agents-home-"));
   vi.stubEnv("HOME", home);
   vi.stubEnv("USERPROFILE", home);
@@ -56,8 +64,10 @@ async function start(options: { subagents?: boolean; readOnly?: boolean; trusted
     app: {
       ...(options.readOnly ? { readOnly: true } : {}),
       ...(options.trusted === false ? {} : { trustProject: true }),
-      builtins:
-        options.subagents === false ? [] : BUILTIN_PLUGINS.filter((p) => p.id === "subagents"),
+      builtins: [
+        ...(options.subagents === false ? [] : BUILTIN_PLUGINS.filter((p) => p.id === "subagents")),
+        ...(options.extraBuiltins ?? []),
+      ],
     },
   });
   const wid = (await t.api.get("/api/workspaces")).json<Array<{ id: string }>>()[0]?.id ?? "";
@@ -245,6 +255,43 @@ describe("agent definitions API", () => {
     const res = await t.api.post("/api/agents/draft", { workspace: wid, description: "x" });
     expect(res.json<AgentDraft>().guidance).toBe("skill:create-agent");
     expect(provider.calls.at(-1)?.instructions).toContain("TEAM-AUTHORING-RULES");
+  });
+});
+
+describe("plugin-contributed agents", () => {
+  /** A plugin contributing an agents directory through `api.resources.agents`. */
+  const pluginWith = (dir: string): BuiltinPlugin => ({
+    id: "evalua",
+    name: "Evaluia",
+    description: "Contributes its own agents",
+    create: () =>
+      definePlugin({
+        id: "evalua",
+        name: "Evaluia",
+        version: "0.6.1",
+        apiVersion: 1,
+        setup(api) {
+          api.resources.agents(dir);
+        },
+      }),
+  });
+
+  it("lists the plugin primary agents on the first /api/agents load (no definitions request)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "alisio-plugin-agents-"));
+    await writeFile(
+      join(dir, "coordinator.md"),
+      "---\nname: coordinator\ndescription: Coordinates the run\nmode: primary\n---\nCoordinate.\n",
+    );
+    // A subagent of the same plugin stays out of the main selector (by design).
+    await writeFile(
+      join(dir, "worker.md"),
+      "---\nname: worker\ndescription: Delegated worker\nmode: subagent\n---\nWork.\n",
+    );
+    const { t, wid } = await start({ extraBuiltins: [pluginWith(dir)] });
+    // The plugin activates AFTER the built-in subagents plugin discovered agents at startup, so
+    // the server must rediscover once every plugin registered: no Agents-window visit needed.
+    const agents = (await t.api.get(`/api/agents?workspace=${wid}`)).json<AgentInfo[]>();
+    expect(agents.map((a) => a.id)).toEqual(["build", "plan", "evalua:coordinator"]);
   });
 });
 

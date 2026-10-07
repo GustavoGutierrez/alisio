@@ -138,6 +138,10 @@ export const activeTab = () => effectiveTab(sessionTab.value, memoryAvailability
 /** Stores a workspace's plugin list; a tab whose plugin is now disabled falls back to Conversation. */
 export function receivePlugins(workspace: string, list: PluginInfo[]): void {
   pluginsState.value = { workspace, list };
+  // The plugin list finishing means the workspace's resources are loaded; plugins may register
+  // main agents (`api.resources.agents`), so invalidate the agent catalog: the picker and the
+  // Agents page refetch instead of keeping the partial list fetched before the plugins resolved.
+  catalogTick.value = { ...catalogTick.value, agents: (catalogTick.value.agents ?? 0) + 1 };
   // Only a definitely disabled plugin removes its tab (a slow or failed load never bounces the user).
   if (memoryAvailability() === "disabled")
     sessionTab.value = effectiveTab(sessionTab.value, "disabled");
@@ -280,6 +284,8 @@ async function refreshPluginNames(): Promise<void> {
     const list = await api.plugins(wid);
     if (detail.value?.workspaceId !== wid) return;
     receivePlugins(wid, list);
+    // The composer's agent list and Shift+Tab cycle read `agentList`, not the `agents` tick.
+    void refreshAgents();
   } catch {
     /* labels fall back to "plugin"; the plugin list keeps its last known state */
     failPlugins(wid);
