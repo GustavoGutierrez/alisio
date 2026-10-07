@@ -2,8 +2,8 @@ import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
 import BentoFeatures from "./components/BentoFeatures.vue";
-import HeroBackground from "./components/HeroBackground.vue";
 import HeroInstall from "./components/HeroInstall.vue";
+import { initHeroVideo } from "./hero-video";
 import { initWhatIs } from "./whatis";
 import "./styles/vars.css";
 import "./styles/home.css";
@@ -19,19 +19,22 @@ export default {
   extends: DefaultTheme,
   Layout: () =>
     h(DefaultTheme.Layout, null, {
-      "home-hero-before": () => h(HeroBackground),
       "home-hero-info-after": () => h(HeroInstall),
       "home-features-before": () => h(BentoFeatures),
     }),
   enhanceApp({ router }) {
     if (typeof window === "undefined") return;
 
+    const enhanceHome = () => {
+      initWhatIs();
+      initHeroVideo();
+    };
     const afterRouteChange = router.onAfterRouteChange;
     router.onAfterRouteChange = async (to) => {
       await afterRouteChange?.(to);
-      requestAnimationFrame(initWhatIs);
+      requestAnimationFrame(enhanceHome);
     };
     // First load: wait for the hydrated page before wiring the home block.
-    requestAnimationFrame(() => requestAnimationFrame(initWhatIs));
+    requestAnimationFrame(() => requestAnimationFrame(enhanceHome));
   },
 } satisfies Theme;
