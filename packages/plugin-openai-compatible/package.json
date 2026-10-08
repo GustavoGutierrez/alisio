@@ -1,6 +1,6 @@
 {
   "name": "@alisio/plugin-openai-compatible",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Built-in OpenAI-compatible model provider for Alisio.",
   "license": "MIT",
   "type": "module",

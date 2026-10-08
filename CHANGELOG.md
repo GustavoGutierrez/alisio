@@ -4,6 +4,38 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.5.2] - 2026-10-08
+
+A patch release with one fix.
+
+### Fixed
+
+- Changing the model in a chat re-binds the session to the model's provider, so you can pick any
+  model of the current provider and keep using the same conversation even when the session's
+  original provider is gone, without starting a new chat.
+
+## [0.5.1] - 2026-10-08
+
+A patch release with one fix.
+
+### Fixed
+
+- The file panel previews PDFs again: the server no longer blocks the same-origin frame, which
+  showed "refused to connect" instead of the document.
+
+## [0.5.0] - 2026-10-07
+
+A feature release.
+
+### Added
+
+- The Trajectory tab offers a Table/Timeline switch: the timeline is an execution trace with lanes
+  for the model, the tools and the user waits, plus tokens per turn and time per tool.
+- The file panel adds a right-click menu to copy a file's absolute path, relative path or name, and
+  previews PDFs and HTML (with a source toggle for HTML).
+- Icon-theme plugins: choose one in Settings, Appearance (for example the Material Icon Theme
+  plugin).
+
 ## [0.4.5] - 2026-10-07
 
 A patch release with two web fixes.

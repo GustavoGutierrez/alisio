@@ -6,6 +6,44 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.5.2",
+      date: "2026-10-08",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "Changing the model in a chat re-binds the session to the model's provider, so you can pick any model of the current provider and keep using the same conversation even when the session's original provider is gone, without starting a new chat.",
+          ],
+        },
+      ],
+    },
+    {
+      version: "0.5.1",
+      date: "2026-10-08",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            'The file panel previews PDFs again: the server no longer blocks the same-origin frame, which showed "refused to connect" instead of the document.',
+          ],
+        },
+      ],
+    },
+    {
+      version: "0.5.0",
+      date: "2026-10-07",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "The Trajectory tab offers a Table/Timeline switch: the timeline is an execution trace with lanes for the model, the tools and the user waits, plus tokens per turn and time per tool.",
+            "The file panel adds a right-click menu to copy a file's absolute path, relative path or name, and previews PDFs and HTML (with a source toggle for HTML).",
+            "Icon-theme plugins: choose one in Settings, Appearance (for example the Material Icon Theme plugin).",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.4.5",
       date: "2026-10-07",
       sections: [
