@@ -44,7 +44,10 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
         { text: labels.herdr ?? "Herdr", link: `${prefix}/tools#herdr` },
       ],
     },
-    { text: labels.groupExtend ?? "Extend", items: ["plugins", "architecture"].map(item) },
+    {
+      text: labels.groupExtend ?? "Extend",
+      items: ["plugins", "icon-themes", "architecture"].map(item),
+    },
     {
       text: labels.groupProject ?? "Project",
       items: ["about", "style-guide", "publishing", "limitations", "contributing"].map(item),
@@ -76,6 +79,7 @@ const en = {
   "decision-intelligence": "Decision Intelligence",
   "smart-dashboard": "Smart Dashboard",
   plugins: "Writing plugins",
+  "icon-themes": "Icon themes",
   architecture: "Architecture",
   mcp: "MCP",
   herdr: "Herdr",
@@ -110,6 +114,7 @@ const es = {
   "decision-intelligence": "Decision Intelligence",
   "smart-dashboard": "Smart Dashboard",
   plugins: "Escribir plugins",
+  "icon-themes": "Temas de iconos",
   architecture: "Arquitectura",
   mcp: "MCP",
   herdr: "Herdr",

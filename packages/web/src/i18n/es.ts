@@ -594,6 +594,10 @@ export const es: Record<MessageKey, string> = {
   "agents.inUse": "En uso",
   "agents.use": "Usar en esta sesión",
   "appearance.lead": "Cómo se ve la interfaz en este navegador.",
+  "appearance.iconTheme": "Tema de iconos",
+  "appearance.iconTheme.none": "Ninguno",
+  "appearance.iconTheme.empty":
+    "No hay ningún plugin de tema de iconos instalado. Instale uno (por ejemplo @alisio/plugin-material-icons) y vuelva a abrir Ajustes.",
   "about.description":
     "Alisio es un entorno para agentes de programación que se conecta a endpoints compatibles con OpenAI y se ejecuta en la terminal o el navegador, con núcleo propio en TypeScript y herramientas, plugins y skills extensibles.",
   "about.version": "Alisio {version}",

@@ -884,6 +884,21 @@ Especificada en `specs/archive/alisio-web-memory-tab-v1.md`. Solo web; todo adit
   de bundle los cargadores perezosos de `app.tsx` pasaron a un único componente `Lazy` y la pestaña
   Trayectoria también se carga de forma perezosa.
 
+### Temas de iconos de la web (`web.iconTheme`)
+
+Punto de extensión `icon-theme` (`@alisio/sdk`) y ajuste global `web.iconTheme` (por defecto `none`)
+que selecciona **un solo** tema activo a la vez. Un plugin registra `{ id, label, manifestPath,
+iconsDir }` con rutas absolutas; el servidor sirve el catálogo (`GET /api/icon-themes`), el
+manifiesto del tema activo (`GET /api/icon-theme/manifest`) y sus SVG (`GET
+/api/icon-theme/icons/:name`, confinado al `iconsDir`, con ETag y caché inmutable). La web carga el
+manifiesto una vez y resuelve el icono por nombre exacto, extensión más larga y defecto (las
+carpetas incluyen la variante expandida), con vuelta al set de iconos inline si no hay tema o el
+icono falla. El dock (pestaña Archivos) usa estos iconos y el selector vive en Ajustes → Apariencia.
+El plugin de ejemplo `@alisio/plugin-material-icons` vendoriza el set de Material Icon Theme (MIT,
+1251 SVG + manifiesto) dentro del propio paquete. Límites de esta rebanada: se ignoran las variantes
+`_light` y los sets que no publiquen un manifiesto estilo VSCode; el paquete del plugin queda fuera
+de la lista de publicación automática de los 7 paquetes.
+
 ### Tareas en segundo plano (fase 3 de la especificación de modos, goal y tareas)
 
 Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.

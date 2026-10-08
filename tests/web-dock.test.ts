@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   absolutePath,
@@ -57,5 +58,40 @@ describe("dock paths", () => {
   it("takes the file name with its extension", () => {
     expect(fileName("a/b/c.ts")).toBe("c.ts");
     expect(fileName("c.ts")).toBe("c.ts");
+  });
+});
+
+/**
+ * The web tests have no DOM: this checks the dock's icon contract. `FileIcon` resolves the themed
+ * SVG from the icon-theme store and renders an <img> when it exists, and falls back to the inline
+ * `Icon` (folder, file or symlink) so the layout is identical. The resolution itself is unit tested
+ * in `tests/icon-theme-store.test.ts`.
+ */
+describe("dock file icons", () => {
+  const dock = readFileSync("packages/web/src/components/dock/Dock.tsx", "utf8");
+  const fileIcon = dock.slice(dock.indexOf("function FileIcon"), dock.indexOf("function Entry"));
+
+  it("renders the themed <img> from iconFor and keeps the inline Icon as fallback", () => {
+    expect(fileIcon).toMatch(/iconFor\(props\.name/);
+    expect(fileIcon).toMatch(/<img\b/);
+    expect(fileIcon).toMatch(/src=\{url\}/);
+    expect(fileIcon).toMatch(/onError=\{\(\) => setFailed\(url\)\}/);
+    expect(fileIcon).toMatch(/<Icon name=\{props\.fallback\} size=\{14\} \/>/);
+    expect(fileIcon).toMatch(/aria-hidden="true"/);
+  });
+
+  it("uses FileIcon for folders, files and symlinks instead of a raw Icon", () => {
+    expect(dock).toMatch(
+      /<FileIcon name=\{entry\.name\} dir expanded=\{open\} fallback="folder" \/>/,
+    );
+    expect(dock).toMatch(
+      /<FileIcon name=\{entry\.name\} fallback=\{entry\.type === "symlink" \? "layers" : "file"\} \/>/,
+    );
+  });
+
+  it("loads the active theme once per workspace and resets it when there is none", () => {
+    expect(dock).toMatch(/loadIconTheme\(wid\)/);
+    expect(dock).toMatch(/resetIconTheme\(\)/);
+    expect(dock).toMatch(/\[session\?\.workspaceId\]/);
   });
 });

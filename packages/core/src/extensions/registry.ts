@@ -3,7 +3,8 @@
  * load order: highest priority, then plugin id (lexicographic), then registration order
  * within the plugin. Fallbacks (built-in defaults) only win when nothing else is registered.
  */
-import type { ExtensionPoints } from "@alisio/sdk";
+import { isAbsolute } from "node:path";
+import type { ExtensionPoints, IconThemeProvider } from "@alisio/sdk";
 
 export interface ExtensionConflict {
   point: string;
@@ -39,6 +40,15 @@ export class ExtensionRegistry {
     // a throwing or malformed provider already falls back there (see `startup/index.ts`).
     if (!provider || typeof provider.id !== "string")
       throw new Error(`Invalid ${point} provider: it needs an id`);
+    if (point === "icon-theme") {
+      // The server reads these absolute paths: an empty id or a relative path can never resolve.
+      const theme = provider as IconThemeProvider;
+      if (!theme.id.trim()) throw new Error("Invalid icon-theme provider: it needs a non-empty id");
+      if (!isAbsolute(theme.manifestPath) || !isAbsolute(theme.iconsDir))
+        throw new Error(
+          "Invalid icon-theme provider: manifestPath and iconsDir must be absolute paths",
+        );
+    }
     const priority = options.priority ?? 0;
     if (!Number.isFinite(priority)) throw new Error("Extension priority must be a finite number");
     const entry: Entry = {
@@ -62,6 +72,18 @@ export class ExtensionRegistry {
   ): { provider: ExtensionPoints[K]; plugin: string } | undefined {
     const top = this.ranked(point)[0];
     return top ? { provider: top.provider as ExtensionPoints[K], plugin: top.plugin } : undefined;
+  }
+  /**
+   * Every provider of a point in resolution order (the same ranking `resolve` uses): highest
+   * priority first, plugin id and registration order as tie-breaks, fallbacks last.
+   */
+  list<K extends keyof ExtensionPoints>(
+    point: K,
+  ): Array<{ provider: ExtensionPoints[K]; plugin: string }> {
+    return this.ranked(point).map((entry) => ({
+      provider: entry.provider as ExtensionPoints[K],
+      plugin: entry.plugin,
+    }));
   }
   /** Equal-priority, non-fallback competitors for each point's winning slot. */
   conflicts(point?: keyof ExtensionPoints): ExtensionConflict[] {

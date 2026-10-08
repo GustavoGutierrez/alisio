@@ -586,6 +586,10 @@ export const en = {
   "agents.inUse": "In use",
   "agents.use": "Use in this session",
   "appearance.lead": "How the interface looks in this browser.",
+  "appearance.iconTheme": "Icon theme",
+  "appearance.iconTheme.none": "None",
+  "appearance.iconTheme.empty":
+    "No icon theme plugin is installed. Install one (for example @alisio/plugin-material-icons) and reopen Settings.",
   "about.description":
     "Alisio is a coding-agent harness that connects to OpenAI-compatible endpoints and runs in your terminal or browser, with its own TypeScript core and extensible tools, plugins and skills.",
   "about.version": "Alisio {version}",

@@ -98,6 +98,14 @@
   color: var(--muted);
 }
 
+/* A themed SVG icon (active icon theme) keeps the same 14px box as the inline icons. */
+.fileIcon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
 .spacer13 {
   width: 13px;
   flex-shrink: 0;

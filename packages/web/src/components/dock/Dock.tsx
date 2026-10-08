@@ -25,10 +25,11 @@ import {
   setDockOpen,
   toggleDir,
 } from "../../store/dock.ts";
+import { iconFor, loadIconTheme, resetIconTheme } from "../../store/icon-theme.ts";
 import { copyText } from "../../util/clipboard.ts";
 import { absolutePath, extensionOf, fileName } from "../../util/files.ts";
 import { CopyButton } from "../CopyButton.tsx";
-import { Icon } from "../icons.tsx";
+import { Icon, type IconName } from "../icons.tsx";
 import styles from "./dock.module.css";
 
 const TABS: DockTab[] = ["files", "changes", "preview", "tasks"];
@@ -73,6 +74,27 @@ function Dir({ path, depth }: { path: string; depth: number }) {
   );
 }
 
+/** The entry's icon: the active theme's SVG when it resolves, else the inline icon. */
+function FileIcon(props: { name: string; dir?: boolean; expanded?: boolean; fallback: IconName }) {
+  const url = iconFor(props.name, props.dir ? { dir: true, expanded: props.expanded } : {});
+  // A failed image (server 404/offline) falls back to the inline icon for that URL.
+  const [failed, setFailed] = useState<string | undefined>(undefined);
+  if (url && url !== failed)
+    return (
+      <img
+        class={styles.fileIcon}
+        src={url}
+        width={14}
+        height={14}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        onError={() => setFailed(url)}
+      />
+    );
+  return <Icon name={props.fallback} size={14} />;
+}
+
 function Entry({ entry, depth }: { entry: FileEntry; depth: number }) {
   const open = expanded.value.has(entry.path);
   const selected = preview.value?.path === entry.path;
@@ -87,7 +109,7 @@ function Entry({ entry, depth }: { entry: FileEntry; depth: number }) {
           onClick={() => toggleDir(entry.path)}
         >
           <Icon name={open ? "chevronDown" : "chevronRight"} size={13} />
-          <Icon name="folder" size={14} />
+          <FileIcon name={entry.name} dir expanded={open} fallback="folder" />
           <span class={styles.name}>{entry.name}</span>
         </button>
         {open ? <Dir path={entry.path} depth={depth + 1} /> : null}
@@ -109,7 +131,7 @@ function Entry({ entry, depth }: { entry: FileEntry; depth: number }) {
         onClick={() => void openInDock(entry.path)}
       >
         <span class={styles.spacer13} />
-        <Icon name={entry.type === "symlink" ? "layers" : "file"} size={14} />
+        <FileIcon name={entry.name} fallback={entry.type === "symlink" ? "layers" : "file"} />
         <span class={styles.name}>{entry.name}</span>
       </button>
     </li>
@@ -288,6 +310,11 @@ export function Dock(props: { width?: number } = {}) {
   const state = preview.value;
   useEffect(() => {
     if (session?.workspaceId) void loadDir("");
+  }, [session?.workspaceId]);
+  useEffect(() => {
+    const wid = session?.workspaceId;
+    if (wid) void loadIconTheme(wid);
+    else resetIconTheme();
   }, [session?.workspaceId]);
   useEffect(() => {
     if (tab === "changes") void loadChanges();

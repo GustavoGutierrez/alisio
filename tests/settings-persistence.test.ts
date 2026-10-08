@@ -11,6 +11,7 @@ import {
   isSettableSettingKey,
   loadConfig,
   setConfigValue,
+  settableSettings,
 } from "../packages/core/src/index.ts";
 import { ProjectContext } from "../packages/core/src/resources/context.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
@@ -134,6 +135,27 @@ describe("setConfigValue", () => {
     expect(loaded.context.claudeMdFallback).toBe(false);
     expect(loaded.tui.paddingX).toBe(1);
     expect(loaded.pluginHooks.sessionEndTimeoutMs).toBe(10_000);
+  });
+
+  it("defaults web.iconTheme to none and exposes it as a settable key", async () => {
+    const { configFile, root } = await fixture();
+    expect(isSettableSettingKey("web.iconTheme")).toBe(true);
+    expect(settableSettings().find((setting) => setting.key === "web.iconTheme")).toEqual({
+      key: "web.iconTheme",
+      kind: "string",
+    });
+    // Schema default: no theme, so the built-in inline icons keep being used.
+    expect((await loadConfig(root)).web.iconTheme).toBe("none");
+
+    await setConfigValue({ key: "web.iconTheme", value: "material-icons" });
+    const saved = JSON.parse(await readFile(configFile, "utf8"));
+    expect(saved.web).toEqual({ iconTheme: "material-icons" });
+    expect((await loadConfig(root)).web.iconTheme).toBe("material-icons");
+    // The leaf is validated by the schema: an empty id is rejected and nothing is written.
+    await expect(setConfigValue({ key: "web.iconTheme", value: "" })).rejects.toThrow(
+      /Invalid value for web\.iconTheme/,
+    );
+    expect((await loadConfig(root)).web.iconTheme).toBe("material-icons");
   });
 
   it("persists the active agent and reasoning effort globally, defaulting active to build", async () => {

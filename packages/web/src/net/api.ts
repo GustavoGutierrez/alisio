@@ -88,6 +88,21 @@ export interface MessagePage {
   hasMore: boolean;
 }
 
+/**
+ * A VSCode-style icon theme as served by the server. Only the lookup maps the web resolves are
+ * typed; the server sends the manifest as-is.
+ */
+export interface IconThemeManifest {
+  iconDefinitions?: Record<string, { iconPath: string }>;
+  file?: string;
+  folder?: string;
+  folderExpanded?: string;
+  fileNames?: Record<string, string>;
+  fileExtensions?: Record<string, string>;
+  folderNames?: Record<string, string>;
+  folderNamesExpanded?: Record<string, string>;
+}
+
 /** `GET /api/artifacts/:aid`: the reference plus its files and public provenance. */
 export interface ArtifactDetail extends ArtifactRef {
   entry?: string;
@@ -448,6 +463,19 @@ export class ApiClient {
     this.request<AnalysisStatus>("GET", `/api/analysis?workspace=${enc(wid)}`);
   setSetting = (wid: string, key: string, value: string | number | boolean | null) =>
     this.request<{ message: string }>("PATCH", "/api/settings", { workspace: wid, key, value });
+  // ---- Icon themes (web UI): the catalog, the active theme's manifest and its SVGs.
+  /** Available icon themes and the active one for `workspace` (`none` when no theme is active). */
+  iconThemes = (workspace: string) =>
+    this.request<{ active: string; themes: Array<{ id: string; label: string }> }>(
+      "GET",
+      `/api/icon-themes?workspace=${enc(workspace)}`,
+    );
+  /** The active theme's manifest; the server answers 404 when no theme is active. */
+  iconThemeManifest = (workspace: string) =>
+    this.request<IconThemeManifest>("GET", `/api/icon-theme/manifest?workspace=${enc(workspace)}`);
+  /** URL of one SVG of the active icon theme (served by the server, never bundled). */
+  iconThemeIconUrl = (workspace: string, name: string): string =>
+    `/api/icon-theme/icons/${encodeURIComponent(name)}?workspace=${enc(workspace)}`;
   providers = (wid?: string) =>
     this.request<ProvidersOverview>("GET", `/api/providers${wid ? `?workspace=${enc(wid)}` : ""}`);
   providerModels = (wid: string) =>

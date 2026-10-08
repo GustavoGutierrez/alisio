@@ -888,12 +888,28 @@ export interface SearchProvider {
   id: string;
   search(query: string, options?: { signal?: AbortSignal }): Promise<SearchResult[]>;
 }
+/**
+ * A VSCode-style icon theme served by the host: one manifest plus a directory of SVGs. Paths are
+ * absolute because the host resolves them against the plugin's own installation, not the workspace.
+ */
+export interface IconThemeProvider {
+  /** Stable theme id: lowercase letters, digits and dashes. */
+  id: string;
+  /** Human label shown by the theme picker. */
+  label: string;
+  /** Absolute path to a VSCode-style icon theme manifest JSON. */
+  manifestPath: string;
+  /** Absolute directory with the SVG files. */
+  iconsDir: string;
+}
 /** Typed map of extension points; new points are added here without breaking existing ones. */
 export interface ExtensionPoints {
   mascot: MascotProvider;
   "startup-screen": StartupScreenProvider;
   /** Replaces the built-in websearch resolution (SearXNG/DuckDuckGo/configured/native) entirely. */
   websearch: SearchProvider;
+  /** Contributes a selectable icon theme for the web UI (one active at a time). */
+  "icon-theme": IconThemeProvider;
 }
 export interface ExtensionOptions {
   /** Higher wins (default 0). Ties break by plugin id, then registration order. */

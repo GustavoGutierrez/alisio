@@ -1546,6 +1546,10 @@ export async function createApplication(options: AppOptions = {}) {
             config.tasks = { ...config.tasks, [leaf]: Number(value) };
             break;
           }
+          case "web.iconTheme":
+            // Read live by the icon-theme routes on the next request; `"none"` clears the theme.
+            config.web = { ...config.web, iconTheme: String(value) };
+            break;
           case "websearch.provider":
             // Mutated in place (same object identity) so the tool chain's per-call
             // `websearchCtx.config` sees the new provider on the very next search call.

@@ -91,6 +91,8 @@ export const OCI_IMAGE_PATTERN = /^[a-zA-Z0-9][^\s@]*@sha256:[a-f0-9]{64}$/;
 const GLOBAL_ONLY_ANALYSIS = ["runtime", "oci", "retention"] as const;
 /** Decision Intelligence keys only the user (global) layer decides: the provider and telemetry. */
 const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;
+/** Web UI keys only the user (global) layer decides: the server picks which theme it serves. */
+const GLOBAL_ONLY_WEB = ["iconTheme"] as const;
 /** JSON values a plugin may receive as options (`pluginOverrides[id].options`). */
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -518,6 +520,17 @@ const configObjectSchema = z
       })
       .strict()
       .default(() => ({ active: "build" })),
+    /**
+     * Web UI preferences. `iconTheme` names the active `icon-theme` extension point provider
+     * (`"none"` keeps the built-in inline icons). GLOBAL ONLY: the server decides which theme its
+     * files serve, so a repository cannot pick one.
+     */
+    web: z
+      .object({
+        iconTheme: z.string().trim().min(1).max(100).default("none"),
+      })
+      .strict()
+      .default(() => ({ iconTheme: "none" })),
   })
   .strict()
   .superRefine((config, context) => {
@@ -684,6 +697,10 @@ export async function loadConfigWithProvenance(
       object.decisions && typeof object.decisions === "object" && !Array.isArray(object.decisions)
         ? (object.decisions as Record<string, unknown>)
         : {};
+    const webRaw =
+      object.web && typeof object.web === "object" && !Array.isArray(object.web)
+        ? (object.web as Record<string, unknown>)
+        : {};
     const overridesRaw =
       object.pluginOverrides &&
       typeof object.pluginOverrides === "object" &&
@@ -695,6 +712,7 @@ export async function loadConfigWithProvenance(
       ...GLOBAL_ONLY_DECISIONS.filter((key) => key in decisionsRaw).map(
         (key) => `decisions.${key}`,
       ),
+      ...GLOBAL_ONLY_WEB.filter((key) => key in webRaw).map((key) => `web.${key}`),
       ...Object.entries(overridesRaw)
         .filter(
           ([, entry]) =>
@@ -807,6 +825,11 @@ export async function loadConfigWithProvenance(
           ...selected.config.tasks,
           retentionDays: global.config.tasks.retentionDays,
         };
+        continue;
+      }
+      if (key === "web") {
+        // `iconTheme` is global-only (the server decides which theme its files serve).
+        overlaid.web = { ...selected.config.web, iconTheme: global.config.web.iconTheme };
         continue;
       }
       (overlaid as unknown as Record<string, unknown>)[key] = (
@@ -976,6 +999,7 @@ const SETTABLE_SECTIONS = {
   tasks: configObjectSchema.shape.tasks.removeDefault(),
   goal: configObjectSchema.shape.goal.removeDefault(),
   plan: configObjectSchema.shape.plan.removeDefault(),
+  web: configObjectSchema.shape.web.removeDefault(),
 } as const;
 const ANALYSIS_LIMITS = SETTABLE_SECTIONS.analysis.shape.limits.removeDefault();
 const ANALYSIS_RETENTION = SETTABLE_SECTIONS.analysis.shape.retention.removeDefault();
@@ -1025,6 +1049,7 @@ const SETTABLE_KEYS = {
   "goal.blockedRepeats": SETTABLE_SECTIONS.goal.shape.blockedRepeats,
   "plan.diagrams": SETTABLE_SECTIONS.plan.shape.diagrams,
   "plan.maxDiagrams": SETTABLE_SECTIONS.plan.shape.maxDiagrams,
+  "web.iconTheme": SETTABLE_SECTIONS.web.shape.iconTheme,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

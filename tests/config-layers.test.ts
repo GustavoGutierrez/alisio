@@ -789,3 +789,19 @@ describe("analysis.smartDashboard across layers", () => {
     await expect(setConfigValue({ key: "analysis.smartDashboard", value: "no" })).rejects.toThrow();
   });
 });
+
+describe("web.iconTheme across layers", () => {
+  it("is global-only: a project layer cannot pick the theme, and the ignored key is reported", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), { web: { iconTheme: "material" } });
+    await json(join(workspace, ".alisio", "config.json"), { web: { iconTheme: "untrusted" } });
+    const { config, provenance } = await loadConfigWithProvenance(workspace, {
+      trustProject: true,
+    });
+    expect(config.web.iconTheme).toBe("material");
+    expect(provenance.ignored).toContain("web.iconTheme");
+    // Without a global value, a project-only theme never applies: the default keeps inline icons.
+    await json(join(global, "config.json"), {});
+    expect((await loadConfig(workspace, { trustProject: true })).web.iconTheme).toBe("none");
+  });
+});

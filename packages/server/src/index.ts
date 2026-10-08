@@ -53,6 +53,7 @@ import { registerFileRoutes } from "./routes/files.ts";
 import { registerFolderRoutes } from "./routes/folders.ts";
 import { registerGoalRoutes } from "./routes/goal.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
+import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
@@ -476,6 +477,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   });
   registerFolderRoutes(router, { picker, browser: loopback, signal: pickerAbort.signal });
   registerWorkspaceRoutes(router, { workspaces, catalog, scheduler });
+  registerIconThemeRoutes(router, { workspaces });
   registerSessionRoutes(router, { catalog, workspaces, sessions, scheduler });
   registerSessionViewRoutes(router, { catalog, sessions });
   registerPluginViewRoutes(router, {
