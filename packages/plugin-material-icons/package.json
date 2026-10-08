@@ -1,6 +1,6 @@
 {
   "name": "@alisio/plugin-material-icons",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Material Icon Theme for the Alisio web UI: a self-contained icon-theme provider with the vendored Material Icon Theme SVGs and VSCode-style manifest.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
