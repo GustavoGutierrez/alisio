@@ -1641,6 +1641,30 @@ export async function createApplication(options: AppOptions = {}) {
         sessionProviders.set(session.id, runtime);
         return session;
       },
+      /**
+       * Re-binds an existing session to the provider that owns `model` (a configured profile), else
+       * to the active provider. The session keeps a single provider+model binding, so choosing a
+       * model of the now-active provider makes it usable even when the session's original provider
+       * is gone. The persisted transcript is provider-neutral: no new session is needed.
+       */
+      async rebindSession(sessionId: string, model?: string) {
+        const requested = model?.trim();
+        if (requested) {
+          const target = await resolveModel(requested).catch(() => undefined);
+          if (target) {
+            const runtime = await runtimeFor(target);
+            store.updateBinding(sessionId, runtime.id, target.model.id);
+            sessionProviders.set(sessionId, runtime);
+            return { provider: runtime.id, model: target.model.id };
+          }
+        }
+        // No configured profile owns it (or none requested): keep the active provider.
+        const next = requested || provider.model;
+        store.updateBinding(sessionId, provider.id, next);
+        sessionProviders.set(sessionId, provider.currentProvider);
+        retainedProviders.add(provider.currentProvider);
+        return { provider: provider.id, model: next };
+      },
       /** Persists and activates only after construction succeeds; programmatic overrides stay fixed. */
       async activateProvider(
         id: string,

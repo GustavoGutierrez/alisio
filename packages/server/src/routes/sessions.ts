@@ -145,7 +145,20 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
       if (ctx.scheduler.busy(session.id))
         throw new HttpError("session_busy", "Cannot change the model while a run is active");
       const { app } = await sessions.app(session);
-      app.runner.setModel(session.id, patch.model);
+      // Changing the model re-binds the session to the provider that owns it: the persisted
+      // transcript is provider-neutral, so a model of the now-active provider is usable even when
+      // the session's original provider is gone (no fresh session needed).
+      try {
+        await app.rebindSession(session.id, patch.model);
+      } catch (error) {
+        throw new HttpError(
+          "validation_failed",
+          error instanceof Error ? error.message : String(error),
+          {
+            fields: ["model"],
+          },
+        );
+      }
     }
     const options: Record<string, unknown> = {};
     if (patch.effort !== undefined) options.effort = patch.effort ?? undefined;

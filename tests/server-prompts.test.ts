@@ -62,6 +62,21 @@ describe("sessions", () => {
     expect((await t.api.get("/api/sessions/nope")).status).toBe(404);
   });
 
+  it("re-binds the session to the active provider when the model changes", async () => {
+    t = await startTestServer();
+    const session = await newSession(t);
+    const patched = await t.api.patch(`/api/sessions/${session.id}`, { model: "other-model" });
+    expect(patched.status).toBe(200);
+    // Same provider (the active one), new model: the session is rebound instead of only relabelled.
+    expect(patched.json<SessionDetail>()).toMatchObject({
+      model: "other-model",
+      provider: session.provider,
+    });
+    // The next run uses the rebound binding (the transcript is provider-neutral).
+    await prompt(t, session.id, "rebind-1");
+    expect(await settled(t, session.id)).toMatchObject({ status: "completed" });
+  });
+
   it("refuses presets above the capability ceiling (403 capability_ceiling)", async () => {
     t = await startTestServer({ app: { readOnly: true } });
     const session = await newSession(t);
