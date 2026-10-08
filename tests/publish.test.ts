@@ -266,6 +266,7 @@ describe("publish script: stable versions", () => {
         "plugin-memory": "@alisio/plugin-memory",
         "plugin-subagents": "@alisio/plugin-subagents",
         "plugin-openai-compatible": "@alisio/plugin-openai-compatible",
+        "plugin-material-icons": "@alisio/plugin-material-icons",
         server: "@alisio/server",
         cli: "@alisio/alisio-code",
       })) {
@@ -279,6 +280,7 @@ describe("publish script: stable versions", () => {
       expect(plan.map((p) => `${p.name}@${p.version}`)).toEqual([
         "@alisio/sdk@0.1.0",
         "@alisio/core@0.1.0",
+        "@alisio/plugin-material-icons@0.1.0",
         "@alisio/plugin-memory@0.1.0",
         "@alisio/plugin-openai-compatible@0.1.0",
         "@alisio/plugin-subagents@0.1.0",
@@ -314,9 +316,9 @@ describe("publish script: stable versions", () => {
 });
 
 describe("repository release state", () => {
-  it("keeps the seven publishable packages and the web package on one version", () => {
+  it("keeps the eight publishable packages and the web package on one version", () => {
     const plan = planPublish({ all: true, packages: [], dryRun: true, build: true });
-    expect(plan).toHaveLength(7);
+    expect(plan).toHaveLength(8);
     const web = JSON.parse(readFileSync(join("packages", "web", "package.json"), "utf8")) as {
       version: string;
     };
