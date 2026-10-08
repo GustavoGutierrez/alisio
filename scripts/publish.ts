@@ -52,7 +52,6 @@ export const PACKAGE_DIRS: Record<string, string> = {
   "plugin-memory": "plugin-memory",
   "plugin-subagents": "plugin-subagents",
   "plugin-openai-compatible": "plugin-openai-compatible",
-  "plugin-material-icons": "plugin-material-icons",
   server: "server",
   cli: "cli",
 };
@@ -68,7 +67,6 @@ const RANK: Record<string, number> = {
   "plugin-memory": 2,
   "plugin-subagents": 2,
   "plugin-openai-compatible": 2,
-  "plugin-material-icons": 2,
   server: 2,
   cli: 3,
 };

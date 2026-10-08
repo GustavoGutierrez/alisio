@@ -12,8 +12,6 @@
       "!packages/core/src/analysis/python/alisio_runtime/chart.umd.min.js",
       "!packages/core/src/analysis/python/alisio_runtime/charts-boot.js",
       "!packages/core/src/analysis/python/alisio_runtime/*.css",
-      "!packages/plugin-material-icons/material-icons.json",
-      "!packages/plugin-material-icons/icons",
       "!docs/benchmark-*.json"
     ]
   },
