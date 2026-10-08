@@ -132,3 +132,152 @@
   color: var(--muted);
   font-size: 12.5px;
 }
+
+/* View mode toggle (Table | Timeline) */
+.viewToggle {
+  display: flex;
+  width: fit-content;
+  margin: 0 auto 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.viewButton {
+  padding: 5px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.viewButton[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* Execution timeline (trace waterfall) and its charts */
+.timeline {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.chartFigure {
+  margin: 0;
+}
+
+.chartTitle {
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.laneLabel {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.tick {
+  fill: var(--faint);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.axisLabel {
+  fill: var(--faint);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.barError {
+  stroke: var(--danger);
+  stroke-width: 1.5;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.toolBars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolBars li {
+  display: grid;
+  grid-template-columns: 150px 1fr 72px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.toolName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+
+.toolTrack {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.toolFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}

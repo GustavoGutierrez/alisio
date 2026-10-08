@@ -4,7 +4,8 @@ import { t } from "../../i18n/index.ts";
 import { currentId, eventsTick } from "../../store/app.ts";
 import { trajectoryFeed } from "../../store/events.ts";
 import { formatSeconds } from "../../store/stats.ts";
-import { type TrajectoryRun, trajectory } from "../../store/trajectory.ts";
+import { executionTimeline, type TrajectoryRun, trajectory } from "../../store/trajectory.ts";
+import { TimelineView } from "./TimelineView.tsx";
 import styles from "./trajectory.module.css";
 
 /** Runs shown before "Show earlier runs" (the feed itself loads in pages from `/events`). */
@@ -71,29 +72,59 @@ function Run({ run, open }: { run: TrajectoryRun; open: boolean }) {
 export function TrajectoryTab() {
   const id = currentId.value;
   const [all, setAll] = useState(false);
+  const [view, setView] = useState<"table" | "timeline">("table");
   useEffect(() => {
     void trajectoryFeed.sync();
   }, [id, eventsTick.value]);
   const feed = trajectoryFeed.state.value;
   const runs = useComputed(() => trajectory(trajectoryFeed.state.value.items));
+  const timeline = useComputed(() => executionTimeline(trajectoryFeed.state.value.items));
   const list = runs.value;
   const shown = all ? list : list.slice(-RUN_WINDOW);
   return (
     <section class={styles.tab} aria-label={t("header.trajectory")}>
+      {list.length ? (
+        <div class={styles.viewToggle} role="group" aria-label={t("trajectory.view")}>
+          <button
+            type="button"
+            class={styles.viewButton}
+            aria-pressed={view === "table"}
+            data-active={view === "table" ? "true" : undefined}
+            onClick={() => setView("table")}
+          >
+            {t("trajectory.view.table")}
+          </button>
+          <button
+            type="button"
+            class={styles.viewButton}
+            aria-pressed={view === "timeline"}
+            data-active={view === "timeline" ? "true" : undefined}
+            onClick={() => setView("timeline")}
+          >
+            {t("trajectory.view.timeline")}
+          </button>
+        </div>
+      ) : null}
       {feed.error ? <p class={styles.error}>{feed.error}</p> : null}
       {!list.length ? (
         <p class={styles.empty}>
           {feed.loading || !feed.loaded ? t("common.loading") : t("trajectory.empty")}
         </p>
       ) : null}
-      {shown.length < list.length ? (
-        <button type="button" class={styles.more} onClick={() => setAll(true)}>
-          {t("trajectory.earlier", { count: list.length - shown.length })}
-        </button>
-      ) : null}
-      {shown.map((run, i) => (
-        <Run key={run.runId} run={run} open={i === shown.length - 1} />
-      ))}
+      {view === "timeline" && timeline.value ? (
+        <TimelineView timeline={timeline.value} />
+      ) : (
+        <>
+          {shown.length < list.length ? (
+            <button type="button" class={styles.more} onClick={() => setAll(true)}>
+              {t("trajectory.earlier", { count: list.length - shown.length })}
+            </button>
+          ) : null}
+          {shown.map((run, i) => (
+            <Run key={run.runId} run={run} open={i === shown.length - 1} />
+          ))}
+        </>
+      )}
     </section>
   );
 }
