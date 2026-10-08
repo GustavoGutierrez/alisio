@@ -135,6 +135,8 @@ describe("GET /api/workspaces/:wid/file (T-11)", () => {
     expect(res.headers["x-truncated"]).toBe("false");
     expect(res.headers["x-file-size"]).toBe("8");
     expect(res.text).toBe("# Title\n");
+    // Non-PDF files keep the app's global framing denial.
+    expect(res.headers["x-frame-options"]).toBe("DENY");
     const cut = await t.api.get(`/api/workspaces/${wid}/file?path=a.md&maxBytes=3`);
     expect(cut.text).toBe("# T");
     expect(cut.headers["x-truncated"]).toBe("true");
@@ -191,6 +193,9 @@ describe("GET /api/workspaces/:wid/file (T-11)", () => {
     expect(res.headers["content-disposition"]).toMatch(/^inline/);
     expect(res.headers["x-truncated"]).toBe("false");
     expect(res.text.length).toBe(pdf.length);
+    // The web previews the PDF in an <iframe>: it must be framable by this origin only.
+    expect(res.headers["x-frame-options"]).toBeUndefined();
+    expect(String(res.headers["content-security-policy"])).toContain("frame-ancestors 'self'");
     // Download still forces the attachment.
     const download = await t.api.get(`/api/workspaces/${wid}/file?path=doc.pdf&download=1`);
     expect(download.headers["content-disposition"]).toMatch(/^attachment/);

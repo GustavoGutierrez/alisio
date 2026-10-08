@@ -176,8 +176,12 @@ export function registerFileRoutes(
         ? Math.min(requested, FILE_PREVIEW_BYTES)
         : FILE_PREVIEW_BYTES;
     const bytes = await readHeadBytes(abs, Math.min(max, info.size));
-    // A PDF is streamed whole and inline so the browser's built-in viewer can render it.
+    // A PDF is streamed whole and inline so the browser's built-in viewer can render it. The web
+    // previews it in an <iframe>: allow only this origin to frame it (Chromium's PDF viewer does
+    // not run in a sandboxed context), overriding the app's global `X-Frame-Options: DENY`.
     if (looksPdf(bytes)) {
+      res.removeHeader("X-Frame-Options");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'self'");
       res.writeHead(200, {
         "Content-Type": "application/pdf",
         "Content-Length": info.size,
