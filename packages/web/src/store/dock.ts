@@ -4,7 +4,13 @@
  */
 import type { FileEntry, SessionChange, UiBlock } from "@alisio/sdk";
 import { batch, signal } from "@preact/signals";
-import { type PreviewKind, parentDirs, previewKind, workspaceRelative } from "../util/files.ts";
+import {
+  extensionOf,
+  type PreviewKind,
+  parentDirs,
+  previewKind,
+  workspaceRelative,
+} from "../util/files.ts";
 import { api, currentId, detail } from "./app.ts";
 import { readPref, writePref } from "./storage.ts";
 
@@ -40,6 +46,18 @@ export const liveTasks = signal(0);
 export const dirs = signal<Record<string, DirState>>({});
 export const expanded = signal<Set<string>>(new Set([""]));
 export const preview = signal<PreviewState | undefined>(undefined);
+/** The Files/Changes right-click menu: where it opened and which file it targets. */
+export const fileMenu = signal<{ x: number; y: number; path: string } | undefined>(undefined);
+
+/** Opens the file context menu at the pointer. */
+export function openFileMenu(event: MouseEvent, path: string): void {
+  event.preventDefault();
+  fileMenu.value = { x: event.clientX, y: event.clientY, path };
+}
+
+export function closeFileMenu(): void {
+  fileMenu.value = undefined;
+}
 export const changes = signal<{ files: SessionChange[]; loading: boolean; error?: string }>({
   files: [],
   loading: false,
@@ -165,6 +183,19 @@ export async function openInDock(rawPath: string, options: { diff?: boolean } = 
     } catch {
       // Not a git repository (409) or an unreadable file: the preview alone still helps.
     }
+  // A PDF renders in the browser's viewer from the inline URL: no need to read its bytes.
+  if (extensionOf(path) === "pdf") {
+    preview.value = {
+      path,
+      status: "ready",
+      kind: "pdf",
+      truncated: false,
+      size: 0,
+      url: api.fileUrl(wid, path),
+      ...(diff ? { diff } : {}),
+    };
+    return;
+  }
   try {
     const file = await api.file(wid, path);
     if (preview.value?.path !== path) return;

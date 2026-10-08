@@ -89,6 +89,9 @@ async function readHeadBytes(path: string, max: number): Promise<Buffer> {
 
 const looksBinary = (bytes: Buffer) => bytes.subarray(0, 8192).includes(0);
 
+/** A PDF (`%PDF-` magic): served whole and inline so the browser's viewer renders it. */
+const looksPdf = (bytes: Buffer) => bytes.subarray(0, 5).toString("latin1") === "%PDF-";
+
 export function registerFileRoutes(
   router: Router,
   ctx: { workspaces: WorkspaceHost; catalog: SQLiteStore; sessions: SessionService },
@@ -173,6 +176,24 @@ export function registerFileRoutes(
         ? Math.min(requested, FILE_PREVIEW_BYTES)
         : FILE_PREVIEW_BYTES;
     const bytes = await readHeadBytes(abs, Math.min(max, info.size));
+    // A PDF is streamed whole and inline so the browser's built-in viewer can render it.
+    if (looksPdf(bytes)) {
+      res.writeHead(200, {
+        "Content-Type": "application/pdf",
+        "Content-Length": info.size,
+        "Content-Disposition": `inline; filename="${name}"`,
+        "X-Truncated": "false",
+        "X-File-Size": String(info.size),
+      });
+      const handle = await open(abs, "r");
+      try {
+        for await (const chunk of handle.createReadStream()) res.write(chunk);
+      } finally {
+        await handle.close().catch(() => {});
+      }
+      res.end();
+      return undefined;
+    }
     const image = sniffImage(bytes);
     const type = image
       ? image.mimeType

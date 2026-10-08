@@ -1,28 +1,32 @@
 import type { FileEntry } from "@alisio/sdk";
 import type { ComponentType } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
 import CodeView from "../../renderers/code/view.tsx";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
-import { currentId, detail, insertIntoComposer, runEnded } from "../../store/app.ts";
+import { currentId, detail, insertIntoComposer, runEnded, showToast } from "../../store/app.ts";
 import {
   changes,
+  closeFileMenu,
   type DockTab,
   dirs,
   dockTab,
   downloadUrl,
   expanded,
+  fileMenu,
   liveTasks,
   loadChanges,
   loadDir,
+  openFileMenu,
   openInDock,
   preview,
   refreshTree,
   setDockOpen,
   toggleDir,
 } from "../../store/dock.ts";
-import { extensionOf } from "../../util/files.ts";
+import { copyText } from "../../util/clipboard.ts";
+import { absolutePath, extensionOf, fileName } from "../../util/files.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
 import styles from "./dock.module.css";
@@ -90,7 +94,11 @@ function Entry({ entry, depth }: { entry: FileEntry; depth: number }) {
       </li>
     );
   return (
-    <li role="treeitem" aria-selected={selected}>
+    <li
+      role="treeitem"
+      aria-selected={selected}
+      onContextMenu={(event) => openFileMenu(event, entry.path)}
+    >
       <button
         type="button"
         class={styles.row}
@@ -120,6 +128,7 @@ function ChangesTab() {
           <button
             type="button"
             class={styles.row}
+            onContextMenu={(event) => openFileMenu(event, file.path)}
             onClick={() => void openInDock(file.path, { diff: true })}
           >
             <span
@@ -138,6 +147,7 @@ function ChangesTab() {
 }
 
 function PreviewBody() {
+  const [htmlMode, setHtmlMode] = useState<"rendered" | "source">("rendered");
   const state = preview.value;
   if (!state) return <p class={styles.empty}>{t("dock.noPreview")}</p>;
   if (state.status === "loading") return <p class={styles.empty}>{t("common.loading")}</p>;
@@ -152,7 +162,38 @@ function PreviewBody() {
           {download ? <a href={download}>{t("dock.download")}</a> : null}
         </p>
       ) : null}
-      {state.kind === "image" && state.url ? (
+      {state.kind === "pdf" && state.url ? (
+        <iframe class={styles.frame} src={state.url} title={state.path} />
+      ) : state.kind === "html" && state.text !== undefined ? (
+        <>
+          <div class={styles.viewToggle} role="group" aria-label={t("dock.htmlView")}>
+            <button
+              type="button"
+              class={styles.viewButton}
+              aria-pressed={htmlMode === "rendered"}
+              data-active={htmlMode === "rendered" ? "true" : undefined}
+              onClick={() => setHtmlMode("rendered")}
+            >
+              {t("dock.viewRendered")}
+            </button>
+            <button
+              type="button"
+              class={styles.viewButton}
+              aria-pressed={htmlMode === "source"}
+              data-active={htmlMode === "source" ? "true" : undefined}
+              onClick={() => setHtmlMode("source")}
+            >
+              {t("dock.viewSource")}
+            </button>
+          </div>
+          {htmlMode === "rendered" ? (
+            // No scripts and an opaque origin: workspace HTML renders without touching the app.
+            <iframe class={styles.frame} sandbox="" srcdoc={state.text} title={state.path} />
+          ) : (
+            <CodeView block={{ kind: "code", lang: "html", code: state.text }} />
+          )}
+        </>
+      ) : state.kind === "image" && state.url ? (
         <img class={styles.image} src={state.url} alt={state.path} />
       ) : state.kind === "markdown" && state.text !== undefined ? (
         <div class={styles.markdown}>
@@ -188,6 +229,55 @@ function jsonOf(text: string): unknown {
   jsonCache.clear();
   jsonCache.set(text, value);
   return value;
+}
+
+/** Right-click menu of a file: copy its absolute path, its relative path or its name. */
+function FileMenu() {
+  const menu = fileMenu.value;
+  const root = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      if (event instanceof MouseEvent && root.current?.contains(event.target as Node)) return;
+      closeFileMenu();
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("mousedown", close);
+    return () => {
+      document.removeEventListener("keydown", close);
+      document.removeEventListener("mousedown", close);
+    };
+  }, [menu]);
+  if (!menu) return null;
+  const workspace = detail.value?.workspace;
+  const items: Array<{ label: string; text: string }> = [
+    { label: t("dock.copyAbsolute"), text: absolutePath(workspace, menu.path) ?? menu.path },
+    { label: t("dock.copyRelative"), text: menu.path },
+    { label: t("dock.copyName"), text: fileName(menu.path) },
+  ];
+  // Keep the menu inside the viewport when it opens near an edge.
+  const left = typeof window === "undefined" ? menu.x : Math.min(menu.x, window.innerWidth - 220);
+  const top = typeof window === "undefined" ? menu.y : Math.min(menu.y, window.innerHeight - 120);
+  return (
+    <ul ref={root} class={styles.menu} role="menu" style={{ left: `${left}px`, top: `${top}px` }}>
+      {items.map((item) => (
+        <li key={item.label}>
+          <button
+            type="button"
+            role="menuitem"
+            class={styles.menuItem}
+            onClick={async () => {
+              closeFileMenu();
+              if (await copyText(item.text)) showToast(t("common.copied"));
+            }}
+          >
+            {item.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** The right dock (RF-12): Files, Changes and Preview of the open session's workspace. */
@@ -286,6 +376,7 @@ export function Dock(props: { width?: number } = {}) {
           <PreviewBody />
         )}
       </div>
+      <FileMenu />
     </aside>
   );
 }

@@ -202,3 +202,67 @@
   color: var(--accent-strong);
   font-size: 11px;
 }
+
+/* File context menu: copy the absolute path, the relative path or the name. */
+.menu {
+  position: fixed;
+  z-index: 40;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 200px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--hover);
+}
+
+/* PDF and HTML previews render in a frame; the HTML source reuses the code viewer. */
+.frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.viewToggle {
+  display: flex;
+  width: fit-content;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.viewButton {
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.viewButton[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}

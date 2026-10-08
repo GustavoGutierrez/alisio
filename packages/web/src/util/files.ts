@@ -40,14 +40,32 @@ export const extensionOf = (path: string): string => {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 };
 
-export type PreviewKind = "image" | "markdown" | "json" | "code" | "binary";
+/** The file name with its extension, from a `/` path (`a/b/c.ts` → `c.ts`). */
+export const fileName = (path: string): string => path.split("/").pop() ?? path;
+
+/** The absolute path of a workspace file, using the workspace's own separator (`/` or `\`). */
+export function absolutePath(workspace: string | undefined, path: string): string | undefined {
+  if (!workspace) return undefined;
+  const separator = workspace.includes("\\") && !workspace.includes("/") ? "\\" : "/";
+  const root = workspace.replace(/[\\/]+$/, "");
+  const rel = path
+    .replace(/^[\\/]+/, "")
+    .split("/")
+    .filter(Boolean)
+    .join(separator);
+  return rel ? `${root}${separator}${rel}` : root;
+}
+
+export type PreviewKind = "image" | "markdown" | "json" | "code" | "binary" | "pdf" | "html";
 
 /** How the Preview tab shows a file, from the server's sniffed type and the extension. */
 export function previewKind(path: string, contentType: string): PreviewKind {
   if (contentType.startsWith("image/")) return "image";
+  if (contentType === "application/pdf") return "pdf";
   if (!contentType.startsWith("text/")) return "binary";
   const ext = extensionOf(path);
   if (ext === "md" || ext === "markdown" || ext === "mdx") return "markdown";
+  if (ext === "html" || ext === "htm") return "html";
   if (ext === "json") return "json";
   return "code";
 }

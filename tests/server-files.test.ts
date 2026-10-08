@@ -177,6 +177,24 @@ describe("GET /api/workspaces/:wid/file (T-11)", () => {
     await mkdir(join(t.workspace, "dir"));
     expect((await t.api.get(`/api/workspaces/${wid}/file?path=dir`)).status).toBe(400);
   });
+
+  it("serves a PDF whole and inline so the browser's viewer can render it", async () => {
+    const { t, wid } = await server();
+    const pdf = Buffer.concat([
+      Buffer.from("%PDF-1.7\n"),
+      Buffer.from("x".repeat(3 * 1024 * 1024)), // over the 2 MB preview limit
+    ]);
+    await writeFile(join(t.workspace, "doc.pdf"), pdf);
+    const res = await t.api.get(`/api/workspaces/${wid}/file?path=doc.pdf`);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-disposition"]).toMatch(/^inline/);
+    expect(res.headers["x-truncated"]).toBe("false");
+    expect(res.text.length).toBe(pdf.length);
+    // Download still forces the attachment.
+    const download = await t.api.get(`/api/workspaces/${wid}/file?path=doc.pdf&download=1`);
+    expect(download.headers["content-disposition"]).toMatch(/^attachment/);
+  });
 });
 
 /** Each run writes `path`, then answers "done". */
