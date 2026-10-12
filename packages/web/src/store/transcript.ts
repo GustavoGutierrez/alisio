@@ -15,6 +15,7 @@ import type {
   ToolResult,
 } from "@alisio/sdk";
 import { artifactsOfResult } from "../util/artifacts.ts";
+import { applyForgeProgress, type ForgeView, parseForgeChunk } from "../util/forge.ts";
 
 export type ToolStatus = "pending" | "running" | "completed" | "failed";
 
@@ -32,6 +33,8 @@ export interface ToolState {
   truncated?: boolean;
   /** Live progress output, bounded. */
   tail: string;
+  /** Live view of a Forja execution (`js_run`, `python_run`): nested calls and counters. */
+  forge?: ForgeView;
 }
 
 type Tone = "info" | "warning" | "error";
@@ -261,6 +264,7 @@ function applySnapshot(
         effect: t.effect,
         status: "running",
         tail: t.tail,
+        ...(t.forge ? { forge: applyForgeProgress(undefined, t.forge) } : {}),
       };
   }
   const users = items
@@ -528,7 +532,11 @@ function applyDelta(
     tools = { ...tools };
     for (const { toolId, chunk } of frame.progress) {
       const current = tools[toolId] ?? toolFromCall({ id: toolId, name: "tool", arguments: "" });
-      tools[toolId] = { ...current, tail: (current.tail + chunk).slice(-TAIL_LIMIT) };
+      // `ForgeProgress` objects feed the live call view; they are never part of the text tail.
+      const forge = parseForgeChunk(chunk);
+      tools[toolId] = forge
+        ? { ...current, forge: applyForgeProgress(current.forge, forge) }
+        : { ...current, tail: (current.tail + chunk).slice(-TAIL_LIMIT) };
     }
   }
   return bump(state, { live, tools });

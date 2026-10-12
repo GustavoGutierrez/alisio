@@ -552,15 +552,18 @@ repite una repetición. Instalar los paquetes opcionales de Python pregunta con 
 de Python?**, la lista de paquetes, la estimación de descarga y que necesita red, y ofrece solo
 **Permitir esta vez** y **Denegar** (`S` no hace nada: nunca se guarda).
 
-### Ajustes → Análisis de datos {#analysis-settings}
+### Ajustes → Forja {#analysis-settings}
 
-La página **Análisis de datos** de Ajustes muestra el runtime en solo lectura (modo, el Python
-encontrado o cómo instalarlo en tu sistema, los paquetes opcionales, el motor e imagen de contenedor
-y el recordatorio de que Python administrado no es un sandbox) y edita el interruptor
-(`analysis.enabled`), el tiempo máximo de ejecución y los tres valores de retención. El servidor
-valida los cambios, se escriben en el archivo de configuración global y se muestra cuándo fue la
-última limpieza. `runtime` y `oci.*` no se editan aquí. Consulta
-[Configuración](/es/configuration#analysis).
+La página **Forja** de Ajustes recoge lo que antes era la página Análisis de datos, ahora como la
+sección **Python**. Muestra el runtime en solo lectura (los tres backends con su estado y
+aislamiento, la política `analysis.runtime` y `analysis.isolation` y el que se usaría ahora, el
+Python encontrado o cómo instalarlo, los paquetes opcionales, el motor e imagen de contenedor y el
+recordatorio de que Python administrado no es un sandbox) y edita el interruptor (`analysis.enabled`),
+el tiempo máximo de ejecución y los tres valores de retención. El servidor valida los cambios, se
+escriben en el archivo de configuración global y se muestra cuándo fue la última limpieza. `runtime`,
+`isolation`, `wasm.*` y `oci.*` no se editan aquí. Las secciones **JavaScript** y **Guías** contienen
+los interruptores `forge.javascript.enabled` y `forge.guides.enabled`. Consulta
+[Forja: modo código](/es/forja#web) y [Configuración](/es/configuration#analysis).
 
 ### Tablas y datos adjuntos {#tables}
 
@@ -633,6 +636,10 @@ PATCH /api/sessions/:sid/goal {objective?, tokenBudget?: number|null, expect?}  
 POST /api/sessions/:sid/goal/pause     POST /api/sessions/:sid/goal/resume   {expect?: {goalId, epoch}} → {goal}; 409 goal_conflict
 GET  /api/workspaces/:wid/tree?path=&cursor=   GET /api/workspaces/:wid/file?path=&maxBytes=&download=1
 GET  /api/workspaces/:wid/diff?path=   GET /api/sessions/:sid/changes
+GET  /api/sessions/:sid/scratch        scratchpad of the root session: {available, files:[{name,size,mtime}], usedBytes, quotaBytes}
+GET  /api/sessions/:sid/scratch/files/*   download one file (attachment, no symlinks); 404 outside the scratchpad
+DELETE /api/sessions/:sid/scratch      empty it → {removed, freedBytes}; 409 runs_active while a Forja script runs
+GET  /api/forge?workspace=<wid>        Forja engines (JavaScript + Python), limits, scratch settings, Python isolation policy
 POST /api/blobs                        raw image body (not JSON) → BlobRef   GET /api/blobs/:hash
 POST /api/sessions/:sid/datasets       raw data file, X-File-Name header → 202 {pending} | 200 {dataset}
 GET  /api/sessions/:sid/datasets       GET /api/datasets/:did        GET /api/datasets/:did/download

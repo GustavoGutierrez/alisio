@@ -262,7 +262,8 @@ describe("shipped changelog", () => {
     const entries = loadChangelog();
     expect(entries.length).toBeGreaterThan(10);
     expect(entries.some((e) => e.version === "0.1.0-alpha.28")).toBe(true);
-    expect(selectEntries(entries, { limit: 3 }).entries.map((e) => e.version)).toEqual([
+    const released = entries.filter((e) => e.version !== "Unreleased");
+    expect(selectEntries(released, { limit: 3 }).entries.map((e) => e.version)).toEqual([
       "0.5.2",
       "0.5.1",
       "0.5.0",

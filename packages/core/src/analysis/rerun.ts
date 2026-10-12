@@ -28,7 +28,7 @@ export interface RerunPlan {
   manifest: unknown[];
   extras: Array<"analysis" | "science">;
   /** The runtime of the original execution (a rerun uses the configured runtime now). */
-  runtime: "managed" | "oci";
+  runtime: "managed" | "oci" | "wasm";
 }
 
 export type RerunPreparation = { ok: true; plan: RerunPlan } | { ok: false; problems: string[] };

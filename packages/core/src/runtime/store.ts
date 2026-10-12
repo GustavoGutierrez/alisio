@@ -263,6 +263,85 @@ export class SQLiteStore implements SessionStore {
         add("owner_pid", "INTEGER");
         this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(8)");
       });
+    if (!has(9))
+      this.db.transaction(() => {
+        // v9 (additive): Forja journal (`forge_executions`, `forge_calls`) and the small JSON state
+        // shared across executions (`forge_state`). Only hashes of inputs are stored, never the
+        // inputs or results themselves. `owner_pid` lets a restart tell its own dead executions
+        // from another live process's.
+        this.db.exec(`CREATE TABLE IF NOT EXISTS forge_executions(
+            id TEXT PRIMARY KEY,
+            root_session_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            tool_call_id TEXT NOT NULL,
+            engine TEXT NOT NULL,
+            isolation TEXT NOT NULL,
+            selection_reason TEXT NOT NULL,
+            status TEXT NOT NULL,
+            code_sha256 TEXT NOT NULL,
+            started_at INTEGER NOT NULL, ended_at INTEGER,
+            metrics_json TEXT,
+            error_code TEXT,
+            termination_unconfirmed INTEGER NOT NULL DEFAULT 0,
+            analysis_execution_id TEXT REFERENCES analysis_executions(id),
+            owner_pid INTEGER);
+          CREATE INDEX IF NOT EXISTS forge_executions_root
+            ON forge_executions(root_session_id, started_at);
+          CREATE TABLE IF NOT EXISTS forge_calls(
+            execution_id TEXT NOT NULL REFERENCES forge_executions(id),
+            call_id TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            effect TEXT NOT NULL,
+            status TEXT NOT NULL,
+            duration_ms INTEGER,
+            input_sha256 TEXT NOT NULL,
+            error_code TEXT,
+            paths_json TEXT,
+            PRIMARY KEY(execution_id, call_id));
+          CREATE INDEX IF NOT EXISTS forge_calls_execution
+            ON forge_calls(execution_id, call_id);
+          CREATE TABLE IF NOT EXISTS forge_state(
+            root_session_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value_json TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(root_session_id, key));
+          INSERT OR IGNORE INTO schema_migrations VALUES(9);`);
+      });
+    if (!has(10)) {
+      // v10: `analysis_executions.runtime` admits `wasm` (the Pyodide backend). SQLite cannot alter
+      // a CHECK, so the table is rebuilt with the official recipe: foreign keys off, copy, drop,
+      // rename. Rows, ids and the artifacts that point at them are untouched.
+      this.db.exec("PRAGMA foreign_keys=OFF");
+      try {
+        this.db.transaction(() => {
+          this.db.exec(`CREATE TABLE analysis_executions_v10(
+              id TEXT PRIMARY KEY,
+              session TEXT NOT NULL,
+              root_session TEXT NOT NULL,
+              workspace TEXT NOT NULL,
+              run_id TEXT, call_id TEXT,
+              runtime TEXT NOT NULL CHECK(runtime IN ('managed','oci','wasm')),
+              status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled','timed_out')),
+              script_sha256 TEXT NOT NULL,
+              exit_code INTEGER, error TEXT,
+              rel_dir TEXT NOT NULL,
+              rerun_of TEXT,
+              created_at INTEGER NOT NULL, ended_at INTEGER);
+            INSERT INTO analysis_executions_v10 SELECT id,session,root_session,workspace,run_id,call_id,
+              runtime,status,script_sha256,exit_code,error,rel_dir,rerun_of,created_at,ended_at
+              FROM analysis_executions;
+            DROP TABLE analysis_executions;
+            ALTER TABLE analysis_executions_v10 RENAME TO analysis_executions;
+            CREATE INDEX IF NOT EXISTS analysis_executions_session
+              ON analysis_executions(root_session, created_at);
+            INSERT OR IGNORE INTO schema_migrations VALUES(10);`);
+        });
+      } finally {
+        this.db.exec("PRAGMA foreign_keys=ON");
+      }
+    }
   }
   /**
    * The root of a session (itself for roots), following `parent_id`. Unknown ids are their own
@@ -493,6 +572,38 @@ export class SQLiteStore implements SessionStore {
     return rows.map((row) => ({
       callId: row.call_id,
       name: row.name ?? "",
+      ...(row.run_id ? { runId: row.run_id } : {}),
+      ...(row.started_at != null ? { startedAt: Number(row.started_at) } : {}),
+    }));
+  }
+  /**
+   * Files the nested `write` calls of Forja executions of a session touched (D-31): one entry per
+   * journaled call that did not fail, with the tool call (`js_run`/`python_run`) that ran it so the
+   * panel can attach the run. `paths` are the absolute paths the gate resolved. Oldest first.
+   */
+  forgeWriteCalls(
+    session: string,
+  ): Array<{ toolCallId: string; paths: string[]; runId?: string; startedAt?: number }> {
+    const rows = this.db
+      .prepare(
+        `SELECT e.tool_call_id AS tool_call_id, c.paths_json AS paths_json,
+                t.run_id AS run_id, t.started_at AS started_at
+         FROM forge_calls c
+         JOIN forge_executions e ON e.id = c.execution_id
+         LEFT JOIN tool_calls t ON t.session = e.session_id AND t.call_id = e.tool_call_id
+         WHERE e.session_id = ? AND c.effect = 'write' AND c.status != 'failed'
+           AND c.paths_json IS NOT NULL
+         ORDER BY t.started_at, c.rowid`,
+      )
+      .all(session) as Array<{
+      tool_call_id: string;
+      paths_json: string;
+      run_id: string | null;
+      started_at: number | null;
+    }>;
+    return rows.map((row) => ({
+      toolCallId: row.tool_call_id,
+      paths: JSON.parse(row.paths_json) as string[],
       ...(row.run_id ? { runId: row.run_id } : {}),
       ...(row.started_at != null ? { startedAt: Number(row.started_at) } : {}),
     }));

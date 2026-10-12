@@ -9,12 +9,17 @@ import {
   type RunEventDataMap,
   type RunEventType,
   type ToolCall,
+  type ToolContext,
   type ToolDefinition,
   type ToolResult,
   textProjection,
   textResult,
 } from "@alisio/sdk";
+import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nested.ts";
+import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
+import { decideEffect, effectAskable } from "../permissions/decide.ts";
 import type { PathAccess } from "../runtime/access.ts";
+import { bindCallInternals } from "./call-internals.ts";
 import {
   checkpointInstructions,
   estimateTokens,
@@ -256,13 +261,6 @@ const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
  * would pay for a summarizer call. The hard-limit last-chance compaction ignores it.
  */
 const RECOMPACT_GROWTH_MARGIN = 0.1;
-const allowed = (policy: Policy, effect: string) =>
-  effect === "read" ||
-  effect === "internal" ||
-  ((effect === "write" || effect === "process" || effect === "external") && !!policy[effect]);
-/** A tool's capability is pre-allowed by the policy alone (`--allow-analysis`). */
-const capabilityAllowed = (policy: Policy, tool: ToolDefinition) =>
-  tool.capability === "analysis.run" && !!policy.analysis;
 /** First 40 lines of a script input, for capability approvals. */
 const scriptPreview = (input: Record<string, unknown>): string | undefined =>
   typeof input.code === "string" ? input.code.split(/\r?\n/).slice(0, 40).join("\n") : undefined;
@@ -395,13 +393,17 @@ export class AgentRunner {
     return o.registry.list().filter((t) => {
       if (run.toolFilter && !run.toolFilter(t)) return false;
       if (!optInAllows(t.name, run.optInTools)) return false;
-      const effect = t.effect ?? "external";
-      if (allowed(policy, effect)) return true;
-      if (t.capability) {
-        if (capabilityAllowed(policy, t)) return true;
-        if (sessionId && o.capabilities?.granted(t.capability, sessionId)) return true;
-      }
-      return approvals && (effect === "write" || effect === "process" || effect === "external");
+      // Offered when the call would run or could be asked: anything but a denial.
+      return (
+        decideEffect(policy, t, {
+          approvals,
+          capabilityGranted: !!(
+            t.capability &&
+            sessionId &&
+            o.capabilities?.granted(t.capability, sessionId)
+          ),
+        }).kind !== "deny"
+      );
     });
   }
   /** Abort signal of the session's active run, if any (used to cascade cancellation). */
@@ -672,6 +674,11 @@ export class AgentRunner {
     const { call } = p;
     let result: ToolResult;
     const started = Date.now();
+    /** Set by the call itself (see `CallInternals`): it may have left effects. */
+    let effectful = false;
+    let dispatcher: NestedCallDispatcher | undefined;
+    /** Held from the scratchpad quota check until the write is done (L1). */
+    let releaseScratch: (() => void) | undefined;
     // `effect` rides along so the TUI can group consecutive calls by capability kind
     // (read batches, write batches, commands…) without a name heuristic. Additive field.
     emit("tool_started", {
@@ -691,6 +698,7 @@ export class AgentRunner {
       // resolved map keeps "allow once" scoped to this one call, with no shared mutable
       // state that parallel read batches could race on.
       const resolved = new Map<string, string>();
+      const targets: string[] = [];
       if (pathAccess)
         for (const declared of p.tool.paths?.(p.input) ?? [])
           if (!resolved.has(declared)) {
@@ -705,6 +713,7 @@ export class AgentRunner {
             // ask a second time for an "allow once" decision.
             resolved.set(declared, target);
             resolved.set(target, target);
+            targets.push(target);
           }
       scope.guard?.(effect);
       if (
@@ -714,26 +723,71 @@ export class AgentRunner {
         throw new Error(`Tool ${call.name} is not available in this session`);
       const capability = p.tool.capability;
       const gate = o.capabilities;
-      if (capability && (allowed(policy, effect) || capabilityAllowed(policy, p.tool))) {
-        // A broad process grant or --allow-analysis: allowed, audited as a flag decision.
-        gate?.record({
-          capability,
-          sessionId,
-          scope: "once",
-          decision: "allow",
-          source: "flag",
-          callId: call.id,
-          runId,
-          ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
-        });
-      } else if (capability && gate?.granted(capability, sessionId)) {
-        // A persisted "allow for this session" grant of the root session.
-      } else if (!allowed(policy, effect)) {
-        if (
-          !o.approve ||
-          !approvals ||
-          (effect !== "write" && effect !== "process" && effect !== "external")
+      let decision = decideEffect(policy, p.tool, {
+        approvals: !!o.approve && approvals,
+        capabilityGranted: !!capability && !!gate?.granted(capability, sessionId),
+      });
+      // The session's scratchpad is an authorized write root (Forja, spec §9.4): a write confined
+      // to it needs no approval in any mode, headless runs included. What is lifted is a call that
+      // WOULD ask a person; a run locked down on purpose (`--read-only`, which has no scratchpad
+      // root, or a child run with approvals turned off) keeps its denial.
+      if (
+        decision.kind !== "allow" &&
+        effect === "write" &&
+        !capability &&
+        options.approvals !== false &&
+        hasScratchEstimator(p.tool.name) &&
+        pathAccess &&
+        targets.length > 0 &&
+        decideEffect(policy, p.tool, { approvals: true, capabilityGranted: false }).kind ===
+          "ask" &&
+        (await Promise.all(targets.map((t) => pathAccess.isScratchPath(t, sessionId)))).every(
+          Boolean,
         )
+      )
+        decision = { kind: "allow", via: "effect" };
+      // A write into the scratchpad also has a quota (FJ-AC-34), whatever allowed it: a full
+      // scratchpad refuses new writes with a plain error and deletes nothing.
+      if (
+        decision.kind === "allow" &&
+        effect === "write" &&
+        !capability &&
+        pathAccess &&
+        targets.length > 0 &&
+        (await Promise.all(targets.map((t) => pathAccess.isScratchPath(t, sessionId)))).every(
+          Boolean,
+        )
+      ) {
+        releaseScratch = await pathAccess.lockScratch(sessionId);
+        const problem = await pathAccess.scratchQuotaProblem(
+          sessionId,
+          await scratchIncomingBytes(p.tool.name, p.input as Record<string, unknown>, targets),
+          targets,
+        );
+        if (problem) throw new Error(problem);
+      }
+      if (decision.kind === "allow") {
+        // A broad process grant or --allow-analysis is audited as a flag decision; a plain effect
+        // and a persisted "allow for this session" grant of the root session leave no record here.
+        if (capability && decision.via === "flag")
+          gate?.record({
+            capability,
+            sessionId,
+            scope: "once",
+            decision: "allow",
+            source: "flag",
+            callId: call.id,
+            runId,
+            ...(options.correlationId !== undefined
+              ? { correlationId: options.correlationId }
+              : {}),
+          });
+      } else if (decision.kind === "deny") {
+        throw new Error(`Capability denied: ${capability ?? effect}`);
+      } else {
+        const approve = o.approve;
+        // `ask` is only ever decided for an askable effect with a handler (see `decideEffect`).
+        if (!approve || !effectAskable(effect))
           throw new Error(`Capability denied: ${capability ?? effect}`);
         const preview = capability
           ? (scriptPreview(p.input) ?? (await gate?.preview?.(p.input, sessionId)))
@@ -745,7 +799,6 @@ export class AgentRunner {
           ...(options.label ? { label: options.label } : {}),
           ...(capability ? { capability } : {}),
         });
-        const approve = o.approve;
         const callInput = p.input;
         // Waiting for the person is not work: the run's time limit does not count it.
         const decision = await this.humanWaits.track(sessionId, () =>
@@ -855,7 +908,7 @@ export class AgentRunner {
         });
         return allowedNow ? "once" : "deny";
       };
-      result = await p.tool.execute(p.input, {
+      const toolContext: ToolContext = {
         signal: combined,
         workspace,
         session: sessionId,
@@ -890,7 +943,36 @@ export class AgentRunner {
               },
             }
           : {}),
+      };
+      // Only the core's own tools can find these (see `CallInternals`); the SDK context is unchanged.
+      bindCallInternals(toolContext, {
+        markEffectful: () => {
+          effectful = true;
+        },
+        nested: () =>
+          (dispatcher ??= createNestedDispatcher({
+            registry: o.registry,
+            policy,
+            approvals: !!o.approve && approvals,
+            scratchWrites: options.approvals !== false,
+            ...(options.toolFilter ? { toolFilter: options.toolFilter } : {}),
+            ...(options.optInTools ? { optInTools: options.optInTools } : {}),
+            workspace,
+            session: sessionId,
+            ...(options.label ? { label: options.label } : {}),
+            runId,
+            parentCallId: call.id,
+            signal: combined,
+            ...(pathAccess ? { pathAccess } : {}),
+            ...(publisher ? { artifacts: publisher } : {}),
+            ...(decisions ? { decisions } : {}),
+            ...(scope.guard ? { guard: scope.guard } : {}),
+            markEffectful: () => {
+              effectful = true;
+            },
+          })),
       });
+      result = await p.tool.execute(p.input, toolContext);
       // The bound applies to what the model sees (the text projection): display-only
       // ui/image parts are bounded by their producers and must not push text over it.
       const projected = textProjection(result);
@@ -907,8 +989,12 @@ export class AgentRunner {
       // the user to inspect. A `read` call cannot have left any (and `exit_plan`, which is one,
       // is exactly what a stop or the run limit interrupts while a person decides): it is closed
       // with the cancellation, so the next message continues normally instead of asking to
-      // "recover" a call nobody needs to inspect.
-      if (!combined.aborted || p.tool?.effect === "read") o.store.endCall(sessionId, call, result);
+      // "recover" a call nobody needs to inspect. A read that flagged itself `effectful` (js_run
+      // after a nested write) is the exception: it stays pending like any other effectful call.
+      if (!combined.aborted || (p.tool?.effect === "read" && !effectful))
+        o.store.endCall(sessionId, call, result);
+    } finally {
+      releaseScratch?.();
     }
     emit("tool_completed", {
       id: call.id,
@@ -1543,8 +1629,11 @@ export class AgentRunner {
         const execute = (p: (typeof prepared)[number]) => this.executeCall(scope, p);
         const results: ToolResult[] = [];
         // Bounded parallel batches for consecutive read or explicitly concurrent tools.
+        // `concurrent: false` keeps a tool out of the batch even when it is a read (js_run).
         const parallel = (p: (typeof prepared)[number] | undefined) =>
-          !!p?.tool && (p.tool.effect === "read" || p.tool.concurrent === true);
+          !!p?.tool &&
+          p.tool.concurrent !== false &&
+          (p.tool.effect === "read" || p.tool.concurrent === true);
         for (let i = 0; i < prepared.length; ) {
           const current = prepared[i];
           if (!current) break;

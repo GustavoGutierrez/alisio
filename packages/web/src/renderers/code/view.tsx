@@ -12,7 +12,12 @@ type CodeBlock = Extract<UiBlock, { kind: "code" }>;
  * A code block with a header (language, copy, wrap). Plain text renders at once; highlighting
  * loads when the block scrolls into view, and never while it is still streaming (`live`).
  */
-export default function CodeView(props: { block: CodeBlock; live?: boolean }) {
+export default function CodeView(props: {
+  block: CodeBlock;
+  live?: boolean;
+  /** Replaces the label of the copy action ("Copy code"). */
+  copyLabel?: string;
+}) {
   const { block } = props;
   const ref = useRef<HTMLPreElement>(null);
   const [lines, setLines] = useState<HighlightedToken[][] | undefined>();
@@ -47,7 +52,12 @@ export default function CodeView(props: { block: CodeBlock; live?: boolean }) {
           >
             {t("code.wrap")}
           </button>
-          <CopyButton text={() => block.code} class={styles.action} showText />
+          <CopyButton
+            text={() => block.code}
+            class={styles.action}
+            showText
+            {...(props.copyLabel ? { label: props.copyLabel } : {})}
+          />
         </span>
       </figcaption>
       <pre ref={ref} class={wrap ? `${styles.pre} ${styles.wrap}` : styles.pre} tabIndex={0}>

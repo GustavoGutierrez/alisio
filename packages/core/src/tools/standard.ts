@@ -150,6 +150,13 @@ export function registerStandard(
   },
   /** Mediated path policy (workspace plus declared extra directories and external approval). */
   pathAccess?: PathAccess,
+  features: {
+    /**
+     * Register the legacy `execute` tool (default true). Forja's `js_run` replaces it (spec D6):
+     * the host turns this off while the JavaScript engine is enabled, with no fallback to `node:vm`.
+     */
+    execute?: boolean;
+  } = {},
 ): void {
   const register = (tool: ToolDefinition) => registry.register(tool);
   /**
@@ -594,48 +601,49 @@ export function registerStandard(
         );
       },
     });
-  register({
-    name: "execute",
-    effect: "process",
-    description:
-      "Run a short JavaScript snippet (Code Mode) that can call other tools via " +
-      "`await callTool(name, input)` and return one final JSON-serializable value, so " +
-      "intermediate tool results never re-enter your context — only the return value does. " +
-      "The snippet runs in an isolated context with no filesystem, network, imports or timers " +
-      "of its own; every nested callTool still goes through this session's normal permission " +
-      `gate (an effect not already allowed is denied, never newly approved). Bounded to ` +
-      `${EXECUTE_TIMEOUT_MS}ms wall-clock and ${MAX_NESTED_CALLS} nested tool calls. This is a ` +
-      "correctness sandbox, not an OS security boundary. Prefer plain sequential tool calls " +
-      "unless you are combining several read-only calls or post-processing their output.",
-    inputSchema: objectSchema({ code: { type: "string", minLength: 1 } }, ["code"]),
-    async execute(i, c) {
-      const policy = execCtx?.policy() ?? { write: false, process: false, external: false };
-      const result = await runExecute(String(i.code), {
-        registry,
-        policy,
-        workspace: c.workspace,
-        signal: c.signal,
-        emit: c.emit,
-        ...(c.session ? { session: c.session } : {}),
-        ...(c.label ? { label: c.label } : {}),
-        // Nested calls must never open a new external-directory prompt; only directories already
-        // approved for this session (or inside the workspace) are reachable.
-        ...(pathAccess
-          ? {
-              resolvePath: (path: string) =>
-                pathAccess.resolve(path, {
-                  workspace: c.workspace,
-                  ...(c.session ? { session: c.session } : {}),
-                  ...(c.label ? { label: c.label } : {}),
-                  signal: c.signal,
-                  interactive: false,
-                }),
-            }
-          : c.resolvePath
-            ? { resolvePath: c.resolvePath }
-            : {}),
-      });
-      return textResult(JSON.stringify({ result: result ?? null }));
-    },
-  });
+  if (features.execute !== false)
+    register({
+      name: "execute",
+      effect: "process",
+      description:
+        "Run a short JavaScript snippet (Code Mode) that can call other tools via " +
+        "`await callTool(name, input)` and return one final JSON-serializable value, so " +
+        "intermediate tool results never re-enter your context — only the return value does. " +
+        "The snippet runs in an isolated context with no filesystem, network, imports or timers " +
+        "of its own; every nested callTool still goes through this session's normal permission " +
+        `gate (an effect not already allowed is denied, never newly approved). Bounded to ` +
+        `${EXECUTE_TIMEOUT_MS}ms wall-clock and ${MAX_NESTED_CALLS} nested tool calls. This is a ` +
+        "correctness sandbox, not an OS security boundary. Prefer plain sequential tool calls " +
+        "unless you are combining several read-only calls or post-processing their output.",
+      inputSchema: objectSchema({ code: { type: "string", minLength: 1 } }, ["code"]),
+      async execute(i, c) {
+        const policy = execCtx?.policy() ?? { write: false, process: false, external: false };
+        const result = await runExecute(String(i.code), {
+          registry,
+          policy,
+          workspace: c.workspace,
+          signal: c.signal,
+          emit: c.emit,
+          ...(c.session ? { session: c.session } : {}),
+          ...(c.label ? { label: c.label } : {}),
+          // Nested calls must never open a new external-directory prompt; only directories already
+          // approved for this session (or inside the workspace) are reachable.
+          ...(pathAccess
+            ? {
+                resolvePath: (path: string) =>
+                  pathAccess.resolve(path, {
+                    workspace: c.workspace,
+                    ...(c.session ? { session: c.session } : {}),
+                    ...(c.label ? { label: c.label } : {}),
+                    signal: c.signal,
+                    interactive: false,
+                  }),
+              }
+            : c.resolvePath
+              ? { resolvePath: c.resolvePath }
+              : {}),
+        });
+        return textResult(JSON.stringify({ result: result ?? null }));
+      },
+    });
 }

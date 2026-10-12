@@ -214,7 +214,7 @@ export interface ApprovalRequest {
   /** Capability approvals: the first 40 lines of the script. */
   preview?: string;
   /** Capability approvals: how the code runs (`managed` is not sandboxed). */
-  runtime?: "managed" | "oci";
+  runtime?: "auto" | "managed" | "oci" | "wasm";
   /** `analysis.install`: the packages, the size estimate and the network need (once or deny). */
   install?: InstallPreview;
 }
@@ -238,7 +238,7 @@ export interface CapabilityGate {
   /** Recorded as the source of interactive decisions (`tui` or `web`). */
   source?: "tui" | "web";
   /** Runtime mode shown with `analysis.run` approvals (read live: the configuration can change). */
-  runtime?: "managed" | "oci";
+  runtime?: "auto" | "managed" | "oci" | "wasm";
   /**
    * The script to show in an approval whose input does not carry it (a rerun runs a saved script).
    * Absent or undefined: the preview is taken from `input.code`.

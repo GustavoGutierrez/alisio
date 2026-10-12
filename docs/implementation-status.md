@@ -2954,3 +2954,854 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   tras compactar, si la cola conservada sigue por encima del 85 %, cada turno vuelve a intentarlo.
   Verificado con tests de módulo (runner y reductor web puro); no verificado con un DeepSeek real
   ni con una captura del navegador.
+
+### Forja: Fase 0 y Fase 1 (contratos puros)
+
+Forja (ejecución aislada de código; especificación en `specs/alisio-forja-v1.md`) está **en curso**: todavía
+no hay ninguna herramienta ni motor visibles para el usuario (la clave de configuración `forge` existe desde
+la Fase 2 y no tiene efecto).
+
+- Fase 0 (experimentos, fuera del repositorio): en Node el `WorkerIsolateHost` cierra con `terminate()` en
+  ~1 ms (10/10) y arranca en ~28 ms; en Bun, `terminate()` tarda entre 20 y 3 702 ms, así que Bun usa
+  `ProcessIsolateHost` (~27 ms). El WASM de `quickjs-wasi` mide 637 405 B con SHA-256
+  `d4c9375f2b1ca4dc95f72c8aa2982a7a9951ac8011490d79c6582df732b4bbd9`. Pyodide 314.0.7 en Node 22.19 superó la
+  puerta P0 con una salvedad: la red **no** queda denegada por el sistema en Node 22/24 (`node:http` es
+  alcanzable desde Python vía FFI). El runner de Vitest de Stryker 10 ejecuta 0 pruebas por mutante con
+  Vitest 5.0.1 y TypeScript 7.0.2 (0 % falso), por lo que se descartó (D-27).
+- Fase 1, entregado: tipos aditivos en `@alisio/sdk` (`EngineLanguage`, `EngineId`, `IsolationLevel`,
+  `EngineDescriptor`, `ForgeProgress`) y módulos puros en `packages/core/src/forge/`: `ports`, `errors`,
+  `limits` (global ∩ proyecto ∩ solicitud; proyecto y solicitud solo bajan, tope global duro),
+  `state-machine` (transiciones de §5.2, terminal una sola vez), `protocol` (validación del lado host:
+  tipo, `seq` creciente, correlación de `callId`/`requestId`, 256 KiB, profundidad 32, claves prohibidas,
+  solo JSON, cierre tras el terminal, `call`/`catalog` solo con `toolCalls`), `budget` (llamadas totales y
+  simultáneas, créditos, bytes de salida), `selector` (cadena de responsabilidad genérica y reglas de
+  JavaScript) y `registry` (solo se registra un motor `ready`; si no, `UnavailableEngine`, fallo cerrado).
+  Nada de esto está conectado a `application.ts`, al runner, a las herramientas ni a la configuración.
+- Verificado: pruebas de módulo `tests/forge-*.test.ts` (63) con Rojo → Verde → Refactor, más la puerta
+  completa (`typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`,
+  `docs:build`).
+- Mutation testing lite (`pnpm test:mutation`, fuera de `pnpm check` y de CI): `@stryker-mutator/core`
+  10.0.0 con `testRunner: "command"` (Vitest con `vitest.mutation.config.ts`), `coverageAnalysis: "off"`
+  y `tsconfigFile` apuntando a un archivo inexistente. Así se desactiva su preprocesador de `tsconfig`,
+  que usa la API JavaScript de TypeScript que TypeScript 7 no ofrece. El runner de Vitest de Stryker no se
+  usa: con Vitest 5.0.1 ejecuta 0 pruebas por mutante.
+  - Alcance: `limits.ts`, `state-machine.ts` y `protocol.ts`.
+  - Validez: los dos mutantes de control (una comparación de `limits.ts` y una transición de
+    `state-machine.ts`) hacen fallar sus pruebas.
+  - Resultado (2026-10-12): **94,65 %** (177 mutantes muertos, 10 supervivientes) en 1 min 18 s con
+    concurrencia 2.
+  - Supervivientes aceptados por irrelevantes o equivalentes:
+    - las opciones `allErrors` y `strict` de Ajv;
+    - la rama de prototipo `null`, que no puede llegar desde JSON;
+    - el encadenado opcional del validador de payload;
+    - cinco en `limits.ts`, todos en constantes de tamaño por defecto (`64 * KiB` → `64 / KiB`).
+      Probarlas solo repetiría la constante.
+  - No se añadieron pruebas solo para matar mutantes.
+- Límites: el protocolo exige `seq` estrictamente creciente (se permiten saltos); los límites de entrada y
+  respuesta por llamada y las franquicias de ejecuciones activas por sesión y proceso quedan para el
+  kernel y el broker (Fases posteriores).
+
+### Forja: Fase 2 (diario, estado, directorio de sesión y configuración)
+
+Sigue sin haber herramienta ni motor visibles: todo lo siguiente es infraestructura que usarán las fases 3 y
+posteriores, y **nada está conectado todavía** a `application.ts`, al runner ni al gate.
+
+- Entregado:
+  - Migración SQLite **v9** (aditiva) en `runtime/store.ts`: `forge_executions`, `forge_calls` (con
+    `paths_json`) y `forge_state`, con los índices de §9.1. Se añade la columna `owner_pid` a
+    `forge_executions` (no está en la tabla de la especificación; ver decisiones).
+  - `forge/journal.ts`: `SqliteExecutionJournal` (abrir, `transition` a estados no terminales validada con la
+    máquina de estados, `close` terminal una sola vez con comparación de estado, `startCall`/`endCall` con ID
+    `${callId}:forge:${n}`, solo hashes de entrada, `paths_json` solo para el efecto `write`;
+    las llamadas en curso quedan `started` al cancelar) y `reconcileInterruptedExecutions` (§9.3).
+  - `forge/state-delta.ts` (puro) y `forge/state-store.ts` (SQLite): instantánea de entrada, delta de salida,
+    comparación de revisión por clave en una transacción, `STATE_CONFLICT`, clave ≤ 128 caracteres, valor
+    ≤ 64 KiB y total por sesión raíz ≤ `maxTotalBytes`. Un borrado deja una lápida (valor vacío) que sigue
+    contando revisiones.
+  - `forge/session-path.ts` (puro) y `forge/session-dir.ts`: raíz temporal (`ALISIO_TMPDIR` > `forge.scratch.root`
+    > `os.tmpdir()`), slug, creación `0700` por nivel con `lstat` (directorio, no symlink, dueño, sin bits de
+    grupo ni otros), respaldo a `<stateHome>/scratch/<workspaceKey>/<rootSessionId>/` con diagnóstico (sin
+    `chmod` ni seguir enlaces), marca `.alisio-session`, `resolveScratchPath` (rechaza `..`, absolutas fuera,
+    symlinks que escapan y symlinks colgantes con `INVALID_INPUT`), cuota por `maxBytes`
+    (`writeScratchFile`, `BUDGET_EXCEEDED`, sin borrar nada) y archivos `0600`.
+  - `ScratchJanitor` en `analysis/janitor.ts`: borra directorios de sesión de sesiones raíz inexistentes o con
+    actividad (archivo más reciente) anterior a `retentionDays`; exige directorio real, marca coincidente y
+    ruta real bajo la raíz verificada; nunca sigue symlinks; una pasada cada 24 h con candado. El candado se
+    extrajo a una función compartida con `AnalysisJanitor` (sin cambio de comportamiento).
+  - Configuración `forge` (`javascript`, `state`, `scratch`, `guides`) en `config.ts`, `.strict()`, con
+    `forge.javascript.enabled` en **`false`** hasta la puerta de la Fase 3. Solo globales: `javascript.host`,
+    `memoryBytes`, `stackBytes`, `state.maxTotalBytes` y `scratch.*` (un proyecto que los escribe los ve en
+    `provenance.ignored`). Un proyecto solo baja `timeoutMs`, `maxToolCalls`, `maxConcurrency` y
+    `maxOutputChars`, y solo puede apagar `javascript`, `state` y `guides`, nunca encenderlos.
+- Verificado: 86 pruebas nuevas en 8 archivos (`forge-journal`, `forge-state-delta`, `forge-state-store`,
+  `forge-session-path`, `forge-session-dir`, `forge-scratch-janitor`, `forge-config` y
+  `store-migration-v9`) con SQLite real y directorios temporales reales; las cinco comprobaciones de
+  `store-migration-v*`/`scenarios` que listaban las versiones de migración ahora incluyen la 9. Mutation
+  testing (`pnpm test:mutation`, ahora sobre `limits`, `state-machine`, `protocol`, `state-delta` y
+  `session-path`): **95,50 %** (297 muertos, 14 supervivientes) en 57 s. Los supervivientes de la Fase 2 son
+  equivalentes o de constante por defecto: `input.length === 0` en `resolveWithin` (el caso vacío cae igual en
+  la comprobación de ruta), el `catch` de `JSON.stringify` (el resultado sigue siendo `undefined`) y
+  `512 * 1024` de `DEFAULT_STATE_TOTAL_BYTES`. Un caso real (`resolveWithin(base, "..")`) se cubrió con una
+  prueba después de la ejecución.
+- Decisiones donde la especificación era ambigua:
+  - `owner_pid` en `forge_executions`: sin él, el arranque de un segundo proceso marcaría `failed` las
+    ejecuciones vivas del primero. La reconciliación solo toca filas sin dueño o con dueño muerto
+    (`isProcessAlive`), el mismo criterio de `background_tasks`.
+  - La razón `interrupted` se guarda en `metrics_json` (`{"reason":"interrupted"}`): no hay columna de razón.
+  - La reconciliación pasa cualquier estado no terminal a `failed` aunque la máquina de estados no lo permita
+    como transición (`cancelling` solo va a `cancelled`): es una corrección de datos tras un proceso muerto,
+    no un paso del ciclo de vida.
+  - Códigos de error: clave o valor inválidos → `INVALID_INPUT`; total por sesión excedido y cuota del
+    scratchpad → `BUDGET_EXCEEDED`.
+  - El límite duro de `forge.state.maxTotalBytes` es 8 MiB (la especificación no fija un máximo).
+  - No se registró `forge.javascript.enabled` ni `forge.guides.enabled` como ajustables en vivo: añadirlos a
+    `SETTABLE_KEYS` exige etiquetas y textos en la web (paridad EN/ES), trabajo de la Fase 7.
+- Limitaciones y pendiente para la Fase 3:
+  - Sin cablear: `reconcileInterruptedExecutions(store.db)` debe llamarse donde `application.ts` abre el
+    `SQLiteStore` (no existe un gancho análogo para `analysis_executions`; el janitor solo trata sus filas
+    `running` de más de 24 h). `ScratchJanitor` debe crearse y arrancarse junto a `AnalysisJanitor`
+    (`roots`: `<tmp>/alisio-<uid>` y `<stateHome>/scratch`; `sessionExists`: el almacén de sesiones;
+    `retentionDays`: `config.forge.scratch.retentionDays`). `SqliteExecutionJournal` y `SqliteStateStore`
+    se construyen sobre `store.db`.
+  - **Raíz autorizada del scratchpad en el gate de rutas (FJ-AC-31) y la línea de `FORGE_ROUTING_RULE`**: no
+    están en esta fase; van con el runner (Fase 3). Tampoco `codePath` (FJ-AC-30): `resolveScratchPath` es el
+    soporte listo.
+  - Un proyecto que sube un límite reducible lo ve limitado en silencio al valor global (no aparece en
+    `provenance.ignored`).
+  - La verificación de dueño del directorio raíz se prueba con la función pura (`privateDirProblem`); la
+    prueba con otro uid real exigiría privilegios. En Windows no se ejecutan las comprobaciones POSIX.
+
+### Forja: Fase 3a (gate extraído, cambios del runner y puerto de llamadas anidadas)
+
+Sigue sin haber herramienta `js_run` ni motor QuickJS (Fase 3b): con `forge.javascript.enabled` en `false`
+(valor por defecto) no hay herramientas nuevas, el prompt no cambia y el gate de rutas se comporta como antes.
+
+- Entregado:
+  - Pruebas de caracterización **antes** de mover lógica: `runner-gate-characterization` (ask/auto/full,
+    solo lectura, capacidades `--allow-analysis`/`--allow-process`/concesión guardada, `toolFilter`, opt-in,
+    `availableTools`) y `execute-tool-characterization` (nested: deniega en vez de preguntar, exclusión de
+    opt-in, autollamada, regla de `analysis.run`, límite de 20 llamadas). El defecto D-28 queda fijado como
+    prueba `KNOWN DEFECT D-28: ...`: un subagente con `write` denegado y la herramienta filtrada la sigue
+    alcanzando con `execute`. Se volteará cuando `execute` se retire (3b).
+  - `permissions/decide.ts` (puro): `decideEffect(policy, tool, {approvals, capabilityGranted})` →
+    `allow` (`via`: `effect`/`flag`/`grant`) | `ask` | `deny`, más `effectAllowed`, `effectAskable` y
+    `capabilityFlagAllowed`. Lo usan `runner.ts` (`availableTools` y la rama de decisión de `executeCall`) y
+    `tools/execute.ts`, sin cambio de comportamiento (las pruebas de caracterización siguen en verde).
+  - Runner (D-23): (a) el lote paralelo de lecturas respeta `concurrent: false`; (b) la llamada puede
+    marcarse `effectful` y una lectura cancelada ya no se cierra como no pendiente si lo hizo; (c)
+    `scope.guard(efecto)` lo aplica el despachador anidado. Marca y despachador viajan por
+    `core/call-internals.ts` (un `WeakMap` ligado al contexto de la llamada; no está en el SDK).
+  - `forge/nested.ts`: `createNestedDispatcher` / `NestedCallDispatcher` (D-24, D-29): `toolFilter`,
+    `optInAllows`, política **viva** del run, `decideEffect` con `approvals:false` y sin concesiones, rutas
+    resueltas con `interactive:false`, `decisions`/`artifacts` ligados al `callId` padre, `approveInstall`
+    siempre `deny`, exclusión de `FORGE_EXCLUDED_TOOLS`, errores estructurados (`TOOL_UNAVAILABLE`,
+    `TOOL_INPUT_INVALID`, `PERMISSION_DENIED`, `APPROVAL_REQUIRED`, `TOOL_FAILED`, `CANCELLED`). Marca al
+    padre `effectful` cuando empieza una llamada que no es `read`/`internal`. Corrige D-28 para `js_run`
+    (política y filtro del run, también en sesiones hijas).
+  - Cableado de la Fase 2 en `application.ts`: `reconcileInterruptedExecutions(store.db)` al abrir el
+    almacén; `ScratchJanitor` junto a `AnalysisJanitor` (no se arranca con `:memory:` ni con `--read-only`);
+    `SqliteExecutionJournal` y `SqliteStateStore` en `app.forge.{journal,state}`; `app.forge.scratchpad`
+    (`undefined` con Forja apagada) y `app.forge.scratchJanitor`.
+  - Scratchpad como raíz autorizada (FJ-AC-31): `PathAccess` acepta un proveedor `scratchpad(session)` (solo
+    cuando `forge.javascript.enabled` y `forge.scratch.enabled`; `forge/scratch-provider.ts` crea el
+    directorio de la sesión **raíz** con `ensureSessionDir`, una vez). Una ruta dentro del scratchpad
+    verificado se resuelve sin aprobar el directorio, y una escritura confinada a él no pide aprobación.
+- Verificado: 90 pruebas nuevas en 8 archivos (`runner-gate-characterization`,
+  `execute-tool-characterization`, `forge-decide-effect`, `runner-forge-hooks`, `forge-nested-dispatcher`,
+  `forge-scratch-gate`, `forge-scratch-provider`, `forge-application`; apoyo en `forge-gate-helpers.ts`) con
+  runner, SQLite y herramientas reales. Mutation testing (`decide.ts` añadido): 98,33 % en el módulo nuevo (59
+  muertos, 1 superviviente: tratar `analysis` como un efecto; se cubrió con una prueba y se comprobó a mano
+  que ahora falla); total 95,96 % (356 muertos, 15 supervivientes, los 14 anteriores son de la Fase 1/2) en 29 s.
+- Decisiones donde la especificación era ambigua:
+  - La raíz del scratchpad solo levanta un `ask`: un run que no puede preguntar (sin manejador, `approvals:false`,
+    hijo con escritura denegada) conserva su denegación, y `--read-only` la mantiene porque `PathAccess` ignora
+    el scratchpad en ese modo. Una lectura dentro del scratchpad tampoco pide aprobar el directorio.
+  - `APPROVAL_REQUIRED` si una llamada directa equivalente habría preguntado; `PERMISSION_DENIED` si no habría
+    podido ni preguntar (solo lectura, `approvals:false`) o la ruta queda fuera de las raíces. Un rechazo del
+    `guard` del run (contexto cambiado, presupuesto agotado) también es `PERMISSION_DENIED`.
+  - El `ScratchJanitor` no recorre la raíz temporal compartida cuando la aplicación usa una base de datos
+    propia (`options.db`, pruebas y embebedores): no puede saber qué sesiones existen y borraría las de otro
+    almacén. Con el almacén por defecto recorre `<tmp>/alisio-<uid>` y `<stateHome>/scratch`.
+  - El `emit` de una llamada anidada es nulo: el progreso del padre lo emitirá el broker (3b) con la carga
+    `forge` tipada.
+- Limitaciones y pendiente para la 3b:
+  - `execute` sigue registrado y con el defecto D-28 hasta que `js_run` lo reemplace. No hay prueba de la
+    cuota del scratchpad (FJ-AC-34) en el gate de las herramientas de archivo ni la línea de
+    `FORGE_ROUTING_RULE`; van con `js_run`/Fase 3b.
+  - El `guard` anidado se prueba contra el despachador; la causa real (instrucciones con ámbito, presupuesto)
+    ya está cubierta por el runner directo. No se cargan instrucciones con ámbito (`beforePaths`) para rutas anidadas.
+
+### Forja: Fase 3b (motor JavaScript, `js_run` y retirada de `execute`)
+
+`js_run` ya existe: ejecuta un script en una VM QuickJS-WASM aislada (un hilo en Node, un proceso hijo en Bun
+y en el binario), con llamadas anidadas que pasan por el gate de la propia sesión sin abrir aprobaciones.
+`forge.javascript.enabled` pasa a **`true`** por defecto tras cumplir la puerta de la Fase 3 (abajo).
+
+- Entregado:
+  - Dependencia `quickjs-wasi` **3.6.2 exacta** en `@alisio/core`. D-22 resuelta: `tsc` 7 **conserva**
+    `import … with { type: "file" }` y reescribe la extensión del `import()` dinámico, así que el WASM va como
+    asset de Bun (`forge/javascript/wasm-asset.ts`, cargado solo si `process.versions.bun`); en Node,
+    `createRequire(...).resolve("quickjs-wasi/quickjs.wasm")`. `runtime-manifest.ts` fija versión, SHA-256
+    (`d4c9375f…bd9`), tamaño (637 405 B) y versión de protocolo/prelude; `wasm.ts` verifica el hash **antes de
+    compilar** y cachea el `Module` por proceso. Un hash distinto deja el motor «no listo» (D17).
+  - Hosts (D-20/D-21/D-33): `WorkerIsolateHost` (bandera `SharedArrayBuffer`, `terminate()` si no hay `exit`
+    en 50 ms, confirmación por `exit`) y `ProcessIsolateHost` (entorno vacío salvo `ALISIO_FORGE_ISOLATE=1`,
+    cwd temporal privado, marcos u32 BE + JSON con límite por trama, cancelación → `SIGKILL`, plazo → plazo
+    local del invitado y `SIGKILL` a +500 ms). `IsolateHostFactory` elige por `process.versions.bun` y
+    `forge.javascript.host`. Las entradas (`worker-entry.ts`, `process-entry.ts`, `isolate-main.ts`,
+    `vm-runner.ts`, `prelude.ts`, `wasm.ts`, `framing.ts`) usan solo sintaxis TS borrable. El binario se
+    relanza con el comando oculto `__forge-isolate` (despachado en `packages/cli/src/main.ts` **antes** de
+    cargar configuración o SQLite) mediante el nuevo export `@alisio/core/forge-isolate`.
+  - Prelude y `vm-runner.ts` (D-26, §6.2): `tools.call`/`callTool`, `catalog.search/describe`, `state`, `text`,
+    `progress`, `parallel.map/settle`, `console`; cuerpo `async`; `SharedArrayBuffer` borrado; el puente se
+    pasa como argumento (nunca queda en `globalThis`); intrínsecas capturadas; objetos congelados; cargador de
+    módulos que siempre rechaza; `UNRESOLVABLE_PROMISE`; `fatal` terminal para el presupuesto de llamadas.
+    **Todos** los invariantes se comprueban otra vez en el host (créditos, concurrencia, tamaños, protocolo).
+  - `JavaScriptEngine` (puerto `ExecutionEngine`), `CapabilityBroker` (`forge/broker.ts`: llamadas, catálogo,
+    salida, estado, diario y `ForgeProgress`), `ExecutionKernel` mínimo (`forge/kernel.ts`, Template Method:
+    validar → seleccionar → admitir (1 por sesión, 4 por proceso: `forge/slots.ts`) → preparar → ejecutar con
+    plazo del reloj del padre → recoger → limpiar siempre), `verdict.ts`, `result.ts` (resultado compacto para
+    el modelo, recorte a `maxOutputChars`), `progress.ts` (4/s, terminales nunca descartados), `task-log.ts`
+    (`<sessionDir>/tasks/<executionId>.log`, 0600, acotado a 256 KiB), `catalog-view.ts`, `routing-rule.ts`,
+    `runtime.ts` (ensamblado, `describeForge`) y `probe.ts` (autoprueba real de un aislado).
+  - `tools/js-run.ts`: efecto `read`, `concurrent:false`, `code` | `codePath` (exactamente uno; `codePath` por
+    `resolveScratchPath`, `.js`, ≤ 64 KiB), descripción de 372 caracteres, cancelación = lanza (el runner deja
+    pendiente una llamada que escribió, D-23b). Se registra con `forge.javascript.enabled` y motor listo,
+    también en `--read-only`; con él **no** se registra `execute` (D6, sin respaldo a `node:vm`). Con Forja
+    apagada todo queda como antes (`execute` registrado, prompt idéntico).
+  - Regla de enrutamiento (§8.1): `ProjectContext.extras` recibe ahora el `sessionId` (cambio aditivo) para
+    añadir la ruta real del scratchpad de la sesión; ≤ 900 caracteres, línea de Python solo si `python_run`
+    está registrado. Con ambos motores el prompt crece 700 caracteres y la descripción de `js_run` ocupa 372: 1 072 en total sobre la línea base (límite 1 200).
+  - Scratchpad: escribir en él ya no pide aprobación tampoco **sin manejador de aprobaciones** (`alisio run`),
+    sí se mantiene la denegación en `--read-only` y en hijos con `approvals:false`; la cuota
+    `forge.scratch.maxBytes` se aplica a toda escritura confinada al scratchpad (también las anidadas, descontando
+    el tamaño del archivo que se reemplaza), con error claro y sin borrar nada (FJ-AC-34).
+  - CLI: `alisio forge status [--probe] [--json]` (descriptor, hash del WASM, host efectivo, límites; `--probe`
+    arranca un aislado real).
+  - `fixtures/cli-e2e.ts`: `js_run` de punta a punta en Node (host worker y host proceso sobre `dist`) y en el
+    binario copiado a una ruta **con espacios** (host proceso, `__forge-isolate`, WASM embebido), con progreso
+    `forge` en el JSONL y cancelación por `SIGINT` de un bucle ocupado sin proceso aislado superviviente
+    (control positivo previo con `pgrep`). `scripts/forge-bun-smoke.ts` (+ `tests/forge-bun-smoke.test.ts`)
+    ejecuta el núcleo real sobre el Bun del repositorio con ambos hosts.
+- Aceptación (todas con QuickJS, SQLite, runner y hosts reales): FJ-AC-01..04, 07 (Node y Bun), 08..15 en
+  `forge-javascript-engine`, `forge-javascript-hosts`, `forge-javascript-protocol` y `forge-js-run`; 05/06 y el
+  equivalente de D-28 por `js_run` en `forge-js-run`; 16/17 en `forge-javascript-engine`; 18 en `forge-wasm` y
+  `forge-javascript-wiring`; 19 (adaptado: apagado ⇒ sin `js_run`, `execute` y prompt como hoy) y 20 en
+  `forge-javascript-wiring`; 23 en `forge-legacy-execute-history` (almacén, TUI y utilidades web); 24 en
+  `pnpm test:compiled`; 27 (100 ejecuciones seguidas con host worker; 15 con host proceso: sin ranuras
+  retenidas, todas las paradas confirmadas); 27a/27b en `forge-js-run`; 30 (`codePath`) en `forge-js-run`; 31
+  (también sin manejador) y 34 en `forge-scratch-gate`; 28/29/33 siguen cubiertas por la Fase 2.
+- Rendimiento medido (Linux x64, Node 22.19, Bun 1.4.2; `Module` en caché; incluye el diario y el núcleo):
+
+  | Métrica | Worker (Node) | Proceso (Node) | Worker (Bun) | Proceso (Bun) |
+  |---|---|---|---|---|
+  | Ejecución vacía p95 | 93 ms | 154 ms | 43 ms | 50 ms |
+  | Parada de `while(true)` tras cancelar p95 | 11 ms | 15 ms | ~12 ms | ~13 ms |
+  | Sobrecoste del plazo (bucle ocupado) p95 | 17 ms | 101 ms | ~14 ms | ~51 ms |
+  | Llamada anidada pequeña p95 | 7 ms | 8 ms | 8 ms | 8 ms |
+
+  Los objetivos de §12.2 (≤ 150 ms worker, ≤ 400 ms proceso, ≤ 1 s de parada, ≤ 20 ms por llamada) se cumplen.
+  Las cifras de Node se midieron bajo Vitest (la entrada `.ts` se transpila al arrancar); en `dist` es menos.
+- Mutation testing lite: se añaden al alcance los módulos puros nuevos (`slots`, `verdict`, `result`,
+  `catalog-view`, `progress`, `hosts/framing`). Primera pasada completa 92,66 %; tras añadir pruebas de frontera
+  solo para los supervivientes relevantes (liberación de ranuras con más de una por sesión, orden con
+  temporizador tardío, límites de 160 caracteres y de trama, partes opcionales del informe, bordes del
+  recorte) quedó en **96,25 %** (563 muertos, 1 por tiempo, 22 supervivientes: reloj real,
+  `unref`, `Buffer.from` frente a `concat`, la limpieza del mapa de ranuras, equivalentes o triviales).
+  Una pasada completa con 12 archivos tardó 1 min 50 s la primera vez y 4 min 56 s al repetirla con la caché
+  borrada. La segunda superó el límite de 2 min, así que se recortó `mutate` a **9 archivos**, el límite de
+  §12.3: salen `result`, `catalog-view` y `progress`; se quedan `slots`, `verdict` y `hosts/framing`. Las
+  pruebas de los tres archivos retirados siguen en `pnpm test`. Las pasadas incrementales tardan unos 4 s.
+- Decisiones donde la especificación era ambigua:
+  - `KernelChannel` se redefinió: lo implementa el **núcleo** (`receive` + `bind`), no el motor; la versión de la
+    Fase 1 (`onMessage(handler)`) no decía quién llamaba a quién. El motor valida y entrega; el núcleo decide.
+  - `describe()` es una autocomprobación barata (hash y compilación del WASM, archivos del host); el arranque de
+    un aislado real es `probe()` (`alisio forge status --probe`), no se hace en cada arranque de la aplicación.
+  - `parallel`/`Promise.all`: el prelude pone en cola las llamadas sin crédito en vez de fallar; solo agotar
+    `maxToolCalls` es terminal (`fatal` desde el prelude y, por si se salta el prelude, `BUDGET_EXCEEDED` del
+    libro mayor del host).
+  - `calls.failed` y `calls.denied` son disjuntos; `denied` = `PERMISSION_DENIED`/`APPROVAL_REQUIRED`.
+  - Una ejecución cancelada hace que `js_run` **lance** (el runner decide si la llamada queda pendiente); un
+    plazo vencido es un resultado de error normal (`timed_out`).
+  - En Node con `host: "process"` (diagnóstico) el hijo ejecuta `process-entry.{ts,js}` directamente; el comando
+    oculto `__forge-isolate` solo lo usa el binario compilado.
+  - `forge.javascript.enabled` activado por un `--config` explícito no cuenta (solo la capa global lo activa),
+    como el resto de claves globales de Forja; los e2e usan el config global.
+- Limitaciones conocidas:
+  - **No es un sandbox absoluto** (§16): el aislamiento depende de QuickJS-WASM (versión y hash fijados, sin
+    extensiones), del confinamiento del hilo o proceso y del gate; un fallo del runtime no está descartado.
+  - Bun usa un **proceso hijo**, no un worker (`terminate()` no es fiable allí): arranque ~50 ms frente a
+    ~40 ms del worker en Bun; no hay memoria compartida, así que la cancelación de usuario es `SIGKILL` y el
+    plazo depende del reloj local del invitado más el respaldo de +500 ms. El entorno del hijo está vacío
+    (en Windows solo `SystemRoot`, sin probar en un Windows real).
+  - La VM **no tiene red, sistema de archivos, procesos ni temporizadores**; `Date`, `Math.random` y
+    `performance.now` son reales (sin promesa de determinismo). `eval`/`Function` existen dentro de la VM sin
+    capacidades nuevas.
+  - Las llamadas anidadas **nunca preguntan** (`APPROVAL_REQUIRED`), no cargan instrucciones con ámbito
+    (`beforePaths` no se carga para rutas anidadas), tienen `emit` nulo y `approveInstall` siempre `deny`.
+  - `task`, `task_wait`, `send_message`, `ask_user_question`, `js_run`, `execute` y `forge_guide` están excluidas de la VM; las
+    herramientas opt-in (`exit_plan`, de objetivo) también. `python_run` solo con `--allow-analysis` o
+    `--allow-process`.
+  - Claves `constructor`, `prototype` y `__proto__` en un valor devuelto o en una entrada de herramienta se
+    rechazan como `PROTOCOL_VIOLATION` (regla de la Fase 1); un resultado de más de 200 000 caracteres falla
+    con `OUTPUT_LIMIT` desde el prelude.
+  - `forge_guide`, los temas adaptativos, la pista `forge_guide(...)` en las respuestas (el texto de la pista
+    no nombra la herramienta todavía), la API `GET /api/forge` y la tarjeta web son de las Fases 6-7.
+  - Las sesiones antiguas con llamadas `execute` se siguen mostrando (no se tocó el mapeo web ni el TUI).
+  - Con `forge.javascript.enabled: false` vuelven `execute` y el prompt anterior; con él en `true` y un motor
+    que no verifica no hay ni `js_run` ni `execute` (sin respaldo a `node:vm`).
+- Revisión de seguridad (invocación 2 de 3): hallazgos y correcciones. Cada uno nació de una prueba que
+  reproducía el escenario (QuickJS, hosts y núcleo reales; un invitado hostil guionizado cuando el fallo estaba
+  en el host) y falló antes de la corrección.
+  - M1 `ask_user_question` era alcanzable desde la VM (efecto `read`) y abría prompts interactivos: ahora está
+    en `FORGE_EXCLUDED_TOOLS` (FJ-AC-13). Auditoría del registro: es la única herramienta que abre una interacción
+    de interfaz; aprobaciones e instalaciones ya se negaban en llamadas anidadas y `exit_plan`/objetivo son opt-in.
+  - M2 El nombre de herramienta del mensaje `call` no tenía cota: el esquema exige `maxLength: 128` y el patrón del
+    registro (`^[a-zA-Z0-9_-]{1,64}$`), el prelude lo comprueba (`TOOL_UNAVAILABLE`, sin enviar nada) y el broker
+    solo registra o difunde nombres que el registro conoce (`dispatcher.knows`); el resto se guarda como
+    `unknown:<sha256[0:12]>`.
+  - M3 El invitado elegía el estado terminal y códigos propios rompían el protocolo: el prelude solo deja pasar
+    los códigos de llamada anidada (`TOOL_UNAVAILABLE`, `TOOL_INPUT_INVALID`, `TOOL_FAILED`,
+    `PERMISSION_DENIED`, `APPROVAL_REQUIRED`, `BUDGET_EXCEEDED`, `OUTPUT_LIMIT`, `STATE_CONFLICT`); cualquier otro
+    es `SCRIPT_RUNTIME`. En el host, `verdictOf` trata un `TIMEOUT`/`CANCELLED` del invitado sin parada del
+    host como `failed`/`SCRIPT_RUNTIME`: los estados `cancelled` y `timed_out` son solo del host. La prueba
+    anterior que fijaba lo contrario («un invitado que se adelanta es lo mismo») se retiró.
+  - M4 `edit_file` esquivaba la cuota del scratchpad: `forge/scratch-quota.ts` estima los bytes resultantes por
+    herramienta (`write_file`: `content`; `edit_file`: tamaño actual − `oldText` + `newText`, una sola
+    coincidencia) y se usa igual en llamadas directas y anidadas. Una herramienta de escritura sin estimador no
+    obtiene el pase sin aprobación al scratchpad (pide aprobación como fuera de él); si una política la permite
+    sigue contando su `content`, como antes (**no** se mide ni se revierte tras escribir).
+  - L1 `PathAccess.lockScratch` serializa comprobación de cuota y escritura por directorio de scratchpad (también
+    entre sesiones de la misma raíz), en el runner y en el despachador anidado.
+  - L2 `JavaScriptEngine.terminate` termina la ejecución con un veredicto del host cuando la parada no se
+    confirma (antes `run()` no resolvía si no llegaba ni mensaje ni `exit`): se libera el hueco (o se retiene
+    hasta `settled`) y se anota `terminationUnconfirmed`.
+  - L3 El límite efectivo `maxCallInputBytes` se recorta a `MAX_MESSAGE_BYTES − 4 KiB` (`MAX_CALL_INPUT_BYTES`
+    = 258 048; el valor por defecto de 256 KiB de §6.5 queda como configurado, pero el efectivo es este) y el
+    prelude mide **bytes UTF-8**; pasarse es `TOOL_INPUT_INVALID` y nunca `PROTOCOL_VIOLATION` (probado con ASCII,
+    `é` y emoji en worker y proceso).
+  - L4 El host recorta `progress.message` a 500 caracteres y solo guarda 10 000 mensajes por ejecución; el resto
+    se descarta en silencio y `metrics.progressDropped` lo cuenta en el diario (más una línea en el log de la tarea).
+  - L5 El prelude captura los métodos de `Array`, `String` y `Promise` que usa (`uncurry`), no usa `Promise.all`
+    ni devuelve promesas desde callbacks de `then` (ambos consultan propiedades que el script puede reemplazar):
+    reemplazar `Array.prototype.map/shift/join`, `Promise.prototype.then` o `Promise.resolve` ya no cambia
+    `parallel` ni `tools.call`. `PRELUDE_VERSION` pasa a 2.
+  - L6 `renderForgeResult` recorta `error.message` al presupuesto `maxOutputChars` y lo indica.
+  - L7 `MEMORY_LIMIT`/`STACK_LIMIT` ya no salen del texto del mensaje: el prelude los marca solo si el error es del
+    tipo propio del motor (`InternalError` de QuickJS, cuyo constructor se borra del ámbito global; `RangeError` para
+    la pila). Un `throw new Error("out of memory")` es `SCRIPT_RUNTIME`.
+  - L8 En win32 el proceso aislado recibe `SystemRoot` y nada más del entorno del padre (`isolateEnv`, probado por plataforma;
+    sin ejecutar en Windows real).
+  - L9 El scratchpad solo es raíz de escritura autorizada si el motor JavaScript está listo (`jsReady`) además de
+    `forge.javascript.enabled` y `forge.scratch.enabled`: con un autotest fallido vuelve a pedir aprobación.
+- Riesgos aceptados de esta revisión:
+  - **Host worker**: una fuga completa de la VM comprometería el proceso anfitrión (hilo del mismo proceso). Es inherente a D-20;
+    el host proceso (Bun, binario) no lo comparte.
+  - El `fd_write` de WASI en el host proceso solo puede inyectar tramas en el canal que el host ya trata como no fiable
+    (se validan igual que cualquier mensaje del invitado).
+  - `STACK_LIMIT` puede imitarlo un script con un `RangeError` propio y ese mensaje; solo cambia la etiqueta de una
+    ejecución ya fallida. Un `TIMEOUT` real del invitado que llegue antes que el temporizador del host (carrera de
+    milisegundos con el hilo principal ocupado) se informa como `failed`/`SCRIPT_RUNTIME` en lugar de `timed_out`.
+  - Una herramienta de escritura de un plugin que una política permita sin estimador de tamaño no queda acotada por la
+    cuota del scratchpad (solo cuenta `content`).
+- Pendiente para la invocación 3 de la revisión: re-verificación de las correcciones anteriores y repaso de
+  `forge/javascript/hosts/worker-host.ts`, `isolate-main.ts` y `factory.ts` (no tocados en esta pasada).
+
+### Forja: Fase 4 (Python en el núcleo: P1 caracterización y P2 adaptación)
+
+`python_run` ya corre sobre el `ExecutionKernel` de `js_run` (especificación `specs/alisio-forja-python-v1.md`,
+fases P1 y P2). Sin cambio de comportamiento para el modelo salvo lo aditivo de abajo; `wasm`, `auto`,
+`analysis.isolation` y el análisis de imports son de la Fase 5.
+
+- P1 (caracterización, antes de tocar código; todas verdes contra el código previo):
+  `tests/analysis-python-characterization.test.ts` fija el texto exacto de `python_run` en éxito, sin salida, sin
+  artefactos, error, `publishOnError` y tiempo agotado; los artefactos (nombres, tipos, procedencia en `managed` y
+  `oci`); `rerunOf` con script alterado (rechazo exacto) y con entrada verificada por hash; el contenedor sin
+  imagen; la lista **exacta** de argumentos de `ociRunArgs`; y la carpeta del job. La aprobación de
+  `analysis.install` con `extras` (y que el modo headless no instala), el ciclo de cancelación y tiempo agotado y el
+  `409 runs_active` de `/api/artifacts/:aid/rerun` ya estaban fijados por `analysis-extras`,
+  `analysis-python-run`, `analysis-oci` y `server-analysis-phase4`, que no se tocaron.
+- P2 (adaptación):
+  - `forge/python/`: `PythonEngine` (implementa `ExecutionEngine`, una instancia por backend: `python-managed` y
+    `python-oci`), `PythonBackend` (§4.2) con `ManagedBackend` (envuelve `AnalysisRuntimeManager.interpreter` y
+    `runProcess`) y `OciBackend` (envuelve `OciRuntime.run`/`ociRunArgs`) sin alterar su salida,
+    `PythonBackendSelector` (`backend-selector.ts`: cadena de reglas puras sobre `EngineSelector`; hoy
+    `rerunOriginalBackend` y `configuredRuntime`), `StdoutFrameTransport` (`frame-transport.ts`), el analizador
+    puro de líneas (`frame-parser.ts`) y `wiring.ts`. `analysis.runtime` sigue siendo `managed | oci`.
+  - `ExecutionKernel` se generalizó de forma aditiva: `language`, `selection` ya hecha por quien llama,
+    `payload` por motor, `limitOverrides` fijados por el núcleo (el plazo de Python llega a 900 s y el script a
+    200 000 caracteres, por encima de los máximos de JavaScript), `dispatcher` opcional (Python no llama
+    herramientas) y un paso opcional `collect` del motor entre `run` y la confirmación del estado compartido.
+    `PreparedExecution.analysisExecutionId` enlaza la fila de `forge_executions` con `analysis_executions`
+    (`SqliteExecutionJournal.linkAnalysisExecution`). Código de error nuevo: `PUBLICATION_REJECTED`.
+  - `python_run` hace antes del núcleo lo que depende del contexto de la llamada (plan de `rerunOf`, lectura de
+    `codePath`, sondeo de preparación, selección, `analysis.install`) y delega la ejecución: el motor crea el job y
+    copia las entradas (`prepare`), lanza y lee los marcos (`run`), publica (`collect`) y mata (`terminate`). El
+    texto para el modelo es el de antes más una **última línea** (PD11):
+    `engine: python-oci (os-container) · reason: analysis.runtime=oci`. Si el script usa `forge.text` o
+    `forge.result` aparece además una sección `--- forge output ---` (solo entonces).
+  - Transporte (§7): líneas de stdout que empiezan por `\u001eALISIO-FORGE:<nonce>:` + JSON; nonce de 128 bits por
+    ejecución en `ALISIO_FORGE_NONCE`; mensajes `ready`, `progress`, `output`, `state.set`, `state.delete`,
+    `complete`, `fatal`; `call` y `catalog` son `PROTOCOL_VIOLATION` (y matan el proceso); 256 KiB por mensaje,
+    profundidad 32, `seq` creciente, máximo 1 000 mensajes (el exceso se ignora con un aviso `warning:`); un
+    marco con otro nonce es salida normal. Los marcos no llegan al modelo ni a la vista en vivo (el `stdout.log` del
+    job los conserva en bruto). `runProcess.onData` recibe ahora el flujo (`stdout`/`stderr`) como segundo
+    argumento opcional, para no mezclar líneas de dos flujos.
+  - `alisio_runtime/forge.py` (sin dependencias, CPython 3.10+): `progress`, `text`, `result` (se envía al salir) y
+    `state.get/set/delete` con el snapshot de `work/.forge/state.json`; sin nonce degrada a `print`.
+    `__version__` pasa de `"3"` a `"4"`.
+  - Estado compartido con JavaScript (FP-AC-19/20): el delta de `forge.state.set` se confirma después de publicar
+    con éxito; un fallo del script o una publicación rechazada lo descartan.
+  - Procedencia aditiva `engine`, `isolation`, `selectionReason` (PD12, FP-AC-24). `rerunOf` prefiere el backend
+    original si está listo y no es **menos aislado** que el configurado (nunca baja el aislamiento elegido).
+  - `codePath` (aditivo, exclusivo con `code` y `rerunOf`): `.py` dentro del scratchpad (`resolveScratchPath`),
+    copiado a `script/main.py` y con el mismo hash que `code`. El scratchpad se expone de solo lectura como
+    `ALISIO_SCRATCH_DIR` (variable en `managed`; montaje `:ro` en `/job/scratch` en `oci`, `ociRunArgs` con la
+    opción `mounts.scratch`). Solo con el mismo requisito que `js_run` (Forja activa y motor verificado); la
+    descripción de `python_run` **no cambia** (la guía va en el esquema de `codePath` y en la regla de
+    enrutamiento, que ahora nombra `python_run codePath`).
+- Aceptación (fakes de intérprete y de contenedor, runner y SQLite reales): FP-AC-01, 02, 03 (solo la variante
+  `oci` explícito: `auto` es de la Fase 5), 09, 10 (`managed` y `oci`, con Python 3.10 real), 18, 19 (con una
+  ejecución JavaScript real que lee el valor), 20, 21 (solo `managed`/`oci`), 24 y FJ-AC-32, en
+  `tests/forge-python-run.test.ts`; transporte en `forge-python-frame-parser`/`forge-python-frame-transport`;
+  `forge.py` contra CPython real en `forge-python-module`; selector en `forge-python-backend-selector`; núcleo en
+  `forge-kernel-python`; cableado en `forge-python-application`. Con `ALISIO_TEST_OCI_IMAGE` se añade un contenedor
+  real (escritura en `$ALISIO_SCRATCH_DIR` denegada, marcos a través de `docker run`); sin él se omite.
+- Cambios en pruebas existentes: `tests/analysis-charts.test.ts` (`alisio_runtime.__version__` `"3"` → `"4"`, pedido
+  por la especificación). Ninguna otra expectativa cambió: la línea PD11 solo está en las pruebas nuevas.
+  `fixtures/fake-python.mjs` y `fixtures/fake-container.mjs` ganaron opciones aditivas (marcos, scratchpad, Python
+  real en el «contenedor»); la primera espera a vaciar stdout antes de salir.
+- Mutation testing lite: `forge/python/frame-parser.ts` **sustituye** a `forge/slots.ts` en `mutate` (sigue en 9
+  archivos; las pruebas de `slots` siguen en `pnpm test`). Pasada completa 1 min 22 s: 96,06 % en conjunto y
+  93,94 % en `frame-parser.ts` (6 supervivientes, todos equivalentes: `join` de `undefined`, banderas que solo
+  son verdad en un modo y el borrado del resto de una línea que el modo `drop` ya descarta).
+- Decisiones donde la especificación era ambigua:
+  - `analysis.runtime` aún no distingue «explícito» de «por defecto», así que la regla de `rerunOf` va **antes** que la
+    del runtime configurado y se limita a no bajar el aislamiento. La Fase 5 debe revisar el orden (§6.1 pone el
+    explícito primero) cuando exista `auto`.
+  - Los motores `python-*` se registran en el registro del núcleo en la primera ejecución con `describe()` estático
+    (`ready: true`); la preparación real se sondea en cada llamada con `PythonBackend.check()`, que conserva los
+    mensajes `runtime_unavailable` de siempre.
+  - Python **no toma ranura** de Forja (`SlotTable`): un `js_run` que llama a `python_run` en la misma sesión ya
+    tiene la ranura, y `python_run` nunca tuvo límite de concurrencia propio.
+  - El plazo lo cuenta el reloj del núcleo desde que arranca `run`; el proceso lleva un respaldo propio 15 s mayor.
+  - Una ejecución detenida por una violación del protocolo no tiene código de salida: el texto dice `stopped in …s`.
+  - Un directorio de scratchpad que el motor no puede montar (`:` en la ruta) simplemente no se expone en `oci`.
+- Limitaciones conocidas:
+  - En `managed` `ALISIO_SCRATCH_DIR` es solo una variable: el script corre con los permisos del usuario y puede
+    escribir allí (FJ-AC-32 lo documenta como no garantizado). En `oci` el montaje `:ro` lo hace cumplir el motor
+    real; la prueba con el CLI falso solo comprueba los argumentos.
+  - `forge.py` exige que un marco empiece una línea: si el script dejó una línea a medias, el marco se pierde como
+    texto. No comprueba la profundidad JSON (el host mata la ejecución si pasa de 32).
+  - Las ejecuciones de Python no aparecen todavía en `alisio forge status` ni en `GET /api/forge` (Fase 5-6).
+
+Traspaso para la Fase 5:
+
+- Reglas nuevas del selector: añadirlas a `RULES` en `forge/python/backend-selector.ts` (`auto` antes de
+  `configuredRuntime`, filtro `analysis.isolation`, ajuste de Pyodide con `inputBytes` e imports). Ensanchar
+  `PythonBackendId` con `"wasm"` y `ISOLATION_RANK`, `PythonRuntimeSetting` y el enum de `analysis.runtime`
+  (`config.ts`). `PythonRequirements.importedModules`/`inputBytes` ya existen en `backend.ts`, sin uso.
+- `PyodideBackend`: implementa `PythonBackend` (`forge/python/backend.ts`), se crea y se registra en
+  `createPythonForge` (`wiring.ts`) junto a los otros dos; `PythonEngine` no cambia. Exposición del scratchpad:
+  `PreparedJob.scratch` ya llega al backend (flag `--allow-fs-read` extra). `StdoutFrameTransport` ya sirve tal cual
+  (la salida de Pyodide se redirige a `sink.onData`). `NEEDED`/sondeo: `neededBackends()` decide qué `check()` se
+  llama; `wasm` entraría ahí. Los descriptores `python-*` para `forge status`/API salen de `PythonForge.engines`.
+
+### Forja: Fase 5 (Python wasm: P3 backend Pyodide y P4 selección y superficies)
+
+Estado: **hecho, sin commit.** Cierra las fases P3 y P4 de `specs/alisio-forja-python-v1.md`. La interfaz web de
+`wasm` (tarjetas, insignias, capturas) es de la Fase 7; las guías `python.*` de `forge_guide`, de la Fase 6.
+
+- Backend `wasm` (P3), en `packages/core/src/forge/python/`:
+  - `pyodide-manifest.ts`: constante TypeScript (no JSON, porque `tsc` no copia JSON a `dist`) con Pyodide 314.0.7
+    (Python 3.14.2), 5 archivos del núcleo y 30 wheels, cada uno con URL, SHA-256, tamaño y origen (`pyodide` = espejo
+    oficial jsDelivr con los hashes del `pyodide-lock.json`; `pypi` = las wheels puras que el lock no trae, con los hashes
+    que publica PyPI). Cierre de dependencias explícito por perfil (`base`, `analysis`, `science`; `science` incluye
+    `analysis`), en orden de carga. Sin entrada de `sqlite3` (viene en la stdlib). Los hashes de los archivos del núcleo se
+    contrastaron con el espejo; los de PyPI, con la API JSON de PyPI y los archivos de la Fase P0.
+    `analysis` pesa 43,9 MiB y `science` 69,6 MiB (el runtime solo, 12,9 MiB).
+  - `pyodide-install.ts`: `installPyodide` es **el único código que usa la red** del backend. Descarga a una carpeta de
+    preparación, verifica hash y tamaño de cada archivo mientras llega (un servidor que envía más de lo fijado se corta),
+    y solo entonces mueve los archivos a `<analysis dir>/pyodide/<versión>/` y escribe `ready.json`. Cualquier fallo
+    borra lo descargado y lanza `PyodideIntegrityError`; si ya había una instalación completa, esa queda intacta (nunca
+    se «baja» de `science` a `analysis`). `inspectPyodide` es la comprobación barata previa a cada ejecución (existencia
+    y tamaño, sin hash); `verifyPyodideFiles` calcula hashes y se ejecuta **en cada lanzamiento** sobre el núcleo y las
+    wheels que ese script carga.
+  - `pyodide-runner.mjs` (JavaScript plano, fuente de verdad) y `pyodide-runner-source.ts` (generado por
+    `scripts/pyodide-runner-source.ts`, con `tests/forge-python-pyodide-runner-source.test.ts` contra el desfase): el npm
+    y el binario solo llevan módulos JavaScript, así que el runner viaja como cadena y el backend lo escribe como
+    `runner-<hash>.mjs` dentro de la carpeta de Pyodide (legible por el hijo) antes de lanzar. El runner borra `fetch`,
+    `WebSocket`, `XMLHttpRequest`, `EventSource` y `navigator`, instala el shim de `process.binding("constants")`,
+    sustituye y congela `process.kill`/`process._kill` (D-32), carga Pyodide con `indexURL`/`lockFileURL`/`packageCacheDir`
+    locales, carga solo los paquetes del escaneo de imports (los del lock por nombre y las wheels puras por archivo, en
+    orden de dependencia), copia `script/`, `input/`, `work/` (con `.forge/state.json`) y el scratchpad (tope de 64 MB) al
+    sistema de archivos virtual `/job`, ejecuta `main.py` como `__main__` (módulo real, con `await` de nivel superior), corre
+    los `atexit` (Pyodide nunca finaliza el intérprete; sin esto `forge.result` no llegaría) y copia `/job/out` al `out/`
+    real sin seguir enlaces. Un error lanzado dentro de un manejador de eventos de Node se reduce a una línea (sin el
+    volcado de Emscripten) y sale con 70.
+  - `wasm-node.ts`: elige el `node` (`analysis.wasm.nodePath`; el Node en ejecución; bajo Bun, el primer `node` con la corrección CVE-2025-55130 (≥ 22.22, 24.13, 25.3; solo entradas absolutas) del
+    `PATH`, sin recordar fallos), construye los flags del Permission Model (**un flag por ruta**, lectura de la
+    distribución, del job y del scratchpad; escritura solo en `work/` y `staging/`; nunca `--allow-child-process`,
+    `--allow-worker`, `--allow-addons`, `--allow-wasi` ni `--allow-net`), el entorno vacío (solo variables `ALISIO_*`) y
+    la **autoprueba de red**: lanza el `node` real con los mismos flags y le pide conectar a un puerto local nuestro. Solo
+    una negativa observada cuenta como denegada; una prueba no concluyente es «no denegada». Se recuerda por binario y
+    versión.
+  - `pyodide-backend.ts` (`PyodideBackend`): `isolation: "wasm-process"`, `hardTermination: true`,
+    `hardMemoryLimit: false`, `cooperativeInterrupt: false`, `networkDeniedByOS` de la autoprueba. Vigilante de RSS cada
+    250 ms (`rss.ts`: `/proc` en Linux, `ps` en macOS/BSD, `tasklist` en Windows) que mata al hijo por encima de
+    `analysis.wasm.memoryMb` y lo informa como `MEMORY_LIMIT` (`RunningProcess.limit`, leído por `PythonEngine`).
+    Cancelación y plazo son `SIGKILL` inmediato (`killGraceMs: 1`) y el confirmado es el cierre del proceso. El arranque
+    se mide con un archivo `work/.forge/wasm-ready` que escribe el runner (su fecha de modificación, no una línea de
+    salida, para no ensuciar la salida del script ni los logs) y se informa aparte (`runtime.startupMs`, y
+    `(startup 1.9s)` en la cabecera del resultado). El plazo del kernel es el del script **más**
+    `analysis.wasm.startupMs`; el texto de «timed out after» sigue citando el plazo del script.
+  - Migración de base de datos v10: `analysis_executions.runtime` admite `'wasm'` (reconstrucción de la tabla con el
+    procedimiento oficial de SQLite; filas, ids y artefactos intactos; `tests/store-migration-v10.test.ts`).
+- Selección y superficies (P4):
+  - Config: `analysis.runtime: auto|managed|oci|wasm` (defecto **`auto`**), `analysis.isolation: preferred|required|strict`
+    (defecto `preferred`) y `analysis.wasm {memoryMb 3072, startupMs 30000, maxInputBytes 100 MiB, nodePath null}`. Los
+    tres son solo globales (una capa de proyecto se ignora con diagnóstico) y no se cambian en vivo ni desde la UI.
+  - `backend-selector.ts`, reglas puras: (1) runtime explícito primero (se respeta o falla con el motivo y la salida;
+    `required`/`strict` también rechazan un `managed`/`wasm` explícito que contradiga la política, para no incumplir
+    «con `required` ningún script corre en el host»); (2) `auto` + `rerunOf`: vuelve al backend original si está listo,
+    encaja y la política lo permite; (3) `auto`: `oci` → `wasm` → `managed` (este último solo con `preferred`; con `strict`
+    solo backends con `networkDeniedByOS`; `wasm` queda fuera por `maxInputBytes`, imports desconocidos o extras sin
+    perfil instalado); (4) sin candidato: `ENGINE_UNAVAILABLE` con el motivo de cada backend y el comando más corto
+    (`alisio analysis setup --wasm`, con `--profile science` cuando eso lo arreglaría, `--oci` cuando `wasm` no puede encajar).
+    Nunca hay reintento tras empezar (PD5).
+  - `import-scan.ts` (§6.2): escáner puro sin intérprete (quita comentarios y cadenas, ve imports sangrados y con `;`),
+    tabla módulo → paquete (`sklearn` → `scikit-learn`, `docx` → `python-docx`, `PIL` → `pillow`…) y clasificación por perfil.
+    No es seguridad. `js`/`pyodide`/`pyodide_js` cuentan como disponibles (los trae Pyodide).
+  - `python_run`: el sondeo de preparación de los candidatos va en paralelo; `wasm` solo calcula `inputBytes` si es
+    candidato. La descripción de la herramienta no cambia con el defecto `auto` (la prueba de bytes de `dashboard-tool`
+    sigue igual); con `wasm` explícito añade su nota.
+  - CLI: `alisio analysis setup --wasm [--profile analysis|science] [--yes]` (tamaño estimado, confirmación interactiva o
+    `--yes` obligatorio sin terminal, destino, progreso y, ante un hash incorrecto, mensaje claro, código de salida 1 y
+    backend no listo); `alisio analysis status` suma `isolation`, `backends` y una tabla por stderr; `alisio forge status`
+    lista los descriptores Python (con `--json` los incluye en `engines`); `alisio doctor` incluye `isolation` y `backends`.
+  - API: `GET /api/analysis` añade `isolation` y `backends` (descriptores vivos: `ready`, `reason`, `profiles`,
+    `networkDeniedByOS`); **nueva** `GET /api/forge` (`ForgeOverview` en el SDK): el motor JavaScript y luego los Python.
+- Cambios de comportamiento por el defecto `auto` (deliberados, con pruebas actualizadas):
+  - `analysis.runtime` por defecto pasó de `managed` a `auto`. Sin backend aislado listo se usa `managed` como antes, y el
+    motivo de la línea final lo dice (`analysis.runtime=auto, analysis.isolation=preferred: managed is ready; oci: not
+    ready (…); wasm: not ready (Pyodide is not installed)`). Las aprobaciones de `analysis.run` muestran `runtime: "auto"`.
+  - La regla de `rerunOf` pasó **después** del runtime explícito (§6.1), así que con `managed`/`oci` explícitos un rerun ya
+    no «salta» al backend original; con `auto` sí. Las tres pruebas FP-AC-21 de la Fase 4 se reescribieron para `auto` y se
+    añadió una que fija que el explícito gana.
+  - Las verificaciones de versión de esquema de las pruebas de migración y de `fixtures/scenarios.ts` ahora esperan `10`.
+- Decisiones donde la especificación era ambigua:
+  - Un cierre no cero del proceso `wasm` sigue siendo `SCRIPT_RUNTIME` (con el código de salida en el mensaje), no un código
+    nuevo `RUNTIME_CRASH`: no existe en `FORGE_ERROR_CODES` y añadirlo ensancharía el esquema del protocolo. El runner usa 1
+    (el script lanzó), el propio código del script, o 70 (falló el runner); `os.system` denegado sigue cayendo con la salida
+    del propio Node.
+  - Los extras de `python_run` en `wasm` no cargan paquetes: solo exigen que el perfil instalado los cubra (§8.2 pide cargar
+    «solo lo que el análisis de imports y los extras requieren»; el perfil completo costaría 5-12 s). Un `importlib` dinámico
+    falla con el `ModuleNotFoundError` de siempre.
+  - `describe()` de `wasm` devuelve `ready: true` (como los otros dos), porque el registro de motores conserva el primer
+    descriptor para siempre; el estado real sale de `check()` en cada llamada y de `describePythonBackends` para las
+    superficies. La autoprueba de red solo se ejecuta cuando el backend está listo.
+  - Un fallo de descarga sobre una instalación previa válida la deja como estaba (no «no listo»); sin instalación previa el
+    resultado es no listo y sin archivos, que es lo que pide FP-AC-22.
+  - La línea `· oci`/`· wasm`/`· host!` de la TUI y la insignia web quedan para la Fase 7: la TUI ya muestra la línea final
+    `engine: …` del resultado y el progreso de `forge.progress`.
+- Limitaciones conocidas (también en `docs/analysis.md`):
+  - **La red no está aislada en Node 22 y 24**: Python alcanza `node:http` por el puente FFI. En esta máquina (Node 22.19) la
+    autoprueba vio la conexión y una conexión real desde Python llegó al servidor de la prueba; por eso `networkDeniedByOS`
+    es `false` y `isolation: strict` excluye `wasm`. En Node ≥ 25 no hay `--allow-net`, así que la misma autoprueba debería
+    ver la negativa (no verificado: no hay Node 25 aquí; la rama «denegada» solo se prueba con un `node` falso).
+  - El límite de memoria es **blando** (muestreo cada 250 ms: puede excederse entre decenas y centenares de MB antes del
+    kill); `hardMemoryLimit: false`.
+  - El Permission Model no es una frontera frente a código hostil: el script alcanza el JavaScript del runner y `process`
+    por el FFI. `process.kill` está sustituido y congelado, pero eso es una mitigación (el SO sigue dejando señalar al propio
+    grupo). Lo que el runner produce se valida en el host como no confiable.
+  - Entre la verificación de hashes y la lectura del hijo hay una ventana (la carpeta es del usuario).
+  - Un script que importa un paquete fuera del perfil descargado no corre en `wasm` (`auto` lo manda a otro backend; un
+    `wasm` explícito falla con `PACKAGE_UNAVAILABLE`-equivalente). Un `import` oculto (`__import__`, `importlib`) engaña al
+    escáner y falla en tiempo de ejecución, sin reintento.
+  - Las rutas de lectura del scratchpad se copian al sistema virtual (tope 64 MB) en lugar de montarse; Python no puede
+    escribirlo de vuelta aunque lo intente.
+  - Los resultados numéricos pueden diferir entre backends (BLAS distinto); las pruebas usan tolerancias.
+- Medido con Pyodide real 314.0.7 en Node 22.19, Linux (`ALISIO_TEST_PYODIDE=1`): arranque 1,8-1,9 s y RSS pico 356-376 MB
+  con pandas; 5,1-5,2 s y 1,38 GB con scikit-learn + statsmodels + scipy + Matplotlib (solo se cargan los paquetes
+  importados, no el perfil completo). Un `while True: pass` muere por `SIGKILL` sin dejar proceso; el vigilante corta una
+  reserva sin límite con `memoryMb` 700.
+- Pruebas: rápidas (siempre) `forge-python-backend-selector`, `forge-python-import-scan`, `forge-python-pyodide-install`
+  (servidor HTTP local con un manifiesto de juguete, nunca se descarga el Pyodide real), `forge-python-pyodide-backend`
+  y `forge-python-wasm-run` (un `node` falso, `fixtures/fake-node.mjs`, detrás de un script envoltorio: flags, entorno,
+  directorio, vigilante, plazo con margen de arranque, autoprueba, FP-AC-04..08, 13, 16, 17, 21, 26, 28 en su forma rápida),
+  `cli-analysis-wasm`, `server-forge-python`, `store-migration-v10`. Con Pyodide real
+  (`ALISIO_TEST_PYODIDE=1 ALISIO_TEST_PYODIDE_DIST=<distribución verificada>`, `tests/forge-python-wasm-real.test.ts`):
+  FP-AC-04, 08, 10 (incluida la igualdad byte a byte del dashboard con el CPython del host), 11, 12 (mismo volcado de
+  tablas que el host), 13 y 28 (la conexión desde Python y el descriptor coinciden; `strict` excluye `wasm`), 14, 15, 16, 17,
+  23 (`strace -e connect`: ninguna conexión `AF_INET` en una ejecución completa; `fetch`, `XMLHttpRequest` y `navigator`
+  ausentes) y 27 (`process.kill`/`_kill` denegados y congelados). Una prueba lenta carga cada arranque en frío (1-5 s).
+- Mutation testing lite: `forge/python/backend-selector.ts` y `forge/python/import-scan.ts` **sustituyen** a
+  `forge/javascript/hosts/framing.ts` (sus mutantes no podía matarlos ninguna prueba de la pasada) y a `forge/verdict.ts`
+  (una tabla de 40 líneas que cubren las pruebas del kernel) en `mutate`; sigue en 9 archivos. El comando de Stryker llama a
+  Vitest directamente (`node node_modules/vitest/vitest.mjs run … --bail=1 --no-isolate --maxWorkers=1`, no a través de
+  `pnpm exec`, que duplicaba el coste de cada mutante) y la copia del sandbox omite `docs`, `specs`, los `dist` y la web.
+  Resultado (pasada completa desde cero, 692 mutantes): 94,94 % en conjunto, `backend-selector.ts` 95,83 %,
+  `import-scan.ts` 87,88 %, `frame-parser.ts` 93,94 %. Los supervivientes restantes son equivalentes o inalcanzables (las
+  guardas de `autoChain`/`rerunOriginalBackend` bajo un runtime explícito, que la regla 1 ya resolvió; bordes de `while`
+  en el escáner). **Presupuesto**: la pasada completa tarda 4 min 35 s (el límite de D-27 para el paso completo es 5 min); una
+  ejecución incremental sin cambios, 2 s.
+  - **Recorte posterior (límite del propietario: una pasada en frío ≤ 2 min):** `mutate` queda en los **5 módulos
+    puros de seguridad**: `limits`, `state-machine`, `protocol`, `session-path` y `decide`. `frame-parser`,
+    `backend-selector`, `import-scan` y `state-delta` siguen con sus pruebas en `pnpm test`, pero ya no se mutan.
+  - Resultado de la pasada en frío: **96,66 %** (289 muertos, 10 supervivientes ya conocidos) en **1 min 17 s**. Las pruebas nuevas que mató mutantes reales: un apóstrofo en un comentario o una comilla
+  escapada no se tragan lo que sigue, una cadena sin cerrar termina en su línea, y la línea de motivo exacta.
+
+### Forja: Fase 6 (contexto incremental y adaptativo: `forge_guide`)
+
+Estado: **hecho, sin commit.** Cierra la Fase 6 de `specs/alisio-forja-v1.md` (§8.1-§8.5, FJ-AC-19 a 22). El benchmark
+manual de 5 tareas necesita un modelo real y **no se ha ejecutado** (ver el final de esta sección).
+
+- `packages/core/src/forge/guides/`: `GuideProvider` (`provider.ts`, Lazy Load: nada se construye hasta que se pide un
+  tema) y los generadores puros `javascript.ts` (`js.api`, `js.patterns`, `js.tools`) y `python.ts` (`python.runtime`,
+  `python.data`, `python.ml`, `python.dashboards`, `python.environment`). Cada tema ≤ 4 096 bytes (el proveedor además lo
+  corta con una nota si algún día se pasara) y lleva `etag` (SHA-256 truncado a 16 caracteres del contenido final); con
+  `ifNoneMatch` igual responde `{unchanged: true, etag}`. Un etag viejo no oculta contenido nuevo: si cambia un límite, un
+  backend o el catálogo permitido, cambia el etag.
+- Contenido adaptativo: `js.api` usa los límites efectivos y el host de `forgeRuntime.status()`; `js.tools` usa el catálogo
+  del **despachador anidado de la propia llamada** (`callInternals(context).nested().catalog()`), así que ya viene filtrado
+  por el modo de permisos (en `ask` no salen las escrituras ni los procesos; nunca salen `js_run`, `forge_guide`, `task*`
+  ni `ask_user_question`), con un máximo de 40 entradas ordenadas y el resto por `catalog.search`.
+  `python-environment.ts` ejecuta **la misma cadena del selector** que `python_run` (mismos `analysis.runtime` y
+  `analysis.isolation` vivos, sin script conocido) sobre los backends reales, y los temas Python se escriben desde ese
+  resultado: `wasm` lista los paquetes del perfil instalado más alto (según `describe().profiles`), `managed` los extras
+  instalados (`EXTRAS_DISTRIBUTIONS`), `oci` no inventa una lista (depende de la imagen). Las garantías son la tabla de §4.3
+  de la especificación Python (la red de `wasm` se declara **no** bloqueada). Si ningún backend puede correr, el tema muestra
+  el mensaje del selector con su «Shortest fix».
+- Herramienta `forge_guide` (`tools/forge-guide.ts`): efecto `read`, `concurrent: true`, descripción de 165 caracteres.
+  Se registra tras `python_run`, solo con `forge.javascript.enabled` y `forge.guides.enabled` (FJ-AC-19: con Forja apagada
+  no existe, igual que `js_run`); el enum de `topic` se construye con los temas que existen (`js.*` si el motor JavaScript
+  verificó, `python.*` si `python_run` está registrada) y se compila con el AJV estricto del registro. Sigue en
+  `FORGE_EXCLUDED_TOOLS`. La respuesta empieza con la línea `etag: …`.
+- Pistas por error (§8.4): `hintFor` ya cubría `SCRIPT_SYNTAX`+`import` → `js.api`, `TOOL_UNAVAILABLE` → `js.tools` y
+  `OUTPUT_LIMIT` → `js.patterns#filtering`; nuevo `pythonHintFor` para `PACKAGE_UNAVAILABLE`/`RUNTIME_UNAVAILABLE` →
+  `python.environment`. El modelo ve una línea (`hint: <motivo> (forge_guide topic "…", section #…)`, `renderHint`), nunca la
+  guía. En `python_run` la línea se añade al texto de `runtime_unavailable` y a un fallo con `ModuleNotFoundError` en
+  stderr, solo mientras `forge_guide` está registrada (`guideHints`). **La descripción de `python_run` no cambió** (la prueba
+  de huellas de `dashboard-tool` sigue verde).
+- Regla de enrutamiento (§8.1): menciona «Call `forge_guide` before writing non-trivial code» solo si la herramienta existe;
+  sigue ≤ 900 caracteres (≈ 560 con ruta de scratchpad típica). Se acortó el texto de `js_run` y de la regla.
+  Presupuesto (§8.5, FJ-AC-20) medido en `tests/forge-javascript-wiring.test.ts`: crecimiento del prompt 617 + descripción de
+  `js_run` 306 + descripción de `forge_guide` 165 = **1 088** caracteres (límite 1 200). Se cuenta lo que Forja añade; la
+  descripción de `execute`, que sale, no se resta.
+- Decisiones donde la especificación era ambigua:
+  - `forge_guide` exige `forge.javascript.enabled` aunque el motor JavaScript no haya verificado (en ese caso solo salen los
+    temas `python.*`); con Forja desactivada no existe aunque `python_run` sí.
+  - El ancla `#filtering` no es un valor del enum: el tema es `js.patterns` y el puntero dice «section #filtering»; la guía
+    tiene la sección `## #filtering`.
+  - El renderizado de la pista de `js_run` pasó de `hint: <motivo>` a `hint: <motivo> (forge_guide topic "…")`
+    (se actualizó la prueba de `renderForgeResult`).
+  - `python.environment` solo llama a `describe()` del backend elegido (en `wasm` lanza la autoprueba de red una vez) y a
+    todos los candidatos solo con `analysis.isolation: strict`, como `python_run`.
+- Pruebas: `tests/forge-guide.test.ts` (tamaño por tema y por entorno, etag/FJ-AC-21, FJ-AC-22 con backends falsos, contenido
+  adaptativo, esquema/enum, exclusión de la VM), `tests/forge-guide-integration.test.ts` (`js.tools` por el runner real en
+  `ask` y `full`, mapeo de pistas, pistas de `python_run` con y sin la herramienta), ampliaciones de
+  `tests/forge-javascript-wiring.test.ts` (FJ-AC-19 y 20 en la aplicación, `forge.guides.enabled: false`) y de
+  `tests/forge-python-application.test.ts` (temas Python en la aplicación). Se escribió primero el código y luego las
+  pruebas; la única prueba que falló al escribirla (FJ-AC-20, 1 212 > 1 200) obligó a acortar los textos.
+- Mutation testing lite: sin cambios (los mismos 5 módulos).
+- **Benchmark manual de 5 tareas (§14, Fase 6): pendiente: ejecución manual por el propietario.** Es informativo, no una
+  puerta. Procedimiento reproducible, con Forja activa y un modelo real, sesión nueva por tarea y un directorio de trabajo
+  con `package.json` y un CSV de ejemplo; para cada tarea se anota (a) la herramienta que eligió el modelo, (b) si llamó a
+  `forge_guide` y con qué tema, (c) los caracteres de guía que cargó (suma de las respuestas de `forge_guide`) y (d) si
+  terminó bien:
+
+  | # | Tarea | Herramienta esperada |
+  | --- | --- | --- |
+  | 1 | «Cuenta cuántas funciones exportadas hay en cada archivo de `src/`» | `js_run` |
+  | 2 | «Lee estos 12 archivos JSON y dame el total de la clave `amount`» | `js_run` |
+  | 3 | «Lista los archivos de más de 100 líneas y agrúpalos por carpeta» | `js_run` |
+  | 4 | «Calcula media, mediana y desviación típica del CSV y haz un gráfico de barras» | `python_run` |
+  | 5 | «Entrena un clasificador sencillo sobre el CSV y dame la exactitud» | `python_run` (`python.ml`/`python.environment`) |
+
+  Anotar además el backend que se usó (`engine:` en la última línea) y si la guía pedida coincidía con el entorno real.
+
+### Forja: Fase 7a (servidor/API y TUI)
+
+Estado: **hecho, sin commit.** Cubre `specs/alisio-forja-v1.md` §11.1 y §11.3, D-31 y la parte de API de FJ-AC-35. La web
+(Fase 7b: tarjetas, página Forja, pestaña Scratch, capturas) **no se ha tocado**.
+
+- Rutas del scratchpad (`packages/server/src/routes/scratch.ts`, ayudantes en `packages/core/src/forge/scratch-files.ts`):
+  `GET /api/sessions/:sid/scratch` (`{available, files:[{name,size,mtime}], usedBytes, quotaBytes, truncated?}`; solo
+  nombres relativos con `/`, hasta 2 000 archivos, enlaces simbólicos omitidos; `usedBytes` es lo que cuenta la cuota),
+  `GET /api/sessions/:sid/scratch/files/*` (descarga con `Content-Disposition: attachment`, `nosniff`; ningún segmento
+  puede ser un symlink, el archivo se abre con `O_NOFOLLOW` y cualquier fuga, directorio o archivo ausente da `404`) y
+  `DELETE /api/sessions/:sid/scratch` (`{removed, freedBytes}`; conserva la carpeta, no sigue enlaces; `409 runs_active`
+  si el diario tiene una ejecución Forja no terminal de la sesión raíz; `403 capability_ceiling` con `--read-only`).
+  Con Forja o el scratchpad apagados el listado responde `available: false` y el borrado no hace nada.
+- D-31: `SQLiteStore.forgeWriteCalls(session)` une `forge_calls` (efecto `write`, estado distinto de `failed`) con
+  `forge_executions` y `tool_calls`; `/api/sessions/:sid/changes` lo suma a `effectCalls("write")` (aditivo; rutas fuera
+  del workspace se descartan igual que antes).
+- SSE: `ForgeProgress` ya llegaba de extremo a extremo: `tool_progress` es efímero y viaja en los frames `delta`
+  (`progress: [{toolId, chunk}]`, con `chunk` = JSON del objeto). Se añadió el campo opcional `forge` a
+  `InflightState.tools[]`: el último `ForgeProgress` de una herramienta en curso ya no se mezcla en `tail` (antes
+  ensuciaba el texto del snapshot con JSON).
+- `GET /api/forge` gana `scratch.retentionDays`/`maxBytes` (nunca `root`, es una ruta del host), `guides.enabled` y
+  `python: {runtime, isolation}` (solo lectura); `alisio forge status --json` lo refleja. No contiene datos de sesión.
+- TUI: la fila de `js_run` muestra `· 2/3 calls` (llamadas anidadas terminadas/iniciadas, desde `ForgeProgress`), más el
+  mensaje y la fracción del propio script si los hay; la de `python_run` añade `· oci` / `· wasm` / `· host!` (desde
+  `ForgeProgress.engine`, o desde la línea `engine:` del resultado si no hubo progreso, también al reanudar una sesión).
+  La duración final va a la derecha como en cualquier herramienta, se pliega con el mismo atajo y la cancelación no cambia.
+  Las llamadas `execute` antiguas se siguen mostrando igual.
+- Headless: sin cambios de protocolo; `fixtures/cli-e2e.ts` ya comprueba `ForgeProgress` en el JSONL de `js_run`.
+- Pruebas: `tests/server-forge-scratch.test.ts`, `tests/server-forge-surfaces.test.ts`, `tests/tui-forge.test.ts` y una
+  ampliación de `tests/server-inflight.test.ts`. Sin cambios en `stryker` (mutation lite).
+- Pendiente para 7b: hoy no hay claves `forge.*` en `SETTABLE_KEYS`. La web necesita, con etiquetas EN/ES, como mínimo
+  `forge.javascript.enabled` y `forge.guides.enabled` (y opcionalmente los cuatro límites que un proyecto puede bajar);
+  `forge.scratch.*`, `forge.javascript.host/memoryBytes/stackBytes` y `analysis.runtime`/`isolation` son solo globales.
+
+### Forja: Fase 7b (interfaz web)
+
+Estado: **hecho, sin commit; sin capturas ni páginas de documentación (Fase 8).** Cubre `specs/alisio-forja-v1.md` §11.2 y
+`specs/alisio-forja-python-v1.md` §9.4 (FJ-AC-23, 26 y 35 en la parte web; FP-AC-25).
+
+- Claves editables: `forge.javascript.enabled` y `forge.guides.enabled` entran en `SETTABLE_KEYS`
+  (`packages/core/src/config.ts`), se aplican en vivo a la configuración (`application.ts`) y `PATCH /api/settings`
+  recicla la aplicación del workspace como con `analysis.enabled`. El resto de claves `forge.*` y `analysis.runtime` /
+  `analysis.isolation` siguen siendo de solo lectura (la web muestra la clave). Etiquetas EN/ES en `labels.ts`; la página
+  General oculta `forge.*`.
+- Progreso: `store/transcript.ts` pliega los `ForgeProgress` de `tool_progress` (JSON en `delta.progress[].chunk` o
+  `forge` del snapshot de `inflight`) en `ToolState.forge` (llamadas anidadas por `callId`, contadores, fase) y ya no los
+  mezcla con `tail`. `util/forge.ts` contiene el plegado y `ForgeThrottle`: coalescencia a 4 actualizaciones por segundo y
+  llamada antes de los reductores (`store/app.ts`); un estado terminal de llamada, el fin de la llamada y cualquier frame
+  que no sea progreso nunca se retienen y lo retenido sale antes. `store/progress.ts` clasifica `js_run` como
+  `javascript` (estado de la ejecución «Ejecutando JavaScript…»).
+- Tarjetas: `util/forge-card.ts` (puro) decide la tarjeta (`js_run`, `python_run`; `execute` y el resto, la fila
+  genérica de siempre), la insignia de motor y aislamiento (texto + icono distinto para el host; nunca solo color), la
+  lectura del texto de `js_run` (`status/value/output/calls/error/hint`), la línea `engine: … · reason: …` de
+  `python_run` y las filas de procedencia. `ToolRow.tsx` añade insignia, progreso, barra y región `aria-live="polite"`
+  (estado de la tarjeta, no cada tic); `ForgeParts.tsx` dibuja la lista de llamadas en vivo y el cuerpo de `js_run`
+  (código con shiki `javascript` y «Copiar código», llamadas, valor con el visor JSON, salida, error con pista). Sin «repetir».
+  Tras recargar la página la lista por llamada ya no existe (no se persiste); queda el contador del resultado.
+- Ajustes: `AnalysisPage.tsx` pasa a `PythonSection.tsx` dentro de la nueva página **Forja** (`ForgePage.tsx`; entrada de
+  menú nueva). JavaScript (estado, versión, hash, host efectivo y configurado, límites, scratchpad, interruptor),
+  Python (todo lo anterior más una tarjeta por backend con estado, aislamiento en texto e icono, perfiles, motivo y comando
+  de preparación con botón de copiar; política `analysis.isolation` y `analysis.runtime` en solo lectura con su clave y el
+  backend que se usaría ahora, con las mismas reglas que el selector) y Guías. Corrige el error «Gestionado: tu propio
+  Python» bajo `auto` (`modeLabelKey`). El identificador antiguo `analysis` abre Forja (`settingsPageFor`, señal
+  `settingsPage`); no existía una ruta de ajustes por URL, así que no hay otra redirección.
+- Procedencia (`ArtifactDetails`): motor, aislamiento, motivo y, con wasm, arranque y memoria máxima.
+- Scratch: pestaña del Dock (junto a Archivos, Cambios, Vista previa y Tareas; chunk propio con su store y sus cadenas,
+  `scratch-strings.ts`): lista (nombre relativo, tamaño, fecha), barra de cuota, vista previa de `.js .py .csv .json .txt
+  .md` (≤ 1 MB) con el visor de texto existente (`TextView`, extraído de `TextPreview`), descarga y «Vaciar» con
+  confirmación; `available: false` y los 409/403/errores muestran un aviso claro. No edita nada.
+- Pruebas: `tests/web-forge-progress.test.ts`, `web-forge-card.test.ts`, `web-forge-page.test.ts`, `web-scratch.test.ts` y
+  `server-forge-settings.test.ts`. Los componentes se verificaron a mano con `alisio serve` y un proveedor guionizado
+  (tarjeta `js_run` con llamadas en vivo, tarjeta `python_run` con insignia y barra, página Forja, pestaña Scratch).
+- Límites y observaciones: el JS del script `progress({message, completed, total})` casi nunca llegaba al cliente porque
+  el coalescedor lo reemplazaba por el siguiente evento de llamada dentro de los mismos 250 ms (corregido en la Fase 8a). Los componentes no tienen pruebas de renderizado
+  (el repositorio no tiene entorno DOM); su lógica vive en módulos puros probados.
+
+### Forja: Fase 8a (documentación, capturas y cierre)
+
+Estado: **hecho, sin commit.** Cubre `specs/alisio-forja-v1.md` §11.2 (capturas), §14 Fase 8 y §15; y
+`specs/alisio-forja-python-v1.md` §9.4 (capturas), §12 y §13.
+
+- Prueba intermitente: la causa era una suposición de reloj en las pruebas de cancelación de
+  `tests/forge-javascript-engine.test.ts`. Cancelaban con `setTimeout(150)`: bajo carga el aborto podía llegar antes de que
+  el script o la llamada anidada hubieran empezado (un listener añadido a una señal ya abortada nunca se dispara, así que
+  `seenAbort` quedaba en `false`), y `FJ-AC-10` comparaba `Date.now() - started < 1500` incluyendo el arranque del worker.
+  Ahora se cancela cuando el estado observable lo permite (el script informó `progress` y está girando; la herramienta
+  anidada está esperando) mediante un sondeo del estado, la cota de parada se mide desde el aborto y la prueba del plazo
+  usa 1 500 ms en lugar de 300 con una herramienta que también contempla una señal ya abortada. No se pudo reproducir el
+  fallo original en varias ejecuciones en paralelo bajo carga; la corrección elimina las dos carreras identificadas por lectura.
+- Coalescencia del progreso (`packages/core/src/forge/progress.ts`): el límite de 4 por segundo pasa a ser por categoría
+  (progreso del script, eventos de llamada y otros); cada categoría conserva su último evento y tiene su propia ventana, el
+  vaciado respeta el orden de llegada y los eventos terminales nunca se descartan ni consumen la ventana. Prueba nueva en
+  `tests/forge-kernel-pure.test.ts`; primera línea roja:
+  `AssertionError: expected [ 'running' ] to deeply equal [ 'running', 'call' ]`.
+- Documentación (EN/ES, en paridad): página nueva `docs/forja.md` y `docs/es/forja.md` (qué es el modo código, elección del
+  lenguaje, aislamiento y sus límites, claves `forge.*` y `analysis.*`, `alisio forge status`, `alisio analysis setup --wasm`,
+  scratchpad, `forge_guide`, web y TUI) enlazada en la barra lateral; sección `forge` en configuración, enlaces desde
+  análisis, herramientas y web, y la sección «Ajustes → Forja» de la web sustituye a la antigua página de análisis.
+- Capturas reales con Playwright sobre `alisio serve` y un proveedor guionizado, datos de ejemplo y la interfaz en inglés
+  (el repositorio usa una imagen por función con el texto alternativo y el pie en el idioma de cada página):
+  `forge_js_run_web_ui`, `forge_settings_web_ui`, `forge_python_backends_web_ui`, `forge_python_run_badge_web_ui` y
+  `forge_scratchpad_web_ui` (WebP, todas por debajo de 60 KB). La ruta del intérprete que mostraba la sección Python se
+  sustituyó en el DOM antes de capturar. La captura del scratchpad muestra la lista; la vista previa de un archivo ocupa el
+  panel entero y no se capturó. El interruptor de guías queda fuera de la captura de ajustes (está al final de la página).
+- `CHANGELOG.md`: sección `[Unreleased]` con Forja. `tests/changelog.test.ts` ignora `Unreleased` al comprobar las
+  entradas de cabecera y `packages/core/src/changelog/data.ts` se regeneró.
+
+### Limitaciones de Forja
+
+- **Aislamiento.** `js_run` está aislado por la VM QuickJS-WASM; en Node el worker es un hilo del proceso, de modo que un
+  escape del motor comprometería a Alisio (Bun y el binario usan un proceso hijo). `python_run` en `managed` no es un
+  sandbox. En `wasm` la red no está bloqueada en Node 22 y 24, el límite de memoria es blando (muestreo cada 250 ms) y un
+  script hostil alcanza el JavaScript del ejecutor (FFI); `strict` excluye `wasm` salvo que el sondeo vea la red rechazada.
+  `ALISIO_SCRATCH_DIR` de solo lectura no se puede garantizar en `managed`. Además, en `wasm` un script puede leer
+  `os.homedir()`, `os.hostname()` y `os.userInfo()`, y las rutas absolutas del host (distribución y carpetas del job)
+  aparecen en `process.argv` del hijo; el ejecutor sustituye esas rutas por marcadores en sus mensajes de fallo. `wasm`
+  exige Node 22.22, 24.13 o 25.3 o posterior (CVE-2025-55130) y recibe una copia del scratchpad sin enlaces.
+- **Concesiones y llamadas anidadas (D8, deliberado).** Las concesiones almacenadas no se aplican a las llamadas anidadas: una
+  llamada directa con concesión puede ejecutarse mientras la anidada recibe `APPROVAL_REQUIRED`.
+- **Aprobaciones.** Un script no puede pedir aprobación: la llamada anidada falla con `APPROVAL_REQUIRED`.
+- **Persistencia.** La lista por llamada de la tarjeta `js_run` no se guarda: tras recargar solo quedan los contadores. El
+  scratchpad vive en la carpeta temporal, se elimina tras 7 días sin actividad y no tiene copia de seguridad.
+- **Rendimiento.** El arranque de Pyodide cuesta de 1 a 2 s con pandas y unos 5 s con scikit-learn; el runtime se descarga una
+  vez (unos 44 MB, 70 MB con `science`). `js_run` limita 50 llamadas, 4 simultáneas y 16 000 caracteres de salida por defecto.
+- **Interfaz.** Los componentes web no tienen pruebas de renderizado (no hay entorno DOM); su lógica vive en módulos puros.
+  La captura del scratchpad no muestra la vista previa y las capturas de ajustes dejan fuera la sección de guías.
+- **Sin repetición.** La tarjeta de `js_run` no ofrece «repetir».
+
+#### Revisión final 3/3 de Forja: hallazgos y correcciones
+
+Hallazgos de la tercera revisión (seguridad) y su resolución. Cada corrección empezó por una prueba de comportamiento en rojo.
+
+- **M1 (medio, bloqueante) — `wasm` leía a través de enlaces simbólicos del scratchpad.** El Modelo de Permisos sigue los
+  enlaces existentes y Python llega a `node:fs` por la FFI. Ahora el padre copia el scratchpad a `<job>/scratch-copy` sin
+  seguir enlaces (`scratch-copy.ts`: omite enlaces y archivos especiales, `O_NOFOLLOW`, tope de 64 MB, profundidad acotada), concede
+  `--allow-fs-read` solo sobre la copia y la borra al terminar el job. `oci` monta la carpeta real en `:ro`, pero un enlace
+  dentro de un montaje se resuelve en el espacio de nombres del contenedor, no en el host (sin cambios); `managed` es el host.
+  Pruebas: rápidas con node falso (flags y rutas, la copia no contiene el enlace, se limpia) y real con Pyodide (un enlace puesto en el
+  scratchpad da `DENIED` desde la copia concedida, la ruta real y la ruta virtual; con la concesión del directorio real la
+  misma prueba filtra el secreto, así que discrimina).
+- **M2 (medio) — el sondeo de red contaba cualquier error de conexión como «denegada».** Ahora solo `ERR_ACCESS_DENIED` es
+  `denied`; `ECONNREFUSED`, `EADDRNOTAVAIL`, etc. son no concluyentes (`networkDeniedByOS: false`, detalle `probe inconclusive: <code>`)
+  y un resultado no concluyente no se recuerda (se vuelve a sondear).
+- **L1 — Bun aceptaba entradas relativas del `PATH`.** Se omiten las no absolutas (`.`, `bin`, vacías).
+- **L2 — las rutas HTTP del scratchpad usaban el proveedor sin puerta.** `app.forge.scratchpad` ahora cierra igual que
+  `PathAccess` (motor verificado y no `--read-only`) y `scratchpadView` busca la carpeta sin crearla (`findSessionScratchpad`): un
+  GET no hace `mkdir`; con `--read-only` o autocomprobación fallida responde `available: false`.
+- **L3 — el listado recorría y ordenaba todo el árbol antes del tope de 2000.** Ahora recorre en el orden final (un directorio
+  ordena como `nombre/`), se detiene al conocer un archivo más que el tope (`truncated: true`) y limita la profundidad a 32.
+- **L4 — las llamadas anidadas ignoran las concesiones almacenadas.** Es la decisión D8; no se cambió el comportamiento y se
+  documentó (docs EN/ES de Forja, fila D8 de la especificación, limitaciones).
+- **L5 — la documentación sobrestimaba el aislamiento de `wasm`.** Documentados `os.homedir()/hostname()/userInfo()` y las rutas
+  en `process.argv`; el ejecutor ya no envía rutas absolutas del host al modelo en `fail(...)` ni en `uncaughtException`
+  (`<dist>`, `<job>/...`, `<host>/<último segmento>`), con prueba que ejecuta el ejecutor real con una distribución inexistente.
+- **L6 — `setup --wasm` concurrentes compartían `.download/`.** Cada ejecución usa `.download-<aleatorio>`, el marcador se
+  escribe con nombre temporal único y se relee antes de escribirlo (no degrada una instalación mayor terminada entretanto), el
+  fallo no borra la carpeta si otra ejecución dejó un marcador, y los restos de ejecuciones muertas (más de 1 h) se limpian.
+- **L7 — confirmado.** CVE-2025-55130 (salto del Modelo de Permisos con rutas simbólicas) se corrigió en Node 22.22.0, 24.13.0 y
+  25.3.0 (https://nodejs.org/en/blog/vulnerability/december-2025-security-releases; Debian lo confirma en
+  https://security-tracker.debian.org/tracker/CVE-2025-55130). `wasm-node.ts` exige ahora esas versiones o posteriores (23.x y
+  anteriores a 22.22 se rechazan, mayores que 25 se aceptan) con el motivo «not ready» que nombra el CVE. Consecuencia: con Node 22.19 `wasm`
+  no está listo; las pruebas reales de Pyodide se ejecutan con `ALISIO_TEST_PYODIDE_NODE` (por ejemplo Node 24.16).
+
+#### Alcance de la verificación de Forja
+
+Verificado: pruebas de comportamiento en los límites de cada módulo (núcleo, motor JavaScript con QuickJS y worker reales,
+Python con backends falsos y Pyodide real bajo `ALISIO_TEST_PYODIDE`, servidor, TUI y lógica web), `pnpm test:cli` y
+`pnpm test:compiled` con el binario, y comprobación manual de la web con un proveedor guionizado. No verificado: otros
+sistemas operativos distintos de Linux (scratchpad y Modelo de Permisos de Node), contenedores reales de
+Docker o Podman en CI, y modelos reales distintos de los usados en el benchmark.
+
+#### Benchmark manual pendiente
+
+**Benchmark manual de 5 tareas (§14, Fase 6): pendiente, ejecución manual por el propietario.** Es informativo, no una
+puerta. Con Forja activa y un modelo real, sesión nueva por tarea y un directorio con `package.json` y un CSV de ejemplo,
+anotar para cada tarea (a) la herramienta elegida, (b) si llamó a `forge_guide` y con qué tema, (c) los caracteres de guía
+cargados y (d) si terminó bien, más el backend usado (`engine:` en la última línea):
+
+| # | Tarea | Herramienta esperada |
+| --- | --- | --- |
+| 1 | «Cuenta cuántas funciones exportadas hay en cada archivo de `src/`» | `js_run` |
+| 2 | «Lee estos 12 archivos JSON y dame el total de la clave `amount`» | `js_run` |
+| 3 | «Lista los archivos de más de 100 líneas y agrúpalos por carpeta» | `js_run` |
+| 4 | «Calcula media, mediana y desviación típica del CSV y haz un gráfico de barras» | `python_run` |
+| 5 | «Entrena un clasificador sencillo sobre el CSV y dame la exactitud» | `python_run` (`python.ml`/`python.environment`) |

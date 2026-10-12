@@ -355,7 +355,7 @@ describe.skipIf(!python)("charts (Chart.js helpers)", () => {
     expect(value.chart).toBe("778f9e762cf054fe7c2f88ea006a2450ed051cb075ae5eebeda25eb96749df1b");
     expect(value.length).toBe(225904);
     expect(value.base).toBe("1f8b4f79e6538f1ebf0a12182661b25162b942cdbd4922a6a67148588f13a261");
-    expect(value.version).toBe("3");
+    expect(value.version).toBe("4");
   });
 
   it("hovers by row in horizontal bars: interaction.axis is 'y' only for hbar", () => {

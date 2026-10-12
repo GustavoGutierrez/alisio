@@ -5,7 +5,8 @@
  * `python_run`: the base runtime is the discovered Python with only the standard library.
  */
 import { dirname, join } from "node:path";
-import type { AnalysisStatus } from "@alisio/sdk";
+import { createInterface } from "node:readline/promises";
+import type { AnalysisStatus, EngineDescriptor } from "@alisio/sdk";
 
 type Common = {
   db?: string;
@@ -31,13 +32,51 @@ async function context(o: Common) {
   return { core, config, provenance, stateDir, manager, oci };
 }
 
+type Context = Awaited<ReturnType<typeof context>>;
+
+/** The Python backends of this configuration, described with their live readiness. */
+function describeBackends(c: Context): (signal?: AbortSignal) => Promise<EngineDescriptor[]> {
+  const backends = c.core.createPythonBackends({
+    runtime: c.manager,
+    oci: { runtime: c.oci, mode: () => c.config.analysis.runtime },
+    wasm: { stateRoot: c.stateDir, settings: () => c.config.analysis.wasm },
+  });
+  return (signal) => c.core.describePythonBackends(backends, signal);
+}
+
+/** `alisio forge status` reuses this for its Python lines. */
+export async function pythonBackendDescriptors(o: Common): Promise<EngineDescriptor[]> {
+  return describeBackends(await context(o))();
+}
+
+/** A fixed-width table of the backends: readiness, isolation, profiles and why not. */
+export function backendsTable(backends: readonly EngineDescriptor[]): string {
+  const rows = backends.map((b) => [
+    b.id.replace(/^python-/, ""),
+    b.isolation,
+    b.ready ? "ready" : "not ready",
+    b.profiles?.length ? b.profiles.join(",") : "-",
+    b.capabilities.networkDeniedByOS ? "denied" : "open",
+    b.reason ?? (b.isolation === "none" ? "host (not sandboxed)" : ""),
+  ]);
+  const head = ["BACKEND", "ISOLATION", "STATE", "PROFILES", "NETWORK", "NOTE"];
+  const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length)));
+  const line = (cells: string[]) =>
+    cells
+      .map((c, i) => c.padEnd(widths[i] ?? 0))
+      .join("  ")
+      .trimEnd();
+  return [line(head), ...rows.map(line)].join("\n");
+}
+
 /** The unified runtime state and, when Python is missing, the install guidance for this system. */
 export async function analysisState(o: Common): Promise<{
   status: AnalysisStatus;
   guidance?: string;
   ignored: string[];
 }> {
-  const { core, config, provenance, stateDir, manager, oci } = await context(o);
+  const ctx = await context(o);
+  const { core, config, provenance, stateDir, manager, oci } = ctx;
   const janitor = {
     lastSweep: () =>
       import("node:fs/promises")
@@ -53,6 +92,7 @@ export async function analysisState(o: Common): Promise<{
     runtime: manager,
     oci,
     janitor,
+    backends: describeBackends(ctx),
     enabled: config.analysis.enabled,
     readOnly: false,
   });
@@ -77,6 +117,10 @@ export async function analysisState(o: Common): Promise<{
 export async function printAnalysisStatus(o: Common): Promise<void> {
   const { status, guidance, ignored } = await analysisState(o);
   console.log(JSON.stringify(status, null, 2));
+  if (status.backends?.length)
+    process.stderr.write(
+      `\nPython backends (analysis.runtime=${status.mode}, analysis.isolation=${status.isolation ?? "preferred"}):\n${backendsTable(status.backends)}\n`,
+    );
   if (guidance) process.stderr.write(`\n${guidance}\n`);
   if (status.mode === "oci" && status.oci.available === false)
     process.stderr.write(
@@ -173,5 +217,93 @@ export async function sweep(o: Common, force: boolean): Promise<void> {
     datasets.close();
   } finally {
     store.close();
+  }
+}
+
+export interface WasmSetupDeps {
+  /** Replaceable in tests; the global `fetch` otherwise. */
+  fetch?: typeof fetch;
+  manifest?: import("@alisio/core").PyodideManifest;
+  /** Whether someone can answer a question (a terminal). */
+  interactive?: boolean;
+  ask?: (question: string) => Promise<boolean>;
+  write?: (text: string) => void;
+}
+
+const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MB`;
+
+async function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return /^y(es)?$/i.test((await rl.question(question)).trim());
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * `alisio analysis setup --wasm [--profile analysis|science] [--yes]`: the only place the wasm
+ * backend uses the network. Downloads the pinned Pyodide distribution into
+ * `<analysis dir>/pyodide/<version>/`, verifies every hash and size, and on any mismatch deletes
+ * what it fetched and leaves the backend not ready. It never touches the venv or the OCI image.
+ */
+export async function setupWasm(
+  o: Common,
+  flags: { profile?: string; yes?: boolean },
+  deps: WasmSetupDeps = {},
+): Promise<void> {
+  const profile = flags.profile ?? "analysis";
+  if (profile !== "analysis" && profile !== "science")
+    throw new Error("Choose the profile: --profile analysis (default) or --profile science");
+  const { core, stateDir } = await context(o);
+  const manifest = deps.manifest ?? core.PYODIDE_MANIFEST;
+  const write = deps.write ?? ((text: string) => void process.stderr.write(text));
+  const dir = core.pyodideDir(stateDir, manifest);
+  const bytes = core.pyodideDownloadSize(manifest, profile);
+  const hosts = [
+    ...new Set(
+      [...manifest.core, ...Object.values(manifest.packages)].map((f) => new URL(f.url).host),
+    ),
+  ];
+  write(
+    `Pyodide ${manifest.version} (Python ${manifest.python}), profile ${profile}: about ${megabytes(bytes)} from ${hosts.join(", ")}.\n` +
+      `It goes to ${dir}. Every file is checked against a pinned SHA-256; this command is the only time the wasm backend uses the network.\n`,
+  );
+  if (!flags.yes) {
+    const interactive = deps.interactive ?? (!!process.stdin.isTTY && !!process.stderr.isTTY);
+    if (!interactive)
+      throw new Error(
+        "This download needs your confirmation: pass --yes in a non-interactive run.",
+      );
+    const ok = await (deps.ask ?? confirm)("Download now? [y/N] ");
+    if (!ok) {
+      write("Cancelled; nothing was downloaded.\n");
+      return;
+    }
+  }
+  const controller = new AbortController();
+  process.on("SIGINT", () => controller.abort(new Error("Interrupted")));
+  try {
+    const result = await core.installPyodide({
+      dir,
+      profile,
+      manifest,
+      signal: controller.signal,
+      ...(deps.fetch ? { fetch: deps.fetch } : {}),
+      onProgress: (e) => write(`  [${e.index}/${e.total}] ${e.file}\n`),
+    });
+    write(
+      `Pyodide ${manifest.version} is ready (profile ${result.ok ? result.profile : profile}). ` +
+        'With analysis.runtime "auto" it is used when no container is ready; set analysis.runtime to "wasm" to require it.\n',
+    );
+  } catch (error) {
+    const integrity = error instanceof core.PyodideIntegrityError;
+    write(
+      `${error instanceof Error ? error.message : String(error)}\n` +
+        (integrity
+          ? "Nothing from this download was kept. The wasm backend is not ready.\n"
+          : "Nothing from this download was kept.\n"),
+    );
+    process.exitCode = 1;
   }
 }

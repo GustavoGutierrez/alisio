@@ -14,7 +14,7 @@ import {
 import { api, currentId, detail } from "./app.ts";
 import { readPref, writePref } from "./storage.ts";
 
-export type DockTab = "files" | "changes" | "preview" | "tasks";
+export type DockTab = "files" | "changes" | "preview" | "tasks" | "scratch";
 
 export interface DirState {
   entries: FileEntry[];

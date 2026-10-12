@@ -13,10 +13,21 @@
  *
  * Deletions are best effort and independent: one that fails is counted and the sweep goes on.
  */
-import { mkdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  rmdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { SqlDatabase } from "@alisio/sdk";
 import type { ArtifactStore } from "../artifacts/store.ts";
+import { readSessionMarker } from "../forge/session-dir.ts";
 import type { BlobStore } from "../runtime/blobs.ts";
 import type { DatasetService } from "./data/datasets.ts";
 
@@ -80,6 +91,26 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Exclusive lock file `<dir>/<name>` between processes sharing the state folder; undefined when a
+ * live holder has it. A lock older than `STALE_LOCK_MS` belongs to a dead process and is replaced.
+ */
+async function acquireLock(dir: string, name: string): Promise<(() => Promise<void>) | undefined> {
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, name);
+  for (let attempt = 0; attempt < 2; attempt++)
+    try {
+      await writeFile(file, `${process.pid}\n`, { flag: "wx" });
+      return () => rm(file, { force: true });
+    } catch {
+      const info = await stat(file).catch(() => undefined);
+      // Real time on purpose: the lock belongs to a live process, not to the injected clock.
+      if (info && Date.now() - info.mtimeMs < STALE_LOCK_MS) return undefined;
+      await rm(file, { force: true });
+    }
+  return undefined;
 }
 
 export class AnalysisJanitor {
@@ -166,20 +197,8 @@ export class AnalysisJanitor {
   }
 
   /** Exclusive lock between processes sharing the state folder; undefined when someone holds it. */
-  private async lock(): Promise<(() => Promise<void>) | undefined> {
-    await mkdir(this.dir, { recursive: true });
-    const file = join(this.dir, ".sweep.lock");
-    for (let attempt = 0; attempt < 2; attempt++)
-      try {
-        await writeFile(file, `${process.pid}\n`, { flag: "wx" });
-        return () => rm(file, { force: true });
-      } catch {
-        const info = await stat(file).catch(() => undefined);
-        // Real time on purpose: the lock belongs to a live process, not to the injected clock.
-        if (info && Date.now() - info.mtimeMs < STALE_LOCK_MS) return undefined;
-        await rm(file, { force: true });
-      }
-    return undefined;
+  private lock(): Promise<(() => Promise<void>) | undefined> {
+    return acquireLock(this.dir, ".sweep.lock");
   }
 
   private async expireArtifacts(policy: RetentionPolicy, now: number, report: SweepReport) {
@@ -299,5 +318,170 @@ export class AnalysisJanitor {
       } catch {
         report.errors++;
       }
+  }
+}
+
+export interface ScratchSweepReport {
+  /** Why nothing ran: swept less than 24 h ago, or another process is sweeping. */
+  skipped?: "recent" | "locked";
+  sessionsDeleted: number;
+  bytesFreed: number;
+  errors: number;
+}
+
+/** Newest modification time and total size under `dir`, without following symlinks. */
+async function treeFacts(dir: string): Promise<{ newest: number; bytes: number }> {
+  const info = await lstat(dir);
+  let newest = info.mtimeMs;
+  let bytes = 0;
+  if (!info.isDirectory()) return { newest, bytes: info.size };
+  for (const entry of await readdir(dir)) {
+    const facts = await treeFacts(join(dir, entry)).catch(() => undefined);
+    if (!facts) continue;
+    newest = Math.max(newest, facts.newest);
+    bytes += facts.bytes;
+  }
+  return { newest, bytes };
+}
+
+/** A directory that is really one (not a symlink to one). */
+async function realDirectory(path: string): Promise<boolean> {
+  const info = await lstat(path).catch(() => undefined);
+  return !!info && info.isDirectory() && !info.isSymbolicLink();
+}
+
+/**
+ * Retention of the volatile Forja session directories (spec §9.4): every `<root>/<workspace>/
+ * <rootSessionId>` folder goes when its root session no longer exists or its last activity
+ * (newest file in it) is older than `retentionDays`; `0` disables the deletion.
+ *
+ * Before deleting, the folder must be a real directory (never a symlink) under a real directory
+ * under a verified root, its `.alisio-session` marker must name the same session as the folder,
+ * and its real path must stay inside the real root. `rm` never follows a symlink it meets inside.
+ * Same schedule as the analysis janitor: at most once every 24 h (mark under `<state>/forge/`),
+ * with a lock between processes; deletions are best effort and independent.
+ */
+export class ScratchJanitor {
+  private timer?: ReturnType<typeof setTimeout>;
+  private stopped = false;
+
+  constructor(
+    private options: {
+      /** State root; holds the sweep mark and lock under `forge/`. */
+      stateRoot: string;
+      /** The scratch roots to sweep: `<tmp>/alisio-<uid>` and `<state>/scratch`. */
+      roots: () => string[];
+      /** Whether the root session still exists in the store. */
+      sessionExists: (rootSessionId: string) => boolean;
+      /** Read at every sweep, so a changed setting applies without a restart. */
+      retentionDays: () => number;
+      now?: () => number;
+      initialDelayMs?: number;
+    },
+  ) {}
+
+  private now(): number {
+    return (this.options.now ?? Date.now)();
+  }
+
+  private get dir(): string {
+    return join(this.options.stateRoot, "forge");
+  }
+
+  async lastSweep(): Promise<number | undefined> {
+    try {
+      const value = Number((await readFile(join(this.dir, ".last-scratch-sweep"), "utf8")).trim());
+      return Number.isFinite(value) ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Launches the sweep in the background; never delays the caller and never keeps Node alive. */
+  start(): void {
+    this.stopped = false;
+    this.arm(this.options.initialDelayMs ?? 30_000);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+
+  private arm(delay: number): void {
+    if (this.stopped) return;
+    this.timer = setTimeout(() => {
+      void this.sweep()
+        .catch(() => undefined)
+        .finally(() => this.arm(SWEEP_INTERVAL_MS));
+    }, delay);
+    this.timer.unref();
+  }
+
+  async sweep(options: { force?: boolean } = {}): Promise<ScratchSweepReport> {
+    const report: ScratchSweepReport = { sessionsDeleted: 0, bytesFreed: 0, errors: 0 };
+    const now = this.now();
+    const last = await this.lastSweep();
+    if (!options.force && last !== undefined && now - last < SWEEP_INTERVAL_MS)
+      return { ...report, skipped: "recent" };
+    const release = await acquireLock(this.dir, ".scratch-sweep.lock");
+    if (!release) return { ...report, skipped: "locked" };
+    try {
+      await writeFile(join(this.dir, ".last-scratch-sweep"), `${now}\n`);
+      const days = this.options.retentionDays();
+      if (days <= 0) return report;
+      for (const root of this.options.roots()) await this.sweepRoot(root, days, now, report);
+    } finally {
+      await release();
+    }
+    return report;
+  }
+
+  private async sweepRoot(root: string, days: number, now: number, report: ScratchSweepReport) {
+    if (!(await realDirectory(root))) return;
+    let realRoot: string;
+    try {
+      realRoot = await realpath(root);
+    } catch {
+      return;
+    }
+    for (const workspace of await readdir(root).catch(() => [] as string[])) {
+      const workspaceDir = join(root, workspace);
+      if (!(await realDirectory(workspaceDir))) continue;
+      for (const id of await readdir(workspaceDir).catch(() => [] as string[])) {
+        const folder = join(workspaceDir, id);
+        try {
+          if (await this.expired(folder, id, realRoot, days, now, report)) {
+            await rm(folder, { recursive: true, force: true });
+            report.sessionsDeleted++;
+          }
+        } catch {
+          report.errors++;
+        }
+      }
+      // Drop the workspace folder when its last session went (rmdir only removes an empty one).
+      await rmdir(workspaceDir).catch(() => undefined);
+    }
+  }
+
+  /** Whether `folder` is a verified session folder that is due; adds its size to the report. */
+  private async expired(
+    folder: string,
+    id: string,
+    realRoot: string,
+    days: number,
+    now: number,
+    report: ScratchSweepReport,
+  ): Promise<boolean> {
+    if (!(await realDirectory(folder))) return false;
+    const marker = await readSessionMarker(folder);
+    if (!marker || marker.sessionId !== basename(folder) || marker.sessionId !== id) return false;
+    const real = await realpath(folder);
+    if (!real.startsWith(realRoot + sep)) return false;
+    const facts = await treeFacts(folder);
+    const due = !this.options.sessionExists(id) || now - facts.newest > days * DAY;
+    if (due) report.bytesFreed += facts.bytes;
+    return due;
   }
 }

@@ -1,0 +1,199 @@
+.tab,
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 10px;
+}
+
+.detail {
+  padding: 0;
+}
+
+.lead,
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.error {
+  margin: 0 0 6px;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+/* Announces the outcome of emptying without taking room. */
+.live {
+  min-height: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.live:not(:empty) {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.quota {
+  display: grid;
+  gap: 4px;
+}
+
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s var(--ease);
+}
+
+.meter[data-level="warn"] span {
+  background: var(--warn);
+}
+
+.meter[data-level="full"] span {
+  background: var(--danger);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.file {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.file:hover {
+  background: var(--hover);
+}
+
+.name {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.iconLink {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.iconLink:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.fileTitle {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+}
+
+.confirm p {
+  margin: 0;
+  font-size: 13px;
+}

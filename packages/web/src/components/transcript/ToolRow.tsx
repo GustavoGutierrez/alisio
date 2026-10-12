@@ -1,4 +1,3 @@
-import type { ToolResult } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
@@ -8,6 +7,8 @@ import { openInDock } from "../../store/dock.ts";
 import { planFromArguments } from "../../store/plan-review.ts";
 import { density } from "../../store/prefs.ts";
 import type { ToolState } from "../../store/transcript.ts";
+import { forgeProgressLine } from "../../util/forge.ts";
+import { cardKind, engineOfCard, liveAnnouncement } from "../../util/forge-card.ts";
 import {
   liveCommand,
   prettyArgs,
@@ -18,6 +19,8 @@ import {
   toolSummary,
 } from "../../util/tools.ts";
 import { Icon, type IconName } from "../icons.tsx";
+import { EngineBadge, ForgeBar, JsRunBody } from "./ForgeParts.tsx";
+import { ResultView } from "./ResultView.tsx";
 import styles from "./transcript.module.css";
 
 const ICONS: Record<string, IconName> = {
@@ -33,45 +36,9 @@ const ICONS: Record<string, IconName> = {
   web_search: "globe",
   ask_user_question: "question",
   exit_plan: "file",
+  js_run: "terminal",
+  python_run: "terminal",
 };
-
-function Part({ part }: { part: ToolResult["content"][number] }) {
-  if (part.type === "text") return <pre class={styles.output}>{part.text}</pre>;
-  if (part.type === "ui") return <RendererHost block={part.block} />;
-  return <img class={styles.image} src={`data:${part.mimeType};base64,${part.data}`} alt="" />;
-}
-
-/**
- * A tool result: rich parts (ui blocks, images) first; when there are any, the text parts (what
- * the model saw) fold under "Raw output".
- */
-function ResultView({ result }: { result: ToolResult }) {
-  const rich = result.content.filter((part) => part.type !== "text");
-  const text = result.content.filter((part) => part.type === "text");
-  if (!rich.length)
-    return (
-      <>
-        {text.map((part, i) => (
-          <Part key={i} part={part} />
-        ))}
-      </>
-    );
-  return (
-    <>
-      {rich.map((part, i) => (
-        <Part key={i} part={part} />
-      ))}
-      {text.length ? (
-        <details class={styles.raw}>
-          <summary>{t("tool.rawOutput")}</summary>
-          {text.map((part, i) => (
-            <Part key={i} part={part} />
-          ))}
-        </details>
-      ) : null}
-    </>
-  );
-}
 
 /** A compact one-line tool call (`Read · README.md`) that expands to its input and output. */
 export function ToolRow({ tool }: { tool: ToolState }) {
@@ -79,11 +46,33 @@ export function ToolRow({ tool }: { tool: ToolState }) {
   // The plan of `exit_plan` is the answer of the turn: it is shown open, as Markdown, in the chat.
   const plan = tool.name === "exit_plan" ? planFromArguments(tool.arguments) : undefined;
   const expanded = open ?? (!!plan || density.value === "detailed");
-  const label = toolLabel(tool.name);
+  // Forja cards (`js_run`, `python_run`) add an engine badge and live progress; `execute` and every
+  // other tool keep the generic row.
+  const kind = cardKind(tool.name);
+  const resultText =
+    tool.result?.content.map((part) => (part.type === "text" ? part.text : "")).join("") ?? "";
+  const engine =
+    kind === "generic"
+      ? undefined
+      : engineOfCard({
+          resultText,
+          ...(tool.forge ? { forgeEngine: tool.forge.engine } : {}),
+        });
+  const label = kind === "javascript" ? t("forge.js.title") : toolLabel(tool.name);
   const plugin = toolPlugin(tool.name, pluginNames.value);
   const summary = toolSummary(tool.arguments);
   const path = toolPath(tool.arguments);
-  const progress = tool.status === "running" ? toolProgressLine(tool.tail) : "";
+  const progress =
+    tool.status === "running"
+      ? kind !== "generic" && tool.forge
+        ? forgeProgressLine(tool.forge)
+        : toolProgressLine(tool.tail)
+      : "";
+  const showBar =
+    kind !== "generic" &&
+    tool.status === "running" &&
+    tool.forge?.total !== undefined &&
+    tool.forge.total > 0;
   const id = `tool-${tool.id}`;
   return (
     <div class={styles.process} data-status={tool.status}>
@@ -111,6 +100,7 @@ export function ToolRow({ tool }: { tool: ToolState }) {
               </span>
             </>
           ) : null}
+          {engine ? <EngineBadge engine={engine.engine} isolation={engine.isolation} /> : null}
           {progress && !expanded ? <span class={styles.progress}>{progress}</span> : null}
           <span class={styles.processState}>
             {tool.status === "running" ? (
@@ -134,7 +124,22 @@ export function ToolRow({ tool }: { tool: ToolState }) {
           </button>
         ) : null}
       </div>
-      {expanded ? (
+      {kind !== "generic" ? (
+        <span class="sr-only" role="status" aria-live="polite">
+          {liveAnnouncement(tool.status, tool.forge)}
+        </span>
+      ) : null}
+      {showBar && tool.forge ? (
+        <ForgeBar completed={tool.forge.completed ?? 0} total={tool.forge.total ?? 0} />
+      ) : null}
+      {kind === "python" && engine?.reason ? (
+        <p class={styles.reason} title={engine.reason}>
+          {t("forge.reason", { reason: engine.reason })}
+        </p>
+      ) : null}
+      {expanded && kind === "javascript" ? (
+        <JsRunBody tool={tool} id={id} />
+      ) : expanded ? (
         <div id={id} class={styles.processBody}>
           {plan ? (
             <div class={styles.answer}>

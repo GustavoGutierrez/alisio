@@ -58,6 +58,7 @@ import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
+import { registerScratchRoutes } from "./routes/scratch.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerSideQuestionRoutes } from "./routes/side-questions.ts";
@@ -488,6 +489,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     ...(options.views?.maxBytes !== undefined ? { maxBytes: options.views.maxBytes } : {}),
   });
   registerFileRoutes(router, { workspaces, catalog, sessions });
+  registerScratchRoutes(router, {
+    sessions,
+    catalog,
+    ...(base.readOnly ? { readOnly: true } : {}),
+  });
   registerBlobRoutes(router, { blobs });
   registerArtifactRoutes(router, {
     artifacts,

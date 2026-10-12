@@ -357,8 +357,8 @@ contra el catálogo del modelo activo).
 ## `analysis`
 
 [Análisis en Python y artefactos](/es/analysis). El intérprete no tiene clave de configuración: se
-descubre automáticamente o se fija con `--python <path>`. `runtime`, `oci.*` y `retention.*` son
-**solo globales**: se leen de `<config home>/config.json`, y una capa de proyecto o `--config` que
+descubre automáticamente o se fija con `--python <path>`. `runtime`, `isolation`, `wasm.*`, `oci.*` y
+`retention.*` son **solo globales**: se leen de `<config home>/config.json`, y una capa de proyecto o `--config` que
 las defina se ignora con un aviso (`alisio doctor` lista lo ignorado), de modo que un repositorio no
 puede elegir el binario que ejecuta los scripts ni acortar la retención de todos los workspaces.
 
@@ -366,7 +366,12 @@ puede elegir el binario que ejecuta los scripts ni acortar la retención de todo
 | --- | --- | --- |
 | `enabled` | `true` | `false` no registra `python_run`, `artifact_create`, `artifact_list`, `data_inspect`, `data_query` ni `dashboard_generate` |
 | `smartDashboard` | `true` | Registra `dashboard_generate` y orienta al modelo hacia ella para los dashboards; `false` elimina la herramienta y restaura la guía solo de Python. Un `false` global no lo puede deshacer una capa de proyecto. Se aplica al siguiente arranque. Consulta [Smart Dashboard](/es/smart-dashboard#switch) |
-| `runtime` | `"managed"` | `managed` (tu Python, sin sandbox) u `oci` (un contenedor Docker o Podman; consulta [Runtime de contenedor](/es/analysis#oci)). Solo global |
+| `runtime` | `"auto"` | `auto` (el backend más aislado que esté listo: contenedor, luego WebAssembly, luego tu Python), `managed` (tu Python, sin sandbox), `oci` (un contenedor Docker o Podman; consulta [Runtime de contenedor](/es/analysis#oci)) o `wasm` (Pyodide; consulta [Runtime WebAssembly](/es/analysis#wasm)). Un valor explícito se respeta o falla, nunca se sustituye. Solo global |
+| `isolation` | `"preferred"` | Qué puede usar `auto`: `preferred` vuelve a tu Python si no hay un backend aislado listo, `required` nunca ejecuta en el host, `strict` solo admite un backend cuya red el sistema operativo deniega. Solo global. Consulta [Dónde se ejecuta un script](/es/analysis#backends) |
+| `wasm.memoryMb` | `3072` | Límite blando de memoria del runtime WebAssembly (256–65 536): el proceso hijo se mata al superarlo |
+| `wasm.startupMs` | `30000` | Margen que se suma al plazo de una ejecución para cargar Pyodide (1 000–300 000); se informa aparte |
+| `wasm.maxInputBytes` | `104857600` | Con entradas mayores, `auto` no elige `wasm` |
+| `wasm.nodePath` | sin definir | Un `node` 22.22, 24.13, 25.3 o posterior para el runtime WebAssembly; hace falta en el binario independiente cuando `node` no está en el `PATH` |
 | `oci.engine` | `"docker"` | `docker` o `podman`. Solo global |
 | `oci.image` | sin definir | La imagen, fijada por digest (`nombre@sha256:<64 hex>`); un valor sin digest se rechaza al cargar la configuración. Solo global |
 | `oci.memoryMb` | `2048` | Límite de memoria del contenedor (256–65 536) |
@@ -394,7 +399,19 @@ la [TUI](/es/tui); se escriben en el archivo global con el mismo escritor valida
 ajustes (una clave de tres niveles, como `analysis.retention.jobsDays`, conserva sus hermanas). El
 tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; `analysis.enabled` y `analysis.smartDashboard`
 se aplican al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
-ejecuciones). `runtime` y `oci.*` no se editan desde la interfaz: edita el archivo.
+ejecuciones). `runtime`, `isolation`, `wasm.*` y `oci.*` no se editan desde la interfaz ni en vivo: edita el archivo.
+
+## `forge` {#forge}
+
+Forja (`js_run`, el scratchpad y `forge_guide`) está activa por defecto. Los límites, la cuota y la
+retención del scratchpad y todas las claves se describen en [Forja: configuración](/es/forja#configuration);
+el backend de Python y su política de aislamiento son `analysis.runtime` y `analysis.isolation`, más arriba.
+Un proyecto solo puede bajar `timeoutMs`, `maxToolCalls`, `maxConcurrency` y `maxOutputChars`; el
+host, la memoria, la pila, el tamaño del estado y `scratch.*` son **solo globales**.
+
+```json
+{ "forge": { "javascript": { "enabled": true, "timeoutMs": 30000 }, "guides": { "enabled": true } } }
+```
 
 ## `tasks` {#tasks}
 
@@ -673,9 +690,10 @@ Comandos:
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
 | `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Diagnóstico del entorno y del proveedor; avisa cuando no hay modelo configurado; muestra el Python de `python_run` (o cómo instalarlo) |
-| `alisio analysis status` | Modo, el intérprete Python descubierto, los extras instalados, el motor e imagen de contenedor, límites y retención, y la guía de instalación si falta Python |
+| `alisio analysis status` | Modo y política de aislamiento, una tabla de los backends de Python (contenedor, WebAssembly, host), el intérprete Python descubierto, los extras instalados, el motor e imagen de contenedor, límites y retención, y la guía de instalación si falta Python |
 | `alisio analysis setup --extras analysis\|science` | Opcional: instala extras con hashes fijados (pandas…) en un entorno virtual privado; necesita red y falla limpiamente sin ella |
 | `alisio analysis setup --oci [--image <nombre>]` | Opcional: descarga una vez la imagen de contenedor y verifica su digest (Docker o Podman) |
+| `alisio analysis setup --wasm [--profile analysis\|science] [--yes]` | Opcional: descarga el runtime Pyodide fijado para el backend `wasm`, verificando cada hash (necesita red; `--yes` es obligatorio cuando no puede preguntar) |
 | `alisio analysis sweep [--force]` | Ejecuta ahora el barrido de retención (también se ejecuta solo, como máximo una vez al día) |
 | `alisio trust list` | Lista los directorios con una decisión de confianza guardada |
 | `alisio trust revoke <path>` | Olvida la decisión de confianza de un directorio (vuelve a preguntar la próxima vez) |

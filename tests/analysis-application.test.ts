@@ -127,7 +127,7 @@ describe("Application wiring", () => {
       },
     });
     const a = await app({ trustProject: true });
-    expect(a.config.analysis.runtime).toBe("managed");
+    expect(a.config.analysis.runtime).toBe("auto");
     expect(a.config.analysis.oci.image).toBeUndefined();
     expect(a.config.analysis.retention.artifactsDays).toBe(0);
     expect(a.config.analysis.limits.timeoutMs).toBe(5000); // limits remain project-settable

@@ -31,10 +31,17 @@ async function json(file: string, value: unknown) {
 }
 
 describe("analysis configuration (runtime, oci, retention)", () => {
-  it("defaults to managed with the retention of the spec", async () => {
+  it("defaults to auto, the preferred isolation policy and the retention of the spec", async () => {
     const { workspace } = await fixture();
     const { analysis } = await loadConfig(workspace);
-    expect(analysis.runtime).toBe("managed");
+    expect(analysis.runtime).toBe("auto");
+    expect(analysis.isolation).toBe("preferred");
+    expect(analysis.wasm).toEqual({
+      memoryMb: 3072,
+      startupMs: 30_000,
+      maxInputBytes: 100 * 1024 * 1024,
+      nodePath: null,
+    });
     expect(analysis.oci).toEqual({ engine: "docker", memoryMb: 2048, cpus: 2 });
     expect(analysis.retention).toEqual({ jobsDays: 30, intermediateDays: 7, artifactsDays: 0 });
   });
@@ -67,6 +74,58 @@ describe("analysis configuration (runtime, oci, retention)", () => {
     expect(analysis.oci).toEqual({ engine: "podman", image, memoryMb: 1024, cpus: 1.5 });
   });
 
+  it("accepts the wasm runtime, the isolation policy and the wasm settings from the user layer", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      analysis: {
+        runtime: "wasm",
+        isolation: "strict",
+        wasm: { memoryMb: 2048, startupMs: 45_000, nodePath: "/opt/node/bin/node" },
+      },
+    });
+    const { analysis } = await loadConfig(workspace);
+    expect(analysis).toMatchObject({
+      runtime: "wasm",
+      isolation: "strict",
+      wasm: {
+        memoryMb: 2048,
+        startupMs: 45_000,
+        maxInputBytes: 100 * 1024 * 1024,
+        nodePath: "/opt/node/bin/node",
+      },
+    });
+  });
+
+  it("rejects an unknown isolation policy, an unknown runtime and out-of-range wasm settings", async () => {
+    const { global, workspace } = await fixture();
+    for (const analysis of [
+      { isolation: "paranoid" },
+      { runtime: "pyodide" },
+      { wasm: { memoryMb: 16 } },
+      { wasm: { startupMs: 10 } },
+      { wasm: { nodePath: "" } },
+      { wasm: { surprise: true } },
+    ]) {
+      await json(join(global, "config.json"), { analysis });
+      await expect(loadConfig(workspace)).rejects.toThrow();
+    }
+  });
+
+  it("a project layer cannot choose the isolation policy or the wasm settings", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), { analysis: { isolation: "required" } });
+    await json(join(workspace, ".alisio", "config.json"), {
+      analysis: { isolation: "preferred", wasm: { memoryMb: 9000, nodePath: "/tmp/evil" } },
+    });
+    const { config, provenance } = await loadConfigWithProvenance(workspace, {
+      trustProject: true,
+    });
+    expect(config.analysis.isolation).toBe("required");
+    expect(config.analysis.wasm.nodePath).toBeNull();
+    expect(config.analysis.wasm.memoryMb).toBe(3072);
+    expect(provenance.ignored).toEqual(["analysis.isolation", "analysis.wasm"]);
+  });
+
   it("ignores runtime, oci and retention from a project layer and reports them", async () => {
     const { global, workspace } = await fixture();
     await json(join(global, "config.json"), {
@@ -88,7 +147,7 @@ describe("analysis configuration (runtime, oci, retention)", () => {
     expect(config.analysis.enabled).toBe(false);
     expect(config.analysis.limits.timeoutMs).toBe(5000);
     // What only the user decides does not.
-    expect(config.analysis.runtime).toBe("managed");
+    expect(config.analysis.runtime).toBe("auto");
     expect(config.analysis.oci.image).toBeUndefined();
     expect(config.analysis.retention).toEqual({
       jobsDays: 10,
@@ -147,7 +206,13 @@ describe("setConfigValue with three-level keys", () => {
     await expect(
       setConfigValue({ key: "analysis.retention.jobsDays", value: "30" }),
     ).rejects.toThrow(/Invalid value/);
-    for (const key of ["analysis.runtime", "analysis.oci.image", "analysis.limits.maxFiles"]) {
+    for (const key of [
+      "analysis.runtime",
+      "analysis.isolation",
+      "analysis.wasm.memoryMb",
+      "analysis.oci.image",
+      "analysis.limits.maxFiles",
+    ]) {
       expect(isSettableSettingKey(key)).toBe(false);
       await expect(setConfigValue({ key: key as never, value: "x" })).rejects.toThrow(
         /Unknown setting key/,

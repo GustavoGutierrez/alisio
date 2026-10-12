@@ -30,6 +30,8 @@ export interface OciMounts {
   input: string;
   work: string;
   staging: string;
+  /** The Forja scratchpad, mounted read-only at `/job/scratch` (Forja spec §9.4). Optional. */
+  scratch?: string;
 }
 
 /** Paths inside the container (spec §8.3). */
@@ -38,6 +40,7 @@ export const CONTAINER = {
   input: "/job/input",
   work: "/job/work",
   out: "/job/out",
+  scratch: "/job/scratch",
 } as const;
 
 export const PIDS_LIMIT = 256;
@@ -121,9 +124,9 @@ export function ociRunArgs(input: {
     mount(input.mounts.work, CONTAINER.work, "rw"),
     "-v",
     mount(input.mounts.staging, CONTAINER.out, "rw"),
-    "--tmpfs",
-    `/tmp:size=${TMPFS_SIZE}`,
   );
+  if (input.mounts.scratch) args.push("-v", mount(input.mounts.scratch, CONTAINER.scratch, "ro"));
+  args.push("--tmpfs", `/tmp:size=${TMPFS_SIZE}`);
   const env: Record<string, string> = {
     ALISIO_INPUT_DIR: CONTAINER.input,
     ALISIO_OUTPUT_DIR: CONTAINER.out,
@@ -137,6 +140,7 @@ export function ociRunArgs(input: {
     PYTHONUNBUFFERED: "1",
     PYTHONNOUSERSITE: "1",
     PYTHONIOENCODING: "utf-8",
+    ...(input.mounts.scratch ? { ALISIO_SCRATCH_DIR: CONTAINER.scratch } : {}),
     ...input.env,
   };
   for (const [key, value] of Object.entries(env)) args.push("-e", `${key}=${value}`);
@@ -299,8 +303,14 @@ export class OciRuntime {
   }
 
   /** The reason a run cannot start (`undefined` = ready), checked before any job is created. */
-  async unavailable(signal?: AbortSignal): Promise<string | undefined> {
+  async unavailable(
+    signal?: AbortSignal,
+    /** `auto` chooses the runtime itself, so the messages must not talk about `analysis.runtime: "oci"`. */
+    options: { auto?: boolean } = {},
+  ): Promise<string | undefined> {
     const { image } = this.settings;
+    if (!image && options.auto)
+      return "no container image is set (analysis.oci.image); `alisio analysis setup --oci --image <name>` prints the value";
     if (!image)
       return (
         'analysis.runtime is "oci" but analysis.oci.image is not set. Put a digest-pinned image ' +
@@ -308,8 +318,14 @@ export class OciRuntime {
       );
     if (!OCI_IMAGE_PATTERN.test(image)) return "analysis.oci.image must be pinned by digest";
     const status = await this.status(signal);
-    if (!status.ok)
-      return `${status.reason}${status.alternative ? `; ${status.alternative} is installed (set analysis.oci.engine to "${status.alternative}")` : ""}. The container runtime is optional: remove analysis.runtime "oci" to use managed Python.`;
+    if (!status.ok) {
+      const alternative = status.alternative
+        ? `; ${status.alternative} is installed (set analysis.oci.engine to "${status.alternative}")`
+        : "";
+      return options.auto
+        ? `${status.reason}${alternative}`
+        : `${status.reason}${alternative}. The container runtime is optional: remove analysis.runtime "oci" to use managed Python.`;
+    }
     return undefined;
   }
 
@@ -323,9 +339,11 @@ export class OciRuntime {
     signal: AbortSignal;
     timeoutMs: number;
     maxBytes: number;
-    onData?: (chunk: string) => void;
+    onData?: (chunk: string, stream: "stdout" | "stderr") => void;
     logFiles: { stdout: string; stderr: string };
     maxLogBytes: number;
+    /** Extra variables for the script (Forja: the frame nonce). */
+    env?: Record<string, string>;
   }): Promise<ProcessResult & { containerName: string }> {
     const image = this.settings.image;
     if (!image) throw new Error("analysis.oci.image is not set");
@@ -338,6 +356,7 @@ export class OciRuntime {
       executionId: input.executionId,
       mounts: input.mounts,
       host: { ...host, rootless: status.ok ? status.rootless : false },
+      ...(input.env ? { env: input.env } : {}),
     });
     const name = containerName(input.executionId);
     const stop = AbortSignal.any([input.signal, AbortSignal.timeout(input.timeoutMs)]);

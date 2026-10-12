@@ -96,4 +96,7 @@ The VitePress site lives in `docs/` (`pnpm docs:dev`, `pnpm docs:build`). Englis
 - `packages/core/src/analysis/data/engine-source.ts` embeds the data engine (the modules listed in
   `scripts/analysis-data-engine-inputs.ts`, bundled with `bun build`): regenerate with
   `node --experimental-strip-types scripts/analysis-data-engine.ts` after changing any of them.
-  Tests fail when either file is stale.
+- `packages/core/src/forge/python/pyodide-runner-source.ts` embeds `pyodide-runner.mjs` (the plain
+  JavaScript run by the restricted `node` of the `wasm` Python backend): regenerate with
+  `node --experimental-strip-types scripts/pyodide-runner-source.ts`.
+  Tests fail when any of these files is stale.

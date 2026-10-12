@@ -27,4 +27,25 @@ describe("in-flight run snapshot", () => {
     tracker.apply(event("run_completed", {}, "2026-10-01T12:00:09.000Z"));
     expect(tracker.get("s1")).toBeUndefined();
   });
+
+  it("keeps the latest ForgeProgress of a running tool apart from its text tail", () => {
+    const tracker = new InflightTracker();
+    const at = "2026-10-01T12:00:00.000Z";
+    tracker.apply(event("run_started", {}, at));
+    tracker.apply(
+      event(
+        "tool_started",
+        { id: "c1", name: "python_run", arguments: "{}", effect: "process" },
+        at,
+      ),
+    );
+    tracker.apply(event("tool_progress", { id: "c1", data: "loading data\n" }, at));
+    const running = { kind: "forge", executionId: "e1", engine: "python-wasm", phase: "running" };
+    tracker.apply(event("tool_progress", { id: "c1", data: running }, at));
+    const calling = { ...running, phase: "call", completed: 2, total: 5 };
+    tracker.apply(event("tool_progress", { id: "c1", data: calling }, at));
+    const [tool] = tracker.get("s1")?.tools ?? [];
+    expect(tool?.tail).toBe("loading data\n");
+    expect(tool?.forge).toEqual(calling);
+  });
 });

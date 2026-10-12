@@ -23,6 +23,7 @@ import { batch, computed, signal } from "@preact/signals";
 import { t } from "../i18n/index.ts";
 import { ApiClient, ApiRequestError, newId } from "../net/api.ts";
 import { type EventSourceLike, EventStream, type StreamStatus } from "../net/events.ts";
+import { ForgeThrottle } from "../util/forge.ts";
 import { normalizeVersion } from "../util/version.ts";
 import {
   answeredSideQuestion,
@@ -95,6 +96,8 @@ export const announceAssertive = signal("");
 /** Ticks every 30 s so relative times refresh. */
 export const now = signal(Date.now());
 export const settingsOpen = signal(false);
+/** The settings page to open first (an id; the former `analysis` opens Forja). */
+export const settingsPage = signal<string | undefined>(undefined);
 /** The Agents window (list/editor), opened from the sidebar above Settings. */
 export const agentsOpen = signal(false);
 /** The `/agents` quick picker of the open chat. */
@@ -309,7 +312,32 @@ async function refreshDetail(): Promise<void> {
 /** An approved plan switches the session to build when its next run starts: refresh the badge. */
 let planApproved = false;
 
-function onFrames(frames: ServerFrame[]): void {
+/**
+ * Forja progress is coalesced to four updates per second and call before it reaches the
+ * reducers (terminal states and the end of a call always pass, see `ForgeThrottle`); what is held
+ * goes out from a timer when its window closes.
+ */
+const forgeGate = new ForgeThrottle();
+let forgeTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleForgeFlush(): void {
+  if (forgeTimer !== undefined) return;
+  const due = forgeGate.nextFlushIn(Date.now());
+  if (due === undefined) return;
+  forgeTimer = setTimeout(() => {
+    forgeTimer = undefined;
+    const frames = forgeGate.flush(Date.now());
+    if (frames.length) applyServerFrames(frames);
+    scheduleForgeFlush();
+  }, due);
+}
+
+function onFrames(incoming: ServerFrame[]): void {
+  const frames = forgeGate.admit(incoming, Date.now());
+  scheduleForgeFlush();
+  if (frames.length) applyServerFrames(frames);
+}
+
+function applyServerFrames(frames: ServerFrame[]): void {
   let ended = false;
   let agentChanged = false;
   let rewritten = false;

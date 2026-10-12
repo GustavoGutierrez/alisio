@@ -307,7 +307,46 @@ admiten esto; consulte la documentación de su proveedor para conocer el tipo ex
 que espera antes de activarlo. Una herramienta no admitida/rechazada aparece como un error normal
 del proveedor, igual que cualquier otro fallo de la petición.
 
+## Guía bajo demanda: forge_guide {#forge-guide}
+
+Para ver el modo código completo (elección del lenguaje, niveles de aislamiento, scratchpad) consulta [Forja: modo código](/es/forja).
+
+`forge_guide(topic)` es una herramienta de solo lectura que devuelve una guía corta (máximo 4 KB) para
+`js_run` o `python_run`, **generada desde el estado vivo** de los motores en lugar de escrita una vez: los
+límites efectivos y el host del motor JavaScript, las herramientas que un script puede llamar ahora, el
+backend de Python que `python_run` elegiría ahora y los paquetes y garantías que ese backend tiene de
+verdad. Solo existe mientras Forja está activa (`forge.javascript.enabled`) y `forge.guides.enabled` no es
+`false`; los temas `python.*` solo existen si `python_run` está registrada. Un script no puede llamarla.
+
+| Tema | Qué muestra |
+| --- | --- |
+| `js.api` | Los globales de la VM, los límites efectivos (tiempo, llamadas, salida), el host y lo que no está disponible. |
+| `js.patterns` | Filtrar y agregar antes de devolver (`#filtering`), `parallel.map` frente a `settle`, paginación, `state`, `codePath` y el scratchpad. |
+| `js.tools` | Un resumen (nombre y efecto, máximo 40) de las herramientas que los permisos de la sesión dejan llamar a un script; las ocultas (escrituras en `ask`, por ejemplo) no aparecen. Use `catalog.describe` dentro del script para los esquemas. |
+| `python.runtime` | `alisio_runtime`, las carpetas `ALISIO_*`, el scratchpad de solo lectura y cómo se publican las salidas. |
+| `python.data` | Datasets, `data_query` frente a Python, `inputs`, conversión de XLSX. |
+| `python.ml` | Patrones de scikit-learn, statsmodels y scipy, y qué perfil o backend los ofrece ahora. |
+| `python.dashboards` | Gráficos y HTML de `alisio_runtime` frente a `dashboard_generate`, PNG de matplotlib (Agg), disponibilidad de plotly. |
+| `python.environment` | Solo los paquetes del backend que el selector elegiría ahora, las garantías de aislamiento de ese backend y el arreglo de preparación más corto cuando ninguno puede correr. |
+
+Cada respuesta empieza con un `etag` (SHA-256 truncado del contenido). Si se devuelve como `ifNoneMatch`,
+una guía sin cambios responde `{"unchanged": true, "etag": "…"}` en lugar de repetirse.
+
+Los errores con causa conocida añaden una línea de puntero en lugar de la guía: un `SCRIPT_SYNTAX` por un
+`import` apunta a `js.api`, `TOOL_UNAVAILABLE` a `js.tools`, `OUTPUT_LIMIT` a `js.patterns` (`#filtering`), y
+un `python_run` que no puede correr o falla por un módulo ausente, a `python.environment`. La regla de
+enrutamiento del prompt del sistema le dice al modelo que llame a `forge_guide` antes de escribir código no
+trivial; con Forja desactivada el prompt y las herramientas son exactamente los de antes.
+
 ## Ejecutar un fragmento contra otras herramientas: execute {#execute}
+
+::: tip Sustituida por js_run
+Mientras `forge.javascript.enabled` esté activo (el valor por defecto), `execute` **no** se registra:
+`js_run` ocupa su lugar y ejecuta el script en una VM QuickJS-WASM aislada, con llamadas anidadas que
+pasan por la puerta de la propia sesión y nunca preguntan. Pon `forge.javascript.enabled` en `false`
+para recuperar `execute` y el prompt anterior. Las sesiones guardadas con llamadas `execute` se abren y
+se muestran igual que antes.
+:::
 
 `execute(code)` ("Code Mode") ejecuta un breve fragmento de JavaScript que llama a otras
 herramientas ya registradas mediante `await callTool(name, input)` y devuelve un único valor final
@@ -476,6 +515,17 @@ ejecución headless no tiene a quién preguntar, así que la llamada falla nombr
 `alisio analysis setup --extras analysis`. `python_run { rerunOf: "art_…" }` ejecuta de nuevo un
 análisis anterior de la sesión (mismo script, entradas verificadas por hash, artefactos nuevos) tras
 la misma puerta `analysis.run`; consulta [Ejecutar de nuevo](/es/analysis#rerun).
+
+`python_run` corre sobre el mismo núcleo de ejecución que `js_run`: cada ejecución queda en el diario,
+informa su progreso y su respuesta de texto termina con una línea que nombra el motor, el aislamiento y
+por qué se eligió (por ejemplo `engine: python-oci (os-container) · reason: analysis.runtime=oci`).
+Mientras exista el scratchpad de Forja, `python_run { codePath: "plan.py" }` ejecuta un archivo `.py`
+guardado allí en vez de `code`, y el script puede leer el scratchpad (nunca escribirlo, salvo en Python
+gestionado, que no es un sandbox) mediante `$ALISIO_SCRATCH_DIR`. Un script habla con el núcleo con
+`from alisio_runtime import forge` (`forge.progress`, `forge.text`, `forge.result` y `forge.state`,
+el estado que comparte `js_run`); no puede llamar herramientas. Dónde se ejecuta (un contenedor, el
+runtime WebAssembly o tu propio Python) lo decide Alisio y nunca el modelo; consulta
+[Dónde se ejecuta un script](/es/analysis#backends).
 
 `dashboard_generate` (efecto `internal`, como `artifact_create`) construye un dashboard a partir de un
 dataset sin código y lo publica como artefacto; no necesita Python ni aprobación. Se registra cuando

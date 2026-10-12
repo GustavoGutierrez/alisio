@@ -47,7 +47,14 @@ export interface RunProgress {
   phaseSince: number;
 }
 
-export type ToolCategory = "python" | "data" | "artifact" | "question" | "agent" | "other";
+export type ToolCategory =
+  | "python"
+  | "javascript"
+  | "data"
+  | "artifact"
+  | "question"
+  | "agent"
+  | "other";
 
 export type Phase =
   | { kind: "waiting" }
@@ -70,6 +77,7 @@ export const silentByDesign = (phase: Phase): boolean =>
 export const toolCategory = (name: string): ToolCategory => {
   const bare = name.replace(/^p_[0-9a-f]{10}_/, "");
   if (bare === "python_run") return "python";
+  if (bare === "js_run") return "javascript";
   if (bare === "data_inspect" || bare === "data_query") return "data";
   if (bare === "artifact_create") return "artifact";
   if (bare === "ask_user_question" || bare === "exit_plan") return "question";

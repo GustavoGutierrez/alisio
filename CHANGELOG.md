@@ -4,6 +4,44 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [Unreleased]
+
+Forja, the code mode of Alisio.
+
+### Added
+
+- `js_run`: the model writes a short JavaScript script that composes tools, runs them in parallel and
+  returns a small result. It runs in an isolated QuickJS-WebAssembly VM with limits for time, memory,
+  calls and output; every nested call passes your permissions and a script cannot ask for approval.
+- `forge_guide`: a short guide for `js_run` and `python_run`, generated from the live limits, tools
+  and Python backend, so the model learns the real environment on demand (`forge.guides.enabled`).
+- `python_run` backends `auto`, `managed`, `oci` and `wasm`, with an isolation policy
+  (`analysis.isolation`: `preferred`, `required` or `strict`). The new `wasm` backend runs Pyodide in a
+  restricted Node process with no Docker (`alisio analysis setup --wasm`); the result names the engine
+  and why it was chosen. `alisio forge status` shows every engine and why one is not ready.
+- A per-session scratchpad where the model keeps scripts and intermediate files and runs them with
+  `codePath` (`forge.scratch.*`: 7 days of retention and a 256 MiB quota by default). Python sees it
+  read only through `ALISIO_SCRATCH_DIR`.
+- Web UI: a Forja settings page, a `js_run` card with the code, the nested calls and a progress
+  bar, an isolation badge and the reason on every `python_run`, and a Scratch tab to preview,
+  download and empty the scratchpad. The terminal shows nested-call counts and the Python backend.
+- Database migrations v9 and v10 (the execution journal and the shared script state) and
+  `alisio_runtime` 4 with `alisio_runtime.forge`; they apply automatically.
+
+### Changed
+
+- `analysis.runtime` defaults to `auto` (before: `managed`): Alisio uses the most isolated backend
+  that is ready (container, then WebAssembly, then your Python). Set `managed` to keep the old
+  behavior; an explicit value is honored or fails, never replaced.
+- While `forge.javascript.enabled` is on (the default), `execute` is not registered: `js_run` takes
+  its place. Set it to `false` to get `execute` and the previous prompt back; saved sessions with
+  `execute` calls still open.
+- The script's own progress now reaches the web UI next to the nested-call events instead of being
+  replaced by them.
+- Isolation has limits you should know: the `wasm` backend does not block the network on Node 22 and
+  24, its memory limit is soft and a hostile script can reach the runner's JavaScript; `managed` is
+  not a sandbox. The Forja documentation page lists them.
+
 ## [0.5.2] - 2026-10-08
 
 A patch release with one fix.

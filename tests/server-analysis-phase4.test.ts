@@ -245,7 +245,7 @@ describe("GET /api/analysis and the analysis settings", () => {
     expect(status).toMatchObject({
       enabled: true,
       readOnly: false,
-      mode: "managed",
+      mode: "auto",
       python: { found: true, version: "3.12.0", extras: [] },
       oci: { engine: "docker", memoryMb: 2048, cpus: 2 },
       limits: { timeoutMs: 120_000 },

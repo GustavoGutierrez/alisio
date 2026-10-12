@@ -10,6 +10,12 @@ Managed Python is not a sandbox: the script runs with your user permissions and 
 files and use the network. Read the script in the approval before allowing it.
 :::
 
+::: tip Part of Forja
+`python_run` is the data half of Forja, the code mode of Alisio (the other half is `js_run`). See
+[Forja: code mode](/forja) for the choice of language, the isolation of every engine and the
+scratchpad.
+:::
+
 ## Quick start {#quick-start}
 
 No setup is needed. Alisio discovers Python 3.10 or newer on your machine the first time the model
@@ -313,10 +319,65 @@ asks**, only offers **Allow once** and **Deny** (nothing is saved), and no flag,
 permission covers it. In a headless run it does not exist: the call fails and names the optional
 command that does the same by hand.
 
+## Where a script runs {#backends}
+
+Alisio chooses; the model never does. `analysis.runtime` is `auto` by default: Alisio uses the most
+isolated backend that is ready and fits the script, in this order, and the last line of every
+`python_run` result says which one ran and why (`engine: python-wasm (wasm-process) · reason: …`).
+
+| Backend | Isolation | Needs |
+| --- | --- | --- |
+| `oci` | A container: no network, a read-only root, only the job folders mounted | Docker or Podman and a pinned image ([Container runtime](#oci)) |
+| `wasm` | Pyodide in a restricted Node process: files limited to the job, no child processes ([WebAssembly runtime](#wasm)) | `alisio analysis setup --wasm` and a Node 22.22+ (24.13+, 25.3+) |
+| `managed` | None: your Python with your permissions | Python 3.10+ |
+
+`analysis.isolation` decides what `auto` may fall back to: `preferred` (default) uses the host only
+when no isolated backend is ready, and says so; `required` never runs on the host and fails with
+the setup commands instead; `strict` accepts only a backend whose network the operating system
+denies (today the container; `wasm` only where its self-probe sees the network refused). An
+explicit `runtime` of `managed`, `oci` or `wasm` is honored or fails with the reason; it never
+changes silently, and a run that fails after it started is never repeated on another backend.
+`alisio analysis status` prints a table of the backends and their state.
+
+## WebAssembly runtime {#wasm}
+
+The `wasm` backend runs the script in Pyodide (Python 3.14 compiled to WebAssembly) inside a child
+`node` started with the Node Permission Model. It needs no Docker. Download it once (about 44 MB
+for `analysis`, 70 MB for `science`; this is the only time it uses the network):
+
+```sh
+alisio analysis setup --wasm                    # pandas, numpy, matplotlib, openpyxl, python-docx, reportlab, plotly, jinja2
+alisio analysis setup --wasm --profile science  # adds scipy, statsmodels, scikit-learn
+```
+
+The command shows the size and asks first (`--yes` is required when it cannot ask), checks every
+file against a pinned SHA-256 and, on any mismatch, deletes what it downloaded and leaves the
+backend not ready. It does not touch the virtual environment of `managed` or the container image.
+Running a script loads only the packages it imports, from that local folder, with no network use.
+Under Bun (the standalone binary) a `node` 22.22, 24.13, 25.3 or newer (the releases with the fix for the Permission Model symlink bypass
+CVE-2025-55130) must be on `PATH` as an absolute entry (or set `analysis.wasm.nodePath`); without one
+the backend is not ready and says why.
+
+```json
+{ "analysis": { "wasm": { "memoryMb": 3072, "startupMs": 30000, "maxInputBytes": 104857600 } } }
+```
+
+What it does and does not guarantee:
+
+| Guarantee | `wasm` |
+| --- | --- |
+| Reading your files outside the job | Prevented by the Permission Model (verified, including through the JavaScript bridge) |
+| Child processes, workers, native addons | Denied (`os.system` ends the run as a failure) |
+| Network | **Not blocked on Node 22 and 24**: Python can reach `node:http` through the bridge. On start Alisio probes the real child and reports what it saw (`alisio forge status`); `isolation: strict` excludes `wasm` unless the probe saw the network refused |
+| Memory | A soft limit: the parent samples the child every 250 ms and kills it above `analysis.wasm.memoryMb`, so it can overshoot briefly |
+| Time | The run's own timeout plus `analysis.wasm.startupMs` for loading Pyodide (about 1-2 s for pandas, 5 s with scikit-learn); the start is reported separately. A timeout kills the process and the kill is confirmed |
+| Packages | Only the downloaded profile. A script that imports anything else is sent to another backend by `auto`, or fails under an explicit `wasm` |
+| Escaping | The Permission Model is not a boundary against hostile code: the script reaches the runner's JavaScript. The runner holds no secrets and everything it produces is validated by the host |
+
 ## Container runtime {#oci}
 
-By default the script runs with your own Python (`managed`). If you have Docker or Podman you can
-run it in a container instead; it is optional and never required:
+If you have Docker or Podman you can run scripts in a container; it is optional and never
+required, and `auto` uses it first when it is ready. To require it, set `runtime` to `oci`:
 
 ```json
 {

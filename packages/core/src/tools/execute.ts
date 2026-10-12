@@ -23,6 +23,7 @@ import { createContext, Script } from "node:vm";
 import type { Policy } from "../core/contracts.ts";
 import { OPT_IN_TOOLS } from "../core/opt-in.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import { decideEffect, effectOf } from "../permissions/decide.ts";
 
 export const EXECUTE_TIMEOUT_MS = 10_000;
 export const MAX_NESTED_CALLS = 20;
@@ -43,11 +44,6 @@ export interface ExecuteDeps {
   /** Overrides `EXECUTE_TIMEOUT_MS`, mainly for tests. */
   timeoutMs?: number;
 }
-const allowedEffect = (policy: Policy, effect: string) =>
-  effect === "read" ||
-  effect === "internal" ||
-  ((effect === "write" || effect === "process" || effect === "external") && !!policy[effect]);
-
 export async function runExecute(code: string, deps: ExecuteDeps): Promise<unknown> {
   let calls = 0;
   const controller = new AbortController();
@@ -67,11 +63,12 @@ export async function runExecute(code: string, deps: ExecuteDeps): Promise<unkno
     // Opt-in tools (`exit_plan`) belong to the run that lists them, never to a nested call.
     if (OPT_IN_TOOLS.has(name))
       throw new Error(`callTool: "${name}" is not available from execute`);
-    const effect = tool.effect ?? "external";
-    // A capability tool is reachable only when already allowed (never through a persisted grant).
+    const effect = effectOf(tool);
+    // A capability tool is reachable only when already allowed (never through a persisted grant),
+    // and a nested call never opens an approval: anything but an allow is a denial.
     if (
-      !allowedEffect(deps.policy, effect) &&
-      !(tool.capability === "analysis.run" && deps.policy.analysis)
+      decideEffect(deps.policy, tool, { approvals: false, capabilityGranted: false }).kind !==
+      "allow"
     )
       throw new Error(
         `callTool: capability denied for "${name}" (effect: ${effect}); execute cannot request ` +

@@ -1,8 +1,18 @@
+import type { IsolationLevel } from "@alisio/sdk";
 import { Fragment } from "preact";
 import { t } from "../../i18n/index.ts";
 import type { ArtifactDetail } from "../../net/api.ts";
 import { dashboardProvenance, formatSize } from "../../util/artifacts.ts";
+import { provenanceEngine } from "../../util/forge-card.ts";
+import { isolationKey } from "../../util/forge-page.ts";
 import styles from "./panel.module.css";
+
+const ISOLATION_LEVELS: Record<IsolationLevel, true> = {
+  "os-container": true,
+  "wasm-isolate": true,
+  "wasm-process": true,
+  none: true,
+};
 
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value ? value : undefined;
@@ -28,6 +38,11 @@ export function ArtifactDetails(props: { detail: ArtifactDetail }) {
     ? (p.inputs as Array<{ name?: string; sha256?: string }>)
     : [];
   const dashboard = dashboardProvenance(p);
+  const forge = provenanceEngine(p);
+  const isolation =
+    forge?.isolation && Object.hasOwn(ISOLATION_LEVELS, forge.isolation)
+      ? t(isolationKey(forge.isolation as IsolationLevel))
+      : forge?.isolation;
   const rows: Array<[string, preact.ComponentChildren]> = [
     [t("artifactPanel.created"), new Date(detail.createdAt).toLocaleString()],
     [t("artifactPanel.size"), formatSize(detail.bytes)],
@@ -71,6 +86,21 @@ export function ArtifactDetails(props: { detail: ArtifactDetail }) {
               .join(" · "),
           ],
         ] as Array<[string, string]>)
+      : []),
+    ...(forge?.engine
+      ? ([[t("artifactPanel.engine"), forge.engine]] as Array<[string, string]>)
+      : []),
+    ...(isolation ? ([[t("artifactPanel.isolation"), isolation]] as Array<[string, string]>) : []),
+    ...(forge?.reason
+      ? ([[t("artifactPanel.engineReason"), forge.reason]] as Array<[string, string]>)
+      : []),
+    ...(forge?.startupMs !== undefined
+      ? ([[t("artifactPanel.startup"), `${(forge.startupMs / 1000).toFixed(1)} s`]] as Array<
+          [string, string]
+        >)
+      : []),
+    ...(forge?.peakRssMb !== undefined
+      ? ([[t("artifactPanel.peakMemory"), `${forge.peakRssMb} MB`]] as Array<[string, string]>)
       : []),
     ...(inputs.length
       ? ([

@@ -14,6 +14,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { ApprovalDecision } from "../core/contracts.ts";
+import { scratchUsage } from "../forge/session-dir.ts";
 import { inside, outsideRootsMessage, safePath } from "./paths.ts";
 
 export type ExternalDirectoryDecision = ApprovalDecision;
@@ -45,6 +46,15 @@ export interface PathAccessOptions {
   approve?: ExternalDirectoryHandler;
   /** Fully locked: declared roots are ignored and no external directory is ever approvable. */
   readOnly?: boolean;
+  /**
+   * The verified scratchpad of a session's ROOT session (Forja, spec §9.4), created on first use.
+   * When given, that folder is an authorized root: a path inside it needs no directory approval.
+   * Absent when Forja is off, so nothing changes; ignored under `--read-only`. A failure to
+   * provide it just means "no scratchpad".
+   */
+  scratchpad?: (session: string) => Promise<string | undefined>;
+  /** `forge.scratch.maxBytes`, read on every check: the quota of one scratchpad. */
+  scratchMaxBytes?: () => number;
 }
 
 export interface ResolvePathOptions {
@@ -81,6 +91,8 @@ export class PathAccess {
   private readonly roots: readonly string[];
   private readonly approve?: ExternalDirectoryHandler;
   private readonly readOnly: boolean;
+  private readonly scratchpad?: (session: string) => Promise<string | undefined>;
+  private readonly scratchMaxBytes?: () => number;
   /** Session-approved directory subtrees (allow for the session). */
   private readonly approved = new Set<string>();
   /** Canonicalized roots, memoized; a nonexistent declared root never matches. */
@@ -91,6 +103,84 @@ export class PathAccess {
     this.roots = options.readOnly ? [] : [...(options.extraRoots ?? [])];
     this.readOnly = !!options.readOnly;
     if (options.approve && !options.readOnly) this.approve = options.approve;
+    if (options.scratchpad && !options.readOnly) this.scratchpad = options.scratchpad;
+    if (options.scratchMaxBytes) this.scratchMaxBytes = options.scratchMaxBytes;
+  }
+
+  /**
+   * `target` made safe inside the session's scratchpad, or undefined when it is not there: outside
+   * it, no session, no scratchpad, or a symlink on the way (an escaping link is "outside").
+   */
+  private async scratchTarget(
+    target: string,
+    session: string | undefined,
+  ): Promise<string | undefined> {
+    if (!this.scratchpad || !session) return undefined;
+    try {
+      const base = await this.scratchpad(session);
+      if (!base || !inside(base, target)) return undefined;
+      return await safePath(base, target);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Whether an already resolved path lies in the session's verified scratchpad (never read-only). */
+  async isScratchPath(target: string, session?: string): Promise<boolean> {
+    return (await this.scratchTarget(target, session)) !== undefined;
+  }
+
+  /** Scratchpad writers in flight, one queue per scratchpad directory (see `lockScratch`). */
+  private scratchLocks = new Map<string, Promise<void>>();
+
+  /**
+   * Serializes the quota check and the write that follows it (L1): two parallel writes that each
+   * fit would otherwise both pass the check and together overflow. Resolves to the release. Keyed
+   * by the scratchpad directory, so a child session shares the lock of its root session.
+   */
+  async lockScratch(session: string | undefined): Promise<() => void> {
+    const base =
+      this.scratchpad && session
+        ? await this.scratchpad(session).catch(() => undefined)
+        : undefined;
+    const key = base ?? "";
+    const previous = this.scratchLocks.get(key) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const mine = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => mine);
+    this.scratchLocks.set(key, tail);
+    await previous;
+    return () => {
+      release();
+      if (this.scratchLocks.get(key) === tail) this.scratchLocks.delete(key);
+    };
+  }
+
+  /**
+   * Why a write of about `incomingBytes` into the session's scratchpad must be refused (spec §9.4,
+   * FJ-AC-34), or undefined when it fits. Nothing is ever deleted to make room: the model is told,
+   * plainly, that the scratchpad is full.
+   */
+  async scratchQuotaProblem(
+    session: string | undefined,
+    incomingBytes: number,
+    /** Files the write replaces: their current size is not counted twice. */
+    replacing: readonly string[] = [],
+  ): Promise<string | undefined> {
+    if (!this.scratchpad || !this.scratchMaxBytes || !session) return undefined;
+    const base = await this.scratchpad(session).catch(() => undefined);
+    if (!base) return undefined;
+    const max = this.scratchMaxBytes();
+    let used = await scratchUsage(base);
+    for (const path of replacing) used -= (await lstat(path).catch(() => undefined))?.size ?? 0;
+    used = Math.max(0, used);
+    if (used + incomingBytes <= max) return undefined;
+    return (
+      `The session scratchpad is full: ${used} of ${max} bytes used and this write needs about ` +
+      `${incomingBytes}. Nothing was deleted; remove files you no longer need, or ask the user to clear it.`
+    );
   }
 
   /** Extra roots actually in force (always empty under `--read-only`). */
@@ -133,6 +223,8 @@ export class PathAccess {
     const target = resolve(workspace, path);
     const root = await this.rootFor(target, workspace);
     if (root) return safePath(root, target);
+    const scratch = await this.scratchTarget(target, options.session);
+    if (scratch) return scratch;
     if (this.readOnly)
       throw new Error(
         outsideRootsMessage(
