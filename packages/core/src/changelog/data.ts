@@ -6,8 +6,8 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
-      version: "Unreleased",
-      unreleased: true,
+      version: "0.6.0",
+      date: "2026-10-12",
       sections: [
         {
           title: "Added",

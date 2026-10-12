@@ -4,7 +4,7 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
-## [Unreleased]
+## [0.6.0] - 2026-10-12
 
 Forja, the code mode of Alisio.
 
