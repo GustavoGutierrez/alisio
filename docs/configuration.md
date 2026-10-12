@@ -347,8 +347,8 @@ catalog).
 ## `analysis`
 
 [Python analysis and artifacts](/analysis). The interpreter has no configuration key: it is
-discovered automatically or pinned with `--python <path>`. `runtime`, `oci.*` and `retention.*` are
-**global only**: they are read from `<config home>/config.json`, and a project or `--config` layer
+discovered automatically or pinned with `--python <path>`. `runtime`, `isolation`, `wasm.*`, `oci.*` and
+`retention.*` are **global only**: they are read from `<config home>/config.json`, and a project or `--config` layer
 that sets them is ignored with a notice (`alisio doctor` lists what was ignored), so a repository can
 neither pick the binary that runs scripts nor shorten the retention of every workspace.
 
@@ -356,7 +356,12 @@ neither pick the binary that runs scripts nor shorten the retention of every wor
 | --- | --- | --- |
 | `enabled` | `true` | `false` registers none of `python_run`, `artifact_create`, `artifact_list`, `data_inspect`, `data_query` and `dashboard_generate` |
 | `smartDashboard` | `true` | Registers `dashboard_generate` and steers the model to it for dashboards; `false` removes the tool and restores the Python-only guidance. A global `false` cannot be undone by a project layer. Applies at the next start. See [Smart Dashboard](/smart-dashboard#switch) |
-| `runtime` | `"managed"` | `managed` (your Python, not a sandbox) or `oci` (a Docker or Podman container; see [Container runtime](/analysis#oci)). Global only |
+| `runtime` | `"auto"` | `auto` (the most isolated backend that is ready: container, then WebAssembly, then your Python), `managed` (your Python, not a sandbox), `oci` (a Docker or Podman container; see [Container runtime](/analysis#oci)) or `wasm` (Pyodide; see [WebAssembly runtime](/analysis#wasm)). An explicit value is honored or fails, never replaced. Global only |
+| `isolation` | `"preferred"` | What `auto` may use: `preferred` falls back to your Python when no isolated backend is ready, `required` never runs on the host, `strict` accepts only a backend whose network the OS denies. Global only. See [Where a script runs](/analysis#backends) |
+| `wasm.memoryMb` | `3072` | Soft memory limit of the WebAssembly runtime (256–65 536): the child is killed above it |
+| `wasm.startupMs` | `30000` | Margin added to a run's timeout for loading Pyodide (1 000–300 000); reported apart |
+| `wasm.maxInputBytes` | `104857600` | Inputs larger than this keep `auto` away from `wasm` |
+| `wasm.nodePath` | unset | A `node` 22.22, 24.13, 25.3 or newer for the WebAssembly runtime; needed under the standalone binary when `node` is not on `PATH` |
 | `oci.engine` | `"docker"` | `docker` or `podman`. Global only |
 | `oci.image` | unset | The image, pinned by digest (`name@sha256:<64 hex>`); a value without a digest is rejected when the configuration loads. Global only |
 | `oci.memoryMb` | `2048` | Container memory limit (256–65 536) |
@@ -383,8 +388,20 @@ edited from **Settings → Data analysis** in [`alisio serve`](/web) and from `/
 [TUI](/tui); they are written to the global file with the same validated writer as the other
 settings (a key with three levels, such as `analysis.retention.jobsDays`, keeps its siblings).
 The timeout and the retention apply from the next call or sweep; `analysis.enabled` and `analysis.smartDashboard` apply when
-Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime` and
-`oci.*` are not editable from the UI: edit the file.
+Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime`, `isolation`,
+`wasm.*` and `oci.*` are not editable from the UI or live: edit the file.
+
+## `forge` {#forge}
+
+Forja (`js_run`, the scratchpad and `forge_guide`) is on by default. The limits, the scratchpad
+quota and retention and every key are described in [Forja: configuration](/forja#configuration);
+the Python backend and its isolation policy are `analysis.runtime` and `analysis.isolation` above.
+A project may only lower `timeoutMs`, `maxToolCalls`, `maxConcurrency` and `maxOutputChars`; the
+host, memory, stack, state size and `scratch.*` are **global only**.
+
+```json
+{ "forge": { "javascript": { "enabled": true, "timeoutMs": 30000 }, "guides": { "enabled": true } } }
+```
 
 ## `tasks` {#tasks}
 
@@ -648,9 +665,10 @@ Commands:
 | `alisio resume <session> [prompt]` | Resume a session (TUI without prompt, headless with prompt) |
 | `alisio setup` | Write an example `.alisio/config.json` without secrets (for `AGENTS.md`, use `/init`) |
 | `alisio doctor` | Environment and provider diagnostics; warns when no model is configured; shows the Python of `python_run` (or how to install it) |
-| `alisio analysis status` | Mode, the discovered Python interpreter, installed extras, the container engine and image, limits and retention, and install guidance when Python is missing |
+| `alisio analysis status` | Mode and isolation policy, a table of the Python backends (container, WebAssembly, host), the discovered Python interpreter, installed extras, the container engine and image, limits and retention, and install guidance when Python is missing |
 | `alisio analysis setup --extras analysis\|science` | Optional: install hash-locked extras (pandas…) into a private virtualenv; needs network and fails cleanly without it |
 | `alisio analysis setup --oci [--image <name>]` | Optional: pull the container image once and verify its digest (Docker or Podman) |
+| `alisio analysis setup --wasm [--profile analysis\|science] [--yes]` | Optional: download the pinned Pyodide runtime for the `wasm` backend, verifying every hash (needs network; `--yes` is required when it cannot ask) |
 | `alisio analysis sweep [--force]` | Run the retention sweep now (it also runs by itself at most once a day) |
 | `alisio trust list` | List directories with a stored project-trust decision |
 | `alisio trust revoke <path>` | Forget a directory's trust decision (re-prompts next time) |

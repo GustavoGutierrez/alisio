@@ -335,6 +335,17 @@ closed (KPI, line, area, bar, horizontal bar, pie, donut, scatter, table; at mos
 decision provider receives only the goal and column metadata, never values, but Alisio does not
 decide where an adapter sends it.
 
+**Forja (`js_run`, `python_run` backends and the scratchpad).** `js_run` is isolated by the QuickJS-WebAssembly
+VM, but on Node the worker is a thread of the Alisio process, so a flaw that escaped the engine would
+compromise it (Bun and the standalone binary use a child process). The Python `wasm` backend does not block
+the network on Node 22 and 24, its memory limit is soft (sampled every 250 ms) and a hostile script can reach
+the runner's JavaScript through the FFI (it can also read `os.homedir()`, `os.hostname()` and `os.userInfo()`, and host paths show in `process.argv`; failure output is redacted); the backend needs Node 22.22, 24.13 or 25.3+ (CVE-2025-55130) and gets a link-free copy of the scratchpad; stored grants do not apply to nested calls; `managed` is not a sandbox, and the read-only `ALISIO_SCRATCH_DIR` is
+not enforceable there. Scripts cannot ask for approval: a nested call that needs one fails with
+`APPROVAL_REQUIRED`. The per-call list of a `js_run` card is not persisted, so after reloading the page only the
+call counters remain. The scratchpad lives in the temporary folder, is removed after seven idle days and is not
+backed up. The benchmark of five tasks with a real model is still pending and informative only. See
+[Forja](/forja#isolation).
+
 Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
 overrides and stable/distinct OpenCode session headers. No real credentials were used.
