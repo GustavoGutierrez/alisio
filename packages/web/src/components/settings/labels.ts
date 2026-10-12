@@ -53,6 +53,8 @@ export const SETTING_LABELS: Record<Locale, Record<string, string>> = {
     "goal.blockedRepeats": "Turns the agent must report a blocker",
     "plan.diagrams": "Plan diagrams",
     "plan.maxDiagrams": "Most diagrams per plan",
+    "forge.javascript.enabled": "Forja JavaScript (js_run)",
+    "forge.guides.enabled": "Forja guides (forge_guide)",
   },
   es: {
     "compaction.auto": "Compactar el contexto automáticamente",
@@ -101,6 +103,8 @@ export const SETTING_LABELS: Record<Locale, Record<string, string>> = {
     "goal.blockedRepeats": "Turnos en que el agente debe reportar un bloqueo",
     "plan.diagrams": "Diagramas del plan",
     "plan.maxDiagrams": "Máximo de diagramas por plan",
+    "forge.javascript.enabled": "Forja JavaScript (js_run)",
+    "forge.guides.enabled": "Guías de Forja (forge_guide)",
   },
 };
 

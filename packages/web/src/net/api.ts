@@ -31,6 +31,7 @@ import type {
   DirectoryListing,
   FileTreePage,
   FolderPickResult,
+  ForgeOverview,
   HealthInfo,
   McpOverview,
   McpServerWire,
@@ -45,6 +46,8 @@ import type {
   ProvidersOverview,
   ReloadReport,
   RunEvent,
+  ScratchClearResult,
+  ScratchListing,
   SessionChange,
   SessionContextUsage,
   SessionDetail,
@@ -56,6 +59,7 @@ import type {
   UiBlock,
   WorkspaceInfo,
 } from "@alisio/sdk";
+import { scratchFileUrl } from "../util/scratch.ts";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -458,6 +462,20 @@ export class ApiClient {
     );
   settings = (wid: string) =>
     this.request<SettingsOverview>("GET", `/api/settings?workspace=${enc(wid)}`);
+  /** The Forja engines with their live state (Settings → Forja). */
+  forge = (wid: string) => this.request<ForgeOverview>("GET", `/api/forge?workspace=${enc(wid)}`);
+  /** The session's scratchpad: relative names, sizes and the quota (Scratch tab). */
+  scratch = (sessionId: string) =>
+    this.request<ScratchListing>("GET", `/api/sessions/${enc(sessionId)}/scratch`);
+  /** Empties the session's scratchpad (`409 runs_active` while a Forja run is going). */
+  clearScratch = (sessionId: string) =>
+    this.request<ScratchClearResult>("DELETE", `/api/sessions/${enc(sessionId)}/scratch`);
+  /** The text of one scratchpad file (`name` is a relative name from the listing). */
+  async scratchText(sessionId: string, name: string): Promise<string> {
+    const url = scratchFileUrl(sessionId, name);
+    if (!url) throw new ApiRequestError(400, "validation_failed", "Invalid file name");
+    return (await this.raw(url)).text();
+  }
   /** The state of the data-analysis runtime (Settings → Data analysis). */
   analysis = (wid: string) =>
     this.request<AnalysisStatus>("GET", `/api/analysis?workspace=${enc(wid)}`);

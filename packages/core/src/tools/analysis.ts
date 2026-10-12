@@ -4,8 +4,8 @@
  * job folder outside the repository; whatever it leaves in `$ALISIO_OUTPUT_DIR` is published as
  * artifacts. Managed Python is NOT a sandbox.
  */
-import { open } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { open, readFile, stat } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 import { type ArtifactKind, type ToolContext, type ToolResult, textResult } from "@alisio/sdk";
 import type { DatasetService } from "../analysis/data/datasets.ts";
 import {
@@ -14,7 +14,7 @@ import {
   installHintsText,
   pythonInstallHints,
 } from "../analysis/install-hints.ts";
-import type { AnalysisJobs, JobInput } from "../analysis/jobs.ts";
+import type { AnalysisJobs } from "../analysis/jobs.ts";
 import type { OciRuntime } from "../analysis/oci.ts";
 import type { AnalysisRerun, RerunPlan } from "../analysis/rerun.ts";
 import {
@@ -22,14 +22,41 @@ import {
   type Extras,
   ExtrasInstallError,
   installPreview,
+  type PythonResolution,
   setupCommand,
 } from "../analysis/runtime-manager.ts";
 import { KIND_LABELS } from "../artifacts/kinds.ts";
 import { ArtifactRejected, type ArtifactStore, toRef } from "../artifacts/store.ts";
-import type { CoreArtifactPublisher, PublishedArtifactInfo } from "../core/contracts.ts";
+import type { CoreArtifactPublisher } from "../core/contracts.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import { isForgeError, renderHint } from "../forge/errors.ts";
+import type { ExecutionKernel } from "../forge/kernel.ts";
+import type {
+  BackendReadiness,
+  PythonBackendId,
+  PythonRequirements,
+  SupportVerdict,
+} from "../forge/python/backend.ts";
+import {
+  engineIdOf,
+  type IsolationPolicy,
+  neededBackends,
+  type PythonRuntimeSetting,
+} from "../forge/python/backend-selector.ts";
+import {
+  newPythonRunReport,
+  PYTHON_PLAN_KEY,
+  type PythonRunPlan,
+  TERMINAL_BYTES,
+} from "../forge/python/engine.ts";
+import { stripFrames } from "../forge/python/frame-parser.ts";
+import { scanImports } from "../forge/python/import-scan.ts";
+import type { PyodideBackendDeps } from "../forge/python/pyodide-backend.ts";
+import { createPythonForge } from "../forge/python/wiring.ts";
+import type { EngineRegistry } from "../forge/registry.ts";
+import { clipText, outputText, pythonHintFor } from "../forge/result.ts";
+import { resolveScratchPath } from "../forge/session-dir.ts";
 import { safePath } from "../runtime/paths.ts";
-import { runProcess } from "../runtime/process.ts";
 import { artifactBlocks, describeArtifact, formatBytes } from "./artifact-blocks.ts";
 import { objectSchema } from "./standard.ts";
 
@@ -49,19 +76,34 @@ export interface AnalysisToolDeps {
   /** Discovery (`interpreter`) and, for the optional extras, `hasExtras` / `installExtras`. */
   runtime: Pick<AnalysisRuntimeManager, "interpreter"> &
     Partial<Pick<AnalysisRuntimeManager, "hasExtras" | "installExtras">>;
-  /** Container mode (`analysis.runtime: "oci"`), read when each call starts. */
-  oci?: { mode(): "managed" | "oci"; runtime(): OciRuntime };
+  /** `analysis.runtime` and the container runtime, read when each call starts. */
+  oci?: { mode(): PythonRuntimeSetting; runtime(): OciRuntime };
+  /** `analysis.isolation`, read when each call starts (`preferred` when absent). */
+  isolation?: () => IsolationPolicy;
+  /** The Pyodide backend (`analysis.runtime: "wasm"`, and a candidate of `auto`). */
+  wasm?: PyodideBackendDeps;
   /** Rerun of an earlier execution (`rerunOf`). */
   rerun?: AnalysisRerun;
+  /**
+   * The Forja kernel and engine registry shared with `js_run` (one journal, one state store). When
+   * absent the tool builds a private kernel over the jobs' database.
+   */
+  forge?: { kernel: ExecutionKernel; engines: EngineRegistry };
+  /**
+   * The verified Forja scratchpad of a session; undefined while there is none (Forja off, or
+   * `--read-only`). It enables `codePath` and is exposed to the script read-only.
+   */
+  scratchpad?: (session: string) => Promise<string | undefined>;
   /** Datasets of the session: `inputs: [{ datasetId }]` copies the dataset's SQLite file. */
   datasets?: DatasetService;
   rootOf: (sessionId: string) => string;
   limits: AnalysisLimits;
   /** Startup facts for the description (stat only; no process was launched). */
   startup: { candidates: boolean; extras: string[] };
+  /** Whether `forge_guide` exists now; error results then point at `python.environment` (spec §8.4). */
+  guideHints?: () => boolean;
 }
 
-const TERMINAL_BYTES = 256 * 1024;
 const TEXT_TAIL = 4 * 1024;
 const MAX_CODE = 200_000;
 const MAX_TEXT = 5 * 1024 * 1024;
@@ -110,54 +152,22 @@ function publisherOf(context: ToolContext): CoreArtifactPublisher {
   return publisher;
 }
 
-/** Environment of the script: the usual whitelist, HOME/TMP inside work/, and the job paths. */
-function scriptEnv(job: {
-  input: string;
-  staging: string;
-  work: string;
-  id: string;
-}): Record<string, string> {
-  const keep = [
-    "PATH",
-    "LANG",
-    "LC_ALL",
-    "SystemRoot",
-    "COMSPEC",
-    "PATHEXT",
-    "SYSTEMDRIVE",
-    "WINDIR",
-  ];
-  return {
-    ...Object.fromEntries(
-      keep.flatMap((k) => (process.env[k] ? [[k, process.env[k] as string]] : [])),
-    ),
-    HOME: job.work,
-    USERPROFILE: job.work,
-    TMPDIR: job.work,
-    TEMP: job.work,
-    TMP: job.work,
-    ALISIO_INPUT_DIR: job.input,
-    ALISIO_OUTPUT_DIR: job.staging,
-    ALISIO_WORK_DIR: job.work,
-    ALISIO_EXECUTION_ID: job.id,
-    MPLBACKEND: "Agg",
-    PYTHONDONTWRITEBYTECODE: "1",
-    PYTHONUNBUFFERED: "1",
-    PYTHONNOUSERSITE: "1",
-    PYTHONIOENCODING: "utf-8",
-  };
-}
+const WASM_NOTE =
+  "This run happens in a restricted WebAssembly process (Pyodide in Node with the Permission Model): no host files outside the job, no child processes; the network is NOT blocked and memory is a soft limit. Only the downloaded profile's packages exist.";
 
 const CONTAINER_NOTE =
   "This run happens in a container (Docker or Podman) with no network access, a read-only root and only the job folders mounted; it is isolation with limits, not a hardened sandbox.";
 
 function pythonRunDescription(deps: AnalysisToolDeps): string {
-  const container = deps.oci?.mode() === "oci";
+  const setting = deps.oci?.mode() ?? "managed";
+  const container = setting === "oci";
   const modules = container
     ? "whatever the configured container image provides (and alisio_runtime)"
-    : deps.startup.extras.length
-      ? `the standard library, alisio_runtime and the "${deps.startup.extras.join(", ")}" extras (pandas, numpy, matplotlib…)`
-      : 'the Python standard library and alisio_runtime only (no pandas or numpy; use csv, statistics, sqlite3). Pass extras: ["analysis"] to use pandas, numpy, matplotlib, openpyxl, python-docx, reportlab, plotly and jinja2: if they are not installed the user is asked once to approve a download, and without approval the call fails';
+    : setting === "wasm"
+      ? "the standard library, alisio_runtime and the downloaded Pyodide profile (analysis: pandas, numpy, matplotlib, openpyxl, python-docx, reportlab, plotly, jinja2; science adds scipy, statsmodels, scikit-learn); other packages are not available"
+      : deps.startup.extras.length
+        ? `the standard library, alisio_runtime and the "${deps.startup.extras.join(", ")}" extras (pandas, numpy, matplotlib…)`
+        : 'the Python standard library and alisio_runtime only (no pandas or numpy; use csv, statistics, sqlite3). Pass extras: ["analysis"] to use pandas, numpy, matplotlib, openpyxl, python-docx, reportlab, plotly and jinja2: if they are not installed the user is asked once to approve a download, and without approval the call fails';
   return [
     ...(deps.smartDashboard
       ? [
@@ -187,12 +197,16 @@ function pythonRunDescription(deps: AnalysisToolDeps): string {
     "inline (no fetch, no CDN). Nothing is published when the script fails unless publishOnError.",
     "Keep each call's code short: the model's output is capped per response, so split large scripts or dashboards into several calls or files.",
     "To run an earlier analysis again unchanged (same script, inputs checked by hash, new artifacts) pass rerunOf: an artifact or execution id of this session, instead of code.",
-    container ? CONTAINER_NOTE : NOT_SANDBOXED,
-    ...(deps.startup.candidates || container
+    container ? CONTAINER_NOTE : setting === "wasm" ? WASM_NOTE : NOT_SANDBOXED,
+    ...(deps.startup.candidates || container || setting === "wasm"
       ? []
       : ["Python was not found at startup: the tool answers with install instructions."]),
   ].join(" ");
 }
+
+/** PD11: the last line of the text names the engine, the isolation and why it was chosen. */
+const withEngineLine = (text: string, line: string): string =>
+  `${text}${text.endsWith("\n") ? "" : "\n"}${line}`;
 
 const failure = (text: string): ToolResult => ({
   content: [{ type: "text", text }],
@@ -200,6 +214,125 @@ const failure = (text: string): ToolResult => ({
 });
 
 export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisToolDeps): void {
+  const python = createPythonForge({
+    jobs: deps.jobs,
+    runtime: deps.runtime,
+    ...(deps.oci ? { oci: deps.oci } : {}),
+    ...(deps.wasm ? { wasm: deps.wasm } : {}),
+    ...(deps.forge ? { shared: deps.forge } : {}),
+  });
+
+  /** The pointer line to `python.environment`, only while the guide tool exists. */
+  const guideLine = (code: "PACKAGE_UNAVAILABLE" | "RUNTIME_UNAVAILABLE"): string =>
+    deps.guideHints?.() ? `\nhint: ${renderHint(pythonHintFor(code))}` : "";
+
+  async function unavailable(
+    runtime: PythonRuntimeSetting,
+    state: BackendReadiness | undefined,
+    fallback: string,
+    host: BackendReadiness | undefined,
+  ): Promise<ToolResult> {
+    const result = await unavailableText(runtime, state, fallback, host);
+    const line = guideLine(
+      /wasm profiles|profile/.test(fallback) ? "PACKAGE_UNAVAILABLE" : "RUNTIME_UNAVAILABLE",
+    );
+    const first = result.content[0];
+    if (line && first?.type === "text") first.text += line;
+    return result;
+  }
+
+  /** The text `python_run` has always answered when the chosen runtime cannot run. */
+  async function unavailableText(
+    runtime: PythonRuntimeSetting,
+    state: BackendReadiness | undefined,
+    fallback: string,
+    host: BackendReadiness | undefined,
+  ): Promise<ToolResult> {
+    if (runtime === "auto" || runtime === "wasm") {
+      // The chain's own message lists every backend; the host's install hints ride along when the
+      // host was a candidate that failed for lack of Python.
+      const hostDown = runtime === "auto" && host && !host.ready ? host : undefined;
+      if (!hostDown) return failure(`runtime_unavailable: ${fallback}`);
+      const found = (hostDown.detail as Extract<PythonResolution, { ok: false }> | undefined)
+        ?.found;
+      const hints = pythonInstallHints(await detectHintHost(found));
+      return {
+        content: [
+          { type: "text", text: `runtime_unavailable: ${fallback}\n${installHintsText(hints)}` },
+          { type: "ui", block: { kind: "markdown", text: installHintsMarkdown(hints) } },
+        ],
+        isError: true,
+      };
+    }
+    if (!state || state.ready) return failure(`runtime_unavailable: ${fallback}`);
+    if (runtime === "oci") return failure(`runtime_unavailable: ${state.reason}`);
+    const found = (state.detail as Extract<PythonResolution, { ok: false }> | undefined)?.found;
+    const hints = pythonInstallHints(await detectHintHost(found));
+    return {
+      content: [
+        { type: "text", text: `runtime_unavailable: ${state.reason}.\n${installHintsText(hints)}` },
+        { type: "ui", block: { kind: "markdown", text: installHintsMarkdown(hints) } },
+      ],
+      isError: true,
+    };
+  }
+
+  /** The Pyodide start margin added to a run's deadline (0 without the backend). */
+  const wasmStartupMs = (): number => deps.wasm?.settings().startupMs ?? 0;
+
+  /** Bytes of the inputs a call declares, best effort: a bad input fails later with its own error. */
+  async function inputBytesOf(
+    declared: unknown,
+    rerun: RerunPlan | undefined,
+    context: ToolContext,
+    root: string,
+  ): Promise<number> {
+    if (rerun) return rerun.inputs.reduce((sum, item) => sum + item.bytes, 0);
+    let total = 0;
+    for (const item of (declared as Array<{ path?: string; datasetId?: string }> | undefined) ??
+      []) {
+      try {
+        const file =
+          item.datasetId !== undefined
+            ? deps.datasets?.file(deps.datasets.getFor(item.datasetId, root))
+            : item.path !== undefined
+              ? await (context.resolvePath
+                  ? context.resolvePath(item.path)
+                  : safePath(context.workspace, item.path))
+              : undefined;
+        if (file) total += (await stat(file)).size;
+      } catch {
+        /* the real preparation reports it */
+      }
+    }
+    return total;
+  }
+
+  /** The scratchpad to expose to the script (read-only), when it exists. */
+  async function exposedScratchpad(session: string): Promise<string | undefined> {
+    const pad = await deps.scratchpad?.(session).catch(() => undefined);
+    if (!pad) return undefined;
+    return (await stat(pad).catch(() => undefined))?.isDirectory() ? pad : undefined;
+  }
+
+  /** `codePath`: the text of a `.py` file inside the session scratchpad (Python spec §5). */
+  async function codeFromScratchpad(codePath: unknown, session: string): Promise<string> {
+    if (typeof codePath !== "string" || codePath === "")
+      throw new Error("`codePath` must be a non-empty string");
+    const pad = deps.scratchpad ? await deps.scratchpad(session).catch(() => undefined) : undefined;
+    if (!pad) throw new Error("`codePath` needs the session scratchpad, which is not available");
+    const path = await resolveScratchPath(pad, codePath);
+    if (extname(path) !== ".py")
+      throw new Error("`codePath` must be a .py file inside the scratchpad");
+    const info = await stat(path).catch(() => undefined);
+    if (!info?.isFile()) throw new Error(`\`codePath\` does not name a file: ${codePath}`);
+    const text = await readFile(path, "utf8");
+    if (text.length > MAX_CODE)
+      throw new Error(`\`codePath\` file is longer than ${MAX_CODE} characters`);
+    if (text.trim() === "") throw new Error("`codePath` file is empty");
+    return text;
+  }
+
   /**
    * The optional extras (pandas…): when they are not installed, installing them needs an
    * `analysis.install` approval (once, with the packages, the size and the network need). Where no
@@ -264,6 +397,12 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
           items: { type: "string", enum: ["analysis", "science"] },
         },
         rerunOf: { type: "string", minLength: 5, maxLength: 64 },
+        codePath: {
+          type: "string",
+          maxLength: 1024,
+          description:
+            "A .py file inside the session scratchpad to run instead of code (edit it with the file tools between runs). The scratchpad is readable from the script as $ALISIO_SCRATCH_DIR and never writable. Only where the scratchpad exists.",
+        },
       },
       [],
     ),
@@ -272,10 +411,14 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
       const sessionId = context.session ?? "headless";
       const root = deps.rootOf(sessionId);
       const rerunRef = typeof input.rerunOf === "string" ? input.rerunOf.trim() : undefined;
+      const hasPath = input.codePath !== undefined;
       if (rerunRef && input.code !== undefined)
         throw new Error("Pass either code or rerunOf, not both");
-      if (!rerunRef && typeof input.code !== "string")
+      if (hasPath && (rerunRef || input.code !== undefined))
+        throw new Error("Pass only one of code, codePath or rerunOf");
+      if (!rerunRef && !hasPath && typeof input.code !== "string")
         throw new Error("python_run needs code (or rerunOf to run an earlier analysis again)");
+      const source = hasPath ? await codeFromScratchpad(input.codePath, sessionId) : undefined;
       // Rerun: the saved script and inputs, verified by hash; a mismatch runs nothing.
       let rerun: RerunPlan | undefined;
       if (rerunRef) {
@@ -287,28 +430,74 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
           );
         rerun = prepared.plan;
       }
-      const code = rerun ? rerun.code : String(input.code);
-      const container = deps.oci?.mode() === "oci" ? deps.oci.runtime() : undefined;
-      // Container mode needs neither host Python nor extras (the image carries them).
-      let runtime: Awaited<ReturnType<AnalysisToolDeps["runtime"]["interpreter"]>> | undefined;
-      if (container) {
-        const unavailable = await container.unavailable(context.signal);
-        if (unavailable) return failure(`runtime_unavailable: ${unavailable}`);
-      } else {
-        runtime = await deps.runtime.interpreter(context.signal);
-        if (!runtime.ok) {
-          const hints = pythonInstallHints(await detectHintHost(runtime.found));
-          return {
-            content: [
-              {
-                type: "text",
-                text: `runtime_unavailable: ${runtime.reason}.\n${installHintsText(hints)}`,
-              },
-              { type: "ui", block: { kind: "markdown", text: installHintsMarkdown(hints) } },
-            ],
-            isError: true,
-          };
-        }
+      const code = rerun ? rerun.code : (source ?? String(input.code));
+      await python.ready();
+
+      // select (Python spec §6): the configured runtime under the isolation policy, from facts
+      // gathered once. Nothing is probed after this point, and nothing falls back after a start.
+      const runtimeSetting: PythonRuntimeSetting = deps.oci ? deps.oci.mode() : "managed";
+      const isolation: IsolationPolicy = deps.isolation?.() ?? "preferred";
+      const rerunOfBackend: PythonBackendId | undefined = rerun?.runtime;
+      const extrasAsked = [
+        ...new Set<string>([
+          ...((input.extras as string[] | undefined) ?? []),
+          ...(rerun?.extras ?? []),
+        ]),
+      ];
+      const probe = neededBackends({
+        runtime: runtimeSetting,
+        isolation,
+        ...(rerunOfBackend ? { rerunOfBackend } : {}),
+      });
+      const readiness: Partial<Record<PythonBackendId, BackendReadiness>> = {};
+      await Promise.all(
+        probe.map(async (id) => {
+          const backend = python.backends[id];
+          readiness[id] = backend
+            ? await backend.check(context.signal)
+            : { ready: false, reason: `${id} is not available here` };
+        }),
+      );
+      const requirements: PythonRequirements = {
+        extras: extrasAsked.filter((e): e is "analysis" | "science" =>
+          ["analysis", "science"].includes(e),
+        ),
+        importedModules: scanImports(code),
+        inputBytes: probe.includes("wasm")
+          ? await inputBytesOf(input.inputs, rerun, context, root)
+          : 0,
+        ...(rerunOfBackend ? { rerunOfBackend } : {}),
+      };
+      const support: Partial<Record<PythonBackendId, SupportVerdict>> = {};
+      const networkDenied: Partial<Record<PythonBackendId, boolean>> = {};
+      for (const id of probe) {
+        const backend = python.backends[id];
+        if (!backend || !readiness[id]?.ready) continue;
+        support[id] = backend.supports(requirements);
+        if (isolation === "strict")
+          networkDenied[id] = (await backend.describe()).capabilities.networkDeniedByOS;
+      }
+      let selection: { engine: PythonBackendId; reason: string };
+      try {
+        selection = python.selector.select({
+          runtime: runtimeSetting,
+          isolation,
+          ...(rerunOfBackend ? { rerunOfBackend } : {}),
+          readiness,
+          support,
+          networkDenied,
+        });
+      } catch (error) {
+        if (!isForgeError(error)) throw error;
+        return unavailable(
+          runtimeSetting,
+          runtimeSetting === "auto" ? undefined : readiness[runtimeSetting],
+          error.message,
+          readiness.managed,
+        );
+      }
+      const managed = python.backends.managed;
+      if (selection.engine === "managed" && managed) {
         const wanted = new Set<string>([
           ...((input.extras as string[] | undefined) ?? []),
           ...(rerun?.extras ?? []),
@@ -317,162 +506,105 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
           const need = wanted.has("science") ? "science" : "analysis";
           const outcome = await ensureExtras(need, context);
           if (outcome) return outcome;
-          runtime = await deps.runtime.interpreter(context.signal);
-          if (!runtime.ok) return failure(`runtime_unavailable: ${runtime.reason}`);
+          const again = await managed.check(context.signal);
+          if (!again.ready) return failure(`runtime_unavailable: ${again.reason}`);
         }
-      }
-      const job = await deps.jobs.create({
-        sessionId,
-        rootSessionId: root,
-        workspace: context.workspace,
-        ...(context.runId ? { runId: context.runId } : {}),
-        ...(context.callId ? { callId: context.callId } : {}),
-        code,
-        runtime: container ? "oci" : "managed",
-        ...(rerun ? { rerunOf: rerun.executionId } : {}),
-      });
-      const inputs: JobInput[] = [];
-      let manifest: unknown[] = [];
-      const extrasAsked = [
-        ...new Set<string>([
-          ...((input.extras as string[] | undefined) ?? []),
-          ...(rerun?.extras ?? []),
-        ]),
-      ];
-      try {
-        if (rerun) {
-          // The verified copies of the original run, under the same names.
-          for (const item of rerun.inputs) {
-            const added = await deps.jobs.addInput(job, item.source, item.name);
-            if (added.sha256 !== (item.copySha256 ?? item.sha256) && !item.datasetId)
-              throw new Error(`Input ${item.name} changed while the rerun started`);
-            inputs.push({
-              ...added,
-              sha256: item.sha256,
-              copySha256: added.sha256,
-              ...(item.datasetId ? { datasetId: item.datasetId } : {}),
-            });
-          }
-          manifest = rerun.manifest;
-        } else
-          for (const item of (input.inputs as
-            | Array<{ path?: string; datasetId?: string }>
-            | undefined) ?? []) {
-            if ((item.path === undefined) === (item.datasetId === undefined))
-              throw new Error("Each input needs exactly one of path or datasetId");
-            if (item.datasetId !== undefined) {
-              if (!deps.datasets) throw new Error("Datasets are not available here");
-              const record = deps.datasets.getFor(item.datasetId, root);
-              const added = await deps.jobs.addInput(
-                job,
-                deps.datasets.file(record),
-                `${
-                  basename(record.name)
-                    .replace(/\.[^.]*$/, "")
-                    .replace(/[^\w.-]+/g, "_") || "dataset"
-                }.sqlite`,
-              );
-              // Provenance names the original content, so a rerun can verify it by hash.
-              inputs.push({
-                ...added,
-                sha256: record.sha256,
-                copySha256: added.sha256,
-                datasetId: record.id,
-              });
-              manifest.push({
-                name: added.name,
-                kind: "dataset",
-                datasetId: record.id,
-                source: record.name,
-                format: record.format,
-                sheets: record.sheets,
-              });
-              continue;
-            }
-            const resolved = context.resolvePath
-              ? await context.resolvePath(item.path as string)
-              : await safePath(context.workspace, item.path as string);
-            const added = await deps.jobs.addInput(job, resolved);
-            inputs.push({ ...added, copySha256: added.sha256 });
-            manifest.push({ name: added.name, kind: "file", bytes: added.bytes });
-          }
-        if (manifest.length) await deps.jobs.writeInputsManifest(job, manifest);
-        await deps.jobs.recordInputs(job, {
-          inputs,
-          manifest,
-          ...(extrasAsked.length ? { extras: extrasAsked } : {}),
-        });
-      } catch (error) {
-        deps.jobs.finish(job.id, "failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
       }
       const timeoutMs = Math.min(
         Number(input.timeoutMs ?? deps.limits.timeoutMs),
         deps.limits.timeoutMs,
       );
-      const started = Date.now();
-      const logs = { stdout: join(job.logs, "stdout.log"), stderr: join(job.logs, "stderr.log") };
-      let result: Awaited<ReturnType<typeof runProcess>>;
-      try {
-        if (container)
-          result = await container.run({
-            executionId: job.id,
-            mounts: {
-              script: job.script,
-              input: job.input,
-              work: job.work,
-              staging: job.staging,
-            },
-            signal: context.signal,
-            timeoutMs,
-            maxBytes: TERMINAL_BYTES,
-            logFiles: logs,
-            maxLogBytes: deps.limits.maxLogBytes,
-            onData: context.emit,
-          });
-        else {
-          const interpreter = runtime as Extract<typeof runtime, { ok: true }>;
-          const args = [
-            ...(interpreter.prefixArgs ?? []),
-            "-E",
-            "-s",
-            "-B",
-            "-u",
-            "-X",
-            "utf8",
-            job.main,
-          ];
-          result = await runProcess(interpreter.executable, args, {
-            cwd: job.work,
-            signal: context.signal,
-            timeoutMs,
-            maxBytes: TERMINAL_BYTES,
-            onOverflow: "truncate",
-            logFiles: logs,
-            maxLogBytes: deps.limits.maxLogBytes,
-            env: scriptEnv(job),
-            onData: context.emit,
-          });
-        }
-      } catch (error) {
-        if (context.signal.aborted) {
-          deps.jobs.finish(job.id, "cancelled");
-          throw error;
-        }
-        const timedOut =
-          error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-        deps.jobs.finish(job.id, timedOut ? "timed_out" : "failed", {
-          error: error instanceof Error ? error.message : String(error),
+      const pad = await exposedScratchpad(sessionId);
+      const engineId = engineIdOf(selection.engine);
+      const report = newPythonRunReport();
+      const plan: PythonRunPlan = {
+        code,
+        ...(rerun ? { rerun } : {}),
+        inputs: (input.inputs as Array<{ path?: string; datasetId?: string }> | undefined) ?? [],
+        extrasAsked,
+        resolvePath: (path) =>
+          context.resolvePath ? context.resolvePath(path) : safePath(context.workspace, path),
+        ...(deps.datasets ? { datasets: deps.datasets } : {}),
+        rootSessionId: root,
+        sessionId,
+        workspace: context.workspace,
+        ...(context.runId ? { runId: context.runId } : {}),
+        ...(context.callId ? { callId: context.callId } : {}),
+        publisher,
+        ...(typeof input.title === "string" && input.title.trim()
+          ? { title: input.title.trim() }
+          : {}),
+        publishOnError: input.publishOnError === true,
+        onText: (text) => context.emit(text),
+        ...(pad ? { scratch: pad } : {}),
+        maxLogBytes: deps.limits.maxLogBytes,
+        engine: {
+          id: engineId,
+          isolation: python.engines.descriptors()[engineId]?.isolation ?? "none",
+          selectionReason: selection.reason,
+        },
+        report,
+      };
+      const { result } = await python.kernel.execute({
+        source: code,
+        language: "python",
+        selection: { engine: engineId, reason: selection.reason },
+        // Pyodide's start is a margin on top of the run's own deadline, not part of it (PD13).
+        limitOverrides: {
+          timeoutMs: timeoutMs + (selection.engine === "wasm" ? wasmStartupMs() : 0),
+          maxSourceBytes: MAX_CODE * 4,
+        },
+        payload: { [PYTHON_PLAN_KEY]: plan },
+        call: {
+          toolCallId: context.callId ?? "python_run",
+          session: sessionId,
+          rootSessionId: root,
+          workspace: context.workspace,
+          signal: context.signal,
+          // Python has no nested calls; these only describe the caller (the call passed the
+          // analysis.run gate, and its effect is `process`).
+          permissionMode: "ask",
+          allowAnalysis: true,
+          allowProcess: true,
+          emit: (progress) => context.emit(progress),
+          ...(pad ? { tasksDir: join(dirname(pad), "tasks") } : {}),
+        },
+      });
+
+      // The tool's errors keep their shape: a failed preparation is the original error, a cancelled
+      // call ends by throwing, a crash of the launch rethrows.
+      if (report.prepareError) throw report.prepareError;
+      const job = report.job;
+      if (!job)
+        return failure(
+          `${result.error?.code ?? "ISOLATE_FAILURE"}: ${result.error?.message ?? "the script did not start"}`,
+        );
+      if (result.status === "cancelled") {
+        deps.jobs.finish(job.id, "cancelled");
+        context.signal.throwIfAborted();
+        throw new Error("python_run was cancelled");
+      }
+      if (report.crash) {
+        deps.jobs.finish(job.id, "failed", {
+          error: report.crash instanceof Error ? report.crash.message : String(report.crash),
         });
-        if (!timedOut) throw error;
-        const output = `${await readTail(logs.stdout, TEXT_TAIL)}${await readTail(logs.stderr, TEXT_TAIL)}`;
+        throw report.crash;
+      }
+      const nonce = report.nonce ?? "";
+      const logs = { stdout: join(job.logs, "stdout.log"), stderr: join(job.logs, "stderr.log") };
+      const engineLine = `engine: ${result.engine} (${result.isolation}) · reason: ${result.selectionReason}`;
+      if (result.status === "timed_out") {
+        deps.jobs.finish(job.id, "timed_out", { error: result.error?.message ?? "timed out" });
+        const stdoutTail = stripFrames(await readTail(logs.stdout, TEXT_TAIL), nonce);
+        const output = `${stdoutTail}${await readTail(logs.stderr, TEXT_TAIL)}`;
         return {
           content: [
             {
               type: "text",
-              text: `timed out after ${Math.round(timeoutMs / 1000)}s; nothing was published (${job.id})${output ? `\n--- output (last 4 KB) ---\n${tail(output, TEXT_TAIL)}` : ""}`,
+              text: withEngineLine(
+                `timed out after ${Math.round(timeoutMs / 1000)}s; nothing was published (${job.id})${output ? `\n--- output (last 4 KB) ---\n${tail(output, TEXT_TAIL)}` : ""}`,
+                engineLine,
+              ),
             },
             {
               type: "ui",
@@ -480,7 +612,7 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
                 kind: "terminal",
                 command: "python main.py",
                 output,
-                durationMs: Date.now() - started,
+                durationMs: report.durationMs ?? timeoutMs,
                 truncated: true,
               },
             },
@@ -488,96 +620,82 @@ export function registerAnalysisTools(registry: ToolRegistry, deps: AnalysisTool
           isError: true,
         };
       }
-      const durationMs = Date.now() - started;
-      const failed = result.exitCode !== 0;
-      let published: PublishedArtifactInfo[] = [];
-      let publishError: string | undefined;
-      if (!failed || input.publishOnError === true) {
-        try {
-          const settings = container?.settings;
-          const interpreter = runtime?.ok ? runtime : undefined;
-          published = await publisher.publishOutputs(job.staging, {
-            executionId: job.id,
-            ...(typeof input.title === "string" && input.title.trim()
-              ? { title: input.title.trim() }
-              : {}),
-            ...(failed ? { partial: true } : {}),
-            provenance: {
-              runtime: settings
-                ? {
-                    mode: "oci",
-                    engine: settings.engine,
-                    ...(settings.image ? { image: settings.image } : {}),
-                    extras: [],
-                  }
-                : {
-                    mode: "managed",
-                    python: interpreter?.version,
-                    extras: interpreter?.extras ?? [],
-                    ...(interpreter?.runtimeVersion
-                      ? { runtimeVersion: interpreter.runtimeVersion }
-                      : {}),
-                  },
-              scriptSha256: job.scriptSha256,
-              inputs: inputs.map((i) => ({
-                name: i.name,
-                sha256: i.sha256,
-                ...(i.datasetId ? { datasetId: i.datasetId } : {}),
-              })),
-              ...(rerun
-                ? {
-                    rerunOf: rerun.executionId,
-                    ...(rerun.artifactId ? { rerunOfArtifact: rerun.artifactId } : {}),
-                  }
-                : {}),
-            },
-          });
-        } catch (error) {
-          if (!(error instanceof ArtifactRejected)) throw error;
-          publishError = error.message;
-        }
-      }
-      deps.jobs.finish(job.id, failed || publishError ? "failed" : "completed", {
-        exitCode: result.exitCode,
-        ...(publishError ? { error: `publish: ${publishError}` } : {}),
+      const durationMs = report.durationMs ?? 0;
+      const proc = report.process;
+      const published = report.published;
+      const publishError = report.publishError;
+      const failed = result.status !== "succeeded";
+      // Anything else that stopped the run (a protocol violation, a refused state write...).
+      const forgeError =
+        result.error && !["SCRIPT_RUNTIME", "PUBLICATION_REJECTED"].includes(result.error.code)
+          ? result.error
+          : undefined;
+      deps.jobs.finish(job.id, failed ? "failed" : "completed", {
+        ...(proc ? { exitCode: proc.exitCode } : {}),
+        ...(publishError
+          ? { error: `publish: ${publishError}` }
+          : forgeError
+            ? { error: `${forgeError.code}: ${forgeError.message}` }
+            : {}),
       });
-      const warnings = published.flatMap((p) => p.warnings);
+      const stdout =
+        proc?.stdout ?? stripFrames(await readTail(logs.stdout, TERMINAL_BYTES), nonce);
+      const stderr = proc?.stderr ?? (await readTail(logs.stderr, TERMINAL_BYTES));
+      const warnings = [...published.flatMap((p) => p.warnings), ...report.warnings];
+      const seconds = (durationMs / 1000).toFixed(1);
       const head = [
-        `${rerun ? `rerun of ${rerun.executionId} · ` : ""}exit ${result.exitCode} in ${(durationMs / 1000).toFixed(1)}s`,
+        `${rerun ? `rerun of ${rerun.executionId} · ` : ""}${proc ? `exit ${proc.exitCode}` : "stopped"} in ${seconds}s${typeof report.runtime?.startupMs === "number" ? ` (startup ${(report.runtime.startupMs / 1000).toFixed(1)}s)` : ""}`,
         publishError
           ? `publication rejected (nothing was published): ${publishError}`
           : failed && input.publishOnError !== true
             ? "nothing was published (non-zero exit; pass publishOnError to keep partial outputs)"
             : `published ${published.length} artifact${published.length === 1 ? "" : "s"}${published.length ? `: ${published.map(describeArtifact).join(", ")}` : ""}`,
       ].join(" · ");
+      const forgeOutput = outputText(result.output);
+      const forgeValue = result.value !== undefined ? JSON.stringify(result.value) : undefined;
       const sections = [
         head,
+        ...(forgeError ? [`error: ${forgeError.code}: ${forgeError.message}`] : []),
         ...warnings.map((w) => `warning: ${w}`),
-        ...(result.stdout.trim()
-          ? [`--- stdout (last 4 KB) ---\n${tail(result.stdout, TEXT_TAIL)}`]
-          : []),
-        ...(result.stderr.trim()
-          ? [`--- stderr (last 4 KB) ---\n${tail(result.stderr, TEXT_TAIL)}`]
+        ...(stdout.trim() ? [`--- stdout (last 4 KB) ---\n${tail(stdout, TEXT_TAIL)}`] : []),
+        ...(stderr.trim() ? [`--- stderr (last 4 KB) ---\n${tail(stderr, TEXT_TAIL)}`] : []),
+        ...(forgeOutput || forgeValue !== undefined
+          ? [
+              `--- forge output ---\n${
+                clipText(
+                  [forgeOutput, ...(forgeValue !== undefined ? [`value: ${forgeValue}`] : [])]
+                    .filter(Boolean)
+                    .join("\n"),
+                  16_000,
+                ).text
+              }`,
+            ]
           : []),
       ];
-      const separator = result.stdout && result.stderr && !result.stdout.endsWith("\n") ? "\n" : "";
+      // A script that failed on an import: point at the packages this backend really has.
+      const missingModule =
+        failed && /ModuleNotFoundError|ImportError: No module named/.test(stderr)
+          ? guideLine("PACKAGE_UNAVAILABLE").trim()
+          : "";
+      if (missingModule) sections.push(missingModule);
+      const separator = stdout && stderr && !stdout.endsWith("\n") ? "\n" : "";
       return {
         content: [
-          { type: "text", text: sections.join("\n") },
+          { type: "text", text: withEngineLine(sections.join("\n"), engineLine) },
           {
             type: "ui",
             block: {
               kind: "terminal",
               command: "python main.py",
-              output: tail(`${result.stdout}${separator}${result.stderr}`, TERMINAL_BYTES),
-              exitCode: result.exitCode,
+              output: tail(`${stdout}${separator}${stderr}`, TERMINAL_BYTES),
+              ...(proc ? { exitCode: proc.exitCode } : {}),
               durationMs,
-              ...(result.truncated ? { truncated: true } : {}),
+              ...(proc?.truncated ? { truncated: true } : {}),
             },
           },
           ...artifactBlocks(published),
         ],
-        ...(failed || publishError ? { isError: true } : {}),
+        ...(failed ? { isError: true } : {}),
       };
     },
   });

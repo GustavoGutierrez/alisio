@@ -24,6 +24,7 @@ import {
 import type {
   AgentInfo,
   AnalysisStatus,
+  ForgeOverview,
   McpOverview,
   McpServerWire,
   PluginInfo,
@@ -459,9 +460,28 @@ export function registerManagementRoutes(
       runtime: app.analysis.runtime,
       oci: () => app.analysis.oci.runtime(),
       janitor: app.analysis.janitor,
+      backends: (signal) => app.analysis.backends(signal),
       enabled: app.analysis.enabled,
       readOnly: !!ctx.base.readOnly,
     });
+    return { body };
+  });
+
+  // Forja: the engines with their live state. JavaScript first, then the Python backends (the
+  // same descriptors `GET /api/analysis` reports under `backends`).
+  router.get("/api/forge", async ({ url }) => {
+    const opened = await open(url.searchParams.get("workspace"));
+    const { app } = opened;
+    const status = await app.forge.runtime.status();
+    const python = await app.analysis.backends();
+    const body: ForgeOverview = {
+      ...status,
+      engines: [...status.engines, ...python],
+      python: {
+        runtime: app.config.analysis.runtime,
+        isolation: app.config.analysis.isolation,
+      },
+    };
     return { body };
   });
 
@@ -495,8 +515,14 @@ export function registerManagementRoutes(
     }
     if (key.startsWith("agents.")) recycler.announce(opened.id, ["agents"]);
     // Analysis tools are registered when the workspace application starts: rebuild it (after its
-    // runs) so `analysis.enabled` applies without restarting the server.
-    if (key === "analysis.enabled" || key === "analysis.smartDashboard" || key === "tasks.enabled")
+    // runs) so `analysis.enabled` (and the Forja switches) apply without restarting the server.
+    if (
+      key === "analysis.enabled" ||
+      key === "analysis.smartDashboard" ||
+      key === "tasks.enabled" ||
+      key === "forge.javascript.enabled" ||
+      key === "forge.guides.enabled"
+    )
       void recycler.request(opened.id).catch(() => undefined);
     return { body: { message: `Saved ${key}` } };
   });

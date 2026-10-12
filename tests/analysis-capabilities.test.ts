@@ -141,7 +141,7 @@ describe("analysis.run capability matrix", () => {
       capability: "analysis.run",
       effect: "process",
       preview: "print(1)",
-      runtime: "managed",
+      runtime: "auto",
     });
     const resolved = first.store
       .eventsPage?.(session, { after: 0, limit: 100 })

@@ -3,7 +3,16 @@
  * versioned runner events into a view model. No terminal or pi-tui imports here.
  */
 import { CommandCatalog, describeOutputLimitSource } from "@alisio/core";
-import type { Message, ModelInfo, RunEvent, ToolResult, TreeNode, UiBlock } from "@alisio/sdk";
+import type {
+  EngineId,
+  ForgeProgress,
+  Message,
+  ModelInfo,
+  RunEvent,
+  ToolResult,
+  TreeNode,
+  UiBlock,
+} from "@alisio/sdk";
 
 export type Level = "ok" | "warn" | "danger";
 
@@ -733,6 +742,8 @@ export type TranscriptItem =
       toolKind?: ToolKind;
       /** Last non-empty `tool_progress` line while the tool runs (cleared on completion). */
       progress?: string;
+      /** What a Forja execution (`js_run`, `python_run`) reported; kept after completion. */
+      forge?: ForgeLine;
       /** Exit code derived safely from the JSON preview when the tool reports one (run_process/shell/search_text). */
       exitCode?: number;
     }
@@ -859,6 +870,63 @@ function updateTool(
   items[index] = { ...item, ...update };
   return { ...state, items };
 }
+/** What the row of a Forja execution shows: nested calls, the script's own note and the engine. */
+export interface ForgeLine {
+  engine: EngineId;
+  /** Highest nested call number seen. */
+  started: number;
+  /** Nested calls that ended (succeeded, failed or denied). */
+  finished: number;
+  /** The script's own `progress({ message, completed, total })`, bounded. */
+  note?: string;
+}
+const FORGE_NOTE_MAX = 40;
+const isForgeProgress = (value: unknown): value is ForgeProgress =>
+  !!value &&
+  typeof value === "object" &&
+  (value as { kind?: unknown }).kind === "forge" &&
+  typeof (value as { engine?: unknown }).engine === "string";
+/** Folds one `ForgeProgress` into the line (terminal call events are never coalesced away). */
+function foldForgeProgress(current: ForgeLine | undefined, progress: ForgeProgress): ForgeLine {
+  const next: ForgeLine = current
+    ? { ...current, engine: progress.engine }
+    : { engine: progress.engine, started: 0, finished: 0 };
+  if (progress.call) {
+    next.started = Math.max(next.started, progress.call.callId);
+    if (progress.call.status !== "started") next.finished += 1;
+  } else if (progress.message || progress.total !== undefined) {
+    const fraction =
+      progress.completed !== undefined && progress.total !== undefined
+        ? ` (${progress.completed}/${progress.total})`
+        : "";
+    const message = (progress.message ?? "").slice(0, FORGE_NOTE_MAX);
+    next.note = `${message}${fraction}`.trim();
+  }
+  return next;
+}
+/** The isolation tag of a Python engine; nothing for JavaScript (it is always isolated). */
+const FORGE_ENGINE_TAG: Partial<Record<EngineId, string>> = {
+  "python-oci": "oci",
+  "python-wasm": "wasm",
+  "python-managed": "host!",
+};
+/** `page 2 (2/9) · 2/3 calls · wasm`; empty when there is nothing to say yet. */
+export function forgeLabel(forge: ForgeLine | undefined): string {
+  if (!forge) return "";
+  return [
+    forge.note,
+    forge.started > 0 ? `${forge.finished}/${forge.started} calls` : undefined,
+    FORGE_ENGINE_TAG[forge.engine],
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+const ENGINE_LINE = /^engine: (python-oci|python-wasm|python-managed) \(/m;
+/** The Python engine a result text names on its last line (PD11), for rows without progress. */
+const engineOfResult = (text: unknown): ForgeLine | undefined => {
+  const engine = typeof text === "string" ? ENGINE_LINE.exec(text)?.[1] : undefined;
+  return engine ? { engine: engine as EngineId, started: 0, finished: 0 } : undefined;
+};
 /** Longest progress line kept on a running tool row. */
 const PROGRESS_LINE_MAX = 80;
 /** The last non-empty line of a `tool_progress` payload, bounded; empty when it has none. */
@@ -1026,6 +1094,11 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
       });
     }
     case "tool_progress": {
+      if (isForgeProgress(d.data)) {
+        const row = state.items.findLast((i) => i.kind === "tool" && i.id === d.id);
+        const before = row?.kind === "tool" ? row.forge : undefined;
+        return updateTool(state, d.id, { forge: foldForgeProgress(before, d.data) });
+      }
       const line = lastProgressLine(d.data);
       return line ? updateTool(state, d.id, { progress: line }) : state;
     }
@@ -1051,6 +1124,9 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
         status: d.isError ? "error" : "ok",
         ...(typeof d.durationMs === "number" ? { durationMs: d.durationMs } : {}),
         ...(typeof d.preview === "string" ? { preview: d.preview } : {}),
+        ...(running?.kind === "tool" && !running.forge && engineOfResult(d.preview)
+          ? { forge: engineOfResult(d.preview) }
+          : {}),
         ...exitCodePart(d.preview),
         ...(isUiBlock(d.ui) ? { ui: d.ui } : {}),
         ...(isImagePart(d.image) ? { image: d.image } : {}),
@@ -1538,6 +1614,8 @@ export interface ToolItemView {
   summary: string;
   /** Last progress line while running. */
   progress?: string;
+  /** `2/3 calls · wasm` of a Forja execution (running or finished). */
+  forge?: string;
   status: ToolStatus;
   durationMs?: number;
   preview?: string;
@@ -1571,6 +1649,7 @@ export function toolItemView(item: Extract<TranscriptItem, { kind: "tool" }>): T
     kind: item.toolKind ?? toolKindOf(item.name),
     summary: item.summary,
     ...(item.progress ? { progress: item.progress } : {}),
+    ...(forgeLabel(item.forge) ? { forge: forgeLabel(item.forge) } : {}),
     status: item.status,
     ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
     ...(item.preview !== undefined ? { preview: item.preview } : {}),
@@ -1749,11 +1828,13 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
       if (m.text) items.push({ kind: "assistant", text: m.text, reasoning: "", done: true });
       for (const c of m.calls) {
         const r = results.get(c.id);
-        const preview = r?.result.content
+        const text = r?.result.content
           .filter((p) => p.type === "text")
           .map((x) => x.text)
-          .join("\n")
-          .slice(0, 2_000);
+          .join("\n");
+        const preview = text?.slice(0, 2_000);
+        // The engine line closes a python_run result (PD11); read it before the preview clips it.
+        const forge = c.name === "python_run" ? engineOfResult(text) : undefined;
         items.push({
           kind: "tool",
           id: c.id,
@@ -1763,6 +1844,7 @@ export function itemsFromHistory(messages: Message[]): TranscriptItem[] {
           status: r?.result.isError ? "error" : "ok",
           preview,
           toolKind: toolKindOf(c.name),
+          ...(forge ? { forge } : {}),
           ...exitCodePart(preview),
           ...richPartsOf(r?.result, c.name),
         });

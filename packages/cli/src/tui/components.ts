@@ -59,6 +59,7 @@ import {
   fitIdentityParts,
   fitSegments,
   foldCandidateOf,
+  forgeLabel,
   formatContext,
   formatDuration,
   formatTokens,
@@ -850,7 +851,9 @@ export class ToolBlock implements Component {
           ? style.gray(formatDuration(i.durationMs))
           : "";
     const progress = i.status === "running" && i.progress ? ` ${style.dim(`· ${i.progress}`)}` : "";
-    const head = `${marker}${icon} ${style.bold(humanizeToolName(i.name))} ${style.gray(i.summary)}${progress}`;
+    const forge = forgeLabel(i.forge);
+    const forgePart = forge ? ` ${style.dim(`· ${forge}`)}` : "";
+    const head = `${marker}${icon} ${style.bold(humanizeToolName(i.name))} ${style.gray(i.summary)}${forgePart}${progress}`;
     const gap = width - visibleWidth(head) - visibleWidth(right) - 1;
     const lines = [
       gap > 0 ? `${head}${" ".repeat(gap + 1)}${right}` : truncateToWidth(head, width),
@@ -940,7 +943,9 @@ export class ToolGroupBlock implements Component {
             member.durationMs !== undefined
               ? ` ${style.gray(`· ${formatDuration(member.durationMs)}`)}`
               : ""
-          }${member.summary ? ` ${style.gray(member.summary)}` : ""}`,
+          }${member.summary ? ` ${style.gray(member.summary)}` : ""}${
+            member.forge ? ` ${style.dim(`· ${member.forge}`)}` : ""
+          }`,
         );
         const rich = richBodyLines(member, width);
         if (rich.lines.length) {

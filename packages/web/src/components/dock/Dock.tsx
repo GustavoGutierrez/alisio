@@ -32,7 +32,7 @@ import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import styles from "./dock.module.css";
 
-const TABS: DockTab[] = ["files", "changes", "preview", "tasks"];
+const TABS: DockTab[] = ["files", "changes", "preview", "tasks", "scratch"];
 
 /** The Tasks tab is its own chunk (the initial bundle has a size budget). */
 function LazyTasks() {
@@ -41,6 +41,21 @@ function LazyTasks() {
     let alive = true;
     void import("../tasks/TasksTab.tsx").then((m) => {
       if (alive) setView(() => m.TasksTab);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View /> : <p class={styles.empty}>{t("common.loading")}</p>;
+}
+
+/** The Scratch tab is its own chunk too (and so are its store and its strings). */
+function LazyScratch() {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("./ScratchTab.tsx").then((m) => {
+      if (alive) setView(() => m.ScratchTab);
     });
     return () => {
       alive = false;
@@ -399,6 +414,8 @@ export function Dock(props: { width?: number } = {}) {
           <ChangesTab />
         ) : tab === "tasks" ? (
           <LazyTasks />
+        ) : tab === "scratch" ? (
+          <LazyScratch />
         ) : (
           <PreviewBody />
         )}

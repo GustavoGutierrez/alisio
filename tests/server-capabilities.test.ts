@@ -65,7 +65,7 @@ describe("capability approvals and grants over HTTP", () => {
       name: "python_run",
       effect: "process",
       capability: "analysis.run",
-      runtime: "managed",
+      runtime: "auto",
       preview: "import csv\nprint('hi')",
     });
     await t.api.post(`/api/approvals/${encodeURIComponent(approval.approvalId)}`, {

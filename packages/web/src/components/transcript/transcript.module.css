@@ -424,3 +424,127 @@ button.processHead:hover,
   border-radius: var(--radius-sm);
   object-fit: cover;
 }
+
+/* Forja cards: engine badge, nested calls, progress bar. */
+.engineBadge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* Running on the host is flagged by the text, the icon and this tint, never by colour alone. */
+.engineBadge[data-tone="warn"] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.reason {
+  margin: 0 0 4px 38px;
+  font-size: 12px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar {
+  height: 3px;
+  margin: 2px 8px 4px 38px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s var(--ease);
+}
+
+.calls {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.callRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.callRow:hover {
+  background: var(--panel);
+}
+
+.callIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.callRow[data-status="failed"] .callIcon,
+.callRow[data-status="denied"] .callIcon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.callTool {
+  flex: none;
+  font-weight: 550;
+}
+
+.callStatus {
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+}
+
+.callRow .duration {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.forgeError {
+  margin: 4px 0 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.forgeError p {
+  margin: 0;
+}
+
+.codeFile {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 6px;
+}

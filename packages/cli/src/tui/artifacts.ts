@@ -251,7 +251,13 @@ export function installApprovalDetail(install: InstallPreview): string {
 }
 
 /** Title of a capability approval in the TUI picker. */
-export const capabilityApprovalTitle = (runtime: "managed" | "oci" | undefined): string =>
+export const capabilityApprovalTitle = (
+  runtime: "auto" | "managed" | "oci" | "wasm" | undefined,
+): string =>
   runtime === "oci"
     ? "Run Python analysis (container · no network)?"
-    : "Run Python analysis (managed · not sandboxed)?";
+    : runtime === "wasm"
+      ? "Run Python analysis (wasm · restricted process, network not blocked)?"
+      : runtime === "auto"
+        ? "Run Python analysis (most isolated backend ready; the host only if none · see the engine line)?"
+        : "Run Python analysis (managed · not sandboxed)?";

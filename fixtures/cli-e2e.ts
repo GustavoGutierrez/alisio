@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { serve } from "./http.ts";
@@ -117,6 +117,49 @@ const bgServer = await serve(async (req) => {
       : results.length === 1
         ? call("bg_list", {})
         : { delta: { content: `Task ${id} is listed` }, finish_reason: "stop" };
+  return new Response(
+    `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+});
+/**
+ * A fake model for Forja's `js_run`: the first turn calls js_run (a script that reads a file through
+ * the gate, or, when the prompt says HANG, a busy loop), the second repeats what the tool said.
+ */
+let forgeRequests = 0;
+let forgeHit: (() => void) | undefined;
+const forgeServer = await serve(async (req) => {
+  const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
+  forgeRequests++;
+  const results = body.messages.filter((m) => m.role === "tool");
+  const prompt = String(body.messages.find((m) => m.role === "user")?.content ?? "");
+  const hang = prompt.includes("HANG");
+  if (hang && results.length === 0) forgeHit?.();
+  const code = hang
+    ? "while (true) {}"
+    : "const f = await tools.call('read_file', { path: 'note.txt' }); text('seen'); return JSON.stringify(f).includes('fixture content');";
+  const choice =
+    results.length === 0
+      ? {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "j0",
+                type: "function",
+                function: {
+                  name: "js_run",
+                  arguments: JSON.stringify({ code, ...(hang ? { timeoutMs: 120000 } : {}) }),
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        }
+      : {
+          delta: { content: `Forge says ${JSON.stringify(String(results[0]?.content ?? ""))}` },
+          finish_reason: "stop",
+        };
   return new Response(
     `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
     { headers: { "Content-Type": "text/event-stream" } },
@@ -308,6 +351,29 @@ const signalDispose = async (signal: "SIGTERM" | "SIGHUP" | "SIGINT") => {
     await hanging.close();
   }
 };
+/** Runs the (possibly relocated) CLI to completion and returns its stdout. */
+let forgeCommandForExecute: string[] | undefined;
+const executeForge = async (args: string[]) => {
+  const [program = "", ...prefix] = forgeCommandForExecute ?? command;
+  const child = spawn(program, [...prefix, ...args], {
+    cwd: directory,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ALISIO_CONFIG_HOME: join(directory, "global"),
+      ALISIO_STATE_HOME: join(directory, "state"),
+      HERDR_ENV: "0",
+    },
+  });
+  let stdout = "",
+    stderr = "";
+  child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  const code = await new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
+  assert.equal(code, 0, stderr);
+  return stdout;
+};
+let forgeSessions = 0;
 const rgAvailable = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 try {
   await writeFile(join(directory, "note.txt"), "fixture content");
@@ -372,6 +438,161 @@ try {
     bgRun.stdout,
   );
   assert.match(bgRun.stderr, /1 background task was still running and was stopped/);
+  // Forja (phase 3b): js_run runs a script in the QuickJS-WASM isolate (a worker on Node, a child
+  // process of the binary itself on Bun), reads a file through the gate, and stops on SIGINT.
+  // The binary is also copied to a path with spaces to prove nothing depends on a clean path.
+  // The provider rides on `--config`; the host is a global-only key, so it goes to the user's own
+  // config file. Forja is on by default: nothing here switches it on.
+  const forgeConfigFile = async (name: string, host: "auto" | "process") => {
+    const file = join(directory, name);
+    await writeFile(
+      file,
+      JSON.stringify({
+        provider: {
+          baseURL: `http://127.0.0.1:${forgeServer.port}/v1`,
+          model: "test",
+          auth: "none",
+          apiMode: "chat",
+        },
+      }),
+    );
+    await mkdir(join(directory, "global"), { recursive: true });
+    await writeFile(
+      join(directory, "global", "config.json"),
+      JSON.stringify({ forge: { javascript: { host } } }),
+    );
+    return file;
+  };
+  const spacedDirectory = join(directory, "dir with spaces", "sub dir");
+  let forgeCommand = command;
+  if (mode === "binary") {
+    await mkdir(spacedDirectory, { recursive: true });
+    const copy = join(spacedDirectory, process.platform === "win32" ? "alisio.exe" : "alisio");
+    await copyFile(command[0] ?? "", copy);
+    await chmod(copy, 0o755);
+    forgeCommand = [copy];
+    forgeCommandForExecute = [copy];
+  }
+  const forgeEnv = {
+    ...process.env,
+    ALISIO_CONFIG_HOME: join(directory, "global"),
+    ALISIO_STATE_HOME: join(directory, "state"),
+    ALISIO_MODEL: "",
+    OPENAI_BASE_URL: "",
+    ALISIO_API_MODE: "",
+    HERDR_ENV: "0",
+  };
+  const forgeRun = (args: string[]) => {
+    forgeSessions++;
+    const [program = "", ...prefix] = forgeCommand;
+    const child = spawn(program, [...prefix, ...args], {
+      cwd: directory,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: forgeEnv,
+    });
+    const out = { stdout: "", stderr: "" };
+    child.stdout.on("data", (d: Buffer) => {
+      out.stdout += d.toString();
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      out.stderr += d.toString();
+    });
+    const closed = new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
+    return { child, out, closed };
+  };
+  for (const [name, host] of mode === "binary"
+    ? ([["forge-auto.json", "auto"]] as const)
+    : ([
+        ["forge-auto.json", "auto"],
+        ["forge-process.json", "process"],
+      ] as const)) {
+    const config = await forgeConfigFile(name, host);
+    const status = JSON.parse(
+      (await executeForge(["forge", "status", "--probe", "--json", "--config", config])).trim(),
+    );
+    assert.equal(status.engines[0].ready, true, JSON.stringify(status));
+    assert.equal(
+      status.javascript.host,
+      host === "process" || mode === "binary" ? "process" : "worker",
+    );
+    assert.equal(status.probe.ok, true, JSON.stringify(status.probe));
+    // The JavaScript engine first, then the Python backends (wasm is not installed in a fresh state).
+    assert.deepEqual(
+      status.engines.map((e: { id: string }) => e.id),
+      ["javascript-quickjs", "python-oci", "python-wasm", "python-managed"],
+    );
+    assert.equal(status.engines[2].ready, false);
+    const before = forgeRequests;
+    const run = forgeRun([
+      "run",
+      "Read note.txt with a script",
+      "--cwd",
+      directory,
+      "--config",
+      config,
+      "--json",
+    ]);
+    assert.equal(await run.closed, 0, run.out.stderr);
+    assert.equal(forgeRequests - before, 2);
+    const events = run.out.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(events.at(-1).type, "run_completed");
+    const done = events.filter((e) => e.type === "tool_completed");
+    assert.deepEqual(
+      done.map((e) => [e.data.name, e.data.isError]),
+      [["js_run", false]],
+    );
+    assert.match(JSON.stringify(events), /status: succeeded\\nvalue: true/);
+    assert.ok(
+      events.some((e) => e.type === "tool_progress" && e.data.data?.kind === "forge"),
+      "forge progress is streamed",
+    );
+    assert.equal(
+      events.some((e) => e.type === "tool_started" && e.data.name === "execute"),
+      false,
+    );
+  }
+  // Cancelling a run in the middle of a busy loop stops it, and leaves no isolate behind.
+  {
+    const config = await forgeConfigFile("forge-cancel.json", "auto");
+    const hit = new Promise<void>((resolve) => {
+      forgeHit = resolve;
+    });
+    const run = forgeRun([
+      "run",
+      "HANG in a script",
+      "--cwd",
+      directory,
+      "--config",
+      config,
+      "--json",
+    ]);
+    await hit;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const isolatePattern = `${directory}.*__forge-isolate|__forge-isolate.*${directory}`;
+    if (mode === "binary" && process.platform !== "win32") {
+      // Positive control: while the script spins, the binary's isolate process exists.
+      const alive = spawnSync("pgrep", ["-f", isolatePattern], { encoding: "utf8" });
+      assert.notEqual(alive.stdout.trim(), "", "the isolate process was not found while running");
+    }
+    const stopped = Date.now();
+    run.child.kill("SIGINT");
+    const code = await Promise.race([
+      run.closed,
+      new Promise<number>((_, fail) =>
+        setTimeout(() => fail(new Error(`js_run was not cancelled: ${run.out.stderr}`)), 15_000),
+      ),
+    ]);
+    assert.ok(Date.now() - stopped < 15_000);
+    assert.notEqual(code, undefined);
+    if (process.platform !== "win32") {
+      // Nothing of this run may stay alive: the isolate process carries our unique folder name.
+      const left = spawnSync("pgrep", ["-f", isolatePattern], { encoding: "utf8" });
+      assert.equal(left.stdout.trim(), "", `an isolate process survived: ${left.stdout}`);
+    }
+  }
   await writeFile(join(directory, "sales.csv"), "region,revenue\nWest,10\nEast,20\nWest,5\n");
   const dataOut = await execute([
     "run",
@@ -400,7 +621,17 @@ try {
   // settings and the retention defaults; `sweep` runs the janitor over this state folder and
   // leaves the dataset the run above just used (it was used a moment ago).
   const analysisStatus = JSON.parse(await execute(["analysis", "status", "--cwd", directory]));
-  assert.equal(analysisStatus.mode, "managed");
+  assert.equal(analysisStatus.mode, "auto");
+  assert.equal(analysisStatus.isolation, "preferred");
+  // The backends table: every Python backend with its isolation, the host never presented as isolated.
+  assert.deepEqual(
+    analysisStatus.backends.map((b: { id: string; isolation: string }) => [b.id, b.isolation]),
+    [
+      ["python-oci", "os-container"],
+      ["python-wasm", "wasm-process"],
+      ["python-managed", "none"],
+    ],
+  );
   assert.deepEqual(
     { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
     {
@@ -410,6 +641,40 @@ try {
     },
   );
   assert.equal(analysisStatus.oci.engine, "docker");
+  // FP-AC-26: the standalone binary runs Pyodide in a Node child. With no node on PATH the wasm
+  // backend is not ready and says why; the other backends are unaffected. (A Node run uses itself.)
+  const wasmNeedsNode = async () => {
+    const emptyPath = await mkdtemp(join(tmpdir(), `alisio-${mode}-nopath-`));
+    const [program = "", ...prefix] = command;
+    const probe = spawnSync(program, [...prefix, "analysis", "status", "--cwd", directory], {
+      cwd: directory,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: emptyPath,
+        ALISIO_CONFIG_HOME: join(directory, "global"),
+        ALISIO_STATE_HOME: join(directory, "state"),
+        HERDR_ENV: "0",
+      },
+    });
+    await rm(emptyPath, { recursive: true, force: true });
+    assert.equal(probe.status, 0, probe.stderr);
+    const backends = JSON.parse(probe.stdout).backends as Array<{
+      id: string;
+      ready: boolean;
+      reason?: string;
+    }>;
+    const wasm = backends.find((b) => b.id === "python-wasm");
+    assert.equal(wasm?.ready, false);
+    assert.match(
+      wasm?.reason ?? "",
+      mode === "binary"
+        ? /no node .* was found on PATH/
+        : /Pyodide is not installed|Pyodide needs Node/,
+    );
+    assert.ok(backends.some((b) => b.id === "python-managed"));
+  };
+  await wasmNeedsNode();
   const swept = JSON.parse(await execute(["analysis", "sweep", "--force", "--cwd", directory]));
   assert.equal(swept.datasetsDeleted, 0);
   assert.equal(swept.errors, 0);
@@ -637,7 +902,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(refused, /needs write access.*--read-only/);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 9); // includes the two plugin-command runs
+  assert.equal(sessions.length, 9 + forgeSessions); // includes the two plugin-command runs and the Forja runs
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {
@@ -732,6 +997,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio analysis status (mode, container settings, retention) and analysis sweep",
         "compatible MCP config list/doctor with fake stdio server and redacted direct env",
         "bg_run + bg_list through the process policy; run stops the task still running and says so",
+        "forge status --probe and js_run in the isolate (reads a file through the gate, streams progress); SIGINT cancels a busy loop and leaves no isolate behind",
         "JSONL output",
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
         "built-in memory plugin loaded",
@@ -751,6 +1017,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
 } finally {
   await server.close();
   await dataServer.close();
+  await forgeServer.close();
   await bgServer.close();
   await rm(directory, { recursive: true, force: true });
 }

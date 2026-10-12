@@ -306,6 +306,21 @@ export function registerFileRoutes(
         after = last.seq;
       }
     }
+    // Nested writes of Forja scripts (`js_run`, `python_run`) never appear as `write` calls of the
+    // session: their journal rows carry the paths instead (D-31).
+    for (const id of ids) {
+      for (const nested of catalog.forgeWriteCalls(id)) {
+        for (const path of nested.paths) {
+          const absolute = resolve(workspace, path);
+          if (!inside(workspace, absolute)) continue;
+          const rel = toPosix(relative(workspace, absolute));
+          const at = nested.startedAt ?? 0;
+          const prev = latest.get(rel);
+          if (!prev || at >= prev.at)
+            latest.set(rel, { ...(nested.runId ? { runId: nested.runId } : {}), at });
+        }
+      }
+    }
     const top = latest.size ? await gitRoot(workspace) : undefined;
     const marks = top ? await gitStatus(workspace, top) : new Map<string, string>();
     const files: SessionChange[] = [...latest.entries()]

@@ -13,6 +13,9 @@ import { newId } from "../runtime/ids.ts";
 import { workspaceKey } from "../runtime/paths.ts";
 import { ALISIO_RUNTIME_FILES } from "./python/sources.ts";
 
+/** Where an execution ran (`analysis_executions.runtime`). */
+export type AnalysisBackendId = "managed" | "oci" | "wasm";
+
 export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled" | "timed_out";
 
 export interface JobPaths {
@@ -52,7 +55,7 @@ export interface ExecutionDetails {
   sessionId: string;
   rootSessionId: string;
   workspace: string;
-  runtime: "managed" | "oci";
+  runtime: AnalysisBackendId;
   status: ExecutionStatus;
   scriptSha256: string;
   exitCode?: number;
@@ -72,6 +75,11 @@ export class AnalysisJobs {
     return (this.options.now ?? Date.now)();
   }
 
+  /** The store's database (Forja's journal and state live in it too). */
+  get database(): SqlDatabase {
+    return this.options.db;
+  }
+
   /** Creates the job folder (script, runtime helpers, empty input/work/staging/logs) and its row. */
   async create(input: {
     sessionId: string;
@@ -80,7 +88,7 @@ export class AnalysisJobs {
     runId?: string;
     callId?: string;
     code: string;
-    runtime: "managed" | "oci";
+    runtime: AnalysisBackendId;
     /** The execution this one repeats (a rerun); recorded in the row and in `job.json`. */
     rerunOf?: string;
   }): Promise<JobPaths & { scriptSha256: string }> {
@@ -175,6 +183,16 @@ export class AnalysisJobs {
     await writeFile(join(job.input, "inputs.json"), `${JSON.stringify(entries, null, 2)}\n`);
   }
 
+  /**
+   * `work/.forge/state.json`: the Forja state snapshot a script reads with `forge.state.get`. A
+   * copy, written fresh for every run; changes travel back as protocol messages, never through it.
+   */
+  async writeForgeState(job: JobPaths, values: Record<string, unknown>): Promise<void> {
+    const dir = join(job.work, ".forge");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "state.json"), JSON.stringify(values));
+  }
+
   /** Adds the inputs to `job.json` (atomically), once they are copied into `input/`. */
   async recordInputs(job: JobPaths, recorded: RecordedInputs): Promise<void> {
     const file = join(job.root, "job.json");
@@ -222,7 +240,7 @@ export class AnalysisJobs {
       sessionId: String(row.session),
       rootSessionId: String(row.root_session),
       workspace: String(row.workspace),
-      runtime: String(row.runtime) as "managed" | "oci",
+      runtime: String(row.runtime) as AnalysisBackendId,
       status: String(row.status) as ExecutionStatus,
       scriptSha256: String(row.script_sha256),
       ...(row.exit_code != null ? { exitCode: Number(row.exit_code) } : {}),

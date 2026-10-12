@@ -47,6 +47,8 @@ export function phaseLabel(phase: Phase): string {
       switch (phase.category) {
         case "python":
           return detail ? t("run.phase.pythonWith", { detail }) : t("run.phase.python");
+        case "javascript":
+          return detail ? t("run.phase.javascriptWith", { detail }) : t("run.phase.javascript");
         case "data":
           return detail ? t("run.phase.dataWith", { detail }) : t("run.phase.data");
         case "artifact":

@@ -1,7 +1,7 @@
 /**
  * Settings → General: the UI language (this browser) and the agent settings of the workspace
  * application (`SettableSettingKey`, written to the global config file). Terminal-only (`tui.*`),
- * agent-selection (`agents.*`), data-analysis and web (`web.*`, shown in Appearance) keys live
+ * agent-selection (`agents.*`), data-analysis, Forja and web (`web.*`, shown in Appearance) keys live
  * elsewhere.
  */
 import type { SettingInfo } from "@alisio/sdk";
@@ -20,7 +20,7 @@ import {
   useLoad,
 } from "./shared.tsx";
 
-const HIDDEN = /^(tui|agents|analysis|web)\./;
+const HIDDEN = /^(tui|agents|analysis|forge|web)\./;
 
 function SettingRow(props: {
   setting: SettingInfo;

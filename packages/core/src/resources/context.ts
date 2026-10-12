@@ -37,7 +37,8 @@ const HEADER =
   "# Project instructions (AGENTS.md)\nFiles are listed from the global and repository root down to the current directory; when they conflict, the closest file wins. Explicit user prompts override these instructions. Instructions for nested directories are attached when you touch paths below them.";
 
 export class ProjectContext implements ContextSource {
-  extras: Array<() => Promise<string>> = [];
+  /** Extra system-prompt sections; `sessionId` lets one depend on the session (the scratchpad path). */
+  extras: Array<(sessionId?: string) => Promise<string>> = [];
   readonly cwd: string;
   private options: ProjectContextOptions;
   /** Per session: nested instruction file path → fingerprint already attached. */
@@ -150,7 +151,7 @@ export class ProjectContext implements ContextSource {
     const files = [...(await this.baseFiles()), ...(this.attached.get(sessionId)?.values() ?? [])];
     const chunks = [PREAMBLE];
     if (files.length) chunks.push(HEADER, ...this.capped(files));
-    for (const extra of this.extras) chunks.push(await extra());
+    for (const extra of this.extras) chunks.push(await extra(sessionId));
     return chunks.join("\n\n");
   }
   /** Keeps the closest files within the byte budget; drops or truncates the farthest ones. */

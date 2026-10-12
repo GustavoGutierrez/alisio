@@ -1761,6 +1761,8 @@ export interface InflightState {
     startedAt: number;
     /** Latest progress output, bounded. */
     tail: string;
+    /** Latest `ForgeProgress` of a `js_run`/`python_run` call; never part of `tail`. */
+    forge?: ForgeProgress;
   }>;
 }
 /** An approval waiting for a decision from a web client. */
@@ -1784,8 +1786,11 @@ export interface PendingApproval {
   capability?: AnalysisCapability;
   /** A short preview for capability approvals (the first 40 lines of the script). */
   preview?: string;
-  /** Capability approvals: `managed` (not sandboxed) or `oci` (container). */
-  runtime?: "managed" | "oci";
+  /**
+   * Capability approvals: `managed` (not sandboxed), `oci` (container), `wasm` (Pyodide in a
+   * restricted process) or `auto` (the most isolated backend that is ready, decided at run time).
+   */
+  runtime?: "auto" | "managed" | "oci" | "wasm";
   /** `analysis.install` approvals: only `once` and `deny` are offered. */
   install?: InstallPreview;
 }
@@ -2203,7 +2208,12 @@ export interface AnalysisStatus {
   /** `analysis.enabled` and not `--read-only`: python_run is registered. */
   enabled: boolean;
   readOnly: boolean;
-  mode: "managed" | "oci";
+  /** `analysis.runtime`: `auto` picks the most isolated backend that is ready. */
+  mode: "auto" | "managed" | "oci" | "wasm";
+  /** `analysis.isolation`: what `auto` may fall back to. */
+  isolation?: "preferred" | "required" | "strict";
+  /** The Python backends with their live state (isolation, ready, profiles, reason). */
+  backends?: EngineDescriptor[];
   /** The discovered (or `--python`) interpreter and the extras environment. */
   python:
     | {
@@ -2471,4 +2481,122 @@ export const textResult = (text: string, isError = false): ToolResult => ({
 export function textProjection(result: ToolResult): ToolResult {
   if (result.content.every((part) => part.type === "text")) return result;
   return { ...result, content: result.content.filter((part) => part.type === "text") };
+}
+
+/** The language a Forja engine runs. */
+export type EngineLanguage = "javascript" | "python";
+/** Stable identifier of a Forja execution engine. */
+export type EngineId = "javascript-quickjs" | "python-managed" | "python-oci" | "python-wasm";
+
+/** Isolation an engine declares and has verified, ordered from the strongest guarantee to none. */
+export type IsolationLevel =
+  | "os-container" // process inside a hardened OCI container
+  | "wasm-isolate" // WASM VM without capabilities, in a separate thread or process
+  | "wasm-process" // WASM interpreter in a child process with partial restrictions
+  | "none"; // host process with the user's privileges
+
+/** What an engine reports about itself. An engine that is not `ready` never runs code. */
+export interface EngineDescriptor {
+  id: EngineId;
+  language: EngineLanguage;
+  /** Engine build, e.g. `quickjs-wasi@3.6.2` or `cpython-3.12.4`. */
+  version: string;
+  isolation: IsolationLevel;
+  ready: boolean;
+  /** Actionable reason the engine is not ready. */
+  reason?: string;
+  capabilities: {
+    cooperativeInterrupt: boolean;
+    /** The host can terminate the guest without its cooperation. */
+    hardTermination: boolean;
+    hardMemoryLimit: boolean;
+    networkDeniedByOS: boolean;
+    /** The guest can call core tools. */
+    toolCalls: boolean;
+  };
+  /** Package profiles available (Python). */
+  profiles?: string[];
+}
+
+/**
+ * `GET /api/forge`: the Forja engines with their live state. `engines` lists the JavaScript engine
+ * first and then the Python backends (`python-oci`, `python-wasm`, `python-managed`), each with its
+ * isolation, readiness, reason and capabilities (`networkDeniedByOS` comes from a self-probe).
+ */
+export interface ForgeOverview {
+  engines: EngineDescriptor[];
+  javascript: {
+    verified: boolean;
+    verification?: string;
+    enabled: boolean;
+    host: "worker" | "process";
+    hostSetting: "auto" | "worker" | "process";
+    wasmSha256: string;
+    version: string;
+    limits: {
+      maxSourceBytes: number;
+      timeoutMs: number;
+      memoryBytes: number;
+      stackBytes: number;
+      maxToolCalls: number;
+      maxConcurrency: number;
+      maxCallInputBytes: number;
+      maxCallResponseBytes: number;
+      maxRetainedOutputBytes: number;
+      maxOutputChars: number;
+    };
+  };
+  /** The scratchpad settings (`forge.scratch.*`); the folder is a host path and never listed. */
+  scratch: { enabled: boolean; retentionDays: number; maxBytes: number };
+  state: { enabled: boolean };
+  guides: { enabled: boolean };
+  /** Python settings only the user decides, read only: `analysis.runtime` and `analysis.isolation`. */
+  python?: {
+    runtime: "auto" | "managed" | "oci" | "wasm";
+    isolation: "preferred" | "required" | "strict";
+  };
+}
+
+/** One file of a session's scratchpad (`GET /api/sessions/:sid/scratch`); never an absolute path. */
+export interface ScratchFile {
+  /** Path relative to the scratchpad, `/`-separated; also the tail of the download URL. */
+  name: string;
+  /** Bytes. */
+  size: number;
+  /** Last modification, ms epoch. */
+  mtime: number;
+}
+/** Answer of `GET /api/sessions/:sid/scratch`. */
+export interface ScratchListing {
+  /** False while Forja's JavaScript engine or its scratchpad is off: there is nothing to list. */
+  available: boolean;
+  files: ScratchFile[];
+  /** Bytes the quota counts (`forge.scratch.maxBytes`), symlinks as links. */
+  usedBytes: number;
+  quotaBytes: number;
+  /** The list was cut at 2 000 files; `usedBytes` still counts all of them. */
+  truncated?: boolean;
+}
+/** Answer of `DELETE /api/sessions/:sid/scratch`. */
+export interface ScratchClearResult {
+  /** Files (and links) removed. */
+  removed: number;
+  freedBytes: number;
+}
+
+/** Typed payload of a `tool_progress` event emitted by a Forja execution. */
+export interface ForgeProgress {
+  kind: "forge";
+  executionId: string;
+  engine: EngineId;
+  phase: "preparing" | "running" | "call" | "collecting";
+  message?: string;
+  completed?: number;
+  total?: number;
+  call?: {
+    callId: number;
+    tool: string;
+    status: "started" | "succeeded" | "failed" | "denied";
+    durationMs?: number;
+  };
 }

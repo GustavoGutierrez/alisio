@@ -462,6 +462,8 @@ program.command("doctor").action(async (_opts, cmd) => {
         python: { mode: analysisInfo.status.mode, ...pythonInfo },
         analysis: {
           mode: analysisInfo.status.mode,
+          ...(analysisInfo.status.isolation ? { isolation: analysisInfo.status.isolation } : {}),
+          ...(analysisInfo.status.backends ? { backends: analysisInfo.status.backends } : {}),
           oci: analysisInfo.status.oci,
           limits: analysisInfo.status.limits,
           retention: analysisInfo.status.retention,
@@ -500,17 +502,40 @@ analysis
 analysis
   .command("setup")
   .description(
-    "Optional: install hash-locked Python extras (--extras) or pull the container image (--oci). " +
-      "python_run never needs this for the standard library.",
+    "Optional: install hash-locked Python extras (--extras), pull the container image (--oci) or " +
+      "download the WebAssembly runtime (--wasm). python_run never needs this for the standard library.",
   )
   .option("--extras <set>", "analysis (pandas, numpy, matplotlib…) or science (adds scipy…)")
   .option("--oci", "Pull the container image once and verify its digest (Docker or Podman)")
   .option("--image <name>", "With --oci: the image to pull (default: analysis.oci.image)")
-  .action(async (flags: { extras?: string; oci?: boolean; image?: string }, cmd) => {
-    const { setupExtras, setupOci } = await import("./analysis.ts");
-    if (flags.oci) return setupOci(options(cmd), flags.image);
-    return setupExtras(options(cmd), flags.extras);
-  });
+  .option("--wasm", "Download the pinned Pyodide runtime for the wasm backend (needs network)")
+  .option(
+    "--profile <name>",
+    "With --wasm: analysis (default) or science (adds scipy, scikit-learn…)",
+  )
+  .option("--yes", "With --wasm: do not ask for confirmation (required when not interactive)")
+  .action(
+    async (
+      flags: {
+        extras?: string;
+        oci?: boolean;
+        image?: string;
+        wasm?: boolean;
+        profile?: string;
+        yes?: boolean;
+      },
+      cmd,
+    ) => {
+      const { setupExtras, setupOci, setupWasm } = await import("./analysis.ts");
+      if (flags.wasm)
+        return setupWasm(options(cmd), {
+          ...(flags.profile ? { profile: flags.profile } : {}),
+          yes: !!flags.yes,
+        });
+      if (flags.oci) return setupOci(options(cmd), flags.image);
+      return setupExtras(options(cmd), flags.extras);
+    },
+  );
 analysis
   .command("sweep")
   .description("Run the retention sweep now (it also runs by itself at most once a day)")
@@ -518,6 +543,21 @@ analysis
   .action(async (flags: { force?: boolean }, cmd) => {
     const { sweep } = await import("./analysis.ts");
     await sweep(options(cmd), !!flags.force);
+  });
+const forge = program
+  .command("forge")
+  .description(
+    "Forja: isolated code execution (js_run). Shows the engine and why it is or is not ready",
+  );
+forge
+  .command("status")
+  .description(
+    "Show the engines: JavaScript (version, WASM hash, isolation, host, limits) and the Python backends",
+  )
+  .option("--probe", "Also start a real isolate and run a trivial script through the protocol")
+  .action(async (flags: { probe?: boolean }, cmd) => {
+    const { printForgeStatus } = await import("./forge.ts");
+    await printForgeStatus(options(cmd), !!flags.probe);
   });
 const trust = program.command("trust").description("Inspect or revoke per-directory project trust");
 trust.command("list").action(async () => {
@@ -757,7 +797,12 @@ program
     await cliUpdateAll(common);
   });
 try {
-  await program.parseAsync();
+  // The compiled binary starts its own Forja process isolates with this hidden command (spec D-21).
+  // It is dispatched before any configuration or database is loaded and is not part of the CLI.
+  if (process.argv.slice(2)[0] === "__forge-isolate") {
+    const { runProcessIsolate } = await import("@alisio/core/forge-isolate");
+    await runProcessIsolate();
+  } else await program.parseAsync();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

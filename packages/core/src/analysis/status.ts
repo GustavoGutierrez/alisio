@@ -3,7 +3,7 @@
  * Settings page: mode, interpreter and extras, container engine (probed only when it matters),
  * limits and retention. One shape (`AnalysisStatus` of the SDK) for every surface.
  */
-import type { AnalysisStatus } from "@alisio/sdk";
+import type { AnalysisStatus, EngineDescriptor } from "@alisio/sdk";
 import type { Config } from "../config.ts";
 import { detectHintHost, pythonInstallHints } from "./install-hints.ts";
 import type { AnalysisJanitor } from "./janitor.ts";
@@ -16,6 +16,8 @@ export async function analysisStatus(input: {
   /** Builds the container runtime of the current settings (probed on demand). */
   oci?: () => OciRuntime;
   janitor?: Pick<AnalysisJanitor, "lastSweep">;
+  /** The live state of the Python backends (isolation, readiness, profiles); omitted = no table. */
+  backends?: (signal?: AbortSignal) => Promise<EngineDescriptor[]>;
   /** python_run is registered (analysis enabled and not `--read-only`). */
   enabled: boolean;
   readOnly: boolean;
@@ -59,10 +61,13 @@ export async function analysisStatus(input: {
     else oci.reason = status.reason;
   }
   const lastSweep = await input.janitor?.lastSweep();
+  const backends = input.backends ? await input.backends(input.signal) : undefined;
   return {
     enabled: input.enabled,
     readOnly: input.readOnly,
     mode: config.runtime,
+    isolation: config.isolation,
+    ...(backends ? { backends } : {}),
     python,
     oci,
     limits: { timeoutMs: config.limits.timeoutMs },

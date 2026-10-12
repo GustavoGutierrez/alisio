@@ -5,13 +5,14 @@
  */
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { api, settingsOpen } from "../../store/app.ts";
+import { api, settingsOpen, settingsPage } from "../../store/app.ts";
+import { type SettingsPage, settingsPageFor } from "../../util/forge-page.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import { AboutPage } from "./AboutPage.tsx";
 import { AgentsPage } from "./AgentsPage.tsx";
-import { AnalysisPage } from "./AnalysisPage.tsx";
 import { AppearancePage } from "./AppearancePage.tsx";
+import { ForgePage } from "./ForgePage.tsx";
 import { GeneralPage } from "./GeneralPage.tsx";
 import { McpPage } from "./McpPage.tsx";
 import { ModelsPage } from "./ModelsPage.tsx";
@@ -20,16 +21,7 @@ import { SkillsPage } from "./SkillsPage.tsx";
 import styles from "./settings.module.css";
 import { settingsWorkspace, useLoad } from "./shared.tsx";
 
-type Page =
-  | "general"
-  | "models"
-  | "plugins"
-  | "skills"
-  | "mcp"
-  | "agents"
-  | "analysis"
-  | "appearance"
-  | "about";
+type Page = SettingsPage;
 
 const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "general", icon: "settings" },
@@ -38,7 +30,7 @@ const PAGES: Array<{ id: Page; icon: IconName }> = [
   { id: "skills", icon: "book" },
   { id: "mcp", icon: "plug" },
   { id: "agents", icon: "users" },
-  { id: "analysis", icon: "fileChart" },
+  { id: "forge", icon: "terminal" },
   { id: "appearance", icon: "palette" },
   { id: "about", icon: "info" },
 ];
@@ -93,7 +85,7 @@ function ConfigFiles(props: { onClose: () => void }) {
 }
 
 export function SettingsModal() {
-  const [page, setPage] = useState<Page>("general");
+  const [page, setPage] = useState<Page>(() => settingsPageFor(settingsPage.peek()));
   const [files, setFiles] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -103,6 +95,7 @@ export function SettingsModal() {
   }, []);
   const close = () => {
     settingsOpen.value = false;
+    settingsPage.value = undefined;
   };
   return (
     <div
@@ -180,8 +173,8 @@ export function SettingsModal() {
             <McpPage />
           ) : page === "agents" ? (
             <AgentsPage />
-          ) : page === "analysis" ? (
-            <AnalysisPage />
+          ) : page === "forge" ? (
+            <ForgePage />
           ) : page === "appearance" ? (
             <AppearancePage />
           ) : (

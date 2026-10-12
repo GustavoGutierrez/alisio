@@ -1,4 +1,4 @@
-import type { Effect, InflightState, RunEvent } from "@alisio/sdk";
+import type { Effect, ForgeProgress, InflightState, RunEvent } from "@alisio/sdk";
 
 const MAX_TEXT = 1_000_000;
 const MAX_TAIL = 4_096;
@@ -70,7 +70,11 @@ export class InflightTracker {
         break;
       case "tool_progress": {
         const tool = run.tools.get(String(data.id));
-        if (tool) tool.tail = (tool.tail + progressChunk(data.data)).slice(-MAX_TAIL);
+        if (!tool) break;
+        // A Forja execution reports structured progress: keep the latest one, out of the text tail.
+        if ((data.data as { kind?: unknown } | null)?.kind === "forge")
+          tool.forge = data.data as ForgeProgress;
+        else tool.tail = (tool.tail + progressChunk(data.data)).slice(-MAX_TAIL);
         break;
       }
       case "tool_completed":

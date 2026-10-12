@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import type { JsonValue } from "@alisio/sdk";
 import { z } from "zod";
 import { DEFAULT_DECISIONS_CONFIG } from "./decisions/service.ts";
+import { DEFAULT_FORGE_LIMITS, type ForgeLimitKey, MAX_FORGE_LIMITS } from "./forge/limits.ts";
 import { exists, readJson } from "./runtime/fs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 
@@ -88,7 +89,43 @@ const serversSchema = <T extends z.ZodType>(value: T) =>
  */
 export const OCI_IMAGE_PATTERN = /^[a-zA-Z0-9][^\s@]*@sha256:[a-f0-9]{64}$/;
 /** Analysis keys only the user (global) layer decides; a project layer cannot set them. */
-const GLOBAL_ONLY_ANALYSIS = ["runtime", "oci", "retention"] as const;
+const GLOBAL_ONLY_ANALYSIS = ["runtime", "isolation", "oci", "wasm", "retention"] as const;
+/**
+ * Forja keys only the user (global) layer decides (spec §10). A project may still lower
+ * `timeoutMs`, `maxToolCalls`, `maxConcurrency` and `maxOutputChars` and switch a feature off.
+ */
+const GLOBAL_ONLY_FORGE = [
+  "javascript.host",
+  "javascript.memoryBytes",
+  "javascript.stackBytes",
+  "state.maxTotalBytes",
+  "scratch",
+] as const;
+/** The limits a project layer may lower: the same list `mergeLimits` honours. */
+const FORGE_PROJECT_LOWERABLE = [
+  "timeoutMs",
+  "maxToolCalls",
+  "maxConcurrency",
+  "maxOutputChars",
+] as const satisfies readonly ForgeLimitKey[];
+/** A Forja limit: a positive integer up to its hard global maximum, with the spec default. */
+const forgeLimit = (key: ForgeLimitKey) =>
+  z.number().int().min(1).max(MAX_FORGE_LIMITS[key]).default(DEFAULT_FORGE_LIMITS[key]);
+const FORGE_DEFAULTS = {
+  javascript: {
+    enabled: true,
+    host: "auto" as const,
+    timeoutMs: DEFAULT_FORGE_LIMITS.timeoutMs,
+    memoryBytes: DEFAULT_FORGE_LIMITS.memoryBytes,
+    stackBytes: DEFAULT_FORGE_LIMITS.stackBytes,
+    maxToolCalls: DEFAULT_FORGE_LIMITS.maxToolCalls,
+    maxConcurrency: DEFAULT_FORGE_LIMITS.maxConcurrency,
+    maxOutputChars: DEFAULT_FORGE_LIMITS.maxOutputChars,
+  },
+  state: { enabled: true, maxTotalBytes: 512 * 1024 },
+  scratch: { enabled: true, root: null, retentionDays: 7, maxBytes: 256 * 1024 * 1024 },
+  guides: { enabled: true },
+};
 /** Decision Intelligence keys only the user (global) layer decides: the provider and telemetry. */
 const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;
 /** Web UI keys only the user (global) layer decides: the server picks which theme it serves. */
@@ -301,11 +338,43 @@ const configObjectSchema = z
          */
         smartDashboard: z.boolean().default(true),
         /**
-         * Where `python_run` executes. `managed` is the discovered Python (not a sandbox); `oci`
-         * is a Docker or Podman container started from a pinned image. GLOBAL ONLY: a project
+         * Where `python_run` executes. `auto` (default) picks the most isolated backend that is
+         * ready: `oci`, then `wasm`, then `managed` (the last only under `isolation: preferred`).
+         * `managed` is the discovered Python (not a sandbox); `oci` is a Docker or Podman
+         * container started from a pinned image; `wasm` is Pyodide in a restricted Node child
+         * process. An explicit value is honored or fails, never replaced. GLOBAL ONLY: a project
          * layer cannot choose the runtime or the image (it is ignored with a diagnostic).
          */
-        runtime: z.enum(["managed", "oci"]).default("managed"),
+        runtime: z.enum(["auto", "managed", "oci", "wasm"]).default("auto"),
+        /**
+         * What `auto` may use: `preferred` falls back to the host when no isolated backend is
+         * ready, `required` never runs on the host, `strict` admits only backends whose network
+         * the OS denies (global only).
+         */
+        isolation: z.enum(["preferred", "required", "strict"]).default("preferred"),
+        /** Pyodide backend settings (global only). Read by `wasm`, and by `auto` when it is ready. */
+        wasm: z
+          .object({
+            /** Soft limit: the parent samples the child's RSS and kills it above this. */
+            memoryMb: z.number().int().min(256).max(65_536).default(3072),
+            /** Margin for loading Pyodide, added to the run's own deadline and reported apart. */
+            startupMs: z.number().int().min(1000).max(300_000).default(30_000),
+            /** Inputs above this many bytes keep `auto` away from wasm. */
+            maxInputBytes: z
+              .number()
+              .int()
+              .positive()
+              .default(100 * 1024 * 1024),
+            /** A `node` >= 22.22 / 24.13 / 25.3 for the child (needed under Bun; the running Node otherwise). */
+            nodePath: z.string().min(1).nullable().default(null),
+          })
+          .strict()
+          .default(() => ({
+            memoryMb: 3072,
+            startupMs: 30_000,
+            maxInputBytes: 100 * 1024 * 1024,
+            nodePath: null,
+          })),
         /** Container runtime settings (global only). Used when `runtime` is `oci`. */
         oci: z
           .object({
@@ -398,7 +467,14 @@ const configObjectSchema = z
       .default(() => ({
         enabled: true,
         smartDashboard: true,
-        runtime: "managed" as const,
+        runtime: "auto" as const,
+        isolation: "preferred" as const,
+        wasm: {
+          memoryMb: 3072,
+          startupMs: 30_000,
+          maxInputBytes: 100 * 1024 * 1024,
+          nodePath: null,
+        },
         oci: { engine: "docker" as const, memoryMb: 2048, cpus: 2 },
         retention: { jobsDays: 30, intermediateDays: 7, artifactsDays: 0 },
         limits: {
@@ -521,6 +597,58 @@ const configObjectSchema = z
       .strict()
       .default(() => ({ active: "build" })),
     /**
+     * Forja: isolated code execution (spec §10). `javascript.enabled` is `true` since the
+     * JavaScript engine passed its gate (Phase 3b): `js_run` replaces `execute`; `false` brings
+     * `execute` and the previous system prompt back. `javascript.host`, `memoryBytes`, `stackBytes`,
+     * `state.maxTotalBytes` and `scratch.*` are GLOBAL ONLY; a project may only lower
+     * `timeoutMs`, `maxToolCalls`, `maxConcurrency` and `maxOutputChars` and switch a feature off.
+     */
+    forge: z
+      .object({
+        javascript: z
+          .object({
+            enabled: z.boolean().default(FORGE_DEFAULTS.javascript.enabled),
+            host: z.enum(["auto", "worker", "process"]).default("auto"),
+            timeoutMs: forgeLimit("timeoutMs"),
+            memoryBytes: forgeLimit("memoryBytes"),
+            stackBytes: forgeLimit("stackBytes"),
+            maxToolCalls: forgeLimit("maxToolCalls"),
+            maxConcurrency: forgeLimit("maxConcurrency"),
+            maxOutputChars: forgeLimit("maxOutputChars"),
+          })
+          .strict()
+          .default(() => ({ ...FORGE_DEFAULTS.javascript })),
+        state: z
+          .object({
+            enabled: z.boolean().default(true),
+            maxTotalBytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(8 * 1024 * 1024)
+              .default(FORGE_DEFAULTS.state.maxTotalBytes),
+          })
+          .strict()
+          .default(() => ({ ...FORGE_DEFAULTS.state })),
+        scratch: z
+          .object({
+            enabled: z.boolean().default(true),
+            /** Base of the volatile session directories; `ALISIO_TMPDIR` wins over it. */
+            root: z.string().min(1).nullable().default(null),
+            /** Days without activity before a session folder goes; `0` disables the cleanup. */
+            retentionDays: z.number().int().min(0).max(3650).default(7),
+            maxBytes: z.number().int().min(1).default(FORGE_DEFAULTS.scratch.maxBytes),
+          })
+          .strict()
+          .default(() => ({ ...FORGE_DEFAULTS.scratch })),
+        guides: z
+          .object({ enabled: z.boolean().default(true) })
+          .strict()
+          .default(() => ({ ...FORGE_DEFAULTS.guides })),
+      })
+      .strict()
+      .default(() => structuredClone(FORGE_DEFAULTS)),
+    /**
      * Web UI preferences. `iconTheme` names the active `icon-theme` extension point provider
      * (`"none"` keeps the built-in inline icons). GLOBAL ONLY: the server decides which theme its
      * files serve, so a repository cannot pick one.
@@ -614,6 +742,48 @@ export function overridesSavedProviderProfile(
 ): boolean {
   return hasEndpointOverride || !!provenance.selectedLayer?.hasLegacyProvider;
 }
+/** Whether a dotted path (`javascript.host`) is written in a raw `forge` block. */
+function forgeHas(raw: Record<string, unknown>, path: string): boolean {
+  let current: unknown = raw;
+  for (const part of path.split(".")) {
+    if (!current || typeof current !== "object" || !(part in current)) return false;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return true;
+}
+
+/**
+ * The project layer over the global one for `forge`: global-only keys always come from the global
+ * layer, a lowerable limit takes the smaller value when the project wrote it, and a feature switch
+ * the project wrote can only turn the feature off (a defaulted value never changes the global one).
+ */
+function overlayForge(
+  global: Config["forge"],
+  project: Config["forge"],
+  raw: Record<string, unknown>,
+): Config["forge"] {
+  const javascript = { ...global.javascript };
+  for (const key of FORGE_PROJECT_LOWERABLE)
+    if (forgeHas(raw, `javascript.${key}`))
+      javascript[key] = Math.min(global.javascript[key], project.javascript[key]);
+  if (forgeHas(raw, "javascript.enabled"))
+    javascript.enabled = global.javascript.enabled && project.javascript.enabled;
+  return {
+    javascript,
+    state: {
+      ...global.state,
+      enabled: forgeHas(raw, "state.enabled")
+        ? global.state.enabled && project.state.enabled
+        : global.state.enabled,
+    },
+    scratch: global.scratch,
+    guides: {
+      enabled: forgeHas(raw, "guides.enabled")
+        ? global.guides.enabled && project.guides.enabled
+        : global.guides.enabled,
+    },
+  };
+}
 export const configHome = () =>
   process.env.ALISIO_CONFIG_HOME ??
   join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "alisio");
@@ -689,6 +859,10 @@ export async function loadConfigWithProvenance(
       object.analysis && typeof object.analysis === "object" && !Array.isArray(object.analysis)
         ? (object.analysis as Record<string, unknown>)
         : {};
+    const forgeRaw =
+      object.forge && typeof object.forge === "object" && !Array.isArray(object.forge)
+        ? (object.forge as Record<string, unknown>)
+        : {};
     const tasksRaw =
       object.tasks && typeof object.tasks === "object" && !Array.isArray(object.tasks)
         ? (object.tasks as Record<string, unknown>)
@@ -709,6 +883,9 @@ export async function loadConfigWithProvenance(
         : {};
     const ignored = [
       ...GLOBAL_ONLY_ANALYSIS.filter((key) => key in analysisRaw).map((key) => `analysis.${key}`),
+      ...GLOBAL_ONLY_FORGE.filter((path) => forgeHas(forgeRaw, path)).map(
+        (path) => `forge.${path}`,
+      ),
       ...GLOBAL_ONLY_DECISIONS.filter((key) => key in decisionsRaw).map(
         (key) => `decisions.${key}`,
       ),
@@ -726,6 +903,8 @@ export async function loadConfigWithProvenance(
       keys: new Set(Object.keys(object)),
       /** Raw keys of the layer's `analysis` block (a defaulted key is not an expressed one). */
       analysisKeys: new Set(Object.keys(analysisRaw)),
+      /** Raw `forge` block of the layer, to tell a written key from a defaulted one. */
+      forgeRaw,
       sources,
       ignored,
       file,
@@ -795,11 +974,13 @@ export async function loadConfigWithProvenance(
         continue;
       }
       if (key === "analysis") {
-        // `runtime`, `oci` and `retention` are global-only (a repository must not pick the binary
+        // `runtime`, `isolation`, `oci`, `wasm` and `retention` are global-only (a repository must not pick the binary
         // that runs scripts, nor shorten the retention of every workspace's data).
         overlaid.analysis = {
           ...selected.config.analysis,
           runtime: global.config.analysis.runtime,
+          isolation: global.config.analysis.isolation,
+          wasm: global.config.analysis.wasm,
           oci: global.config.analysis.oci,
           retention: global.config.analysis.retention,
           // A defaulted `true` must not undo the global `false`: only a key the layer wrote wins.
@@ -807,6 +988,14 @@ export async function loadConfigWithProvenance(
             ? selected.config.analysis.smartDashboard
             : global.config.analysis.smartDashboard,
         };
+        continue;
+      }
+      if (key === "forge") {
+        overlaid.forge = overlayForge(
+          global.config.forge,
+          selected.config.forge,
+          selected.forgeRaw,
+        );
         continue;
       }
       if (key === "decisions") {
@@ -1000,7 +1189,10 @@ const SETTABLE_SECTIONS = {
   goal: configObjectSchema.shape.goal.removeDefault(),
   plan: configObjectSchema.shape.plan.removeDefault(),
   web: configObjectSchema.shape.web.removeDefault(),
+  forge: configObjectSchema.shape.forge.removeDefault(),
 } as const;
+const FORGE_JAVASCRIPT = SETTABLE_SECTIONS.forge.shape.javascript.removeDefault();
+const FORGE_GUIDES = SETTABLE_SECTIONS.forge.shape.guides.removeDefault();
 const ANALYSIS_LIMITS = SETTABLE_SECTIONS.analysis.shape.limits.removeDefault();
 const ANALYSIS_RETENTION = SETTABLE_SECTIONS.analysis.shape.retention.removeDefault();
 const SETTABLE_KEYS = {
@@ -1050,6 +1242,8 @@ const SETTABLE_KEYS = {
   "plan.diagrams": SETTABLE_SECTIONS.plan.shape.diagrams,
   "plan.maxDiagrams": SETTABLE_SECTIONS.plan.shape.maxDiagrams,
   "web.iconTheme": SETTABLE_SECTIONS.web.shape.iconTheme,
+  "forge.javascript.enabled": FORGE_JAVASCRIPT.shape.enabled,
+  "forge.guides.enabled": FORGE_GUIDES.shape.enabled,
 } as const satisfies Record<string, z.ZodTypeAny>;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {

@@ -57,12 +57,34 @@ export function TextPreview(props: {
         {t("artifact.loading")}
       </div>
     );
+  return (
+    <TextView
+      text={text}
+      as={props.as}
+      entry={entry}
+      image={(href) => artifactImageUrl(href, artifact.id, entry)}
+    />
+  );
+}
+
+/**
+ * The text of a file with the viewer its type needs: Markdown with the transcript's renderer
+ * (`image` resolves relative images), JSON with the JSON renderer, anything else with the code
+ * renderer. The Scratch tab reuses it for the session scratchpad.
+ */
+export function TextView(props: {
+  text: string;
+  as: "markdown" | "json" | "code";
+  entry: string;
+  image?: (href: string) => string | undefined;
+}) {
+  const { text, entry } = props;
   if (props.as === "markdown")
     return (
       <div class={styles.document}>
         <MarkdownScope.Provider
           value={{
-            image: (href) => artifactImageUrl(href, artifact.id, entry),
+            image: props.image ?? (() => undefined),
             workspaceLinks: false,
           }}
         >

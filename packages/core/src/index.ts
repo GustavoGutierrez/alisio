@@ -326,6 +326,29 @@ export {
   validateRequest,
 } from "./decisions/index.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
+export { ForgeError } from "./forge/errors.ts";
+export {
+  downloadSize as pyodideDownloadSize,
+  inspectPyodide,
+  installPyodide,
+  PyodideIntegrityError,
+  pyodideDir,
+} from "./forge/python/pyodide-install.ts";
+export {
+  PYODIDE_MANIFEST,
+  type PyodideManifest,
+  type PyodideProfile,
+} from "./forge/python/pyodide-manifest.ts";
+export { describePythonBackends } from "./forge/python/status.ts";
+export { createPythonBackends } from "./forge/python/wiring.ts";
+export { describeForge, type ForgeStatus, forgeEngineFor } from "./forge/runtime.ts";
+export {
+  emptyScratch,
+  listScratch,
+  openScratchFile,
+  SCRATCH_LIST_LIMIT,
+  type ScratchFileInfo,
+} from "./forge/scratch-files.ts";
 export * from "./goal/index.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
 export {

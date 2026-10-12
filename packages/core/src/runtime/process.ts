@@ -62,7 +62,8 @@ export async function runProcess(
     timeoutMs?: number;
     maxBytes?: number;
     env?: Record<string, string>;
-    onData?: (chunk: string) => void;
+    /** Live text; the second argument says which stream it came from. */
+    onData?: (chunk: string, stream: "stdout" | "stderr") => void;
     /** On cancellation: SIGTERM the process group, then SIGKILL after this grace (default 5s). */
     killGraceMs?: number;
     /**
@@ -158,7 +159,7 @@ export async function runProcess(
       written += chunk.byteLength;
     };
   };
-  const consume = (stream: NodeJS.ReadableStream, logPath?: string) =>
+  const consume = (stream: NodeJS.ReadableStream, name: "stdout" | "stderr", logPath?: string) =>
     new Promise<string>((resolveText, reject) => {
       const decoder = new TextDecoder();
       const log = logger(logPath);
@@ -181,7 +182,7 @@ export async function runProcess(
         log?.(value);
         if (tailMode) {
           const live = decoder.decode(value, { stream: true });
-          if (live) options.onData?.(live);
+          if (live) options.onData?.(live, name);
           tail.push(value);
           tailBytes += value.byteLength;
           while (tailBytes > max && tail.length) {
@@ -203,7 +204,7 @@ export async function runProcess(
         size += slice.byteLength;
         const chunk = decoder.decode(slice, { stream: true });
         text += chunk;
-        if (chunk) options.onData?.(chunk);
+        if (chunk) options.onData?.(chunk, name);
         if (value.byteLength > remaining) {
           truncated = true;
           kill();
@@ -216,8 +217,8 @@ export async function runProcess(
     });
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
-      consume(child.stdout as NodeJS.ReadableStream, options.logFiles?.stdout),
-      consume(child.stderr as NodeJS.ReadableStream, options.logFiles?.stderr),
+      consume(child.stdout as NodeJS.ReadableStream, "stdout", options.logFiles?.stdout),
+      consume(child.stderr as NodeJS.ReadableStream, "stderr", options.logFiles?.stderr),
       exited,
     ]);
     signal.throwIfAborted();

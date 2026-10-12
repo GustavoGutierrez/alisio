@@ -30,11 +30,22 @@ if (args[0] === "--container") {
   const plan = JSON.parse(readFileSync(planFile, "utf8"));
   process.stdout.on("error", () => {});
   process.stderr.on("error", () => {});
-  const child = spawn(process.execPath, [FAKE_PYTHON, plan.main], {
-    cwd: plan.cwd,
-    env: plan.env,
-    stdio: ["ignore", "inherit", "inherit"],
-  });
+  // `<stateDir>/python` (a path) makes the "container" run the script with a REAL interpreter, for
+  // tests that need alisio_runtime; otherwise the fake interpreter reads the `# fake:` plan.
+  const real = existsSync(join(state, "python"))
+    ? readFileSync(join(state, "python"), "utf8").trim()
+    : undefined;
+  const child = real
+    ? spawn(real, ["-s", "-B", "-u", "-X", "utf8", plan.main], {
+        cwd: plan.cwd,
+        env: plan.env,
+        stdio: ["ignore", "inherit", "inherit"],
+      })
+    : spawn(process.execPath, [FAKE_PYTHON, plan.main], {
+        cwd: plan.cwd,
+        env: plan.env,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
   child.on("close", (code) => {
     rmSync(marker(name), { force: true });
     process.exit(code ?? 1);

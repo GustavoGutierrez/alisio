@@ -15,7 +15,7 @@ import type {
 import { AgentDefinitionService } from "./agents/service.ts";
 import { CapabilityGrants } from "./analysis/capabilities.ts";
 import { DatasetService } from "./analysis/data/datasets.ts";
-import { AnalysisJanitor } from "./analysis/janitor.ts";
+import { AnalysisJanitor, ScratchJanitor } from "./analysis/janitor.ts";
 import { AnalysisJobs } from "./analysis/jobs.ts";
 import { OciRuntime } from "./analysis/oci.ts";
 import { AnalysisRerun } from "./analysis/rerun.ts";
@@ -51,6 +51,16 @@ import {
   DecisionRegistry,
   DecisionService,
 } from "./decisions/index.ts";
+import { reconcileInterruptedExecutions, SqliteExecutionJournal } from "./forge/journal.ts";
+import { describePythonBackends } from "./forge/python/status.ts";
+import { createPythonBackends } from "./forge/python/wiring.ts";
+import { createForgeRuntime } from "./forge/runtime.ts";
+import {
+  createScratchpadLookup,
+  createScratchpadProvider,
+  scratchSweepRoots,
+} from "./forge/scratch-provider.ts";
+import { SqliteStateStore } from "./forge/state-store.ts";
 import { GoalService } from "./goal/service.ts";
 import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
@@ -68,7 +78,7 @@ import { Skills, skillRoots } from "./resources/skills.ts";
 import { type ExternalDirectoryHandler, PathAccess } from "./runtime/access.ts";
 import { BlobStore } from "./runtime/blobs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
-import { findWorkspace } from "./runtime/paths.ts";
+import { findWorkspace, workspaceKey } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
 import { ChildSessions } from "./sessions/children.ts";
 import { SideQuestions } from "./sessions/side-questions.ts";
@@ -266,6 +276,25 @@ export async function createApplication(options: AppOptions = {}) {
     }
   });
   const askExternalDirectory = options.approveExternalDirectory;
+  const customStore = !!options.db;
+  const scratchStateRoot =
+    options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
+  // Forja's scratchpad (spec §9.4): an authorized write root only while the JavaScript engine is
+  // enabled, so a build with Forja off behaves exactly as before. `store` is read lazily, on the
+  // first path outside the workspace.
+  const scratchOptions = {
+    rootOf: (session: string) => store.rootOf(session),
+    workspaceOf: (rootSessionId: string) => store.get(rootSessionId).workspace,
+    workspaceKey,
+    stateHome: scratchStateRoot,
+    configRoot: () => config.forge.scratch.root,
+  };
+  const scratchEnabled = config.forge.javascript.enabled && config.forge.scratch.enabled;
+  const scratchpad = scratchEnabled ? createScratchpadProvider(scratchOptions) : undefined;
+  const scratchpadLookup = scratchEnabled ? createScratchpadLookup(scratchOptions) : undefined;
+  // The scratchpad is a free write root only once the engine verified itself (`jsReady`, known after
+  // `createForgeRuntime` below): a failed self-check leaves it an ordinary directory (L9).
+  let scratchReady = false;
   const pathAccess = new PathAccess({
     workspace,
     extraRoots: [...config.additionalDirectories, ...addDirs],
@@ -276,8 +305,21 @@ export async function createApplication(options: AppOptions = {}) {
         }
       : {}),
     readOnly: !!options.readOnly,
+    ...(scratchpad
+      ? {
+          scratchpad: (session: string) =>
+            scratchReady ? scratchpad(session) : Promise.resolve(undefined),
+          scratchMaxBytes: () => config.forge.scratch.maxBytes,
+        }
+      : {}),
   });
   const store = new SQLiteStore(options.db ?? join(stateHome(), "sessions.sqlite"));
+  // Executions of a process that is gone cannot be running: close them (nothing is relaunched).
+  reconcileInterruptedExecutions(store.db);
+  const forgeJournal = new SqliteExecutionJournal(store.db);
+  const forgeState = new SqliteStateStore(store.db, {
+    maxTotalBytes: () => config.forge.state.maxTotalBytes,
+  });
   // Content-addressed attachment bytes next to the session database (no I/O until `put`).
   const blobs = new BlobStore({
     root:
@@ -550,6 +592,14 @@ export async function createApplication(options: AppOptions = {}) {
     );
     context.extras.push(async () => skills.catalog(), ...plugins.contexts);
     const { registerStandard } = await import("./tools/standard.ts");
+    // Forja's JavaScript engine verifies itself here (the WASM against its pinned hash). Enabled
+    // means `js_run` replaces `execute` for good: a failed check leaves neither (no fallback).
+    const forgeRuntime = await createForgeRuntime({
+      forge: () => config.forge,
+      journal: forgeJournal,
+      state: forgeState,
+    });
+    scratchReady = forgeRuntime.jsReady;
     // `runner` is referenced lazily (constructed just below): safe because these accessors only
     // run once the tool is actually called, well after the runner exists.
     registerStandard(
@@ -566,7 +616,30 @@ export async function createApplication(options: AppOptions = {}) {
         resolveExtension: () => plugins.extensions.resolve("websearch"),
       },
       pathAccess,
+      { execute: !config.forge.javascript.enabled },
     );
+    // `--read-only` has no scratchpad root, so `codePath` is unavailable there.
+    const sessionScratchpad = options.readOnly ? async () => undefined : scratchpad;
+    if (forgeRuntime.jsReady) {
+      const { registerJsRun } = await import("./tools/js-run.ts");
+      const { buildRoutingRule } = await import("./forge/routing-rule.ts");
+      registerJsRun(registry, {
+        kernel: forgeRuntime.kernel,
+        rootOf: (session) => store.rootOf(session),
+        scratchpad: async (session) => sessionScratchpad?.(session),
+        policy: () => runner.policy,
+      });
+      // Layer 0 of the context (spec §8.1): present only because `js_run` is, per session.
+      context.extras.push(async (sessionId) =>
+        buildRoutingRule({
+          javascript: true,
+          python: registry.list().some((tool) => tool.name === "python_run"),
+          // Registered later (after `python_run`), so it is looked up when the prompt is built.
+          guide: registry.list().some((tool) => tool.name === "forge_guide"),
+          scratchpad: sessionId ? await sessionScratchpad?.(sessionId) : undefined,
+        }),
+      );
+    }
     // Python analysis and artifacts live next to the session database (like attachment blobs).
     const artifacts = new ArtifactStore({
       root: stateRoot,
@@ -603,6 +676,13 @@ export async function createApplication(options: AppOptions = {}) {
         return ociRuntime.runtime;
       },
     };
+    // The Python backends as surfaces report them (`GET /api/analysis`, `GET /api/forge`); the tool
+    // builds its own for running. Read live: the settings can change between calls.
+    const pythonBackends = createPythonBackends({
+      runtime: analysisRuntime,
+      oci,
+      wasm: { stateRoot, settings: () => config.analysis.wasm },
+    });
     // Tabular datasets (one SQLite file each); XLSX needs the discovered Python.
     const datasets = new DatasetService({
       root: stateRoot,
@@ -620,6 +700,28 @@ export async function createApplication(options: AppOptions = {}) {
       datasets,
       blobs,
       retention: () => config.analysis.retention,
+      ...(options.analysisSweepDelayMs !== undefined
+        ? { initialDelayMs: options.analysisSweepDelayMs }
+        : {}),
+    });
+    // Volatile Forja session folders: same schedule as the analysis sweep, gone with their session.
+    const scratchJanitor = new ScratchJanitor({
+      stateRoot,
+      roots: () =>
+        scratchSweepRoots({
+          customStore,
+          stateHome: scratchStateRoot,
+          configRoot: config.forge.scratch.root,
+        }),
+      sessionExists: (rootSessionId) => {
+        try {
+          store.get(rootSessionId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      retentionDays: () => config.forge.scratch.retentionDays,
       ...(options.analysisSweepDelayMs !== undefined
         ? { initialDelayMs: options.analysisSweepDelayMs }
         : {}),
@@ -683,6 +785,15 @@ export async function createApplication(options: AppOptions = {}) {
         runtime: analysisRuntime,
         datasets,
         oci,
+        // Read live: the policy and the Pyodide settings are global-only and may change.
+        isolation: () => config.analysis.isolation,
+        wasm: { stateRoot, settings: () => config.analysis.wasm },
+        // Python runs through the same kernel as `js_run`: one journal, one state store.
+        forge: { kernel: forgeRuntime.kernel, engines: forgeRuntime.engines },
+        // `codePath` and the read-only exposure exist only where `js_run` has its scratchpad too.
+        ...(scratchReady && sessionScratchpad
+          ? { scratchpad: async (session: string) => sessionScratchpad(session) }
+          : {}),
         rerun: analysisRerun,
         rootOf: (id) => store.rootOf(id),
         // Read live: a changed `analysis.limits.*` setting applies to the next call.
@@ -695,6 +806,8 @@ export async function createApplication(options: AppOptions = {}) {
           },
         },
         startup: { candidates: candidates.length > 0, extras: active?.extras ?? [] },
+        // Error results point at `forge_guide` only while that tool exists (spec §8.4).
+        guideHints: () => registry.list().some((tool) => tool.name === "forge_guide"),
       });
       const { registerArtifactTools } = await import("./tools/artifacts.ts");
       registerArtifactTools(registry, { store: artifacts, rootOf: (id) => store.rootOf(id) });
@@ -707,6 +820,48 @@ export async function createApplication(options: AppOptions = {}) {
         // Registered only with the tool: the `false` state keeps the system prompt byte for byte.
         context.extras.push(async () => DASHBOARD_PROMPT_RULE);
       }
+    }
+    // Layer 2 of the context (spec §8.3): `forge_guide`. Registered only with Forja on and a ready
+    // engine for at least one language; the `python.*` topics need `python_run`.
+    if (config.forge.guides.enabled && config.forge.javascript.enabled) {
+      const [{ GuideProvider }, { registerForgeGuide }, { probePythonEnvironment }] =
+        await Promise.all([
+          import("./forge/guides/provider.ts"),
+          import("./tools/forge-guide.ts"),
+          import("./forge/guides/python-environment.ts"),
+        ]);
+      const hasPython = registry.list().some((tool) => tool.name === "python_run");
+      registerForgeGuide(
+        registry,
+        new GuideProvider({
+          ...(forgeRuntime.jsReady
+            ? {
+                javascript: async () => {
+                  const status = await forgeRuntime.status();
+                  return {
+                    version: status.javascript.version,
+                    isolation: status.engines[0]?.isolation ?? "wasm-isolate",
+                    host: status.javascript.host,
+                    limits: status.javascript.limits,
+                  };
+                },
+              }
+            : {}),
+          ...(hasPython
+            ? {
+                python: () =>
+                  probePythonEnvironment({
+                    backends: pythonBackends,
+                    runtime: () => config.analysis.runtime,
+                    isolation: () => config.analysis.isolation,
+                    managedExtras: async () =>
+                      (await analysisRuntime.activeRuntime())?.extras ?? [],
+                    smartDashboard: () => config.analysis.smartDashboard,
+                  }),
+              }
+            : {}),
+        }),
+      );
     }
     // `exit_plan` (opt-in: only the plan agent's run sees it): the plan review hand-over.
     const { registerExitPlan } = await import("./plan/exit-plan.ts");
@@ -1186,7 +1341,10 @@ export async function createApplication(options: AppOptions = {}) {
     // Retention runs in the background (unreferenced timer); never for in-memory test databases.
     if (analysisEnabled && options.db !== ":memory:") janitor.start();
     // Retention is maintenance that deletes files: never under --read-only, never for `:memory:`.
-    if (options.db !== ":memory:" && !options.readOnly) taskJanitor.start();
+    if (options.db !== ":memory:" && !options.readOnly) {
+      taskJanitor.start();
+      scratchJanitor.start();
+    }
     return {
       workspace,
       pathAccess,
@@ -1211,8 +1369,38 @@ export async function createApplication(options: AppOptions = {}) {
         jobs: analysisJobs,
         /** Container runtime of the current configuration (status, pull); mode `managed` ignores it. */
         oci,
+        /** The live state of every Python backend (isolation, ready, profiles, reason). */
+        backends: (signal?: AbortSignal) => describePythonBackends(pythonBackends, signal),
         rerun: analysisRerun,
         janitor,
+      },
+      /**
+       * Forja services for the engines (Phase 3b): the execution journal, the cross-execution
+       * state, the scratchpad of a session (undefined while the JavaScript engine is off) and the
+       * retention sweep of the volatile session folders.
+       */
+      forge: {
+        journal: forgeJournal,
+        state: forgeState,
+        /** The scratchpad, created on first use; under the same gate as the write root. */
+        scratchpad: scratchpad
+          ? (session: string) =>
+              scratchReady && !options.readOnly ? scratchpad(session) : Promise.resolve(undefined)
+          : undefined,
+        /**
+         * What the HTTP surface sees (L2): `available` follows the gate of the write root (engine
+         * verified, not `--read-only`); the folder is only looked up, never created.
+         */
+        scratchpadView: scratchpadLookup
+          ? async (session: string): Promise<{ available: boolean; path?: string }> => {
+              if (!scratchReady || options.readOnly) return { available: false };
+              const path = await scratchpadLookup(session);
+              return path ? { available: true, path } : { available: true };
+            }
+          : undefined,
+        scratchJanitor,
+        /** The JavaScript engine: descriptor and effective limits (`alisio forge status`), probe. */
+        runtime: forgeRuntime,
       },
       /** Keys a project layer set that only the user layer decides (ignored on load). */
       configDiagnostics: configProvenance.ignored ?? [],
@@ -1546,6 +1734,18 @@ export async function createApplication(options: AppOptions = {}) {
             config.tasks = { ...config.tasks, [leaf]: Number(value) };
             break;
           }
+          case "forge.javascript.enabled":
+            // The tool set (`js_run` or `execute`) is chosen when the application starts: the
+            // change applies to the next application (the web recycles the workspace application).
+            config.forge = {
+              ...config.forge,
+              javascript: { ...config.forge.javascript, enabled: value === true },
+            };
+            break;
+          case "forge.guides.enabled":
+            // Like `forge.javascript.enabled`: `forge_guide` is registered at start.
+            config.forge = { ...config.forge, guides: { enabled: value === true } };
+            break;
           case "web.iconTheme":
             // Read live by the icon-theme routes on the next request; `"none"` clears the theme.
             config.web = { ...config.web, iconTheme: String(value) };
@@ -1747,6 +1947,7 @@ export async function createApplication(options: AppOptions = {}) {
         try {
           janitor.stop();
           taskJanitor.stop();
+          scratchJanitor.stop();
           datasets?.close();
           // Tasks first in the same stage: they end with Alisio (process groups killed).
           await capped(Promise.allSettled([herdr.close(), mcp.close(), tasks.close()]));

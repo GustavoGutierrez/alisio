@@ -1,13 +1,14 @@
 /**
- * Settings → Data analysis (spec §18): the runtime state read only (mode, Python found or how to
- * install it, optional packages, container engine and image) and the settings that can be edited:
- * the switch, the execution timeout and the retention. Python needs no configuration; nothing here
- * is required to run an analysis.
+ * Settings → Forja, Python section (spec §18 of the analysis feature, Python spec §9.4): the runtime
+ * state read only (mode, Python found or how to install it, optional packages, container engine
+ * and image), one card per backend (readiness, isolation, profiles, reason, setup command), the
+ * isolation policy and the runtime in use (read only, with the key that changes them), and the
+ * settings that can be edited: the switches, the execution timeout and the retention. Python needs
+ * no configuration; nothing here is required to run an analysis.
  */
 import type { AnalysisStatus, SettingInfo } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { api, showToast } from "../../store/app.ts";
 import {
   type AnalysisKey,
   analysisSetting,
@@ -18,16 +19,16 @@ import {
   secondsToMs,
   TIMEOUT_SECONDS,
 } from "../../util/analysis.ts";
-import styles from "./settings.module.css";
 import {
-  errorMessage,
-  PageIntro,
-  Pill,
-  Status,
-  Switch,
-  settingsWorkspace,
-  useLoad,
-} from "./shared.tsx";
+  type BackendCard,
+  backendCards,
+  effectiveBackend,
+  modeLabelKey,
+} from "../../util/forge-page.ts";
+import { CopyButton } from "../CopyButton.tsx";
+import { Icon } from "../icons.tsx";
+import styles from "./settings.module.css";
+import { Pill, Switch } from "./shared.tsx";
 
 /** A whole-number field committed on blur or Enter; an invalid entry reverts. */
 function NumberRow(props: {
@@ -88,6 +89,89 @@ function NumberRow(props: {
   );
 }
 
+/** The backend that runs scripts now, or the configured mode when the server lists no backends. */
+function effectiveMode(status: AnalysisStatus): "oci" | "wasm" | "managed" {
+  const current = effectiveBackend(status.mode, status.isolation, status.backends ?? []);
+  if (current) return current;
+  return status.mode === "auto" ? "managed" : status.mode;
+}
+
+/** Green only when the code would run isolated; the host is a warning, nothing ready is off. */
+function modeTone(status: AnalysisStatus): "ok" | "warn" | "off" {
+  if (!status.backends?.length) return status.mode === "oci" ? "ok" : "warn";
+  const current = effectiveBackend(status.mode, status.isolation, status.backends);
+  return current === undefined ? "off" : current === "managed" ? "warn" : "ok";
+}
+
+function BackendCardView({ card }: { card: BackendCard }) {
+  return (
+    <li class={styles.backend} data-ready={card.ready ? "true" : "false"}>
+      <div class={styles.backendHead}>
+        <h5 class={styles.backendName}>{t(`forge.backend.${card.id}`)}</h5>
+        <Pill tone={card.ready ? "ok" : "off"}>
+          {t(card.ready ? "forge.ready" : "forge.notReady")}
+        </Pill>
+        {card.current ? <span class={styles.chip}>{t("forge.inUse")}</span> : null}
+      </div>
+      <p class={styles.isolation} data-sandboxed={card.sandboxed ? "true" : "false"}>
+        <Icon name={card.icon} size={14} />
+        {t(card.isolationKey)}
+      </p>
+      {card.profiles.length ? (
+        <p class={styles.profiles}>
+          {t("forge.profiles")}{" "}
+          {card.profiles.map((profile) => (
+            <span key={profile} class={styles.chip}>
+              {profile}
+            </span>
+          ))}
+        </p>
+      ) : null}
+      {card.reason ? <p class={styles.reasonText}>{card.reason}</p> : null}
+      {card.setup ? (
+        <div class={styles.command}>
+          <code>{card.setup}</code>
+          <CopyButton text={() => card.setup ?? ""} label={t("forge.copyCommand")} />
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** One card per backend plus the policy and runtime that choose between them (read only). */
+function Backends({ status }: { status: AnalysisStatus }) {
+  const cards = backendCards(status);
+  const current = cards.find((card) => card.current);
+  return (
+    <>
+      <h4 class={styles.sectionTitle}>{t("forge.backends")}</h4>
+      {cards.length ? (
+        <ul class={styles.backendList} aria-label={t("forge.backends")}>
+          {cards.map((card) => (
+            <BackendCardView key={card.id} card={card} />
+          ))}
+        </ul>
+      ) : null}
+      <dl class={styles.facts} data-testid="forge-policy">
+        <dt>{t("forge.runtimeSetting")}</dt>
+        <dd>
+          <code>{status.mode}</code> <code class={styles.settingKey}>analysis.runtime</code>
+        </dd>
+        <dt>{t("forge.isolationPolicy")}</dt>
+        <dd>
+          <code>{status.isolation ?? "preferred"}</code>{" "}
+          <code class={styles.settingKey}>analysis.isolation</code>
+        </dd>
+        <dt>{t("forge.runsOn")}</dt>
+        <dd>{current ? t(`forge.backend.${current.id}`) : t("forge.noneReady")}</dd>
+      </dl>
+      <p class={styles.note}>
+        {t("forge.policyHint", { policy: status.isolation ?? "preferred" })}
+      </p>
+    </>
+  );
+}
+
 function RuntimeFacts(props: { status: AnalysisStatus }) {
   const { status } = props;
   const { python, oci } = status;
@@ -97,13 +181,7 @@ function RuntimeFacts(props: { status: AnalysisStatus }) {
       <dl class={styles.facts} data-testid="analysis-status">
         <dt>{t("settings.analysis.mode")}</dt>
         <dd>
-          <Pill tone={status.mode === "oci" ? "ok" : "warn"}>
-            {t(
-              status.mode === "oci"
-                ? "settings.analysis.mode.oci"
-                : "settings.analysis.mode.managed",
-            )}
-          </Pill>
+          <Pill tone={modeTone(status)}>{t(modeLabelKey(status.mode))}</Pill>
         </dd>
         <dt>{t("settings.analysis.runtime")}</dt>
         <dd>
@@ -153,9 +231,11 @@ function RuntimeFacts(props: { status: AnalysisStatus }) {
       </dl>
       <p class={styles.note} role="note">
         {t(
-          status.mode === "oci"
+          effectiveMode(status) === "oci"
             ? "settings.analysis.containerNote"
-            : "settings.analysis.managedNote",
+            : effectiveMode(status) === "wasm"
+              ? "settings.analysis.wasmNote"
+              : "settings.analysis.managedNote",
         )}
       </p>
       {python.found ? (
@@ -187,53 +267,37 @@ function RuntimeFacts(props: { status: AnalysisStatus }) {
   );
 }
 
-export function AnalysisPage() {
-  const workspace = settingsWorkspace();
-  const status = useLoad(workspace ? () => api.analysis(workspace.id) : undefined, [workspace?.id]);
-  const overview = useLoad(workspace ? () => api.settings(workspace.id) : undefined, [
-    workspace?.id,
-  ]);
+/** The Python half of Settings → Forja; the page loads the data and owns the saving. */
+export function PythonSection(props: {
+  status: AnalysisStatus | undefined;
+  /** The workspace's settings; absent while they load. */
+  settings: SettingInfo[] | undefined;
+  readOnly: boolean;
+  save: (key: AnalysisKey, value: number | boolean) => Promise<void>;
+}) {
   const [busy, setBusy] = useState(false);
-  const readOnly = !!overview.data?.readOnly;
-  const settings: SettingInfo[] = overview.data?.settings ?? [];
-  const save = async (key: AnalysisKey, value: number | boolean) => {
-    if (!workspace || !overview.data) return;
-    try {
-      await api.setSetting(workspace.id, key, value);
-      overview.set({
-        ...overview.data,
-        settings: overview.data.settings.map((s) => (s.key === key ? { ...s, value } : s)),
-      });
-      status.reload();
-    } catch (error) {
-      showToast(errorMessage(error));
-      throw error;
-    }
-  };
+  const { readOnly, status, save } = props;
+  const settings = props.settings ?? [];
   const enabled = analysisSetting(settings, "analysis.enabled");
   const smartDashboard = analysisSetting(settings, "analysis.smartDashboard");
   const number = (key: AnalysisKey, fallback: number) => {
     const value = analysisSetting(settings, key);
     return typeof value === "number" ? value : fallback;
   };
-  const sweep = status.data?.retention.lastSweep;
+  const sweep = status?.retention.lastSweep;
   return (
     <>
-      <PageIntro title={t("settings.analysis.title")} body={t("settings.analysis.lead")} />
-      <Status
-        loading={(overview.loading && !overview.data) || (status.loading && !status.data)}
-        error={overview.error ?? status.error}
-        empty={!workspace ? "settings.noWorkspace" : undefined}
-      />
-      {status.data?.readOnly ? (
+      <h4 class={styles.sectionTitle}>{t("forge.python")}</h4>
+      <p class={styles.lead}>{t("settings.analysis.lead")}</p>
+      {status?.readOnly ? (
         <p class={styles.note}>{t("settings.analysis.readOnlyRuntime")}</p>
       ) : enabled === false ? (
         <p class={styles.note}>{t("settings.analysis.disabled")}</p>
       ) : null}
-      {status.data ? <RuntimeFacts status={status.data} /> : null}
-      {overview.data ? (
+      {status ? <Backends status={status} /> : null}
+      {status ? <RuntimeFacts status={status} /> : null}
+      {props.settings ? (
         <>
-          {readOnly ? <p class={styles.note}>{t("settings.readOnly")}</p> : null}
           <ul class={styles.settingList}>
             <li class={styles.settingRow}>
               <label class={styles.settingLabel} for="analysis-enabled">
