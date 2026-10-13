@@ -454,6 +454,19 @@ html.whatis-locked {
   --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6h11M9 12h11M9 18h11M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2'/%3E%3C/svg%3E");
 }
 
+/* Forja list: code, chart and guide glyphs instead of the "Under the hood" ones. */
+.whatis-forge li:nth-child(1) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14'/%3E%3C/svg%3E");
+}
+
+.whatis-forge li:nth-child(2) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3'/%3E%3C/svg%3E");
+}
+
+.whatis-forge li:nth-child(3) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11M9 8h6'/%3E%3C/svg%3E");
+}
+
 /* ---------- Closing: stability note and next steps ---------- */
 
 .whatis-closing {

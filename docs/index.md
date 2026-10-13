@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Alisio
-  text: Build with agents you control
-  tagline: "A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards."
+  text: Your coding agent, on the model you choose
+  tagline: "Connect any OpenAI-compatible model to your project: it reads and edits code behind explicit permissions, runs JavaScript in isolation and Python for data analysis, and publishes dashboards. In your terminal, your browser or CI."
   image:
     src: /assets/logo.png
     alt: Alisio mascot
@@ -34,9 +34,9 @@ featured:
     details: "A local, token-protected browser UI for several workspaces and sessions, on the same agent core."
     link: "/web"
   - icon: chart
-    title: "Dashboards and charts"
-    details: "Python analysis publishes dashboards and reports as artifacts, with offline interactive charts."
-    link: "/smart-dashboard"
+    title: "Code mode and dashboards"
+    details: "Forja lets the agent solve with code: isolated JavaScript to combine tools, Python for data, AI and dashboards published as artifacts."
+    link: "/forja"
 more:
   - icon: api
     title: "Any OpenAI-compatible API"
@@ -82,13 +82,14 @@ more:
 
 <div class="whatis-intro whatis-item" style="--i: 0">
 <div class="whatis-logo">
-<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — coding-agent harness" width="1000" height="470" decoding="async" />
+<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — coding agent for any OpenAI-compatible model" width="1000" height="470" decoding="async" />
 </div>
 <div class="whatis-def">
 
-Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
+Alisio is a coding agent with its own TypeScript core. It connects to any OpenAI-compatible
 endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
-headless for scripts and CI.
+headless for scripts and CI, or in your browser with `alisio serve`. When code is the faster route,
+it writes and runs it with [Forja](/forja): isolated JavaScript, and Python for data analysis.
 
 </div>
 </div>
@@ -126,7 +127,17 @@ headless for scripts and CI.
 </section>
 </div>
 
-<h3 class="whatis-sub whatis-item" style="--i: 3">Under the hood</h3>
+<h3 class="whatis-sub whatis-item" style="--i: 3">Code mode with Forja: the language follows the goal</h3>
+
+<div class="whatis-facts whatis-forge">
+
+- **[JavaScript for everything else](/forja#language)** `js_run` combines several tool calls, filters and paginates results, and transforms JSON and text. It runs in a fresh QuickJS WebAssembly VM with no file, network or process access: it can only call Alisio tools, under the same permissions as the agent.
+- **[Python for data analysis and AI](/forja#isolation)** `python_run` covers pandas and NumPy, statistics, scikit-learn, charts and custom dashboards. It runs in a container (`oci`) or in a restricted Pyodide WebAssembly process (`wasm`) when available; with `analysis.isolation: required` it never runs unsandboxed.
+- **[Context on demand](/forja#forge-guide)** With `forge_guide`, the guide for each language loads only when the task needs it, adapted to the engines and packages actually installed, so the prompt stays small.
+
+</div>
+
+<h3 class="whatis-sub whatis-item" style="--i: 4">Under the hood</h3>
 
 <div class="whatis-facts">
 
@@ -140,7 +151,9 @@ headless for scripts and CI.
 <div class="whatis-note">
 
 Alisio `__ALISIO_VERSION__` is a **stable** release, still pre-1.0: minor versions may include breaking changes (see [Stability and versioning](/publishing#stability-and-versioning)). Read [Known limitations](/limitations) before relying
-on it, and remember that it is **not a sandbox**: tools and plugins run with your user privileges.
+on it. Alisio as a whole is **not a sandbox**: the shell, local tools and plugins run with your user
+privileges. Only Forja isolates code (`js_run`, and Python on the `oci` or `wasm` backends), with the
+limits documented in [Forja](/forja).
 
 </div>
 <div class="whatis-next">
