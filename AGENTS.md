@@ -14,7 +14,26 @@ headless for scripts and CI.
   LinkedIn: <https://www.linkedin.com/in/gustavo-gutierrez-mercado>.
 - **Documentation** (EN/ES): <https://gustavogutierrez.github.io/alisio/>.
 
-## Publishing (skill)
+## Skills index (`.agents/skills/`)
+
+**Before coding in this repo, load `alisio-architecture` and `alisio-coding-standards`, plus the
+relevant package or plugin skill.**
+
+| Skill | Load when |
+|---|---|
+| `alisio-architecture` | Any coding: package map, boundaries, data flow, conventions |
+| `alisio-coding-standards` | Any coding: TDD, lint, security rules, delivery checklist, docs parity |
+| `alisio-plugins` | Creating or changing a plugin, the plugin host or `packages/plugin-*` |
+| `alisio-pkg-core` | Editing `packages/core` |
+| `alisio-pkg-sdk` | Editing `packages/sdk` (public contract) |
+| `alisio-pkg-server` | Editing `packages/server` (HTTP/SSE API) |
+| `alisio-pkg-web` | Editing `packages/web` (browser UI, i18n) |
+| `alisio-pkg-cli-tui` | Editing `packages/cli` (CLI, TUI) |
+| `alisio-docs-screenshots` | Documenting or changing a Web UI feature (screenshot rule) |
+| `alisio-specs` | Writing, executing or archiving a spec under `specs/`; test strategy |
+| `alisio-publish` | Publishing, releasing or bumping versions on npm |
+
+## Publishing
 
 Whenever the user asks to publish/release/bump any Alisio package, load the skill
 `.agents/skills/alisio-publish/SKILL.md` and follow its canonical flow: manual stable semver bump of
@@ -23,33 +42,23 @@ install. Never run `npm publish` directly; `package@version` is immutable; npm p
 async; OTP is entered by the operator, never shared in chat. Produce the commands with the
 repo root completed (no absolute user paths inside the skill itself).
 
-## Specs (skill)
+## Specs
 
-Whenever the user asks to write, number, execute, review or archive a spec under `specs/`, load
-`.agents/skills/alisio-specs/SKILL.md` (folder semantics, `NNN-slug-vN` naming, model assignment,
-spec skeleton, test strategy, ready-to-execute checklist).
+Specs under `specs/` follow `.agents/skills/alisio-specs/SKILL.md` (numbering, folders, skeleton,
+test strategy). Load it before writing or executing one.
 
-Use pnpm for dependencies (keep only pnpm-lock.yaml). The runtime is Node-first (Node >=22.16)
-and must keep working on Bun; Bun also builds the optional standalone binary.
-Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`,
-`pnpm pack:check`, `pnpm docs:check` and `pnpm docs:build` before delivery.
-Keep provider SDKs and runtime-specific imports out of the public SDK and agent-core contracts.
-Use only portable Node APIs (node:fs, node:child_process, node:sqlite) in packages; no Bun globals.
-Plugins depend only on @alisio/sdk (peer) and never import @alisio/core internals.
-Preserve tool call IDs, provider continuation data and persisted session consistency.
-Never treat a plugin manifest or a subprocess as a sandbox.
-Test behavior at module boundaries. Do not add snapshot tests that merely restate implementation.
-Document limitations and verification scope in docs/implementation-status.md.
-Keep the English and Spanish documentation pages in parity (see CONTRIBUTING.md).
+## Hard rules (details in the skills)
 
-## Documenting Web UI features (screenshots)
-
-Whenever you document or change a Web UI feature, take a real screenshot of it and put it in the
-documentation. Capture it with Playwright against a built `alisio serve` with a scripted fake provider
-(realistic sample data, never real session titles, e-mails or tokens), after the feature works. Convert
-it to WebP (under ~150 KB), save it as `docs/assets/web-ui/<feature>_web_ui.webp` and delete the
-temporary files and `.playwright-mcp/`. Place it next to the paragraph it illustrates in BOTH the
-English and the Spanish page, with alt text and a caption in each page's language. Reuse an existing
-screenshot when it already shows the feature, never rename existing ones, never use them in TUI
-sections, and do not repeat one image more than twice on a page. `pnpm docs:check` validates that the
-images exist and that both languages stay in parity.
+- Use pnpm for dependencies; keep only `pnpm-lock.yaml`.
+- Runtime is Node-first (Node >=22.16) and must keep working on Bun; Bun also builds the optional
+  standalone binary. Use only portable Node APIs in packages; no Bun globals.
+- Keep provider SDKs and runtime-specific imports out of the public SDK and agent-core contracts.
+- Plugins depend only on `@alisio/sdk` (peer) and never import `@alisio/core` internals. Never
+  treat a plugin manifest or a subprocess as a sandbox.
+- Preserve tool call IDs, provider continuation data and persisted session consistency.
+- Keep the English and Spanish documentation pages in parity (see CONTRIBUTING.md); document
+  limitations and verification scope in `docs/implementation-status.md`.
+- Test behavior at module boundaries; no snapshot tests that merely restate implementation.
+- Before delivery run the checklist in `alisio-coding-standards` (`pnpm typecheck`, `lint`, `test`,
+  `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`).
+- Web UI features need a real screenshot in the EN and ES docs: see `alisio-docs-screenshots`.

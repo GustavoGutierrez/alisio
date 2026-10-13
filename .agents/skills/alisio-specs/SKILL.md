@@ -1,6 +1,6 @@
 ---
 name: alisio-specs
-description: "Write, number, place, review, execute and archive Alisio technical specs under specs/ (folder semantics, NNN-slug-vN naming, model assignment, spec skeleton, acceptance matrix, test strategy, ready-to-execute checklist). Trigger: write a spec, new spec, execute spec, implement spec, archive spec, specs/ folder, test strategy for a spec."
+description: "Write, number, place, review, execute and archive Alisio technical specs under specs/ (folder semantics, NNN-slug-vN naming, model assignment, spec skeleton, acceptance matrix, test strategy, ready-to-execute checklist). Use this skill whenever the user asks to write, plan, draft, review, execute, implement or archive a spec, mentions the specs/ folder, or asks for a test strategy for a feature, even if they do not say 'spec'."
 ---
 
 # Alisio specs workflow
@@ -80,8 +80,8 @@ Minimize Opus invocations; name each one in the spec (section "Asignación de mo
   (ID, case, required result). Given/When/Then is allowed inside "Caso" when setup matters.
 - **Traceability**: each decision maps to at least one acceptance row; each phase lists the AC
   IDs it closes; each AC maps to a test file.
-- **Phases leave the repo green**: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`,
-  `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check`, `pnpm docs:build`.
+- **Phases leave the repo green**: the delivery checklist of `alisio-coding-standards`
+  (typecheck, lint, test, build, test:cli, test:compiled, pack:check, docs:check, docs:build).
 - Language: specs follow the repo precedent (Spanish prose); identifiers, error codes and
   generated strings in English; UI text in EN and ES.
 - Architecture claims name patterns and their reason (hexagonal ports, strategy, etc.) only when
@@ -134,11 +134,11 @@ with IDs, verified current state, acceptance matrix, phases, definition of done,
 
 ## 8. Test strategy (for specs and implementation)
 
-Principle: test what adds confidence per unit of cost, through public behavior.
+Principle: test what adds confidence per unit of cost, through public behavior. Baseline rules
+(behavior at module boundaries, real dependencies when cheap, env-flagged slow tests, lite
+mutation testing) live in `alisio-coding-standards` ("TDD and tests"); this section adds what a
+spec must decide.
 
-- Test **behavior at module boundaries** (public function, tool, route, event), not internals.
-  Prefer real dependencies when cheap (real SQLite, real QuickJS); mock only slow, external or
-  nondeterministic systems.
 - Write tests for: core logic and state machines, contracts and schemas, security and permission
   boundaries, previously found regressions, edge cases listed in the acceptance matrix, error
   paths with defined codes.
@@ -149,8 +149,6 @@ Principle: test what adds confidence per unit of cost, through public behavior.
 - **Mutation testing lite**: Stryker with narrow `mutate` on small pure-logic modules (limits,
   state machines, protocol parsers), `testRunner: "command"`, outside CI, bounded time budget.
   Add tests only for survivors that reveal a real behavior gap, never to kill trivial mutants.
-- Slow or real-dependency tests (Docker, network, Pyodide, browsers) sit behind env flags and
-  are skipped by default with a clear message.
 - Pyramid vs trophy is a heuristic, not a rule: pure logic gets unit tests; wiring between
   modules gets integration tests; a few end-to-end tests cover critical user journeys.
 
@@ -168,7 +166,7 @@ edge case at the boundary. Low (cosmetic, thin glue): no test, rely on typecheck
 
 - [ ] Estado is approved by the owner (date) and no open questions remain.
 - [ ] Header table complete; relations to other specs name paths that exist (archive paths fixed).
-- [ ] Number and filename follow section 2 (or legacy name kept).
+- [ ] Number and filename follow section 2.
 - [ ] Objective and non-goals stated; scope fits phases.
 - [ ] Every decision has an ID; owner decisions are marked confirmed.
 - [ ] "Estado actual" checked against code on a stated date; claims tagged verificado / no verificado / nuevo.

@@ -1,6 +1,6 @@
 ---
 name: alisio-publish
-description: "Publicar versiones estables (semver 0.x) de Alisio en npm: elegir versión, subir los 7 paquetes juntos, CHANGELOG, pnpm run publish, verificación con instalación real, tag vX.Y.Z y aviso a los plugins externos. Trigger: publicación, release, bump, nueva versión npm."
+description: "Publicar versiones estables (semver 0.x) de Alisio en npm: elegir versión, subir los 7 paquetes juntos, CHANGELOG, pnpm run publish, verificación con instalación real, tag vX.Y.Z y aviso a los plugins externos. Use whenever the user asks to publish, release, bump or ship a new npm version of any Alisio package (publicar, release, bump, nueva versión npm), even if they only say \"sube la versión\"."
 ---
 
 # Alisio npm publishing workflow
@@ -172,4 +172,7 @@ publicar de nuevo.
 
 - **AGENTS.md raíz** es la fuente de identidad de Alisio: no añadir rutas absolutas.
 - El flujo de changesets (`pnpm changeset version`, workflow `release.yml`) NO se usa para
-  publicar: los bumps son manuales y los publishes salen de `pnpm run publish`.
+  publicar: los bumps son manuales y los publishes salen de `pnpm run publish`. Esto no
+  contradice la regla de contribución: cada PR que cambia un paquete publicado sigue añadiendo
+  un changeset (`pnpm changeset`, ver `alisio-coding-standards`); el changeset documenta el cambio,
+  pero la versión y el publish los hace el flujo manual de esta skill.
