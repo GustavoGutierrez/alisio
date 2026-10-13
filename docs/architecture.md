@@ -125,11 +125,13 @@ emits; `tests/run-events-contract.test.ts` checks the runner against them.
 not stored when `decisions.telemetry` is `false`. There is no `decision_started` event on purpose:
 the latency is in the final event.
 
-## Session database (v4) {#session-database}
+## Session database (v10) {#session-database}
 
 `SQLiteStore` migrates forward only and additively: a database written by an older Alisio opens at
-schema version 4 without losing rows, and an older binary ignores the new tables and columns.
-Version 4 adds:
+the current schema version (10) without losing rows, and an older binary ignores the new tables and
+columns. Later versions are additive too: v5 archived workspaces, v6 Python analysis executions,
+artifacts and capability grants, v7 background tasks, v8 the goal runtime's columns, v9 the Forja
+journal and shared state, and v10 lets `analysis_executions.runtime` admit `wasm`. Version 4 added:
 
 | Addition | Purpose |
 | --- | --- |

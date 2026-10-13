@@ -133,11 +133,14 @@ runner contra ellos.
 persisten cuando `decisions.telemetry` es `false`. No hay un evento `decision_started` a propósito:
 la latencia va en el evento final.
 
-## Base de datos de sesiones (v4) {#session-database}
+## Base de datos de sesiones (v10) {#session-database}
 
 `SQLiteStore` migra solo hacia delante y de forma aditiva: una base escrita por un Alisio anterior se
-abre en la versión 4 del esquema sin perder filas, y un binario anterior ignora las tablas y
-columnas nuevas. La versión 4 añade:
+abre en la versión actual del esquema (10) sin perder filas, y un binario anterior ignora las tablas
+y columnas nuevas. Las versiones posteriores también son aditivas: la v5 añade workspaces archivados,
+la v6 las ejecuciones de análisis Python, los artefactos y las concesiones de capacidades, la v7 las
+tareas en segundo plano, la v8 las columnas del runtime de objetivos, la v9 el diario de Forja y su
+estado compartido, y la v10 permite `wasm` en `analysis_executions.runtime`. La versión 4 añadió:
 
 | Adición | Propósito |
 | --- | --- |
