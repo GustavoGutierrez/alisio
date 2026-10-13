@@ -8,7 +8,7 @@
 | Fecha | 2026-10-03 |
 | Paquetes probablemente afectados | `@alisio/core` (herramienta `exit_plan`, publicador de artefactos, instrucciones del agente `plan`), `@alisio/sdk` (contratos aditivos), `@alisio/server` (servir el artefacto del plan), `@alisio/alisio-code` (TUI), `@alisio/web` (privado: visor, panel de artefactos) |
 | Paquetes nuevos | Ninguno previsto |
-| Relación con otras especificaciones | Extiende la fase 2 (Plan Review) de `alisio-modes-goal-background-v1.md` y el sistema de artefactos de `alisio-data-analysis-runtime-v1.2.md`. Todo debe ser aditivo. |
+| Relación con otras especificaciones | Extiende la fase 2 (Plan Review) de `003-modes-goal-background-v1.md` y el sistema de artefactos de `002-data-analysis-runtime-v1.md`. Todo debe ser aditivo. |
 | Superficies | Web y TUI (la TUI se adapta, ver sección 6) |
 
 ## 0. Cómo usar este documento

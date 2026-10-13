@@ -8,7 +8,7 @@
 | Fecha | 2026-10-02 |
 | Paquetes afectados | `@alisio/sdk`, `@alisio/core`, `@alisio/server`, `@alisio/web` (privado), `@alisio/alisio-code` (CLI/TUI); `@alisio/plugin-subagents` solo en la fase 3 (lista de tareas unificada) |
 | Paquetes nuevos | Ninguno |
-| Relación con otras especificaciones | Extiende `alisio-ui.md` (comandos, presets, `InteractionBridge`) y `alisio-data-analysis-runtime-v1.2.md` (artefactos, grants, `/permissions`). No cambia ninguno de sus contratos: todo es aditivo. |
+| Relación con otras especificaciones | Extiende `001-ui-v1.md` (comandos, presets, `InteractionBridge`) y `002-data-analysis-runtime-v1.md` (artefactos, grants, `/permissions`). No cambia ninguno de sus contratos: todo es aditivo. |
 | Referencia externa | `minimax-code-0.6.2` (MIT, solo lectura): se replican **patrones**, nunca código (Apéndice A). |
 
 ## 0. Cómo usar este documento (para agentes de código)

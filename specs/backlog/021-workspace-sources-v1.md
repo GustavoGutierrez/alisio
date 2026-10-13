@@ -8,7 +8,7 @@
 | Fecha | 2026-10-03 |
 | Paquetes afectados | `@alisio/sdk` (tipos y capacidad aditiva `api.sources`, subruta `@alisio/sdk/testing/sources`), `@alisio/core` (motor de sincronización, OAuth, almacén de tokens, migración v9, herramientas, opción de raíz exacta), `@alisio/server` (rutas `/api/sources/*`, tramas SSE, apertura de workspace por ruta exacta), `@alisio/web` (privado: asistente, Ajustes, insignia, revisión de envíos), `@alisio/alisio-code` (CLI/TUI: `/source`, `alisio source …`, registro del integrado) |
 | Paquetes nuevos | `@alisio/plugin-google-drive` (publicado, integrado en `BUILTIN_PLUGINS`, desactivable) |
-| Relación con otras especificaciones | Extiende `alisio-ui.md` (protocolo web v1, formato de error, Origin), `alisio-data-analysis-runtime-v1.2.md` (ADR-01 «core, no plugin», ADR-02 «capacidad refina efecto», `capability_grants`) y `alisio-modes-goal-background-v1.md` (modos `ask`/`auto`/`full`, patrón `owner_pid`, Ajustes). Todo es aditivo. |
+| Relación con otras especificaciones | Extiende `001-ui-v1.md` (protocolo web v1, formato de error, Origin), `002-data-analysis-runtime-v1.md` (ADR-01 «core, no plugin», ADR-02 «capacidad refina efecto», `capability_grants`) y `003-modes-goal-background-v1.md` (modos `ask`/`auto`/`full`, patrón `owner_pid`, Ajustes). Todo es aditivo. |
 | Superficies | Web y TUI con paridad funcional; headless (`alisio source status|sync`) para scripts. |
 | Política de versión | Es una funcionalidad nueva: sale en **0.2.0** (reglas 0.x de `CHANGELOG.md`: una minor puede romper; esta no rompe nada). Changeset por paquete publicado. |
 
@@ -106,7 +106,7 @@ Pendientes abiertos: resultados de la Fase 0 (§16.1), verificación de Google d
 | `configHome()` = `ALISIO_CONFIG_HOME` o `$XDG_CONFIG_HOME/alisio` o `~/.config/alisio`; `stateHome()` = `ALISIO_STATE_HOME` o `$XDG_STATE_HOME/alisio` o `~/.local/state/alisio` | `core/src/config.ts` | verificado |
 | No existe llavero ni almacenamiento cifrado | búsqueda en `packages/*/src` | verificado |
 | `BUILTIN_PLUGINS` (openai-compatible, memory, subagents) en el CLI; desactivables con `builtinPlugins.<id>.enabled:false` o `--disable-plugin`; las opciones `builtinPlugins.<id>` llegan al plugin | `packages/cli/src/builtin.ts`, `core/src/application.ts` | verificado |
-| ADR-01: los plugins no registran rutas HTTP, no acceden a `SQLiteStore` ni al flujo de aprobación | `specs/alisio-data-analysis-runtime-v1.2.md` | verificado |
+| ADR-01: los plugins no registran rutas HTTP, no acceden a `SQLiteStore` ni al flujo de aprobación | `specs/002-data-analysis-runtime-v1.md` | verificado |
 | Datasets: CSV/TSV/JSON/JSONL/XLSX (XLSX con helper Python de stdlib) | `core/src/analysis/data/datasets.ts` | verificado |
 | Tareas en segundo plano con `owner_pid` y estado `lost` para dueños muertos; `TaskJanitor` con temporizador sin referencia | `core/src/background/{store,janitor}.ts` | verificado |
 | `core/src/background/mirror.ts` ya existe (espejo de **tareas** de subagentes): los nuevos módulos usan otro directorio (`core/src/sources/`) | ídem | verificado |

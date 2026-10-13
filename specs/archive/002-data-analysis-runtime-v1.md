@@ -8,7 +8,7 @@
 | Fecha | 2026-10-01 |
 | Paquetes afectados | `@alisio/sdk`, `@alisio/core`, `@alisio/server`, `@alisio/web` (privado), `@alisio/alisio-code` (CLI/TUI) |
 | Paquetes nuevos | Ninguno en las fases 1–3 (ver ADR-01). |
-| Relación con la v1.2 original | Reescritura. El original (`alisio-data-analysis-runtime-v1.2.md`, raíz del repositorio) se conserva sin cambios. Se mantienen sus ideas de valor (tres dominios de archivos, scripts internos separados de los artefactos, aprobación con alcance por ejecución o por chat, revocación, auditoría, procedencia, rerun, retención) y se corrigen los supuestos que contradicen el código real. El Apéndice A mapea cada sección original a su destino. |
+| Relación con la v1.2 original | Reescritura. El original (`002-data-analysis-runtime-v1.md`, raíz del repositorio) se conserva sin cambios. Se mantienen sus ideas de valor (tres dominios de archivos, scripts internos separados de los artefactos, aprobación con alcance por ejecución o por chat, revocación, auditoría, procedencia, rerun, retención) y se corrigen los supuestos que contradicen el código real. El Apéndice A mapea cada sección original a su destino. |
 | Referencia visual | Captura del chat con la tarjeta de artefacto descargable y el panel de workspace a la derecha (título con desplegable; botones Descargar, Pantalla completa y Cerrar). |
 
 ## 0. Cómo usar este documento (para agentes de código)
@@ -108,7 +108,7 @@ El agente puede **escribir un script Python y ejecutarlo** en un entorno adminis
 | C5 | Rutas `/api/chats/:chatId/...` | No hay "chats": hay `/api/sessions/:sid`. | §14.1. |
 | C6 | Herramientas `data.inspect`, `analysis.python.execute` | Los nombres de herramienta son snake_case sin puntos (`read_file`, `run_process`); muchos proveedores rechazan puntos. | `python_run`, `artifact_list`, … (§12). |
 | C7 | `capability_grants` con `UNIQUE` implícito por `(capability, workspace, chat, execution)` y `decision = 'deny'` persistido | Un `deny` persistido bloquearía para siempre sin UI para deshacerlo; además mezcla auditoría con estado vigente. | `deny` se audita pero no es pegajoso (§10.4). |
-| C8 | `@tanstack/preact-table` + TanStack Virtual | Comprobado el 2026-10-01: el registro npm **sí** publica `@tanstack/preact-table@9.2.4` (la afirmación original era falsa), pero la web evita dependencias de componentes (ADR-03 de `specs/alisio-ui.md`) y la paginación keyset del servidor no necesita un modelo de tabla en el cliente. | Virtualización propia mínima (§17.3). |
+| C8 | `@tanstack/preact-table` + TanStack Virtual | Comprobado el 2026-10-01: el registro npm **sí** publica `@tanstack/preact-table@9.2.4` (la afirmación original era falsa), pero la web evita dependencias de componentes (ADR-03 de `specs/001-ui-v1.md`) y la paginación keyset del servidor no necesita un modelo de tabla en el cliente. | Virtualización propia mínima (§17.3). |
 | C9 | DuckDB "en el backend" sin decir cómo, y pandas/Polars/PyArrow como base | Un binding de DuckDB es un binario nativo por plataforma: rompe la portabilidad Node/Bun, añade peso de instalación y complejidad de desarrollo. Exigir pandas/PyArrow obliga a una instalación con red y wheels por plataforma. | DuckDB **eliminado**: `node:sqlite` en Node y `sqlite3` estándar en Python sobre el mismo archivo (ADR-06, §17). pandas y compañía pasan a extras opcionales. |
 | C10 | "Abrir en un nuevo tab" sin aislamiento | Una página HTML generada por el modelo abierta como documento de primer nivel en el origen de Alisio tendría la cookie y el DOM de la app. | Cabecera CSP `sandbox` también en la navegación de primer nivel (§14.2). |
 
@@ -169,7 +169,7 @@ El agente puede **escribir un script Python y ejecutarlo** en un entorno adminis
 
 - **Contexto**: un plugin solo ve `PluginAPI` (`@alisio/sdk`): no puede registrar rutas HTTP, no accede a `SQLiteStore`, a `runProcess` ni al flujo de aprobación del runner, y el efecto `internal` solo se respeta en built-ins.
 - **Decisión**: el runtime, el almacén de artefactos y los grants viven en `@alisio/core` (`packages/core/src/analysis/` y `packages/core/src/artifacts/`, nuevos). El servidor añade rutas; la web y la TUI añaden presentación. Las dependencias pesadas opcionales (pandas, Matplotlib, Plotly) viven en el entorno Python como extras, no en `node_modules`; los datos usan `node:sqlite`, ya integrado. Core no gana dependencias npm de runtime.
-- **Alternativa descartada**: `@alisio/plugin-data-analysis`. Exigiría ampliar `PluginAPI` con almacén de artefactos, capabilities persistidas y rutas HTTP, convirtiendo a un plugin no aislado en un servidor de red (mismo argumento que ADR-02 de `specs/alisio-ui.md`).
+- **Alternativa descartada**: `@alisio/plugin-data-analysis`. Exigiría ampliar `PluginAPI` con almacén de artefactos, capabilities persistidas y rutas HTTP, convirtiendo a un plugin no aislado en un servidor de red (mismo argumento que ADR-02 de `specs/001-ui-v1.md`).
 - **Consecuencia**: el SDK solo gana tipos y un publicador opcional en `ToolContext` (`ctx.artifacts?.publish`), de modo que **otros** plugins y servidores MCP envueltos puedan publicar artefactos sin depender de core.
 
 ### ADR-02 — `analysis.run` como refinamiento de `process`
@@ -1011,7 +1011,7 @@ El bloque `{ kind: "artifact" }` se renderiza en `tui/components.ts` (función n
 - Icono Unicode o ASCII (`[D]`, `[M]`, `[T]`, `[I]`, `[J]`, `[C]`, `[Z]`, `[F]`) según `terminalCapabilities()` (`banner.ts`); sin color con `NO_COLOR`.
 - La ruta abrevia el home con `~`, se recorta por el centro si excede el ancho y es la ruta real del archivo (o del `index.html` en un dashboard multiarchivo).
 - Al final del turno, si hubo artefactos, una línea tenue: `/artifacts to open, copy or reveal`.
-- `tests/ui-blocks-fallback.test.ts` se amplía: todo `UiBlock` nuevo tiene representación TUI en el mismo PR (regla de `specs/alisio-ui.md`).
+- `tests/ui-blocks-fallback.test.ts` se amplía: todo `UiBlock` nuevo tiene representación TUI en el mismo PR (regla de `specs/001-ui-v1.md`).
 
 ### 16.2 `/artifacts [filtro]`
 

@@ -8,7 +8,7 @@
 | Fecha | 2026-10-03 |
 | Paquetes afectados | `@alisio/sdk` (evento `model_tier_routed`, ampliación de `summarizeDecisionEvents`), `@alisio/core` (`packages/core/src/routing/model-tier*.ts`, `RunOptions.modelOverride`, gancho en `AgentRunner`, config `modelTiers` y `decisions.routing.modelTier`, `/stats` y `/decisions`), `@alisio/web` (privado: estadísticas y etiquetas), `@alisio/alisio-code` (TUI: estadísticas) |
 | Paquetes nuevos | Ninguno |
-| Relación con otras especificaciones | Depende de `specs/alisio-decision-intelligence-v1.md` (0.3.0) y reutiliza el sub-bloque `decisions.routing` y el patrón de `specs/alisio-capability-routing-v1.md` (0.5.0). **Solo empieza tras registrar el benchmark de 0.5.0.** Arnés: `specs/alisio-smart-dashboard-v1.md` (`scripts/bench/lib.ts`, creado en la especificación de Smart Dashboard) |
+| Relación con otras especificaciones | Depende de `specs/006-decision-intelligence-v1.md` (0.3.0) y reutiliza el sub-bloque `decisions.routing` y el patrón de `specs/019-capability-routing-v1.md` (0.5.0). **Solo empieza tras registrar el benchmark de 0.5.0.** Arnés: `specs/007-smart-dashboard-v1.md` (`scripts/bench/lib.ts`, creado en la especificación de Smart Dashboard) |
 | Superficies | Web, TUI y headless |
 | Política de versión | Funcionalidad nueva, **experimental y opt-in**: **la siguiente minor en el momento de ejecución; esperada 0.6.0**. Desactivada por defecto; excluida de los valores por defecto hasta que el benchmark la justifique |
 
@@ -71,12 +71,12 @@ Fuera de alcance solo de esta entrega: cambiar de modelo **a mitad de una ejecuc
 
 | # | Decisión |
 |---|---|
-| O1 | **Empaquetado**: 0.6.0 es un release estable **separado** y solo empieza tras registrar el benchmark de 0.5.0 (`specs/alisio-capability-routing-v1.md`). La función es experimental y opt-in. |
+| O1 | **Empaquetado**: 0.6.0 es un release estable **separado** y solo empieza tras registrar el benchmark de 0.5.0 (`specs/019-capability-routing-v1.md`). La función es experimental y opt-in. |
 | O2 | `@alisio/plugin-laya` es un plugin **externo** (`alisio-plugins`), nunca un integrado del core; defaults `model: "multilingual"`, `preload: true`. |
 | O3 | **Una elección explícita del modelo por el usuario desactiva el enrutado en esa sesión** (D9). |
 | O4 | **Umbrales de promoción fuera de «experimental»**: ≥ 30 % de ahorro de coste, caída de la tasa de éxito ≤ 2 puntos y ≥ 85 % de acierto de perfil en `suggest`. Si no se cumplen, la función **sigue experimental y `off`**. |
 | O5 | **Benchmarks**: endpoint y modelo son parámetros por variables de entorno que entrega el propietario al ejecutar; todas las variantes de un benchmark usan el mismo modelo; el modelo y el *host* del endpoint se registran en el JSON (**nunca** la clave de API). Particularidad de esta entrega en §11. |
-| O6 | **Alcance de configuración**: `modelTiers`, `decisions.routing.*`, `decisions.provider` y `decisions.telemetry` solo del config global; un proyecto (aunque tenga confianza) no puede fijarlos; se ignoran con diagnóstico (§8; mecanismo en `specs/alisio-decision-intelligence-v1.md` §8.2). |
+| O6 | **Alcance de configuración**: `modelTiers`, `decisions.routing.*`, `decisions.provider` y `decisions.telemetry` solo del config global; un proyecto (aunque tenga confianza) no puede fijarlos; se ignoran con diagnóstico (§8; mecanismo en `specs/006-decision-intelligence-v1.md` §8.2). |
 | O7 | **Privacidad**: el `state` de los proveedores nunca lleva valores de datos; aquí solo el mensaje del usuario truncado (D12). |
 | O8 | **Documentación**: una página por release; en 0.6.0, `docs/model-tiers.md` + `docs/es/model-tiers.md`. |
 
@@ -95,7 +95,7 @@ Fuera de alcance solo de esta entrega: cambiar de modelo **a mitad de una ejecuc
 | D9 | **Implementación de O3**: cualquier `setModel` posterior a la creación (`/model`, `PATCH` de sesión, `--model` sobre sesión existente, modelo de una definición de agente activada) marca la sesión como «modelo fijado» hasta que termine el proceso (en memoria; ADR-5). |
 | D10 | **Modos**: `suggest` calcula y **solo informa** del perfil que elegiría (evento con `applied: false`); `on` aplica la anulación. |
 | D11 | **Experimental y gobernada por la regla O4**: se documenta como experimental, no entra en valores por defecto y no se recomienda activar sin los resultados de §11; solo si el benchmark cumple O4 se retira la etiqueta «experimental» de la documentación (el valor por defecto del esquema sigue siendo `"off"`; cambiarlo exigiría una orden nueva del propietario). |
-| D12 | **Privacidad** (O7): igual que `specs/alisio-capability-routing-v1.md` D12 (el mensaje del usuario truncado a 600 caracteres va al proveedor; solo global; se recomienda proveedor local). |
+| D12 | **Privacidad** (O7): igual que `specs/019-capability-routing-v1.md` D12 (el mensaje del usuario truncado a 600 caracteres va al proveedor; solo global; se recomienda proveedor local). |
 | D13 | **Compatibilidad** (el plugin Laya, externo, declara peer `>=0.3.0 <0.7.0`; 0.6.0 es la última minor cubierta): el contrato de decisiones y `api.options`/`api.paths` deben seguir siendo compatibles hacia atrás. |
 | D14 | **Experimento de continuidad obligatorio** (§12.1 E1): si falla, esta entrega se cancela o se limita a modelos que lo soporten (lista blanca por proveedor/modo de API). |
 
@@ -259,7 +259,7 @@ Si **cualquiera** de las tres claves fue rechazada o falta, o `tryDecide` devolv
 
 ## 8. Configuración
 
-`modelTiers` (raíz) y `decisions.routing.modelTier` (sub-bloque de la especificación de enrutado de capacidades) son **solo globales** (O6): se sigue el precedente `GLOBAL_ONLY_ANALYSIS` de `config.ts` (l. 89) y su mecanismo `ignored` → `provenance.ignored` → `configDiagnostics` descritos en `specs/alisio-decision-intelligence-v1.md` §8.2. Un archivo de proyecto (aunque tenga confianza) o `--config` que contenga `modelTiers` o `decisions.routing` **no falla el arranque**: las claves se ignoran con diagnóstico y el bucle de capas conserva las del global (`continue` para la clave raíz `modelTiers`). Prueba en `model-tier-config.test.ts`. Claves ajustables en vivo: `decisions.routing.modelTier` (enum). `modelTiers.*` se edita por archivo de configuración (cadena libre validada al resolver; las etiquetas EN/ES de los ajustes se añaden si el propietario las quiere en el menú; propuesta: ajustables como cadenas con `!clear`). Ejemplo documentado:
+`modelTiers` (raíz) y `decisions.routing.modelTier` (sub-bloque de la especificación de enrutado de capacidades) son **solo globales** (O6): se sigue el precedente `GLOBAL_ONLY_ANALYSIS` de `config.ts` (l. 89) y su mecanismo `ignored` → `provenance.ignored` → `configDiagnostics` descritos en `specs/006-decision-intelligence-v1.md` §8.2. Un archivo de proyecto (aunque tenga confianza) o `--config` que contenga `modelTiers` o `decisions.routing` **no falla el arranque**: las claves se ignoran con diagnóstico y el bucle de capas conserva las del global (`continue` para la clave raíz `modelTiers`). Prueba en `model-tier-config.test.ts`. Claves ajustables en vivo: `decisions.routing.modelTier` (enum). `modelTiers.*` se edita por archivo de configuración (cadena libre validada al resolver; las etiquetas EN/ES de los ajustes se añaden si el propietario las quiere en el menú; propuesta: ajustables como cadenas con `!clear`). Ejemplo documentado:
 
 ```json
 {
@@ -370,6 +370,6 @@ Si **cualquiera** de las tres claves fue rechazada o falta, o `tryDecide` devolv
 
 1. Plan de producto: `alisio-decision-intelligence-plan-1.md` (§33, §35, §36, §42).
 2. Código del repositorio citado en §3 (leído el 2026-10-03).
-3. Especificaciones hermanas: `specs/alisio-decision-intelligence-v1.md`, `specs/alisio-capability-routing-v1.md`, `specs/alisio-smart-dashboard-v1.md`; plugin Laya: `../alisio-plugins/specs/alisio-plugin-laya-v1.md`.
+3. Especificaciones hermanas: `specs/006-decision-intelligence-v1.md`, `specs/019-capability-routing-v1.md`, `specs/007-smart-dashboard-v1.md`; plugin Laya: `../alisio-plugins/specs/alisio-plugin-laya-v1.md`.
 4. Compatibilidad del contenido de razonamiento cifrado entre modelos: documentación del proveedor — **no verificado** (E1).
-5. Convención de formato: `specs/alisio-workspace-sources-v1.md`, `specs/archive/alisio-plan-diagrams-viewer-v1.md`.
+5. Convención de formato: `specs/021-workspace-sources-v1.md`, `specs/archive/005-plan-diagrams-viewer-v1.md`.

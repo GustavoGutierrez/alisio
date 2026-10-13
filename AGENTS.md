@@ -23,6 +23,12 @@ install. Never run `npm publish` directly; `package@version` is immutable; npm p
 async; OTP is entered by the operator, never shared in chat. Produce the commands with the
 repo root completed (no absolute user paths inside the skill itself).
 
+## Specs (skill)
+
+Whenever the user asks to write, number, execute, review or archive a spec under `specs/`, load
+`.agents/skills/alisio-specs/SKILL.md` (folder semantics, `NNN-slug-vN` naming, model assignment,
+spec skeleton, test strategy, ready-to-execute checklist).
+
 Use pnpm for dependencies (keep only pnpm-lock.yaml). The runtime is Node-first (Node >=22.16)
 and must keep working on Bun; Bun also builds the optional standalone binary.
 Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`,

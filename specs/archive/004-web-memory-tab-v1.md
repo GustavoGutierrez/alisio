@@ -8,7 +8,7 @@
 | Fecha | 2026-10-02 |
 | Paquetes afectados | `@alisio/sdk` (API `views`, errores de API), `@alisio/core` (`PluginHost`), `@alisio/server` (ruta de vistas), `@alisio/plugin-memory` (tres vistas + tabla de contexto inyectado), `@alisio/web` (privado: pestaña, store, i18n) |
 | Paquetes nuevos | Ninguno |
-| Relación con otras especificaciones | Extiende `alisio-ui.md` (protocolo web v1: rutas de sesión, formato de error) y `alisio-modes-goal-background-v1.md` (fase 1: lista de plugins del web, pestañas del encabezado). Todo es aditivo. |
+| Relación con otras especificaciones | Extiende `001-ui-v1.md` (protocolo web v1: rutas de sesión, formato de error) y `003-modes-goal-background-v1.md` (fase 1: lista de plugins del web, pestañas del encabezado). Todo es aditivo. |
 | Solo web | Sí. La TUI no cambia (`/memory` ya cubre ese uso). |
 
 ## 0. Cómo usar este documento

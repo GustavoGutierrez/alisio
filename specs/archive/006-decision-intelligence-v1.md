@@ -8,7 +8,7 @@
 | Fecha | 2026-10-03 |
 | Paquetes afectados | `@alisio/sdk` (tipos `DecisionProvider` y `DecisionProviderError`, `api.decisions?`, `api.paths?`, `api.options?`, `ToolContext.decisions?`, eventos, categoría `decisions`, helper puro `summarizeDecisionEvents`), `@alisio/core` (`packages/core/src/decisions/*`, config `decisions` y `pluginOverrides[id].options`, directorios por plugin, cierre acotado de plugins, comando `/decisions`, sección en `/stats`, eventos), `@alisio/server` (sin rutas nuevas; el comando viaja por `routes/commands.ts`), `@alisio/web` (privado: sección de decisiones en las estadísticas, etiquetas de ajustes), `@alisio/alisio-code` (CLI/TUI: `/decisions`, `statsReport`; `alisio run` gestiona SIGTERM/SIGHUP) |
 | Paquetes nuevos | Ninguno en este repositorio. El primer adaptador (`@alisio/plugin-laya`) vive en el repositorio `alisio-plugins` (ver §10) |
-| Relación con otras especificaciones | Primera de cuatro: `specs/alisio-smart-dashboard-v1.md` (0.4.0), `specs/alisio-capability-routing-v1.md` (0.5.0), `specs/alisio-model-tier-router-v1.md` (0.6.0). Plugin Laya: `../alisio-plugins/specs/alisio-plugin-laya-v1.md` (repositorio `alisio-plugins`; su §13 son los requisitos G1..G9 resueltos en §10 de este documento). Fuente de producto: `alisio-decision-intelligence-plan-1.md`. Convive con `specs/alisio-workspace-sources-v1.md` (migración v9 de esa especificación: esta no añade migraciones) |
+| Relación con otras especificaciones | Primera de cuatro: `specs/007-smart-dashboard-v1.md` (0.4.0), `specs/019-capability-routing-v1.md` (0.5.0), `specs/020-model-tier-router-v1.md` (0.6.0). Plugin Laya: `../alisio-plugins/specs/alisio-plugin-laya-v1.md` (repositorio `alisio-plugins`; su §13 son los requisitos G1..G9 resueltos en §10 de este documento). Fuente de producto: `alisio-decision-intelligence-plan-1.md`. Convive con `specs/021-workspace-sources-v1.md` (migración v9 de esa especificación: esta no añade migraciones) |
 | Superficies | Web, TUI y headless (`alisio run --json` recibe los eventos nuevos) con paridad funcional |
 | Política de versión | Funcionalidad nueva: **la siguiente minor en el momento de ejecución; esperada 0.3.0** (reglas 0.x de `CHANGELOG.md`: una minor puede romper; esta no rompe nada). Todo es aditivo; `apiVersion` del plugin sigue en 1 |
 
@@ -450,7 +450,7 @@ Qué cuenta como solicitud en métricas: toda llamada con petición válida y `e
 
 | Amenaza | Mitigación |
 |---|---|
-| Fuga de datos del usuario a un proveedor remoto futuro | El contrato pone `state` en manos del consumidor con límite de 16 KB; la regla de admisión exige declarar qué datos entran (§11); el adaptador, no el core, decide si sale del proceso. Smart Dashboard define su regla en `specs/alisio-smart-dashboard-v1.md`. |
+| Fuga de datos del usuario a un proveedor remoto futuro | El contrato pone `state` en manos del consumidor con límite de 16 KB; la regla de admisión exige declarar qué datos entran (§11); el adaptador, no el core, decide si sale del proceso. Smart Dashboard define su regla en `specs/007-smart-dashboard-v1.md`. |
 | Fuga en eventos/logs | Carga solo de metadatos; reconstrucción de respuestas con campos conocidos; prueba con cadenas centinela (ADR-7). |
 | Un proveedor concede permisos | Imposible por contrato: ninguna API de permisos acepta una `DecisionResponse`; fuera de alcance. Una prueba revisa que `runner.ts`/`permissions/*` no importan `decisions/`. |
 | Proveedor que cuelga o inunda | Tiempo límite con carrera; disyuntor; límites de petición; el plugin corre en proceso (no es un sandbox: confianza explícita ya existente al instalar plugins). |
@@ -480,7 +480,7 @@ decisions: z.object({
 
 **Aplicación (nuevo):**
 
-- `const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;` junto a `GLOBAL_ONLY_ANALYSIS`. Las entregas posteriores añaden entradas: `"routing"` (0.5.0, `specs/alisio-capability-routing-v1.md`) y la clave raíz `modelTiers` (0.6.0, `specs/alisio-model-tier-router-v1.md`; se trata en una lista `GLOBAL_ONLY_ROOT`).
+- `const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;` junto a `GLOBAL_ONLY_ANALYSIS`. Las entregas posteriores añaden entradas: `"routing"` (0.5.0, `specs/019-capability-routing-v1.md`) y la clave raíz `modelTiers` (0.6.0, `specs/020-model-tier-router-v1.md`; se trata en una lista `GLOBAL_ONLY_ROOT`).
 - `parseLayer`: lee `object.decisions` crudo y añade `decisions.<clave>` a `ignored` por cada clave presente de la lista (idéntico a `analysis.<clave>`); para `GLOBAL_ONLY_ROOT`, añade la clave raíz.
 - Bucle de capas: rama `if (key === "decisions")` → `overlaid.decisions = { ...selected.config.decisions, provider: global.config.decisions.provider, telemetry: global.config.decisions.telemetry }`; para claves de `GLOBAL_ONLY_ROOT`, `continue` (se conserva la del global).
 - El resto (`enabled`, `timeoutMs`, `minConfidence`) sigue la regla general (la capa seleccionada reemplaza el bloque; lo no escrito toma el valor por defecto, comportamiento ya vigente en `goal`).
@@ -621,7 +621,7 @@ Laya 0.3.24, checkpoint `multilingual` (`LAYA_REVISION=reviewed`), CPU (20 núcl
 | # | ¿Se cumplió lo esperado? | Observado | Efecto en esta especificación |
 |---|---|---|---|
 | E1 | No para `score`; sí para `noul` | `score` devuelve el valor esperado (Σ i·pᵢ), `legend` y `probabilities` con claves índice; sin nivel ni índice. `noul` devuelve P(true). | §5.1 **sin cambios**: el adaptador deriva `index = argmax(probabilities)`, `level = levels[index]` y `distribution` en orden (falla cerrado si faltan probabilidades). Lo especifica `alisio-plugin-laya-v1.md`. |
-| E2 | No | 14/20 aciertos en casos claros; `answer_confidence ≥ 0.6` no separa claros de ambiguos (AUC 0,34; muestra pequeña etiquetada a mano; el checkpoint no trae temperaturas ajustadas). | D18 deja de afirmar calibración: el core **no** asume que `confidence` esté calibrada y `minConfidence` es un filtro heurístico. `minConfidence` se mantiene en 0.6. La calidad se mide en la variante C del benchmark de `specs/alisio-smart-dashboard-v1.md`; comparar checkpoints es tarea de la especificación del plugin. |
+| E2 | No | 14/20 aciertos en casos claros; `answer_confidence ≥ 0.6` no separa claros de ambiguos (AUC 0,34; muestra pequeña etiquetada a mano; el checkpoint no trae temperaturas ajustadas). | D18 deja de afirmar calibración: el core **no** asume que `confidence` esté calibrada y `minConfidence` es un filtro heurístico. `minConfidence` se mantiene en 0.6. La calidad se mide en la variante C del benchmark de `specs/007-smart-dashboard-v1.md`; comparar checkpoints es tarea de la especificación del plugin. |
 | E3 | Sí (4 decisiones) | CPU p50 379 / p95 399 ms; CUDA p95 18 ms. Escala ≈ 80 ms por pregunta en CPU (16 preguntas: 1273 ms). | D7/D8: `timeoutMs` por defecto pasa de 800 a **1500 ms**, que cubre el tope de 16 decisiones en CPU. |
 | E4 | Parcial | El servidor acepta hasta 100 opciones (101 → 413), 32 niveles y 64 preguntas. | Ninguno: los topes de D5 (20 opciones, 12 niveles, 16 decisiones) son del core y más estrictos. |
 | E5 | Sí | `min_confidence` del servidor solo anota (`abstention`, `low_confidence`); no elimina respuestas. | Ninguno: D3 confirmado; no se envía. |
@@ -682,7 +682,7 @@ Propuesta G10 del plugin (pista `maxDecisionsPerRequest` o timeout por proveedor
 | Un `dispose()` de plugin sigue sin cubrir `SIGKILL` o caída | Procesos huérfanos (p. ej. servidor de Laya) | Fuera del alcance del core; el plugin lleva limpiador por PID (§13 del plugin) |
 | Romper `api.decisions`/`api.paths`/`api.options` en 0.4-0.6 rompe el plugin (peer `<0.7.0`) | Plugin roto en producción | D26: compatibilidad hacia atrás, *smoke test* de `plugin-laya` contra cada candidata y aviso previo a `alisio-plugins` |
 | Coste de mantener `summarizeDecisionEvents` en tres consumidores | Deriva | Helper único; prueba de equivalencia (Fase 5) |
-| La especificación de carpetas en la nube dice 0.2.0, que ya está publicada | Numeración confusa | Las versiones de estas cuatro especificaciones son «la siguiente minor al ejecutar»; el propietario revisa `specs/alisio-workspace-sources-v1.md` |
+| La especificación de carpetas en la nube dice 0.2.0, que ya está publicada | Numeración confusa | Las versiones de estas cuatro especificaciones son «la siguiente minor al ejecutar»; el propietario revisa `specs/021-workspace-sources-v1.md` |
 | `tests/command-catalog-tui-parity.test.ts` se rompe al añadir `/decisions` | Falso fallo | Actualizar la lista legada en la misma fase (Fase 5) |
 | Disyuntor oculta una recuperación del proveedor durante 30 s | Fallbacks innecesarios | Medio abierto con sonda; documentado en `/decisions` (estado del circuito) |
 
@@ -693,4 +693,4 @@ Propuesta G10 del plugin (pista `maxDecisionsPerRequest` o timeout por proveedor
 3. Requisitos del plugin y correcciones de hechos: `../alisio-plugins/specs/alisio-plugin-laya-v1.md` (§13 y §14, leídos 2026-10-03).
 4. Laya (README del repositorio; resumen obtenido con WebFetch, **no verificado** en fuente primaria ejecutable): https://github.com/NandhaKishorM/laya — endpoints `POST /v1/systemone`, `/v1/systemone/batch` (hasta 64 estados), tipos `choice`/`score`/`noul`, campos `confidence`, `answer_confidence`, `probabilities`, `abstention`, `min_confidence`, variables `LAYA_DEVICE`, `LAYA_PRELOAD`, `LAYA_HOST`, `LAYA_PORT`, `LAYA_API_KEY`, `laya[serve]`.
 5. SQLite y Chart.js no se consultan en esta especificación.
-6. Convención de formato: `specs/alisio-workspace-sources-v1.md`, `specs/archive/alisio-plan-diagrams-viewer-v1.md`.
+6. Convención de formato: `specs/021-workspace-sources-v1.md`, `specs/archive/005-plan-diagrams-viewer-v1.md`.

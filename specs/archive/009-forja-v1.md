@@ -4,11 +4,11 @@
 |---|---|
 | Versión | 1.0 |
 | Proyecto | Alisio |
-| Estado | **Fase 0 ejecutada (2026-10-12)**: decisiones cerradas en §2.3. Pendiente de la confirmación del propietario para empezar la Fase 1 |
+| Estado | **Implementada (fases 0-8a)**. Ver `docs/implementation-status.md` |
 | Fecha | 2026-10-12 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ForgeProgress`, `EngineDescriptor`, campos opcionales de procedencia), `@alisio/core` (nuevo `packages/core/src/forge/*`, herramientas `js_run` y `forge_guide`, adaptación de `python_run`, migración SQLite, configuración `forge`), `@alisio/server` (ruta `GET /api/forge`, carga útil de progreso por SSE), `@alisio/web` (privado: tarjeta de `js_run`, insignia de motor, página de ajustes), `@alisio/alisio-code` (TUI: progreso; CLI: `alisio forge status`) |
 | Paquetes nuevos | Ninguno. Una dependencia de producción nueva en `@alisio/core`: `quickjs-wasi` (versión exacta). Dependencia de desarrollo: `@stryker-mutator/core` (§12.3, D-27) |
-| Relación con otras especificaciones | Se complementa con `specs/alisio-forja-python-v1.md`, que define el motor Python sobre este mismo núcleo. Esta especificación es la dueña de los contratos comunes; la de Python no los redefine. Es independiente de `specs/alisio-capability-routing-v1.md` (pausada): si esta se reanuda, `js_run`, `python_run` y `forge_guide` forman la familia `forge` |
+| Relación con otras especificaciones | Se complementa con `specs/archive/008-forja-python-v1.md`, que define el motor Python sobre este mismo núcleo. Esta especificación es la dueña de los contratos comunes; la de Python no los redefine. Es independiente de `specs/019-capability-routing-v1.md` (pausada): si esta se reanuda, `js_run`, `python_run` y `forge_guide` forman la familia `forge` |
 | Superficies | Web, TUI y headless (`alisio run`) con paridad funcional; API HTTP de `alisio serve` |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva, salvo que `js_run` reemplaza a `execute` (D6) |
 
@@ -32,7 +32,7 @@
 Que el agente pueda **resolver con código** una parte de una tarea, en un entorno aislado, eligiendo el lenguaje que mejor encaja:
 
 - **JavaScript** (motor nuevo, QuickJS compilado a WebAssembly) para componer herramientas, paginar, filtrar y resumir resultados, transformar JSON y texto, inspeccionar el repositorio con varias lecturas y hacer cálculos ligeros. Es rápido de arrancar (milisegundos) y no tiene más capacidades que las herramientas que el núcleo le presta.
-- **Python** (motor existente, ampliado en `specs/alisio-forja-python-v1.md`) para análisis de datos, estadística, aprendizaje automático (scikit-learn, SciPy, statsmodels), gráficos y la construcción de dashboards complejos o especiales con `alisio_runtime`.
+- **Python** (motor existente, ampliado en `specs/archive/008-forja-python-v1.md`) para análisis de datos, estadística, aprendizaje automático (scikit-learn, SciPy, statsmodels), gráficos y la construcción de dashboards complejos o especiales con `alisio_runtime`.
 
 Los dos lenguajes conviven bajo un **núcleo común**: identidad de ejecución, ciclo de vida, límites, protocolo de mensajes, estado, eventos, persistencia y presentación. Lo que cambia es el **motor** y el **lenguaje** que escribe el modelo.
 
@@ -237,7 +237,7 @@ packages/core/src/tools/js-run.ts
 packages/core/src/tools/forge-guide.ts
 ```
 
-El motor Python vive en `packages/core/src/forge/python/` y se especifica en `specs/alisio-forja-python-v1.md`.
+El motor Python vive en `packages/core/src/forge/python/` y se especifica en `specs/archive/008-forja-python-v1.md`.
 
 ---
 

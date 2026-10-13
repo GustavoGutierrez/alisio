@@ -4,17 +4,17 @@
 |---|---|
 | Versión | 1.0 |
 | Proyecto | Alisio |
-| Estado | **Propuesta, no implementada.** Depende de los contratos de `specs/alisio-forja-v1.md` (Fases 1-2) |
+| Estado | **Implementada** (fases P0-P4; ver `docs/implementation-status.md`, «Forja: Fase 4» y «Fase 5»). Depende de los contratos de `specs/archive/009-forja-v1.md` (Fases 1-2) |
 | Fecha | 2026-10-12 |
 | Paquetes afectados | `@alisio/core`: `packages/core/src/forge/python/*`, `tools/analysis.ts` (`python_run` delega en el núcleo), `analysis/runtime-manager.ts`, `analysis/oci.ts`, `config.ts`, `alisio_runtime` (módulo `forge.py`); `@alisio/server` (`GET /api/analysis` y `GET /api/forge`); `@alisio/web` (sección Python de la página Forja, insignia en `python_run`, procedencia); `@alisio/alisio-code` (`alisio analysis setup --wasm`, `status`) |
 | Paquetes nuevos | Ninguno. **Ninguna dependencia npm nueva**: la distribución de Pyodide se descarga con `alisio analysis setup --wasm` desde una lista fijada con hashes, igual que los extras actuales |
-| Relación con otras especificaciones | `specs/alisio-forja-v1.md` es la dueña de `ExecutionKernel`, `ExecutionEngine`, el protocolo, `ForgeResult`, el estado, el journal, la configuración `forge`, la estrategia de pruebas (§12) y la asignación de modelos (§13). Esta especificación los usa y no los redefine |
+| Relación con otras especificaciones | `specs/archive/009-forja-v1.md` es la dueña de `ExecutionKernel`, `ExecutionEngine`, el protocolo, `ForgeResult`, el estado, el journal, la configuración `forge`, la estrategia de pruebas (§12) y la asignación de modelos (§13). Esta especificación los usa y no los redefine |
 | Superficies | Web, TUI, headless y API, con paridad |
 | Política de versión | Se entrega con la misma minor que Forja JavaScript o con la siguiente. `alisio_runtime.__version__` pasa de `"3"` a `"4"` (aditivo) |
 
 ## 0. Cómo usar este documento
 
-Aplican íntegras las reglas de §0 de `specs/alisio-forja-v1.md`: TDD Rojo → Verde → Refactor, etiquetas (verificado)/(no verificado)/(nuevo), repo verde al final de cada fase, sin commit hasta que lo pida el propietario, Sonnet 5.5 por defecto y Opus 5.5 solo en sus tres invocaciones.
+Aplican íntegras las reglas de §0 de `specs/archive/009-forja-v1.md`: TDD Rojo → Verde → Refactor, etiquetas (verificado)/(no verificado)/(nuevo), repo verde al final de cada fase, sin commit hasta que lo pida el propietario, Sonnet 5.5 por defecto y Opus 5.5 solo en sus tres invocaciones.
 
 **Regla adicional de esta especificación**: antes de tocar `python_run`, `runtime-manager.ts` u `oci.ts`, se escriben **pruebas de caracterización** que fijan el comportamiento actual (§10.1). La adaptación se hace en el paso Refactor con esas pruebas en verde. Sin ellas no se mueve código.
 
@@ -34,7 +34,7 @@ Aplican íntegras las reglas de §0 de `specs/alisio-forja-v1.md`: TDD Rojo → 
 
 ### 2.1 Del propietario
 
-Las mismas O1-O10 de `specs/alisio-forja-v1.md` §2.1. Aquí aplican sobre todo O3, O4 y O5.
+Las mismas O1-O10 de `specs/archive/009-forja-v1.md` §2.1. Aquí aplican sobre todo O3, O4 y O5.
 
 ### 2.2 De diseño (vinculantes)
 

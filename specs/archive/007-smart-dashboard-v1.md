@@ -8,7 +8,7 @@
 | Fecha | 2026-10-03 |
 | Paquetes afectados | `@alisio/sdk` (tipos `DashboardSpec`), `@alisio/core` (`packages/core/src/analysis/dashboard/*`, herramienta `dashboard_generate`, extracción de activos del runtime de gráficos, publicación con procedencia, texto de guía), `@alisio/web` (privado: progreso de la herramienta, procedencia del artefacto), `@alisio/alisio-code` (TUI: progreso de herramientas en curso) |
 | Paquetes nuevos | Ninguno |
-| Relación con otras especificaciones | Requiere `specs/alisio-decision-intelligence-v1.md` (0.3.0 publicada): consume `ToolContext.decisions?`, pero **funciona sin proveedor por diseño**. Precede a `specs/alisio-capability-routing-v1.md` (0.5.0, reutiliza el arnés de benchmark de esta entrega) y `specs/alisio-model-tier-router-v1.md` (0.6.0). Extiende el runtime de análisis descrito en `specs/archive/alisio-data-analysis-runtime-v1.2.md`. El plugin Laya vive en `../alisio-plugins/specs/alisio-plugin-laya-v1.md` (solo la variante C del benchmark lo necesita) |
+| Relación con otras especificaciones | Requiere `specs/006-decision-intelligence-v1.md` (0.3.0 publicada): consume `ToolContext.decisions?`, pero **funciona sin proveedor por diseño**. Precede a `specs/019-capability-routing-v1.md` (0.5.0, reutiliza el arnés de benchmark de esta entrega) y `specs/020-model-tier-router-v1.md` (0.6.0). Extiende el runtime de análisis descrito en `specs/archive/002-data-analysis-runtime-v1.md`. El plugin Laya vive en `../alisio-plugins/specs/alisio-plugin-laya-v1.md` (solo la variante C del benchmark lo necesita) |
 | Superficies | Web y TUI con paridad funcional; headless (`alisio run`) usa la herramienta como cualquier otra |
 | Política de versión | Funcionalidad nueva: **la siguiente minor en el momento de ejecución; esperada 0.4.0**. Aditivo. La versión del runtime Python (`alisio_runtime.__version__`) pasa de `"2"` a `"3"` |
 
@@ -71,7 +71,7 @@ Fuera de alcance solo de esta entrega: filtros/segmentadores interactivos en el 
 
 | # | Decisión |
 |---|---|
-| O1 | **Empaquetado**: 0.4.0 (Smart Dashboard) es un release estable **separado** de 0.3.0 (Decision Intelligence, `specs/alisio-decision-intelligence-v1.md`). |
+| O1 | **Empaquetado**: 0.4.0 (Smart Dashboard) es un release estable **separado** de 0.3.0 (Decision Intelligence, `specs/006-decision-intelligence-v1.md`). |
 | O2 | `@alisio/plugin-laya` es un plugin **externo** (repositorio `alisio-plugins`), nunca un integrado del core; defaults `model: "multilingual"`, `preload: true`. Esta entrega no lo instala ni lo nombra; solo la variante C del benchmark lo usa. |
 | O3 | **Comportamiento por defecto**: la guía al agente prefiere `dashboard_generate`. Interruptor de apagado `analysis.smartDashboard` (booleano, por defecto `true`): con `false` la herramienta **no se ofrece** y los textos de guía **vuelven al flujo actual de Python** (§9). |
 | O4 | **Privacidad**: el `state` del proveedor lleva solo el objetivo del usuario y metadatos de columna (etiqueta, rol, tipo inferido, cubo de cardinalidad). **Nunca** valores de celdas, valores frecuentes, mínimos/máximos ni muestras. |
@@ -261,7 +261,7 @@ export function profileSheet(sheet: DatasetDetailWire["sheetDetails"][number]): 
 export interface Candidates { measures: ProfiledColumn[]; dimensions: ProfiledColumn[]; time: ProfiledColumn[]; compositionDims: ProfiledColumn[] }
 export function buildCandidates(columns: ProfiledColumn[]): Candidates;
 
-// pack.ts (pure): the provider-agnostic Decision Pack (specs/alisio-decision-intelligence-v1.md, ADR-9)
+// pack.ts (pure): the provider-agnostic Decision Pack (specs/006-decision-intelligence-v1.md, ADR-9)
 export const SMART_DASHBOARD_PACK = { id: "smart-dashboard-v1", version: 1 } as const;
 export function buildPack(input: { goal: string; locale: DashboardLocale; candidates: Candidates }): {
   request: DecisionRequest | null;                 // null when no question is worth asking
@@ -506,7 +506,7 @@ Los textos de UI que citan `python_run` (`packages/cli/src/tui/settings.ts` l. 2
 
 ### 11.2 Puerta hacia 0.5.0 (O6, confirmada)
 
-La especificación `specs/alisio-capability-routing-v1.md` solo empieza si la variante B cumple, frente a la variante A y con el mismo modelo, **todas** estas condiciones: (1) ≥ 50 % menos tokens de salida; (2) ≥ 40 % menos turnos LLM (conteo de `turn_completed`); (3) 100 % de los `DashboardSpec` ejecutados válidos; (4) 0 avisos de `chart-lint` sobre el HTML publicado. Métricas informadas sin puerta: tiempo hasta el artefacto, tokens de entrada, llamadas a herramientas, igualdad de spec entre repeticiones y la variante C (que depende de que el plugin exista; se marca «pendiente» si no está instalado y no bloquea la puerta). Los resultados se registran en `docs/benchmark-dashboard.json`; la utilidad de los dashboards se revisa a mano sobre una muestra y se anota.
+La especificación `specs/019-capability-routing-v1.md` solo empieza si la variante B cumple, frente a la variante A y con el mismo modelo, **todas** estas condiciones: (1) ≥ 50 % menos tokens de salida; (2) ≥ 40 % menos turnos LLM (conteo de `turn_completed`); (3) 100 % de los `DashboardSpec` ejecutados válidos; (4) 0 avisos de `chart-lint` sobre el HTML publicado. Métricas informadas sin puerta: tiempo hasta el artefacto, tokens de entrada, llamadas a herramientas, igualdad de spec entre repeticiones y la variante C (que depende de que el plugin exista; se marca «pendiente» si no está instalado y no bloquea la puerta). Los resultados se registran en `docs/benchmark-dashboard.json`; la utilidad de los dashboards se revisa a mano sobre una muestra y se anota.
 
 ---
 
@@ -658,4 +658,4 @@ E6 registrada (fila anterior; resultados en `docs/benchmark-dashboard.json`). E7
 3. SQLite, funciones de fecha y hora (`strftime`, `date`, formatos ISO 8601, `NULL` ante entrada no válida): https://www.sqlite.org/lang_datefunc.html — resumen vía WebFetch, **no verificado** por ejecución (E3).
 4. Chart.js (opciones `indexAxis`, `cutout`, `interaction.mode`/`axis`, ganchos de plugin): https://www.chartjs.org/docs/latest/ vía Context7 (`/websites/chartjs`) — **no verificado** por ejecución (E4, E5).
 5. Laya (solo variante C): https://github.com/NandhaKishorM/laya y `../alisio-plugins/specs/alisio-plugin-laya-v1.md` — **no verificado**.
-6. Convención de formato: `specs/alisio-workspace-sources-v1.md`, `specs/archive/alisio-plan-diagrams-viewer-v1.md`; especificación hermana `specs/alisio-decision-intelligence-v1.md`.
+6. Convención de formato: `specs/021-workspace-sources-v1.md`, `specs/archive/005-plan-diagrams-viewer-v1.md`; especificación hermana `specs/006-decision-intelligence-v1.md`.

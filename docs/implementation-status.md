@@ -19,10 +19,10 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
   (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
-  (`specs/archive/alisio-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
+  (`specs/archive/004-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
-  Intelligence (fases 1 a 5 de `specs/alisio-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
-  de `specs/alisio-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
+  Intelligence (fases 1 a 5 de `specs/006-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
+  de `specs/007-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
   release).
 - Validación.
 - Pendiente para llegar a 1.0.0.
@@ -819,7 +819,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 
 ### Modos de permisos, `/reload` y `/changelog` (fase 1)
 
-Primera fase de `specs/archive/alisio-modes-goal-background-v1.md` (decisiones del propietario confirmadas
+Primera fase de `specs/archive/003-modes-goal-background-v1.md` (decisiones del propietario confirmadas
 el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, migración v7) y 4
 (`/goal`, migración v8) están implementadas (ver las secciones siguientes).
 
@@ -858,7 +858,7 @@ el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, mi
 
 ### Pestaña Memory de la web y vistas de datos de plugins
 
-Especificada en `specs/archive/alisio-web-memory-tab-v1.md`. Solo web; todo aditivo.
+Especificada en `specs/archive/004-web-memory-tab-v1.md`. Solo web; todo aditivo.
 
 - SDK: `api.views?.register({ id, description, params?, handler })` (`ViewDefinition`,
   `ViewContext`, `ViewParamsError`) y los códigos de error `view_failed` (502), `view_timeout`
@@ -901,7 +901,7 @@ variantes `_light` y los sets que no publiquen un manifiesto estilo VSCode.
 
 ### Tareas en segundo plano (fase 3 de la especificación de modos, goal y tareas)
 
-Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§8). Todo aditivo.
+Especificada en `specs/archive/003-modes-goal-background-v1.md` (§8). Todo aditivo.
 
 - Migración **v7** (solo hacia delante, idempotente): `background_tasks` (estados `queued`, `running`,
   `stopping`, `succeeded`, `failed`, `cancelled`, `lost`; `abort_origin`, `error_code`, `owner_pid`,
@@ -952,7 +952,7 @@ Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§8). Todo a
 
 ### Objetivos de sesión `/goal` (fase 4 de la especificación de modos, goal y tareas)
 
-Especificada en `specs/archive/alisio-modes-goal-background-v1.md` (§9). Todo aditivo; decisiones del
+Especificada en `specs/archive/003-modes-goal-background-v1.md` (§9). Todo aditivo; decisiones del
 propietario del 2026-10-02 aplicadas tal cual.
 
 - Migración **v8** (aditiva, `ALTER TABLE`): la tabla `session_goals` de la v7 no tenía lector y le
@@ -1025,7 +1025,7 @@ propietario del 2026-10-02 aplicadas tal cual.
 
 ### Decision Intelligence (fases 1 a 5 de la especificación)
 
-Especificada en `specs/alisio-decision-intelligence-v1.md`. Todo aditivo y opcional: sin proveedor
+Especificada en `specs/006-decision-intelligence-v1.md`. Todo aditivo y opcional: sin proveedor
 Alisio se comporta igual. Solo infraestructura: el paquete no incluye ningún proveedor ni ninguna
 función que consuma decisiones (los consumidores son especificaciones posteriores). Guía de usuario:
 [Decision Intelligence](/es/decision-intelligence).
@@ -1086,7 +1086,7 @@ función que consuma decisiones (los consumidores son especificaciones posterior
 
 ### Smart Dashboard (fases 0 a 7 de la especificación)
 
-Especificada en `specs/alisio-smart-dashboard-v1.md` (release previsto 0.4.0). Estado: la fase 0 está
+Especificada en `specs/007-smart-dashboard-v1.md` (release previsto 0.4.0). Estado: la fase 0 está
 hecha, las fases 1 a 7 están implementadas y la fase 8 se midió el 2026-10-03 con `deepseek-flash`
 (resultados en `docs/benchmark-dashboard.json`; resumen en la guía de usuario). **La puerta de §11.2
 falla**: B (15 ejecuciones, 1 repetición por dataset) redujo los tokens de salida un 28,5 % (exigido
@@ -1848,7 +1848,7 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
 
 ## Análisis en Python y artefactos (fase 1): alcance de la verificación
 
-Fase 1 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): `python_run`, `artifact_create`,
+Fase 1 de `specs/archive/002-data-analysis-runtime-v1.md` (§21): `python_run`, `artifact_create`,
 `artifact_list`, capability `analysis.run` con permisos persistidos, `--allow-analysis`,
 `--python`, migración v6, rutas de artefactos y permisos, tarjeta de descarga y popover de
 permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
@@ -1891,7 +1891,7 @@ permisos en la web, anuncio, `/artifacts` y `/permissions` en la TUI.
 
 ## Análisis en Python y artefactos (fase 2): alcance de la verificación
 
-Fase 2 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): comodín del router, visor aislado
+Fase 2 de `specs/archive/002-data-analysis-runtime-v1.md` (§21): comodín del router, visor aislado
 `/artifact-view/<token>/*` con enlace firmado (HMAC con el secreto del proceso, 10 min), rutas
 `files/*`, `view`, `export`, `sources` y `DELETE`, `runToolCall` (un run sin modelo con las mismas
 puertas que una llamada del modelo), `artifact_read` y `artifact_export`; en la web "Abrir archivo"
@@ -1933,7 +1933,7 @@ la TUI "Preview here", "Copy to workspace…", "Reveal analysis sources" y "Deta
 
 ## Datos tabulares con `node:sqlite` (fase 3): alcance de la verificación
 
-Fase 3 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): ingesta de CSV, TSV, JSON, JSONL y
+Fase 3 de `specs/archive/002-data-analysis-runtime-v1.md` (§21): ingesta de CSV, TSV, JSON, JSONL y
 XLSX en un archivo SQLite por dataset, `data_inspect` y `data_query`, guardia SQL, rutas de datasets
 y frames `dataset_ready`/`dataset_failed`, subida desde el compositor web con chips y resumen en el
 prompt, `SpreadsheetView` (también para artefactos `spreadsheet`), helper XLSX en Python con la
@@ -1978,7 +1978,7 @@ biblioteca estándar (D6, opción B), `datasetId` en `python_run` y `alisio_runt
 
 ## OCI, extras, retención y rerun (fase 4): alcance de la verificación
 
-Fase 4 de `specs/archive/alisio-data-analysis-runtime-v1.2.md` (§21): runtime `oci` opcional (Docker o
+Fase 4 de `specs/archive/002-data-analysis-runtime-v1.md` (§21): runtime `oci` opcional (Docker o
 Podman, imagen fijada por digest), instalación de extras bajo demanda con la capability
 `analysis.install`, `AnalysisJanitor` (retención de artefactos, datasets, originales en `blobs/` y
 trabajos internos), `Rerun` con procedencia (modelo y proveedor incluidos), la página **Análisis de
@@ -2957,7 +2957,7 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 
 ### Forja: Fase 0 y Fase 1 (contratos puros)
 
-Forja (ejecución aislada de código; especificación en `specs/alisio-forja-v1.md`) está **en curso**: todavía
+Forja (ejecución aislada de código; especificación en `specs/archive/009-forja-v1.md`) está **en curso**: todavía
 no hay ninguna herramienta ni motor visibles para el usuario (la clave de configuración `forge` existe desde
 la Fase 2 y no tiene efecto).
 
@@ -3309,7 +3309,7 @@ y en el binario), con llamadas anidadas que pasan por el gate de la propia sesi�
 
 ### Forja: Fase 4 (Python en el núcleo: P1 caracterización y P2 adaptación)
 
-`python_run` ya corre sobre el `ExecutionKernel` de `js_run` (especificación `specs/alisio-forja-python-v1.md`,
+`python_run` ya corre sobre el `ExecutionKernel` de `js_run` (especificación `specs/archive/008-forja-python-v1.md`,
 fases P1 y P2). Sin cambio de comportamiento para el modelo salvo lo aditivo de abajo; `wasm`, `auto`,
 `analysis.isolation` y el análisis de imports son de la Fase 5.
 
@@ -3409,7 +3409,7 @@ Traspaso para la Fase 5:
 
 ### Forja: Fase 5 (Python wasm: P3 backend Pyodide y P4 selección y superficies)
 
-Estado: **hecho, sin commit.** Cierra las fases P3 y P4 de `specs/alisio-forja-python-v1.md`. La interfaz web de
+Estado: **hecho, sin commit.** Cierra las fases P3 y P4 de `specs/archive/008-forja-python-v1.md`. La interfaz web de
 `wasm` (tarjetas, insignias, capturas) es de la Fase 7; las guías `python.*` de `forge_guide`, de la Fase 6.
 
 - Backend `wasm` (P3), en `packages/core/src/forge/python/`:
@@ -3553,7 +3553,7 @@ Estado: **hecho, sin commit.** Cierra las fases P3 y P4 de `specs/alisio-forja-p
 
 ### Forja: Fase 6 (contexto incremental y adaptativo: `forge_guide`)
 
-Estado: **hecho, sin commit.** Cierra la Fase 6 de `specs/alisio-forja-v1.md` (§8.1-§8.5, FJ-AC-19 a 22). El benchmark
+Estado: **hecho, sin commit.** Cierra la Fase 6 de `specs/archive/009-forja-v1.md` (§8.1-§8.5, FJ-AC-19 a 22). El benchmark
 manual de 5 tareas necesita un modelo real y **no se ha ejecutado** (ver el final de esta sección).
 
 - `packages/core/src/forge/guides/`: `GuideProvider` (`provider.ts`, Lazy Load: nada se construye hasta que se pide un
@@ -3622,7 +3622,7 @@ manual de 5 tareas necesita un modelo real y **no se ha ejecutado** (ver el fina
 
 ### Forja: Fase 7a (servidor/API y TUI)
 
-Estado: **hecho, sin commit.** Cubre `specs/alisio-forja-v1.md` §11.1 y §11.3, D-31 y la parte de API de FJ-AC-35. La web
+Estado: **hecho, sin commit.** Cubre `specs/archive/009-forja-v1.md` §11.1 y §11.3, D-31 y la parte de API de FJ-AC-35. La web
 (Fase 7b: tarjetas, página Forja, pestaña Scratch, capturas) **no se ha tocado**.
 
 - Rutas del scratchpad (`packages/server/src/routes/scratch.ts`, ayudantes en `packages/core/src/forge/scratch-files.ts`):
@@ -3656,8 +3656,8 @@ Estado: **hecho, sin commit.** Cubre `specs/alisio-forja-v1.md` §11.1 y §11.3,
 
 ### Forja: Fase 7b (interfaz web)
 
-Estado: **hecho, sin commit; sin capturas ni páginas de documentación (Fase 8).** Cubre `specs/alisio-forja-v1.md` §11.2 y
-`specs/alisio-forja-python-v1.md` §9.4 (FJ-AC-23, 26 y 35 en la parte web; FP-AC-25).
+Estado: **hecho, sin commit; sin capturas ni páginas de documentación (Fase 8).** Cubre `specs/archive/009-forja-v1.md` §11.2 y
+`specs/archive/008-forja-python-v1.md` §9.4 (FJ-AC-23, 26 y 35 en la parte web; FP-AC-25).
 
 - Claves editables: `forge.javascript.enabled` y `forge.guides.enabled` entran en `SETTABLE_KEYS`
   (`packages/core/src/config.ts`), se aplican en vivo a la configuración (`application.ts`) y `PATCH /api/settings`
@@ -3698,8 +3698,8 @@ Estado: **hecho, sin commit; sin capturas ni páginas de documentación (Fase 8)
 
 ### Forja: Fase 8a (documentación, capturas y cierre)
 
-Estado: **hecho, sin commit.** Cubre `specs/alisio-forja-v1.md` §11.2 (capturas), §14 Fase 8 y §15; y
-`specs/alisio-forja-python-v1.md` §9.4 (capturas), §12 y §13.
+Estado: **hecho, sin commit.** Cubre `specs/archive/009-forja-v1.md` §11.2 (capturas), §14 Fase 8 y §15; y
+`specs/archive/008-forja-python-v1.md` §9.4 (capturas), §12 y §13.
 
 - Prueba intermitente: la causa era una suposición de reloj en las pruebas de cancelación de
   `tests/forge-javascript-engine.test.ts`. Cancelaban con `setTimeout(150)`: bajo carga el aborto podía llegar antes de que
