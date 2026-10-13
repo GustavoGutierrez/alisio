@@ -17,10 +17,12 @@ describe.skipIf(!existsSync(bun) || process.platform === "win32")(
     it.each(["process", "worker"])(
       "runs, times out and cancels with the %s host",
       (host) => {
-        const run = spawnSync(bun, ["scripts/forge-bun-smoke.ts", host], {
-          encoding: "utf8",
-          timeout: 60_000,
-        });
+        const run = // `alisio-source` resolves workspace packages to their sources, as vitest does: CI runs the
+          // tests before `pnpm build`, so the packages have no `dist` yet.
+          spawnSync(bun, ["--conditions=alisio-source", "scripts/forge-bun-smoke.ts", host], {
+            encoding: "utf8",
+            timeout: 60_000,
+          });
         expect(run.status, run.stderr + run.stdout).toBe(0);
         const report = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "{}") as Record<
           string,

@@ -28,6 +28,22 @@ export function workerEntryUrl(base: string = import.meta.url): URL {
   return new URL(`./worker-entry.${extension}`, base);
 }
 
+/**
+ * Node flags for the worker. A `.ts` entry (running from sources) needs type stripping, which Node
+ * enables by default only from 22.18; on 22.16-22.17 the worker would fail to load its entry. Bun
+ * runs TypeScript natively.
+ */
+export function workerExecArgv(
+  entry: URL,
+  runtime: { bun?: string; typescript?: unknown } = {
+    bun: process.versions.bun,
+    typescript: (process.features as { typescript?: unknown }).typescript,
+  },
+): string[] {
+  if (!entry.pathname.endsWith(".ts") || runtime.bun || runtime.typescript) return [];
+  return ["--experimental-strip-types", "--disable-warning=ExperimentalWarning"];
+}
+
 export interface WorkerHostOptions {
   module: WebAssembly.Module;
   /** Overrides the entry (tests of failure paths). */
@@ -51,8 +67,10 @@ export class WorkerIsolateHost implements IsolateHost {
       module: this.#options.module,
       flag: flagBuffer,
     };
-    const worker = new Worker(this.#options.entry ?? workerEntryUrl(), {
+    const entry = this.#options.entry ?? workerEntryUrl();
+    const worker = new Worker(entry, {
       workerData: data,
+      execArgv: workerExecArgv(entry),
       env: {},
       stdout: true,
       stderr: true,

@@ -120,9 +120,7 @@ describe("no stale hardcoded versions in docs", () => {
     const readme = readFileSync("README.md", "utf8");
     expect(readme).not.toMatch(STALE_STATUS);
     expect(readme).toContain("https://img.shields.io/npm/v/@alisio/alisio-code");
-    expect(readme).toMatch(
-      /Status: Usable, tested and documented\. First stable release \(0\.1\.0\)/,
-    );
+    expect(readme).toMatch(/Status: stable, tested and documented, still pre-1\.0/);
     expect(readme).toMatch(/minors? .*break|0\.x semver/is);
     expect(readme).not.toMatch(/still alpha/i);
   });

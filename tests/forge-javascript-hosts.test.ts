@@ -13,7 +13,10 @@ import {
   isolateEnv,
   resolveIsolateCommand,
 } from "../packages/core/src/forge/javascript/hosts/process-host.ts";
-import { workerEntryUrl } from "../packages/core/src/forge/javascript/hosts/worker-host.ts";
+import {
+  workerEntryUrl,
+  workerExecArgv,
+} from "../packages/core/src/forge/javascript/hosts/worker-host.ts";
 import { kernelFixture, probeTools } from "./forge-kernel-helpers.ts";
 
 const fixtures: Array<{ close(): Promise<void> }> = [];
@@ -189,5 +192,20 @@ describe.each(["worker", "process"] as const)("%s host through the kernel", (hos
       "utf8-over": "TOOL_INPUT_INVALID",
       "emoji-over": "TOOL_INPUT_INVALID",
     });
+  });
+});
+
+describe("worker entry flags", () => {
+  const ts = new URL("file:///x/worker-entry.ts");
+  const js = new URL("file:///x/worker-entry.js");
+
+  it("adds type stripping for a .ts entry on a Node without default stripping (22.16)", () => {
+    expect(workerExecArgv(ts, {})).toContain("--experimental-strip-types");
+  });
+
+  it("adds nothing for a built .js entry, on Bun, or when Node strips types itself", () => {
+    expect(workerExecArgv(js, {})).toEqual([]);
+    expect(workerExecArgv(ts, { bun: "1.4.2" })).toEqual([]);
+    expect(workerExecArgv(ts, { typescript: "strip" })).toEqual([]);
   });
 });
