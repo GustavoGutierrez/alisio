@@ -1,7 +1,7 @@
 # Alisio
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Alisio — extensible, provider-agnostic coding-agent harness" width="720">
+  <img src="docs/assets/banner.png" alt="Alisio — coding agent for any OpenAI-compatible model" width="720">
 </p>
 
 [![CI](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml)
@@ -9,15 +9,16 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-EN%20%7C%20ES-8A2BE2)](https://gustavogutierrez.github.io/alisio/)
 
-**Alisio is an extensible, provider-agnostic coding-agent harness for your terminal.** It brings a
-fast TUI to any OpenAI-compatible model, runs local tools behind explicit permissions, compacts long
-conversations into structured checkpoints, remembers decisions across sessions with Engram-style
-persistent memory (a built-in plugin you can disable), and exposes a typed plugin SDK so you can
-extend it without touching the core.
+**Alisio is your coding agent, on the model you choose.** It connects any OpenAI-compatible model
+to your project and drives its own tool loop: it reads and edits code behind explicit permissions,
+and when code is the faster route it writes and runs it with **Forja**, isolated JavaScript to combine
+tools and Python for data analysis, AI and dashboards. It runs in your terminal (TUI or headless for
+scripts and CI) and in your browser with `alisio serve`. It also compacts long conversations into
+structured checkpoints, remembers decisions across sessions with persistent memory (a built-in plugin
+you can disable), and exposes a typed plugin SDK so you can extend it without touching the core.
 
-> **Status: Usable, tested and documented. First stable release (0.1.0), still pre-1.0.** Until 1.0.0
-> the usual 0.x semver rules apply: fixes ship as patch releases and a new minor release (such as 0.3.0) may include
-> breaking changes. The npm badge above always shows the latest published version; see the
+> **Status: stable, tested and documented, still pre-1.0.** Until 1.0.0 the usual 0.x semver rules
+> apply: fixes ship as patch releases and a new minor release may include breaking changes. The npm badge above always shows the latest published version; see the
 > [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
 > [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
 
@@ -25,13 +26,17 @@ extend it without touching the core.
 
 - **Terminal UI**: streaming Markdown, tool blocks with spinners, durations and diffs, a context/token
   bar, slash commands with autocomplete, model switching, interactive approvals and copy-on-select.
+- **Web UI**: `alisio serve` opens a local, token-protected browser workspace for several workspaces
+  and sessions, with streaming conversations, approvals, files, changes, artifacts and the plan
+  viewer, on the same agent core.
 - **Any OpenAI-compatible provider**: Chat Completions and Responses APIs, DeepSeek-style endpoints, local servers.
   Keys are read from environment variables only. Dedicated DeepSeek, OpenCode Console (Zen) and
   OpenCode Go providers are separate plugins: `alisio install npm:@alisio/plugin-deepseek`,
   `alisio install npm:@alisio/plugin-opencode`, `alisio install npm:@alisio/plugin-opencode-go`.
 - **Local tools with explicit permissions**: reads by default; the TUI asks before every
   write/process/network call unless you pass `--allow-write`/`--allow-process`/`--allow-external`
-  (skip asking) or `--read-only` (never even offered). Not a sandbox, and it says so. A repository's
+  (skip asking) or `--read-only` (never even offered). Alisio as a whole is not a sandbox, and it
+  says so: only Forja isolates code. A repository's
   own `.alisio/config.json` and plugins load only after a one-time per-directory trust prompt (or
   `--trust-project`).
 - **Context compaction**: a structured checkpoint (goal, constraints, discoveries, state, next steps,
@@ -43,6 +48,13 @@ extend it without touching the core.
   and switched with `/agents` or `/agent:<id>` in the web UI and the TUI.
 - **Plan mode and plan viewer**: a read-only plan agent proposes a plan (with optional Mermaid diagrams)
   that you approve before anything changes; the web UI opens it in a plan viewer.
+- **Forja, code mode picked by goal**: `js_run` runs JavaScript in a fresh QuickJS WebAssembly VM with
+  no file, network or process access, to combine tool calls, filter results and transform data under
+  the agent's own permissions. `python_run` handles data analysis, statistics, scikit-learn, charts
+  and custom dashboards in a container (`oci`) or a restricted Pyodide process (`wasm`) when
+  available, and `analysis.isolation: required` keeps it off your host. Guides load on demand with
+  `forge_guide`, and each session gets a private scratchpad. See the
+  [Forja docs](https://gustavogutierrez.github.io/alisio/forja) for the isolation limits.
 - **Dashboards and charts**: Python analysis publishes dashboards, reports and spreadsheets as
   artifacts, with interactive charts from an embedded Chart.js that works offline.
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
@@ -52,7 +64,8 @@ extend it without touching the core.
 - **Also**: headless JSONL mode, MCP servers (with an optional persistent global `mcp.allow` consent
   that auto-connects enabled servers on every start, or per-session grants from the TUI), AGENTS.md
   scopes, Agent Skills, Herdr integration.
-- **Runs on Node.js >= 22.16 or Bun**; standalone binaries for Linux, macOS and Windows.
+- **Runs on Node.js >= 22.16 or Bun**; standalone binaries for Linux, macOS and Windows. The Pyodide
+  (`wasm`) Python backend needs Node.js >= 22.22, >= 24.13 or >= 25.3.
 
 ## Install
 
@@ -100,7 +113,8 @@ All packages are published under the [alisio npm organization](https://www.npmjs
 | Package | npm | Purpose |
 | --- | --- | --- |
 | [`alisio-code`](packages/cli) | [npm](https://www.npmjs.com/package/@alisio/alisio-code) | The CLI and TUI you install (`alisio` bin) |
-| [`@alisio/core`](packages/core) | [npm](https://www.npmjs.com/package/@alisio/core) | Embeddable agent core: runner, compaction, provider, tools, plugin host |
+| [`@alisio/core`](packages/core) | [npm](https://www.npmjs.com/package/@alisio/core) | Embeddable agent core: runner, compaction, provider, tools, Forja, plugin host |
+| [`@alisio/server`](packages/server) | [npm](https://www.npmjs.com/package/@alisio/server) | Local HTTP + SSE server behind `alisio serve` (the Web UI) |
 | [`@alisio/sdk`](packages/sdk) | [npm](https://www.npmjs.com/package/@alisio/sdk) | Typed plugin contract, zero runtime dependencies |
 | [`@alisio/plugin-memory`](packages/plugin-memory) | [npm](https://www.npmjs.com/package/@alisio/plugin-memory) | Built-in persistent memory plugin |
 | [`@alisio/plugin-subagents`](packages/plugin-subagents) | [npm](https://www.npmjs.com/package/@alisio/plugin-subagents) | Subagent delegation plugin |
