@@ -350,6 +350,16 @@ Per-session routing was verified with fake provider profiles and concurrent pare
 including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
 overrides and stable/distinct OpenCode session headers. No real credentials were used.
 
+**Reliability Lab (`alisio eval`).** There is no LLM judge, no third-party benchmark, no result
+upload (`eval export` writes a local bundle whose scrubbing of paths and secrets is pattern-based, not a guarantee), and no interactive UI. `live` runs are not deterministic (the seed only
+orders runs), and replay measures the harness, not the model. Runs use a temporary copy of the
+fixture, but a subprocess or policy is not a sandbox: with `process` granted, or with a `command`
+verifier, code runs with your privileges. Repetitions are assumed independent, with no correction for
+multiple comparisons; with `k = 5` only 0/5 against 5/5 yields a verdict. Headless `ask` mode denies
+approvals, unlike `alisio run`. The bundled suites and cassettes exist only in a source checkout. The
+optional `pnpm eval:ci` gate replays them and exits non-zero on a divergence or a failing task; it is
+opt-in and not part of the default CI. User guide: [Reliability Lab](/eval).
+
 ## Verification scope
 
 The source file records a dedicated verification-scope section for each area below; the summary
@@ -511,3 +521,12 @@ Python flow are still pending, so no claim is made about how often a real model 
 verified: a real decision provider, a real terminal for the TUI progress line, other browsers,
 Windows or macOS, screen readers and very large datasets in the browser. User guide:
 [Smart Dashboard](/smart-dashboard).
+
+**Reliability Lab.** Verified with Vitest without network or credentials (loader, verifiers,
+statistics, engine, reports and comparison, cassettes and replay with the real engine, the CLI and its
+exit codes, and the bundled suites replayed in `pnpm test`), plus `pnpm test:cli` and
+`pnpm test:compiled` on the real binary. Measured live (2026-10-14) with two models: `smoke-coding` 1.2.0 saturates on a strong cheap model and
+discriminates only partly (through latency) on a weaker one, so its power to tell models apart is not
+established. Not verified with a real model: `long-context`; the bundled cassettes were recorded with a
+scripted provider and pin harness behavior only. Only an OpenAI-compatible provider from a config
+file was exercised. User guide: [Reliability Lab](/eval).

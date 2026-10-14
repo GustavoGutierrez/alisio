@@ -4,6 +4,22 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.7.0] - 2026-10-14
+
+The Reliability Lab: measure how reliably Alisio solves your tasks.
+
+### Added
+
+- `alisio eval list|run|record|compare|variants|export`: run evaluation suites against any
+  configured provider, compare variants and export the results.
+- Reliability Lab suites with deterministic verifiers (files, commands, tool sequences), so a pass or
+  fail never depends on a model judging itself.
+- `pass@k` and `pass^k` metrics with Wilson confidence intervals, so a comparison tells you whether
+  a difference is real or noise.
+- Cassettes: `alisio eval record` captures provider responses and later runs replay them offline,
+  without network or cost.
+- Bundled suites `smoke-coding`, `tool-sequences` and `long-context`, available from a source checkout.
+
 ## [0.6.0] - 2026-10-12
 
 Forja, the code mode of Alisio.

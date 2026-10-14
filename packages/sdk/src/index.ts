@@ -2600,3 +2600,219 @@ export interface ForgeProgress {
     durationMs?: number;
   };
 }
+
+/** Hard limits of one reliability-lab task (`specs/010`). A run that exceeds one ends `budget_exceeded`. */
+export interface EvalBudget {
+  maxTurns: number;
+  maxTokens?: number;
+  maxWallMs: number;
+  maxToolCalls?: number;
+}
+
+/** Assertion over the sequence of tool events of one run. */
+export type ToolSequenceRule =
+  /** `first` must occur before `then`. */
+  | { type: "before"; first: string; then: string }
+  | { type: "never"; tool: string }
+  | { type: "max-calls"; tool: string; max: number }
+  | { type: "no-repeat-failure"; tool: string };
+
+/** Deterministic, local check of a task result. `kind` stays open for future adapters. */
+export type EvalVerifier =
+  | {
+      kind: "command";
+      id: string;
+      command: string[];
+      timeoutMs: number;
+      expectExit?: number;
+      expectStdoutIncludes?: string;
+    }
+  | { kind: "file-equals"; id: string; path: string; sha256: string }
+  | { kind: "file-contains"; id: string; path: string; text: string }
+  | { kind: "file-absent"; id: string; path: string }
+  | { kind: "tree-diff-within"; id: string; allowed: string[] }
+  | { kind: "tool-sequence"; id: string; rule: ToolSequenceRule };
+
+export interface EvalTask {
+  id: string;
+  prompt: string;
+  /** Fixture directory, relative to the suite directory. */
+  fixture: string;
+  agent?: string;
+  budget: EvalBudget;
+  /**
+   * `allow` lists extra effects on top of the mode: `write`, `process`, `external` or `analysis`
+   * (never MCP or agents). A task can only equal or restrict what the invoker already holds.
+   */
+  policy: { mode: "ask" | "auto" | "full"; readOnly?: boolean; allow?: string[] };
+  verifiers: EvalVerifier[];
+  tags?: string[];
+  /** Initialize a git repository (identity set, no global config) in the run copy of the fixture. */
+  fixtureGit?: boolean;
+  /**
+   * Replay-only noise filter, versioned with the suite: each `pattern` (a JavaScript regular
+   * expression, applied globally) found in a string of a request is replaced by `replace` BEFORE
+   * the request is fingerprinted, after the lab's own path and id normalization. Use it for
+   * non-deterministic fixture output (a timestamp a command prints). Over-broad rules hide real
+   * regressions; keep them narrow.
+   */
+  replayNormalize?: Array<{ pattern: string; replace: string }>;
+}
+
+/** Content of a versioned `suite.json`. */
+export interface EvalSuite {
+  schemaVersion: 1;
+  suiteId: string;
+  suiteVersion: string;
+  description: string;
+  tasks: EvalTask[];
+}
+
+/** One repetition of one task, with the conditions it was measured under. */
+export interface EvalRunRecord {
+  schemaVersion: 1;
+  runId: string;
+  suiteId: string;
+  suiteVersion: string;
+  taskId: string;
+  repetition: number;
+  seed: number;
+  harnessVersion: string;
+  configHash: string;
+  provider: string;
+  model: string;
+  mode: "live" | "replay";
+  startedAt: number;
+  endedAt: number;
+  status: "pass" | "fail" | "budget_exceeded" | "error";
+  /** Which budget ended the run; present only when `status` is `budget_exceeded`. */
+  budgetExceeded?: "maxTurns" | "maxTokens" | "maxWallMs" | "maxToolCalls";
+  /**
+   * Why the run ended `error` (infrastructure or refusal), or the detail of a failure the model
+   * caused (`fail` with a `run_aborted` incident). Never contains file contents.
+   */
+  error?: string;
+  /**
+   * `sha256:` of the compaction-related configuration the run was measured under. Compaction
+   * calls are not in `measured` tokens, so two runs with different compaction settings are not
+   * comparable on tokens or cost.
+   */
+  compactionHash?: string;
+  verifiers: Array<{ id: string; status: "pass" | "fail" | "error"; detail?: string }>;
+  /** Provider-reported usage, wall time and event counts. Never mixed with `estimated`. */
+  measured: {
+    inputTokens?: number;
+    outputTokens?: number;
+    /**
+     * True when only SOME turns reported usage: the token totals above understate the run and are
+     * treated as not reported by every aggregation.
+     */
+    usagePartial?: true;
+    wallMs: number;
+    turns: number;
+    toolCalls: number;
+  };
+  /** Derived values (cost from configured rates, approximate tokens). */
+  estimated?: { costUsd?: number; approxTokens?: number };
+  incidents: Array<{ kind: string; count: number }>;
+  /**
+   * Present on a replay run that ended `error` with `error: "replay_divergence"`: the harness asked
+   * the provider for something the cassette did not record.
+   */
+  divergence?: EvalReplayDivergence;
+}
+
+/** One field of a request that differs from the recorded one (excerpts are redacted, at most ~240 characters). */
+export interface EvalDivergenceEntry {
+  call: number;
+  /** For example `instructions`, `messages[2].tool.result`, `tools[read_file].description`, `model`. */
+  field: string;
+  excerpt: { before: string; after: string };
+}
+
+/** Why a replay stopped: a changed request, a call past the recording, or recorded calls never asked for. */
+export interface EvalReplayDivergence {
+  kind: "fingerprint" | "exhausted" | "unconsumed";
+  message: string;
+  /** Empty unless `kind` is `fingerprint`; at most 10 entries. */
+  diff: EvalDivergenceEntry[];
+}
+
+/**
+ * Rates the caller supplies to turn measured tokens into an estimated cost (USD per million
+ * tokens). Alisio never ships or guesses rates: without them no cost is computed.
+ */
+export interface EvalRates {
+  inputPerMTokUsd: number;
+  outputPerMTokUsd: number;
+}
+
+/**
+ * Reliability metrics of one task over its repetitions. Runs that ended `error` (infrastructure)
+ * are not repetitions of the task: they are excluded from every number here and counted in
+ * `errored`. `k` is the number of judged runs (pass, fail or budget_exceeded).
+ */
+export interface EvalTaskMetrics {
+  taskId: string;
+  k: number;
+  /** Judged runs only. With `k: 0` the value is 0 and the interval [0, 1] carries no information. */
+  successRate: { value: number; wilsonLow: number; wilsonHigh: number };
+  passAtK: boolean;
+  passPowK: boolean;
+  /** Runs of this task that ended `error` and were excluded from the numbers (omitted when 0). */
+  errored?: number;
+  /** `configHash` the task was measured under (a hash covers the task's own policy and budget). */
+  configHash?: string;
+  /**
+   * Provider-reported usage and wall time only. A value that cannot be computed honestly is
+   * omitted, never invented: the median needs one judged run, a variance two samples, the
+   * per-success figures at least one success (and usage on every judged run for tokens).
+   */
+  measured: {
+    medianWallMs?: number;
+    varianceWallMs?: number;
+    varianceTokens?: number;
+    tokensPerSuccess?: number;
+    wallMsPerSuccess?: number;
+  };
+  /** Present only when the caller supplied rates and every judged run reported usage. */
+  estimated?: { costUsdPerSuccess?: number };
+}
+
+export interface EvalReport {
+  schemaVersion: 1;
+  suiteId: string;
+  suiteVersion: string;
+  conditions: {
+    harnessVersion: string;
+    configHash: string;
+    provider: string;
+    model: string;
+    mode: "live" | "replay";
+    k: number;
+    seedBase: number;
+    /** Compaction identity shared by every run (omitted for reports of older runs). */
+    compactionHash?: string;
+  };
+  /** The variant this report was measured as (`eval variants`): its id and config overrides. */
+  variant?: { id: string; overrides: Record<string, unknown> };
+  /** Caveats about what the numbers mean (for example which tokens are counted). */
+  notes?: string[];
+  tasks: EvalTaskMetrics[];
+  /** IDs of the `EvalRunRecord`s, errored ones included (the detail lives in `runs.jsonl`). */
+  runs: string[];
+  /**
+   * Counts of RUNS, except `tasks`: `passed`, `failed`, `errored` and `budgetExceeded` add up to
+   * `runs`. `errored` runs are infrastructure and are excluded from every rate and spread.
+   */
+  summary: {
+    tasks: number;
+    passed: number;
+    errored: number;
+    budgetExceeded: number;
+    runs?: number;
+    failed?: number;
+  };
+  /** The rates behind every `estimated` figure; absent when none was supplied. */
+  rates?: EvalRates;
+}

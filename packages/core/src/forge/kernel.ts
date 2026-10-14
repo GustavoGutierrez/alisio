@@ -9,8 +9,9 @@
  * deadline and cancellation with the host's OWN clock, the output bound and the single terminal
  * state. The engine only knows how to run code in an isolate.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { EngineId, EngineLanguage, ForgeProgress, PermissionMode } from "@alisio/sdk";
+import { newUuid } from "../runtime/ids.ts";
 import { CapabilityBroker } from "./broker.ts";
 import { BudgetLedger } from "./budget.ts";
 import { ForgeError, isForgeError } from "./errors.ts";
@@ -133,7 +134,7 @@ export class ExecutionKernel {
     const now = deps.now ?? Date.now;
     const call = invocation.call;
     const startedAt = now();
-    const id = (deps.newId ?? (() => `fx_${randomUUID()}`))();
+    const id = (deps.newId ?? (() => `fx_${newUuid()}`))();
     const config = deps.config();
     const descriptors = deps.engines.descriptors();
     const language: EngineLanguage = invocation.language ?? "javascript";

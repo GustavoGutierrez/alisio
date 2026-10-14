@@ -9,7 +9,7 @@
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos `ProofCriterion`, `ProofEvidence`, `ProofVerifier`, `ProofLedger`; eventos `proof_updated`; `GoalEvidence.evidenceId?`; `PluginAPI.proof?`), `@alisio/core` (nuevo `packages/core/src/proof/*`; suscripción en `core/src/core/runner.ts`; ampliación aditiva de `core/src/plan/{exit-plan,manifest}.ts` y `core/src/goal/{service,machine,store}.ts`; publicación vía `core/src/artifacts/publisher.ts`; migración en `runtime/store.ts`), `@alisio/server` (`packages/server/src/routes/proof.ts`: `GET /api/sessions/:sid/proof`), `@alisio/web` (privado: tarjeta y panel Proof, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/proof`; CLI: `alisio run --proof`, `alisio proof show|export`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
-| Relación con otras especificaciones | Complementa `specs/018-perimeter-v1.md` (Perímetro declara el alcance; Proof declara qué se verificó; no se solapan y Proof no decide permisos). Extiende `003-modes-goal-background-v1.md` (goal y plan review) de forma aditiva. Consume el patrón de artefactos de `002-data-analysis-runtime-v1.md`. Es prerequisito de `specs/017-goal-milestones-v1.md` (obligatoria), y aporta IDs de evidencia a `specs/015-project-memory-v1.md`, `specs/013-adaptive-execution-v1.md` (contrato de resultado de subagentes) y `specs/016-code-intelligence-v1.md` (verificadores `typecheck|lint|test`). Su costo se mide con `specs/010-reliability-lab-v1.md`. Aporta el segmento de invariantes «criterios vigentes» a `specs/012-context-governor-v1.md`. |
+| Relación con otras especificaciones | Complementa `specs/018-perimeter-v1.md` (Perímetro declara el alcance; Proof declara qué se verificó; no se solapan y Proof no decide permisos). Extiende `003-modes-goal-background-v1.md` (goal y plan review) de forma aditiva. Consume el patrón de artefactos de `002-data-analysis-runtime-v1.md`. Es prerequisito de `specs/017-goal-milestones-v1.md` (obligatoria), y aporta IDs de evidencia a `specs/015-project-memory-v1.md`, `specs/013-adaptive-execution-v1.md` (contrato de resultado de subagentes) y `specs/016-code-intelligence-v1.md` (verificadores `typecheck|lint|test`). Su costo se mide con `specs/archive/010-reliability-lab-v1.md`. Aporta el segmento de invariantes «criterios vigentes» a `specs/012-context-governor-v1.md`. |
 | Superficies | Web, TUI y headless (`alisio run --json`) con paridad funcional, desde la misma fuente (el ledger); API HTTP de `alisio serve` |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: sin criterios, goal ni plan, el comportamiento es byte-idéntico a 0.6.x. `RunEvent.schemaVersion` sigue en 1. |
 
@@ -69,7 +69,7 @@ Modelo de datos del ledger y su persistencia; captura automática de evidencia d
 | Decidir permisos o aprobar acciones | El gate existente (`permissions/decide.ts`) es la única autoridad (D6). |
 | Generación automática de tests con modelo | Solo el verificador `coverage` opt-in (Fase 7) y sin escribir tests por sí mismo. |
 | Evaluación con juez-LLM como verificador | Un verificador narrativo viola D2; si se pide, queda `manual_review`. |
-| Medir fiabilidad entre ejecuciones | Es `specs/010-reliability-lab-v1.md`. |
+| Medir fiabilidad entre ejecuciones | Es `specs/archive/010-reliability-lab-v1.md`. |
 | Milestones, checkpoints y reanudación | Es `specs/017-goal-milestones-v1.md`, que reutiliza los IDs de evidencia. |
 | Sandbox de los comandos verificadores | Un subproceso no es un sandbox; se ejecutan con el mismo gate que cualquier `run_process`. |
 
@@ -254,7 +254,7 @@ Pruebas: `tests/proof-coverage.test.ts` con salidas de muestra fijas.
 
 ### Fase 8 — Documentación, estado y puerta de medición
 
-Trabajo: `docs/proof.md` EN/ES en paridad; `docs/implementation-status.md` con límites; entrada de changelog; ejecutar la comparación con `specs/010-reliability-lab-v1.md` si ya existe (costo de tokens/latencia con y sin Proof).
+Trabajo: `docs/proof.md` EN/ES en paridad; `docs/implementation-status.md` con límites; entrada de changelog; ejecutar la comparación con `specs/archive/010-reliability-lab-v1.md` si ya existe (costo de tokens/latencia con y sin Proof).
 Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde; límites documentados (heurística de divergencia, huella de árbol acotada).
 
 ## 6. Seguridad y privacidad

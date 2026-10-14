@@ -1,6 +1,6 @@
 {
   "name": "alisio-monorepo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
@@ -21,6 +21,8 @@
     "docs:dev": "vitepress dev docs",
     "docs:check": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/docs-check.ts",
     "docs:build": "pnpm docs:check && vitepress build docs",
+    "eval:ci": "node --conditions=alisio-source --experimental-transform-types --disable-warning=ExperimentalWarning scripts/eval-ci.ts",
+    "eval:record-bundled": "node --conditions=alisio-source --experimental-transform-types --disable-warning=ExperimentalWarning scripts/eval-record-bundled.ts",
     "bench": "node --experimental-strip-types scripts/bench.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:cli && pnpm test:compiled && pnpm pack:check && pnpm docs:build",
     "changeset": "changeset",

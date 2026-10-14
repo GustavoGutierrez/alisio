@@ -675,6 +675,62 @@ try {
     assert.ok(backends.some((b) => b.id === "python-managed"));
   };
   await wasmNeedsNode();
+  // Reliability lab: `eval list` (the bundled suites exist only in a source checkout, not in the
+  // standalone binary), and `eval compare` exit codes (0 / 3).
+  const evalReport = (suiteVersion: string) => ({
+    schemaVersion: 1,
+    suiteId: "e2e",
+    suiteVersion,
+    conditions: {
+      harnessVersion: "dev",
+      configHash: "sha256:aaa",
+      provider: "fake",
+      model: "fake-model",
+      mode: "live",
+      k: 5,
+      seedBase: 1,
+    },
+    tasks: [
+      {
+        taskId: "t1",
+        k: 5,
+        successRate: { value: 1, wilsonLow: 0.57, wilsonHigh: 1 },
+        passAtK: true,
+        passPowK: true,
+        measured: { medianWallMs: 1000 },
+      },
+    ],
+    runs: [],
+    summary: { tasks: 1, passed: 5, errored: 0, budgetExceeded: 0 },
+  });
+  const evalDirectory = join(directory, "eval-reports");
+  for (const version of ["1.0.0", "2.0.0"]) {
+    await mkdir(join(evalDirectory, version), { recursive: true });
+    await writeFile(
+      join(evalDirectory, version, "report.json"),
+      JSON.stringify(evalReport(version)),
+    );
+  }
+  const listed = JSON.parse(await execute(["eval", "list", "--json"])) as {
+    suites: Array<{ id: string; origin: string }>;
+  };
+  assert.deepEqual(
+    listed.suites.map((suite) => suite.id).sort(),
+    mode === "binary" ? [] : ["long-context", "smoke-coding", "tool-sequences"],
+  );
+  assert.ok(listed.suites.every((suite) => suite.origin === "bundled"));
+  assert.match(
+    await execute(["eval", "compare", join(evalDirectory, "1.0.0"), join(evalDirectory, "1.0.0")]),
+    /# Comparison: e2e 1\.0\.0/,
+  );
+  assert.match(
+    await execute(
+      ["eval", "compare", join(evalDirectory, "1.0.0"), join(evalDirectory, "2.0.0")],
+      false,
+      3,
+    ),
+    /different suite versions/,
+  );
   const swept = JSON.parse(await execute(["analysis", "sweep", "--force", "--cwd", directory]));
   assert.equal(swept.datasetsDeleted, 0);
   assert.equal(swept.errors, 0);
@@ -901,6 +957,119 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
     1,
   );
   assert.match(refused, /needs write access.*--read-only/);
+  // Reliability lab, live: the provider is resolved from the config, one task runs in a throwaway
+  // copy of its fixture against the fake server, and the three report files are written.
+  const labSuite = join(directory, "lab-suite");
+  await mkdir(join(labSuite, "fixtures", "read-note"), { recursive: true });
+  await writeFile(join(labSuite, "fixtures", "read-note", "note.txt"), "fixture content");
+  await writeFile(
+    join(labSuite, "suite.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      suiteId: "lab",
+      suiteVersion: "1.0.0",
+      description: "e2e",
+      tasks: [
+        {
+          id: "read-note",
+          prompt: "Read note.txt",
+          fixture: "fixtures/read-note",
+          budget: { maxTurns: 6, maxWallMs: 60000 },
+          policy: { mode: "auto" },
+          verifiers: [
+            { kind: "file-contains", id: "kept", path: "note.txt", text: "fixture content" },
+          ],
+        },
+      ],
+    }),
+  );
+  const labOut = join(directory, "lab-report");
+  const labLines = (
+    await execute([
+      "eval",
+      "run",
+      "lab",
+      "--suite-dir",
+      labSuite,
+      "--yes",
+      "--k",
+      "2",
+      "--json",
+      "--allow-write",
+      "--cwd",
+      directory,
+      "--config",
+      join(directory, "config.json"),
+      "--out",
+      labOut,
+    ])
+  )
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(labLines.length, 3);
+  assert.deepEqual(
+    labLines.slice(0, 2).map((r: { status: string }) => r.status),
+    ["pass", "pass"],
+  );
+  assert.equal(labLines[2].tasks[0].k, 2);
+  for (const file of ["report.json", "report.md", "runs.jsonl"])
+    assert.ok((await readFile(join(labOut, file), "utf8")).length > 0);
+  // Cassettes: record the task once live, replay it without calling the model, then change what the
+  // harness asks (the prompt) and see the replay exit 2 with the diverged field.
+  const labArgs = [
+    "--suite-dir",
+    labSuite,
+    "--yes",
+    "--allow-write",
+    "--cwd",
+    directory,
+    "--config",
+    join(directory, "config.json"),
+  ];
+  await execute(["eval", "record", "lab", ...labArgs]);
+  const cassette = await readFile(join(labSuite, "cassettes", "read-note.cassette.jsonl"), "utf8");
+  assert.match(cassette, /^\{"v":1,"cassetteVersion":1,/);
+  const beforeReplay = requests;
+  const replayLines = (
+    await execute([
+      "eval",
+      "run",
+      "lab",
+      "--mode",
+      "replay",
+      "--json",
+      "--out",
+      join(directory, "lab-replay"),
+      ...labArgs,
+    ])
+  )
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(requests, beforeReplay, "a replay must not call the model");
+  assert.equal(replayLines[0].mode, "replay");
+  assert.equal(replayLines[0].status, "pass");
+  const labSuiteFile = join(labSuite, "suite.json");
+  await writeFile(
+    labSuiteFile,
+    (await readFile(labSuiteFile, "utf8")).replace("Read note.txt", "Read note.txt twice"),
+  );
+  const diverged = await execute(
+    [
+      "eval",
+      "run",
+      "lab",
+      "--mode",
+      "replay",
+      "--out",
+      join(directory, "lab-diverged"),
+      ...labArgs,
+    ],
+    false,
+    2,
+  );
+  assert.match(diverged, /DIVERGED .*messages\[0\]\.user\.text/s);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
   assert.equal(sessions.length, 9 + forgeSessions); // includes the two plugin-command runs and the Forja runs
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
@@ -1010,6 +1179,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio run: SIGTERM, SIGHUP and SIGINT abort the run and dispose plugins (sentinel file)",
         "alisio serve: --help, --allow-remote refusal, health/token/cookie smoke, SIGTERM exit",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
+        "alisio eval list/compare/run: a live run against the fake server writes its report files; exit 0 and 3 (incompatible suites); eval record + replay without calling the model, exit 2 on divergence",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
       ],
     }),

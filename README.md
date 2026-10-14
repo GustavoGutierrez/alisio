@@ -57,6 +57,10 @@ you can disable), and exposes a typed plugin SDK so you can extend it without to
   [Forja docs](https://gustavogutierrez.github.io/alisio/forja) for the isolation limits.
 - **Dashboards and charts**: Python analysis publishes dashboards, reports and spreadsheets as
   artifacts, with interactive charts from an embedded Chart.js that works offline.
+- **Reliability Lab**: `alisio eval` runs task suites k times with deterministic verifiers, reports
+  pass rates with Wilson intervals, compares reports and config variants, and replays recorded
+  cassettes to catch harness regressions without a model (replay measures the harness, not the
+  model). See the [Reliability Lab docs](https://gustavogutierrez.github.io/alisio/eval).
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned

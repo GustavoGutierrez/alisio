@@ -5,7 +5,7 @@
 | Versión | 0.1 |
 | Origen | 🔬 **Investigación arXiv** (`specs/research/022-arxiv-features-research.md`) · **Orden de ejecución: 1 de 8** |
 | Proyecto | Alisio |
-| Estado | **Borrador. Propuesta, no implementada.** Decisiones O1–O8 pendientes de confirmar por el propietario. |
+| Estado | **Implementada (fases 0-6)**. Ver `docs/implementation-status.md` |
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `EvalSuite`, `EvalTask`, `EvalVerifier`, `EvalRunRecord`, `EvalReport`, `Cassette`), `@alisio/core` (nuevo `packages/core/src/eval/*`: motor, verificadores, métricas, proveedor de replay, comparador), `@alisio/alisio-code` (CLI: `alisio eval run\|compare\|record\|replay\|list`), scripts (`scripts/eval-ci.ts` opcional) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. Reutiliza `scripts/bench/lib.ts` (`readBenchParams`, `mulberry32`, `BenchUsageError`) moviendo lo común a `packages/core/src/eval/rng.ts` solo si hace falta; el bench de dashboards no se reemplaza. |
@@ -16,7 +16,7 @@
 ## 0. Cómo usar este documento (para agentes de código)
 
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
-2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 sobre `main` (0.6.0, `2e867c7`); **(no verificado)** = deducido o externo sin prueba ejecutada aquí; **(nuevo)** = no existe.
+2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 sobre `main` (0.6.0, `2e867c7`; auditado de nuevo en `b7dfae3` sin desvíos de fondo); **(no verificado)** = deducido o externo sin prueba ejecutada aquí; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts` (vitest), sobre comportamiento en límites de módulo. Sin pruebas de instantánea que repitan la implementación.
 4. **Orden obligatorio**: Fase 0 (medición de línea base) → el propietario revisa → Fases 1..6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: §14. Por defecto Sonnet; Opus solo en los puntos listados.
@@ -29,7 +29,7 @@
 
 ### 1.1 Objetivo
 
-Que el propietario (y cualquier contribuidor) pueda **decidir con datos** si un cambio del arnés, una estrategia o un modelo mejora o empeora el comportamiento de Alisio, y **publicar resultados honestos**. Hoy no se puede: la única medición existente es `scripts/bench-dashboard.ts` (solo dashboards) y `scripts/bench.ts` (solo arranque del CLI) **(verificado)**. No hay suite de tareas, ni repeticiones, ni replay de proveedor; las pruebas usan proveedores «scripted» ad hoc (`tests/runner-gate-characterization.test.ts`, `tests/*-helpers.ts`) **(verificado)**.
+Que el propietario (y cualquier contribuidor) pueda **decidir con datos** si un cambio del arnés, una estrategia o un modelo mejora o empeora el comportamiento de Alisio, y **publicar resultados honestos**. Hoy no se puede: la única medición existente es `scripts/bench-dashboard.ts` (solo dashboards) y `scripts/bench.ts` (solo arranque del CLI) **(verificado)**. No hay suite de tareas, ni repeticiones, ni replay de proveedor; las pruebas usan proveedores «scripted» ad hoc (`tests/server-helpers.ts` (`fakeProvider`), `tests/forge-gate-helpers.ts`, `tests/analysis-run-helpers.ts`) **(verificado)**.
 
 El laboratorio ofrece cuatro capacidades:
 
@@ -86,9 +86,9 @@ Motor de evaluación headless; suites incluidas pequeñas (`smoke-coding`, `tool
 | `RunRecord` conserva `usage` por run | `packages/core/src/core/contracts.ts` | Costo/tokens **medidos** disponibles por ejecución. |
 | `createApplication` construye la aplicación headless | `packages/core/src/application.ts` (exportado en `packages/core/src/index.ts`) | Punto de entrada del motor para correr una tarea en un directorio y configuración dados. |
 | Bench actual: `readBenchParams`, `mulberry32`, `BenchUsageError`, datasets sintéticos | `scripts/bench/lib.ts`, `scripts/bench-dashboard.ts` | Patrón de parámetros por entorno y RNG con semilla reutilizable; el bench de dashboards sigue como está. |
-| Proveedores «scripted» ad hoc en pruebas | `tests/runner-gate-characterization.test.ts`, `tests/*-helpers.ts` | Patrón base para el proveedor de replay; se unifica en `core/eval` sin reescribir esas pruebas. |
-| `alisio run --json` emite JSONL de eventos y acepta `--allow-*` y `--read-only` | `packages/cli/src/main.ts` (`.command("run")`) | El CLI ya tiene el patrón headless; `alisio eval` lo reutiliza internamente en vez de lanzar subprocesos cuando es posible. |
-| El goal tiene evidencia en texto libre (`GoalEvidence`) y no hay verificadores | `packages/sdk/src/index.ts` | Los verificadores del laboratorio son propios y mínimos; `02-alisio-proof.md` los unificará después (D12). |
+| Proveedores «scripted» ad hoc en pruebas | `tests/server-helpers.ts` (`fakeProvider`), `tests/forge-gate-helpers.ts`, `tests/analysis-run-helpers.ts` | Patrón base para el proveedor de replay; se unifica en `core/eval` sin reescribir esas pruebas. |
+| `alisio run --json` emite JSONL de eventos y acepta `--allow-*` y `--read-only` | `packages/cli/src/main.ts` (opciones globales `--json`, `--allow-*`, `--read-only`; comando `run`) | El CLI ya tiene el patrón headless; `alisio eval` lo reutiliza internamente en vez de lanzar subprocesos cuando es posible. |
+| El goal tiene evidencia en texto libre (`GoalEvidence`) y no hay verificadores | `packages/sdk/src/index.ts` | Los verificadores del laboratorio son propios y mínimos; `specs/011-proof-v1.md` los unificará después (D12). |
 | No existe replay de proveedor ni suite de evaluación de tareas | búsqueda en `tests/` y `scripts/` | Todo (nuevo). |
 
 ## 3. Decisiones
@@ -111,7 +111,7 @@ Motor de evaluación headless; suites incluidas pequeñas (`smoke-coding`, `tool
 | ID | Decisión |
 | --- | --- |
 | D1 | Una **suite** es un directorio versionado con `suite.json` (`EvalSuite`) y fixtures por tarea. Una **tarea** (`EvalTask`) tiene: `id`, `prompt`, `fixture` (ruta relativa), `agent?`, `budget` (`maxTurns`, `maxTokens`, `maxWallMs`, `maxToolCalls`), `policy` (modo de permisos y `--allow-*` explícitos), `verifiers[]`. `suite.json` lleva `suiteVersion` (semver) y `schemaVersion: 1`. |
-| D2 | Un **run de evaluación** (`EvalRunRecord`) conserva siempre: `suiteId`, `suiteVersion`, `taskId`, `repetition`, `seed`, `harnessVersion` (de `core/src/version.ts`), `configHash` (hash de la configuración efectiva sin secretos), `provider`, `model`, `mode` (`live\|replay`), `startedAt`, `endedAt`, resultado por verificador, `usage` (medido), `wallMs` (medido), `toolCalls`, `incidents[]`. Sin esos campos el reporte es inválido (criterio de aceptación 1). |
+| D2 | Un **run de evaluación** (`EvalRunRecord`) conserva siempre: `suiteId`, `suiteVersion`, `taskId`, `repetition`, `seed`, `harnessVersion` (de `loadVersion()` en `core/src/version.ts`), `configHash` (hash de la configuración efectiva sin secretos), `provider`, `model`, `mode` (`live\|replay`), `startedAt`, `endedAt`, resultado por verificador, `usage` (medido), `wallMs` (medido), `toolCalls`, `incidents[]`. Sin esos campos el reporte es inválido (criterio de aceptación 1). |
 | D3 | Cada ejecución corre en una **copia temporal** del fixture (directorio bajo `os.tmpdir()` propio del run) y la limpia al terminar salvo `--keep`. Nunca se ejecuta sobre el árbol real. El git del fixture (si lo requiere) se inicializa dentro de la copia. |
 | D4 | **Verificadores v1** (deterministas, locales): `command` (código de salida y/o salida esperada de un comando acotado por tiempo), `file-equals`, `file-contains`, `file-absent`, `tree-diff-within` (los archivos modificados están dentro de una lista permitida), `tool-sequence` (aserciones sobre la secuencia de eventos: orden, ausencia, máximo de llamadas). Cada verificador devuelve `{id, status: pass\|fail\|error, detail}`; `error` (el verificador no pudo correr) **no** cuenta como `fail` ni `pass` y se reporta aparte. |
 | D5 | **Tarea pasa** si todos sus verificadores obligatorios dan `pass` y no excedió presupuesto duro. Si un presupuesto se excede, el run termina con `status: "budget_exceeded"` y cuenta como no-pass, con el motivo. |
@@ -121,7 +121,7 @@ Motor de evaluación headless; suites incluidas pequeñas (`smoke-coding`, `tool
 | D9 | Nada sale de la máquina. Los reportes se escriben en `<dataDir>/eval/<runId>/` (`report.json`, `report.md`, `runs.jsonl`) y el usuario decide compartirlos. `alisio eval export` produce un paquete sin rutas absolutas ni secretos (revisado por prueba). Sin telemetría. |
 | D10 | **Cassettes**: formato JSONL versionado (`cassette/v1`) con un registro por llamada a `ModelProvider.stream`: `requestFingerprint` (hash canónico de `instructions`, `messages`, nombres+esquemas de `tools`, `maxOutputTokens`, `model`) y los `ProviderEvent` emitidos. Los secretos y `sessionId` se excluyen del fingerprint. |
 | D11 | **Replay**: `ReplayProvider implements ModelProvider` sirve los eventos grabados en orden. Si el `requestFingerprint` de la llamada N no coincide con el grabado, **falla con un diff estructurado** (qué campo cambió: mensajes, herramientas, instrucciones) y no continúa. Una cassette consumida antes de tiempo, o con llamadas sobrantes, también falla. Replay no hace red ni requiere credenciales. |
-| D12 | Los verificadores v1 son propios del laboratorio y **no** dependen de `02-alisio-proof.md`. Cuando Proof exista, se añade un adaptador (`EvalVerifier` ↔ verificador de Proof) en una fase posterior (O1 de §12); el formato de `EvalVerifier` queda con `kind` abierto para ello. |
+| D12 | Los verificadores v1 son propios del laboratorio y **no** dependen de `specs/011-proof-v1.md`. Cuando Proof exista, se añade un adaptador (`EvalVerifier` ↔ verificador de Proof) en una fase posterior (O1 de §12); el formato de `EvalVerifier` queda con `kind` abierto para ello. |
 | D13 | Pruebas de **secuencias con estado** (`tool-sequences`): la tarea define un entorno simulado mínimo (p. ej. archivos que solo pueden editarse tras leerse, un proceso en segundo plano que debe detenerse antes de borrar su directorio) y el verificador `tool-sequence` rechaza transiciones inválidas. El estado vive en el fixture + eventos; no hay servidor simulado nuevo. |
 | D14 | `alisio eval compare <baseline> <candidate>` exige que ambos reportes compartan `suiteId` y `suiteVersion`; si difieren, rechaza con un mensaje claro (no compara peras con manzanas). La comparación declara qué cambió entre ambos (`configHash`, `model`, `harnessVersion`, `mode`). |
 | D15 | La **comparación de dos estrategias** (F09 mínimo) se expresa como dos *variantes* en un `compare.json`: cada variante es un conjunto de overrides de configuración (p. ej. `{"compaction.threshold": 0.6}`) sobre la misma suite. Solo overrides de claves existentes de la configuración; sin código arbitrario. |
@@ -277,7 +277,7 @@ Salida `--json` en JSONL de `EvalRunRecord` + línea final `EvalReport`. Código
 | --- | --- | --- |
 | `smoke-coding` | 6–8 tareas sobre fixtures TypeScript mínimos: corregir una prueba que falla, añadir una función con prueba, renombrar un símbolo en 3 archivos, aplicar un cambio con `edit_file` respetando sha256. Verificadores `command` (`node --test`/script del fixture) y `tree-diff-within`. | `live` para decidir; `replay` en CI |
 | `tool-sequences` | 4–6 tareas con estado (D13): leer antes de editar; detener un `bg_run` antes de borrar su directorio; no repetir una llamada fallida idéntica. | `replay` |
-| `long-context` | 3 tareas con archivos largos y recortes de salida, para que `03-alisio-context-governor.md` mida elisión y compactación. Verificadores de conservación de información (`file-contains` sobre el resultado). | `live` |
+| `long-context` | 3 tareas con archivos largos y recortes de salida, para que `specs/012-context-governor-v1.md` mida elisión y compactación. Verificadores de conservación de información (`file-contains` sobre el resultado). | `live` |
 | `injection` | **Hueco reservado**: lo define `specs/014-trust-boundaries-v1.md`; el laboratorio solo ejecuta el corpus que esa spec aporte (formato `EvalSuite` estándar). | `live`/`replay` |
 
 Cada suite declara su versión; cambiar un fixture o un verificador sube `suiteVersion` y `compare` rechaza mezclar versiones (D14).
@@ -311,6 +311,10 @@ Entregable: medir **sin cambiar producción** cuánto cuesta y cuánto varía un
 Criterios de aceptación: (1) los tres datos (éxito, varianza, infraestructura) quedan registrados; (2) el propietario aprueba `k` por defecto y presupuestos antes de la Fase 1.
 Pruebas: ninguna de producción; el script tiene una prueba de humo con proveedor «scripted».
 
+**Resultado medido (2026-10-13, aprobado por el propietario)**: proveedor `opencode-go/deepseek-v4.1-flash`, `k=5`, 3 tareas, 15/15 pass, 0 fallos de infraestructura. Medianas de tokens (input+output) / desviación: `fix-add` 65.8k / 12k, `add-slugify` 85.2k / 22k, `implement-chunk` 85.6k / 17k. Medianas de tiempo de pared / desviación: 8.6 s / 2.3 s, 15.9 s / 4.0 s, 21.9 s / 2.5 s. Total de la medición ≈ 1.2 M de tokens y ≈ 4 min.
+
+**Valores aprobados**: `k` por defecto = 5; `maxTokens` = 200k (**medido**: mediana + 5 desviaciones de la peor tarea); `maxWallMs` = 120 s (**medido**: ≈ 5× la mediana más lenta); `maxTurns` = 30 y `maxToolCalls` = 40 (**estimados, no medidos**: el script no registra turnos ni llamadas; revisar tras la Fase 2). **Efecto techo**: con 5/5 el límite inferior de Wilson es 0.57, así que `k=5` solo detecta regresiones catastróficas; la Fase 5 DEBE incluir en `smoke-coding` tareas más difíciles que estas tres.
+
 ### Fase 1 — Contratos, suite loader y verificadores (Sonnet)
 
 - `packages/sdk/src/index.ts`: tipos de §5.1–5.2 (solo tipos).
@@ -338,7 +342,7 @@ Criterios de aceptación:
 3. El directorio temporal se elimina salvo `--keep`; ningún archivo del árbol real cambia (prueba con un fixture que intenta escribir fuera).
 4. `suite` que pide `full` sin `--allow-suite-full` se rechaza (D16).
 
-Pruebas: `tests/eval-engine.test.ts` con un proveedor «scripted» (patrón de `tests/runner-gate-characterization.test.ts`); sin red.
+Pruebas: `tests/eval-engine.test.ts` con un proveedor «scripted» (patrón de `tests/server-helpers.ts` `fakeProvider`; inyección con `createApplication({ provider })`); sin red.
 
 ### Fase 3 — Repeticiones, métricas, reporte y `compare` (Sonnet)
 
@@ -454,12 +458,14 @@ Por defecto **Sonnet**. **Opus** solo en tres puntos: (1) diseño del aislamient
 
 | Fase | Estado |
 | --- | --- |
-| 0 — Línea base | Pendiente |
-| 1 — Contratos y verificadores | Pendiente |
-| 2 — Motor `live` | Pendiente |
-| 3 — Métricas, reporte y compare | Pendiente |
-| 4 — Cassettes y replay | Pendiente |
-| 5 — Suites incluidas y CI | Pendiente |
-| 6 — Documentación | Pendiente |
+| 0 — Línea base | **Completada y aprobada (2026-10-13)**: `k` y presupuestos fijados en §8 Fase 0. |
+| 1 — Contratos y verificadores | **Completada (2026-10-13)**: tipos SDK, `loadSuite`, seis verificadores, estadística; 53 pruebas; checklist completo verde. |
+| 2 — Motor `live` | **Completada (2026-10-13)**: `runTask`, aislamiento por entorno, presupuestos, `configHash` con lista permitida; 33 pruebas del motor; checklist verde. Desvíos aditivos del SDK: `EvalRunRecord.budgetExceeded`, `EvalRunRecord.error`, `EvalTask.fixtureGit`. Modo `ask` headless deniega aprobaciones (a diferencia de `alisio run`); `seed` solo ordena ejecuciones; sin confinamiento si la tarea concede `process`. |
+| 3 — Métricas, reporte y compare | **Completada (2026-10-13)** con revisión Opus (§14.3) y 12 correcciones aplicadas: fallos causados por el modelo cuentan como `fail` (no `error`), sin veredicto con ejecuciones `error`, modos o compactación distintos; replay sin intervalos de Wilson; variantes intercaladas; pie estadístico en cada comparación. Sin corrección por comparaciones múltiples; repeticiones asumidas independientes; con `k=5` solo 0/5 vs 5/5 da veredicto. Checklist verde (3952 pruebas). |
+| 4 — Cassettes y replay | **Completada (2026-10-13)** con diseño Opus (§14.2): fingerprint normalizado (incluye `nativeTools` y `reasoningEffort`), `RecordingProvider`/`ReplayProvider`, `alisio eval record` y `--mode replay` (exit 2 en divergencia), fuente de IDs determinista (cambio aditivo en `runtime/ids.ts`, `store.ts`, `exit-plan.ts`, `kernel.ts`). Límites: carriles de subagentes concurrentes en mejor esfuerzo; compactación y `firstTokenTimeoutMs=0` en replay sin prueba directa. Checklist verde (4048 pruebas). |
+| 5 — Suites incluidas y CI | **Completada (2026-10-13)**: `smoke-coding` (7 tareas, 4 más difíciles que la línea base), `tool-sequences` (6), `long-context` (3, solo live); 10 cassettes grabadas con proveedor scripted (377 KB, replay ≈ 2 s); `pnpm eval:record-bundled` regraba de forma byte-idéntica. Las cassettes fijan el comportamiento del harness, no la calidad de un modelo. **Medición live (2026-10-13, `deepseek-v4.1-flash`, k=5)**: 32/35 pass; `rename-symbol`, `edit-respects-hash` y `off-by-one-among-passing` siguen saturando en 5/5; `bug-across-modules` dio 2/5 con 3 `budget_exceeded` (2× `maxWallMs`, 1× `maxTokens`), con pasos que usaron hasta 189k tokens y 82 s. Ajuste aprobado: presupuesto de esa tarea 400k tokens / 240 s y `suiteVersion` 1.1.0 de `smoke-coding`; **remedición (2026-10-13, smoke-coding 1.1.0, k=5)**: `bug-across-modules` 4/5 [37.6 %, 96.4 %], 0 `budget_exceeded`; el único `fail` modificó `check.ts` (verificador `scope`), no fue una solución incorrecta. Tres de las cuatro pasadas habrían excedido el presupuesto anterior (hasta 301k tokens y 194 s). **Endurecimiento (2026-10-13, smoke-coding 1.2.0)**: `rename-symbol`, `edit-respects-hash` y `off-by-one-among-passing` rediseñadas con protección anti-manipulación de los scripts de verificación y 9 soluciones erróneas plausibles rechazadas por prueba; presupuestos 400k/240 s, 300k/180 s y 300k/180 s. **Medición live (2026-10-14, smoke-coding 1.2.0, k=5, arnés 0.6.0)**: `deepseek-v4.1-flash` 15/15 pass (el objetivo de 30–80 % era una hipótesis y NO se cumplió: saturan); `mimo-v2.6-flash` 9 pass, 0 fail, 6 `budget_exceeded` (sobre todo tiempo de reloj), sin `fail` causado por el modelo. El poder discriminante entre modelos NO está establecido; detalle en `docs/implementation-status.md`. Checklist verde (4088 pruebas). |
+| 6 — Documentación | **Completada (2026-10-13)**: `docs/eval.md` y `docs/es/eval.md` en paridad, sección consolidada en `docs/implementation-status.md`; sin vista Web (no solicitada). Checklist verde. |
 
-Estado del documento: **Borrador** (2026-10-13). Nada de lo descrito está implementado.
+**Pendientes antes de archivar**: (1) ~~`alisio eval export`~~ **implementado (2026-10-13)**: bundle JSON único, rutas y proveedores depurados, rechaza ante un hallazgo del escáner de secretos; (2) ~~`scripts/eval-ci.ts`~~ **implementado (2026-10-13)**: `pnpm eval:ci`, opt-in, no está en el CI por defecto (O7); (3) ~~medición live de las tareas difíciles de `smoke-coding`~~ **medida (2026-10-14)**, ver Fase 5; la medición live de `long-context` con un modelo real **sigue sin hacerse** y queda como limitación documentada, no como bloqueo del archivo; (4) la spec cita `context.compactionThreshold`, la clave real es `compaction.threshold`.
+
+Estado del documento: **Implementada (fases 0-6)** (2026-10-14). Ver `docs/implementation-status.md`.

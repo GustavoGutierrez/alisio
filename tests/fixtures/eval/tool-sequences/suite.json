@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "tool-sequences",
+  "suiteVersion": "1.0.0",
+  "description": "Stateful tool-use tasks (D13): read before edit, stop a background process before deleting its directory, never repeat a failed call, chained hash-guarded edits, no shell where it is not needed, bounded reads. Verified from the tool-call sequence and the final files.",
+  "tasks": [
+    {
+      "id": "read-before-edit",
+      "prompt": "Change the version in src/version.ts to 1.1.0.",
+      "fixture": "fixtures/read-before-edit",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "edit-after-read",
+          "rule": {
+            "type": "before",
+            "first": "read_file",
+            "then": "edit_file"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "write-after-read",
+          "rule": {
+            "type": "before",
+            "first": "read_file",
+            "then": "write_file"
+          }
+        },
+        {
+          "kind": "file-contains",
+          "id": "new-version",
+          "path": "src/version.ts",
+          "text": "\"1.1.0\""
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/version.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "sequence",
+        "read-before-edit"
+      ]
+    },
+    {
+      "id": "stop-bg-before-delete",
+      "prompt": "Start `node server.js` in the background from the work/ directory, then shut it down and remove the whole work/ directory.",
+      "fixture": "fixtures/stop-bg-before-delete",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "started-before-stopped",
+          "rule": {
+            "type": "before",
+            "first": "bg_run",
+            "then": "bg_stop"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "stop-before-delete-shell",
+          "rule": {
+            "type": "before",
+            "first": "bg_stop",
+            "then": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "stop-before-delete-process",
+          "rule": {
+            "type": "before",
+            "first": "bg_stop",
+            "then": "run_process"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "one-server",
+          "rule": {
+            "type": "max-calls",
+            "tool": "bg_run",
+            "max": 1
+          }
+        },
+        {
+          "kind": "file-absent",
+          "id": "directory-removed",
+          "path": "work"
+        }
+      ],
+      "tags": [
+        "sequence",
+        "background",
+        "invalid-transition"
+      ],
+      "replayNormalize": [
+        {
+          "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z",
+          "replace": "<TIMESTAMP>"
+        }
+      ]
+    },
+    {
+      "id": "no-repeat-failed-call",
+      "prompt": "Make settings.local.json from settings.example.json with retries set to 5. If settings.local.json already exists keep its theme.",
+      "fixture": "fixtures/no-repeat-failed-call",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "no-repeated-read",
+          "rule": {
+            "type": "no-repeat-failure",
+            "tool": "read_file"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-repeated-write",
+          "rule": {
+            "type": "no-repeat-failure",
+            "tool": "write_file"
+          }
+        },
+        {
+          "kind": "file-contains",
+          "id": "retries",
+          "path": "settings.local.json",
+          "text": "\"retries\": 5"
+        },
+        {
+          "kind": "file-contains",
+          "id": "theme",
+          "path": "settings.local.json",
+          "text": "\"theme\": \"dark\""
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "settings.local.json"
+          ]
+        }
+      ],
+      "tags": [
+        "sequence",
+        "no-repeat-failure"
+      ]
+    },
+    {
+      "id": "sequential-hash-edits",
+      "prompt": "In src/flags.ts enable darkMode and betaSearch. Leave newCheckout off.",
+      "fixture": "fixtures/sequential-hash-edits",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "edit-after-read",
+          "rule": {
+            "type": "before",
+            "first": "read_file",
+            "then": "edit_file"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-repeated-edit",
+          "rule": {
+            "type": "no-repeat-failure",
+            "tool": "edit_file"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "few-edits",
+          "rule": {
+            "type": "max-calls",
+            "tool": "edit_file",
+            "max": 4
+          }
+        },
+        {
+          "kind": "file-equals",
+          "id": "exact-result",
+          "path": "src/flags.ts",
+          "sha256": "0442616406f4837e8af20b009273a986ca160b41417e1ce015ecf8dcc2216a88"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/flags.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "sequence",
+        "sha256",
+        "edit"
+      ]
+    },
+    {
+      "id": "no-shell-fix-typo",
+      "prompt": "Fix the spelling mistake in README.md. Use the file editing tools only; do not run shell commands or processes.",
+      "fixture": "fixtures/no-shell-fix-typo",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        },
+        {
+          "kind": "file-contains",
+          "id": "fixed",
+          "path": "README.md",
+          "text": "receives events"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "README.md"
+          ]
+        }
+      ],
+      "tags": [
+        "sequence",
+        "never"
+      ]
+    },
+    {
+      "id": "read-each-file-once",
+      "prompt": "Write summary.txt with the content of notes/a.txt, notes/b.txt and notes/c.txt, in that order, one line each. Read each notes file at most once.",
+      "fixture": "fixtures/read-each-file-once",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "tool-sequence",
+          "id": "bounded-reads",
+          "rule": {
+            "type": "max-calls",
+            "tool": "read_file",
+            "max": 3
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "read-before-write",
+          "rule": {
+            "type": "before",
+            "first": "read_file",
+            "then": "write_file"
+          }
+        },
+        {
+          "kind": "file-equals",
+          "id": "summary",
+          "path": "summary.txt",
+          "sha256": "3eca7ea48b0da0ad30bee679c92c7b68d487547068b6914d10a64e8cedb03f51"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "summary.txt"
+          ]
+        }
+      ],
+      "tags": [
+        "sequence",
+        "max-calls"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "smoke-coding",
+  "suiteVersion": "1.2.0",
+  "description": "Small TypeScript coding tasks checked by deterministic scripts: three easy ones from the phase 0 baseline and four harder ones (multi-file rename with look-alike symbols, byte-exact multi-edit, bug across modules, several boundary bugs behind passing tests). The checks the agent must not edit are pinned by sha256.",
+  "tasks": [
+    {
+      "id": "fix-add",
+      "prompt": "The function add in src/math.ts returns the wrong result. Fix it so add(2, 3) returns 5. Change only src/math.ts.",
+      "fixture": "fixtures/fix-add",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "check",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "check.ts"
+          ],
+          "timeoutMs": 30000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/math.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "easy"
+      ]
+    },
+    {
+      "id": "add-slugify",
+      "prompt": "In src/strings.ts add and export slugify(s): lowercase, trim, replace every run of non-alphanumeric characters with a single '-', and strip leading and trailing '-'. Keep capitalize unchanged.",
+      "fixture": "fixtures/add-slugify",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "check",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "check.ts"
+          ],
+          "timeoutMs": 30000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/strings.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "easy"
+      ]
+    },
+    {
+      "id": "implement-chunk",
+      "prompt": "In src/list.ts implement chunk<T>(items: T[], size: number): T[][] that splits items into consecutive arrays of at most size elements. It currently throws.",
+      "fixture": "fixtures/implement-chunk",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "check",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "check.ts"
+          ],
+          "timeoutMs": 30000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/list.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "easy"
+      ]
+    },
+    {
+      "id": "rename-symbol",
+      "prompt": "Rename the function fetchUser, exported by src/api.ts, to loadUser everywhere it is defined or used under src/. It is the only thing to rename: other symbols keep their names, and behavior must not change.",
+      "fixture": "fixtures/rename-symbol",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 400000,
+        "maxWallMs": 240000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "check",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "check.ts"
+          ],
+          "timeoutMs": 30000
+        },
+        {
+          "kind": "file-equals",
+          "id": "check-intact",
+          "path": "check.ts",
+          "sha256": "f1ce4324cf89935357ff3b953a15c67a54b81097bb1660f3168b50060f30d89c"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "harder",
+        "multi-file"
+      ]
+    },
+    {
+      "id": "edit-respects-hash",
+      "prompt": "Make these changes and no others. In src/defaults.ts, for httpDefaults: raise retries to 5, set timeoutMs to 8000 and change backoff to \"exponential\". In src/limits.ts, raise maxBodyKb of uploadLimits to 512. Every other byte of both files must stay exactly as it is.",
+      "fixture": "fixtures/edit-respects-hash",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 300000,
+        "maxWallMs": 180000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "defaults-exact",
+          "path": "src/defaults.ts",
+          "sha256": "b61dbeb35bc536ceec6015b5123b2bcbc6d5153f233507556d37ea9cd56e5ffc"
+        },
+        {
+          "kind": "file-equals",
+          "id": "limits-exact",
+          "path": "src/limits.ts",
+          "sha256": "89a588a49fdd60290d3d540e307429b7271b9fe9b1ae405d01fb8386439addee"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/defaults.ts",
+            "src/limits.ts"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "harder",
+        "edit"
+      ]
+    },
+    {
+      "id": "bug-across-modules",
+      "prompt": "formatTotal(19.99, 3) in src/order.ts returns \"$59.94\" but the correct total is \"$59.97\". Find the root cause and fix it in a way that is right for any price, not only this one.",
+      "fixture": "fixtures/bug-across-modules",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 400000,
+        "maxWallMs": 240000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "check",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "check.ts"
+          ],
+          "timeoutMs": 30000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "harder",
+        "multi-file"
+      ]
+    },
+    {
+      "id": "off-by-one-among-passing",
+      "prompt": "Running `node --experimental-strip-types --test checks/paginate.check.mjs` reports a failing test. Fix the implementation under src/ so that the whole suite passes and every function behaves as its comments document. Do not change the tests.",
+      "fixture": "fixtures/off-by-one-among-passing",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 300000,
+        "maxWallMs": 180000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "command",
+          "id": "suite",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "--test",
+            "checks/paginate.check.mjs"
+          ],
+          "timeoutMs": 60000
+        },
+        {
+          "kind": "command",
+          "id": "contract",
+          "command": [
+            "node",
+            "--experimental-strip-types",
+            "--input-type=module",
+            "-e",
+            "// Hidden verifier of off-by-one-among-passing: suite.json embeds this file verbatim as the argument\n// of `node -e`, so the agent never sees it in the workspace. It checks only what the JSDoc\n// comments under src/ promise.\nimport assert from \"node:assert/strict\";\nimport { getPage, hasNextPage, pageRange, totalPages } from \"./src/paginate.ts\";\nimport { pagesRemaining } from \"./src/summary.ts\";\n\nconst items = Array.from({ length: 11 }, (_, index) => index + 1);\nconst first = [1, 2, 3, 4, 5];\n\nassert.equal(totalPages(10, 5), 2);\nassert.equal(totalPages(11, 5), 3);\nassert.equal(totalPages(0, 5), 1, \"an empty list still has one page\");\n\nassert.deepEqual(getPage(items, 0, 5), first, \"page 0 is treated as page 1\");\nassert.deepEqual(getPage(items, -3, 5), first, \"negative pages are treated as page 1\");\nassert.deepEqual(getPage(items, 3, 5), [11]);\nassert.deepEqual(getPage(items, 4, 5), []);\n\nassert.equal(hasNextPage(10, 1, 5), true);\nassert.equal(hasNextPage(10, 2, 5), false);\nassert.equal(hasNextPage(11, 3, 5), false);\nassert.equal(hasNextPage(0, 1, 5), false);\n\nassert.deepEqual(pageRange(11, 1, 5), { from: 1, to: 5 });\nassert.deepEqual(pageRange(11, 3, 5), { from: 11, to: 11 });\nassert.deepEqual(pageRange(10, 2, 5), { from: 6, to: 10 });\nassert.deepEqual(pageRange(0, 1, 5), { from: 0, to: 0 });\n\nassert.equal(pagesRemaining(10, 1, 5), 1);\nassert.equal(pagesRemaining(10, 2, 5), 0);\nassert.equal(pagesRemaining(10, 5, 5), 0, \"never negative\");\nassert.equal(pagesRemaining(0, 1, 5), 0);\nassert.equal(pagesRemaining(11, 1, 5), 2);\n"
+          ],
+          "timeoutMs": 60000
+        },
+        {
+          "kind": "file-equals",
+          "id": "checks-intact",
+          "path": "checks/paginate.check.mjs",
+          "sha256": "0b24ebbf309d085f1c5c7718fac3644e6ea0526148515564941d5912f89c3b57"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "src/"
+          ]
+        }
+      ],
+      "tags": [
+        "smoke",
+        "coding",
+        "harder",
+        "debugging"
+      ]
+    }
+  ]
+}

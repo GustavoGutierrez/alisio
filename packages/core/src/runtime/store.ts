@@ -18,6 +18,7 @@ import type {
   StoredEvent,
   ToolCallMeta,
 } from "../core/contracts.ts";
+import { newUuid } from "./ids.ts";
 import { isProcessAlive } from "./process.ts";
 import { openDatabase } from "./sqlite.ts";
 
@@ -359,7 +360,7 @@ export class SQLiteStore implements SessionStore {
     return current;
   }
   create(workspace: string, provider: string, model: string): Session {
-    const id = crypto.randomUUID();
+    const id = newUuid();
     const now = Date.now();
     this.db
       .prepare(
@@ -400,7 +401,7 @@ export class SQLiteStore implements SessionStore {
       .map((r) => this.row(r));
   }
   createChild(record: import("../core/contracts.ts").ChildSessionRecord): Session {
-    const id = record.id ?? crypto.randomUUID();
+    const id = record.id ?? newUuid();
     const now = Date.now();
     this.db
       .prepare(

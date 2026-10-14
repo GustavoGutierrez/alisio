@@ -325,6 +325,124 @@ export {
   validateAnswers,
   validateRequest,
 } from "./decisions/index.ts";
+export { canonicalJson, hashCanonical } from "./eval/canonical.ts";
+export {
+  CASSETTE_SUFFIX,
+  type Cassette,
+  type CassetteCall,
+  CassetteFormatError,
+  type CassetteHeader,
+  type CassetteMeta,
+  CassetteRecorder,
+  CassetteWriteError,
+  MAX_CASSETTE_BYTES,
+  MAX_CASSETTE_DIR_BYTES,
+  parseCassette,
+  RecordingProvider,
+  ReplayDivergenceError,
+  ReplayExhausted,
+  ReplayProvider,
+  ReplayUnconsumedError,
+  readCassette,
+  serializeCassette,
+  type WriteOptions,
+  writeCassette,
+} from "./eval/cassette.ts";
+export {
+  type Conditions,
+  compareReports,
+  compareVariants,
+  EvalCompareError,
+  type EvalComparison,
+  type Interval,
+  type MetricDelta,
+  parseReport,
+  renderComparisonMarkdown,
+  renderVariantComparisonMarkdown,
+  type TaskComparison,
+  type TokenComparison,
+  type VariantComparison,
+  type Verdict,
+} from "./eval/compare.ts";
+export {
+  CONFIG_HASH_COVERAGE,
+  type ConfigHashExtras,
+  checkTaskPolicy,
+  computeConfigHash,
+  type EvalApplication,
+  EvalBudgetExceeded,
+  type EvalRunMode,
+  EvalRunRefusedError,
+  type InvokerPermissions,
+  type RunTaskOptions,
+  runTask,
+} from "./eval/engine.ts";
+export {
+  buildExportBundle,
+  type EvalExportBundle,
+  EvalExportRefusedError,
+  type ExportContext,
+} from "./eval/export.ts";
+export {
+  computeFingerprint,
+  type FingerprintDiff,
+  type FingerprintDiffEntry,
+} from "./eval/fingerprint.ts";
+export { EvalPathError, resolveInside } from "./eval/paths.ts";
+export {
+  interleaveVariants,
+  mulberry32,
+  type PlannedRun,
+  planRuns,
+  type VariantStep,
+} from "./eval/plan.ts";
+export {
+  type BuildReportOptions,
+  buildReport,
+  EvalReportError,
+  estimateRunCost,
+  lowPowerTasks,
+  MIN_POWER_K,
+  renderReportMarkdown,
+} from "./eval/report.ts";
+export {
+  type RunEvaluationOptions,
+  type RunEvaluationResult,
+  type RunVariantsOptions,
+  runEvaluation,
+  runVariantEvaluations,
+} from "./eval/run-suite.ts";
+export { findSecrets, redactSecrets } from "./eval/secrets.ts";
+export {
+  median,
+  passAtK,
+  passPowK,
+  sampleVariance,
+  wilsonInterval,
+} from "./eval/stats.ts";
+export {
+  EvalSuiteError,
+  type LoadedSuite,
+  loadSuite,
+  MAX_VERIFIER_TIMEOUT_MS,
+} from "./eval/suite.ts";
+export {
+  applyConfigOverrides,
+  EvalVariantError,
+  loadVariantsFile,
+  resolveVariants,
+  type VariantsFile,
+} from "./eval/variants.ts";
+export {
+  runVerifier,
+  runVerifiers,
+  snapshotTree,
+  type ToolEvent,
+  type TreeSnapshot,
+  type VerifierContext,
+  type VerifierResult,
+  type VerifierStatus,
+} from "./eval/verifiers.ts";
 export { type ExtensionConflict, ExtensionRegistry } from "./extensions/registry.ts";
 export { ForgeError } from "./forge/errors.ts";
 export {
@@ -502,7 +620,14 @@ export {
 export { BlobStore, type BlobStoreOptions, BlobTooLarge } from "./runtime/blobs.ts";
 export { clipLines, unifiedPatch } from "./runtime/diff.ts";
 export { exists, fileSize, readHead, readJson, readText, which } from "./runtime/fs.ts";
-export { newId, ulid } from "./runtime/ids.ts";
+export {
+  type IdSource,
+  newId,
+  newUuid,
+  seededIdSource,
+  setIdSource,
+  ulid,
+} from "./runtime/ids.ts";
 export {
   defaultGlobalRoots,
   isPathSpec,

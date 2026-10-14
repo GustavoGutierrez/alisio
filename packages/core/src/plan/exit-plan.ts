@@ -26,6 +26,7 @@ import { textResult } from "@alisio/sdk";
 import type { CoreArtifactPublisher } from "../core/contracts.ts";
 import { EXIT_PLAN_TOOL } from "../core/opt-in.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import { newUuid } from "../runtime/ids.ts";
 import { objectSchema } from "../tools/standard.ts";
 import {
   DIAGRAM_MAX_BYTES,
@@ -191,7 +192,7 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
       if (!plan) throw new Error("exit_plan needs the whole plan in the `plan` field");
       const sessionId = context.session;
       const title = planTitle(plan, input.title);
-      const planId = crypto.randomUUID();
+      const planId = newUuid();
       const reviewable = !!sessionId && deps.ui.interactive() && !deps.readOnly;
       const revision = sessionId ? nextPlanRevision(deps.store, sessionId) : 1;
       const previous: DiagramRecord[] | undefined = sessionId

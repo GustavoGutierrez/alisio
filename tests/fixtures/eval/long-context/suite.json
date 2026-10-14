@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "long-context",
+  "suiteVersion": "1.0.0",
+  "description": "Long files and truncated command output: facts buried deep in files that cannot be read in one call, to measure information conservation (specs/012 context governor). Live mode.",
+  "tasks": [
+    {
+      "id": "find-late-value",
+      "prompt": "logs/service.log records one rollout. Find its id (the value after rollout.id=) and write only that id to answer.txt.",
+      "fixture": "fixtures/find-late-value",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-contains",
+          "id": "rollout-id",
+          "path": "answer.txt",
+          "text": "amber-falcon-4821"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "answer.txt"
+          ]
+        }
+      ],
+      "tags": [
+        "long-context",
+        "needle"
+      ]
+    },
+    {
+      "id": "merge-facts-across-files",
+      "prompt": "Read the three documents in docs/ and write summary.md with exactly three lines, `max_upload_mb: <value>`, `default_port: <value>` and `retention_days: <value>`, using the values the documents state.",
+      "fixture": "fixtures/merge-facts-across-files",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-contains",
+          "id": "upload",
+          "path": "summary.md",
+          "text": "max_upload_mb: 87"
+        },
+        {
+          "kind": "file-contains",
+          "id": "port",
+          "path": "summary.md",
+          "text": "default_port: 8472"
+        },
+        {
+          "kind": "file-contains",
+          "id": "retention",
+          "path": "summary.md",
+          "text": "retention_days: 19"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "summary.md"
+          ]
+        }
+      ],
+      "tags": [
+        "long-context",
+        "multi-file"
+      ]
+    },
+    {
+      "id": "truncated-command-output",
+      "prompt": "Run `node tools/gen-report.js`. Exactly one check in its output FAILED. Write the name of that check to answer.txt.",
+      "fixture": "fixtures/truncated-command-output",
+      "budget": {
+        "maxTurns": 30,
+        "maxTokens": 200000,
+        "maxWallMs": 120000,
+        "maxToolCalls": 40
+      },
+      "policy": {
+        "mode": "auto",
+        "allow": [
+          "process"
+        ]
+      },
+      "verifiers": [
+        {
+          "kind": "file-contains",
+          "id": "failed-check",
+          "path": "answer.txt",
+          "text": "check-58"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "answer.txt"
+          ]
+        }
+      ],
+      "tags": [
+        "long-context",
+        "truncated-output"
+      ]
+    }
+  ]
+}

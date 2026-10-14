@@ -15,7 +15,8 @@
       "!docs/benchmark-*.json",
       "!.stryker-tmp",
       "!.atl",
-      "!.vitest"
+      "!.vitest",
+      "!tests/fixtures/eval"
     ]
   },
   "formatter": {

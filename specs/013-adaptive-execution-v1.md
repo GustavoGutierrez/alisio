@@ -5,11 +5,11 @@
 | Versión | 0.1 |
 | Origen | 🔬 **Investigación arXiv** (`specs/research/022-arxiv-features-research.md`) · **Orden de ejecución: 4 de 8** |
 | Proyecto | Alisio |
-| Estado | **Borrador. Propuesta, no implementada.** Decisiones O1–O9 pendientes de confirmar por el propietario. No se ejecuta hasta que exista al menos el núcleo de `specs/010-reliability-lab-v1.md` (Fases 1–3 y la suite `smoke-coding`). |
+| Estado | **Borrador. Propuesta, no implementada.** Decisiones O1–O9 pendientes de confirmar por el propietario. No se ejecuta hasta que exista al menos el núcleo de `specs/archive/010-reliability-lab-v1.md` (Fases 1–3 y la suite `smoke-coding`). |
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (aditivo: eventos `strategy_selected` y `run_stalled` en `RunEventDataMap`, `StrategyName`, `StrategySignals`, `ChildResultContract`, campos opcionales en `ChildRunResult`), `@alisio/core` (nuevo `packages/core/src/core/progress-guard.ts` y `packages/core/src/strategy/*`; cambios acotados en `core/runner.ts`, `goal/machine.ts`, `commands/builtins.ts`, `core/run-stats.ts`, `config.ts`), `@alisio/plugin-subagents` (`src/index.ts`, `src/manager.ts`: contrato de resultado y coste de coordinación), `@alisio/server` (los eventos nuevos viajan por el SSE existente), `@alisio/web` (privado: tarjeta de estancamiento y de estrategia en el hilo), `@alisio/alisio-code` (TUI: mensajes de estancamiento y de estrategia; `alisio run --json` ya emite los eventos nuevos) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
-| Relación con otras especificaciones | **Depende de** `specs/010-reliability-lab-v1.md` (Fase 0 de medición y puerta de promoción de cada comportamiento activo). **Consume opcionalmente** `specs/011-proof-v1.md` (los IDs de evidencia en el contrato de resultado de los hijos; sin Proof el campo queda como texto). **Deja la señal `strategy`** lista para `specs/backlog/020-model-tier-router-v1.md`, que sigue siendo dueña del enrutado de modelos; esta spec **no** elige modelos. **No toca** `specs/018-perimeter-v1.md` (Perímetro no decide permisos; esta spec tampoco). Opcionalmente usa Decision Intelligence (`ToolContext.decisions?.tryDecide`), nunca como requisito. |
+| Relación con otras especificaciones | **Depende de** `specs/archive/010-reliability-lab-v1.md` (Fase 0 de medición y puerta de promoción de cada comportamiento activo). **Consume opcionalmente** `specs/011-proof-v1.md` (los IDs de evidencia en el contrato de resultado de los hijos; sin Proof el campo queda como texto). **Deja la señal `strategy`** lista para `specs/backlog/020-model-tier-router-v1.md`, que sigue siendo dueña del enrutado de modelos; esta spec **no** elige modelos. **No toca** `specs/018-perimeter-v1.md` (Perímetro no decide permisos; esta spec tampoco). Opcionalmente usa Decision Intelligence (`ToolContext.decisions?.tryDecide`), nunca como requisito. |
 | Superficies | Web, TUI y headless (`alisio run`, JSONL) con paridad funcional: el mismo evento y el mismo texto de razón en las tres. |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva. **Todo el comportamiento activo es opt-in** (`off` o `shadow` por defecto) hasta que el propietario promueva cada pieza tras pasar su puerta de medición (§11). El default de cada release es byte-idéntico al anterior salvo por el registro `shadow`. |
 
@@ -425,7 +425,7 @@ Sin migración de base de datos (D18). Los eventos nuevos son variantes aditivas
 
 ## 13. Orden de ejecución y dependencias
 
-- Requiere antes: `specs/010-reliability-lab-v1.md` (Fases 1–3 y suite `smoke-coding`) para la Fase 0 y la Fase 7.
+- Requiere antes: `specs/archive/010-reliability-lab-v1.md` (Fases 1–3 y suite `smoke-coding`) para la Fase 0 y la Fase 7.
 - Consume si existe: `specs/011-proof-v1.md` (IDs de evidencia en el contrato de hijos). No bloquea.
 - Alimenta: `specs/backlog/020-model-tier-router-v1.md` (la señal `strategy`; no se implementa enrutado aquí).
 - Sin solapamiento de archivos con `specs/018-perimeter-v1.md`.

@@ -9,7 +9,7 @@
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ContextSegment`, `ContextReport`, `CompactionCheckpoint.invariants?`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
-| Relación con otras especificaciones | Mide su efecto con `specs/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
+| Relación con otras especificaciones | Mide su efecto con `specs/archive/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
 | Superficies | Web, TUI y headless con paridad funcional; API HTTP de `alisio serve` |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: `context.governor` arranca en `off`; en `shadow` lo enviado al proveedor es byte-idéntico a 0.6.x. `RunEvent.schemaVersion` sigue en 1. |
 
@@ -169,7 +169,7 @@ Cada fase: Rojo → Verde → Refactor; repo verde al cerrar; sin commit hasta q
 
 ### Fase 0 — Medición base (sin código de producción)
 
-Trabajo: con `specs/010-reliability-lab-v1.md` (Fase 0) o un arnés mínimo en `scripts/`, medir en sesiones sintéticas largas: tokens enviados por vuelta, proporción de resultados `read_file` superados, número de compactaciones y pérdida de instrucciones tras compactar (suite `long-context`). Fijar el umbral de «sin caída de éxito» (p. ej. ≤2 puntos).
+Trabajo: con `specs/archive/010-reliability-lab-v1.md` (Fase 0) o un arnés mínimo en `scripts/`, medir en sesiones sintéticas largas: tokens enviados por vuelta, proporción de resultados `read_file` superados, número de compactaciones y pérdida de instrucciones tras compactar (suite `long-context`). Fijar el umbral de «sin caída de éxito» (p. ej. ≤2 puntos).
 Aceptación: línea base documentada en esta spec; umbral aprobado por el propietario.
 Pruebas: ninguna de producción.
 

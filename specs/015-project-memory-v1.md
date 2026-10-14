@@ -9,7 +9,7 @@
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/plugin-memory` (`packages/plugin-memory/src/{store,tools,types,index,views,format}.ts`: migraciones propias, columnas y tabla nuevas, herramientas ampliadas, hooks de sesión), `@alisio/web` (privado: `packages/web/src/components/memory/{MemoryTab.tsx,strings.ts}` y `src/i18n/es.ts`), `@alisio/sdk` (solo tipos de vistas si hace falta; sin cambios en contratos de core), `@alisio/core` (ninguno obligatorio; opcional: etiqueta de procedencia del segmento inyectado, ver §8) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción (usa `node:sqlite` vía `api.storage.sqlite` y `node:child_process` solo para `git` acotado). |
-| Relación con otras especificaciones | Reutiliza el formato de export/import de `specs/018-perimeter-v1.md` (Fase 5, `memory_export/import`): **el formato debe incluir los campos nuevos** de esta spec. Usa de forma opcional los IDs de evidencia de `specs/011-proof-v1.md` (`evidence_ref`). Los recuerdos inyectados entran como segmento con procedencia en `specs/012-context-governor-v1.md`. Complementa a `specs/014-trust-boundaries-v1.md` (un recuerdo creado desde datos no confiables conserva `source_kind`). Medible con `specs/010-reliability-lab-v1.md`. No se solapa con `specs/research/023-knowledge-vault-research.md` (RAG de documentos). |
+| Relación con otras especificaciones | Reutiliza el formato de export/import de `specs/018-perimeter-v1.md` (Fase 5, `memory_export/import`): **el formato debe incluir los campos nuevos** de esta spec. Usa de forma opcional los IDs de evidencia de `specs/011-proof-v1.md` (`evidence_ref`). Los recuerdos inyectados entran como segmento con procedencia en `specs/012-context-governor-v1.md`. Complementa a `specs/014-trust-boundaries-v1.md` (un recuerdo creado desde datos no confiables conserva `source_kind`). Medible con `specs/archive/010-reliability-lab-v1.md`. No se solapa con `specs/research/023-knowledge-vault-research.md` (RAG de documentos). |
 | Superficies | Web (pestaña Memory), TUI y headless (herramientas `memory_*`) con paridad funcional |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: columnas con valores por defecto y tablas nuevas; ninguna herramienta ni columna existente cambia de significado salvo el upsert por `topic_key` (§6.3, decisión O3). |
 
@@ -244,7 +244,7 @@ En `api.session.onEnd`, `proposals.ts` genera candidatos desde los recuerdos de 
 - `tests/memory-proposals.test.ts`: cola `pending`, aceptar/rechazar, headless sin bloqueo.
 - `tests/memory-views.test.ts` y `tests/web-memory.test.ts` (ampliar): render de estado, procedencia y acciones.
 - `tests/memory-secrets.test.ts`: patrones rechazados, contenido benigno aceptado.
-- Medición con `specs/010-reliability-lab-v1.md`: suite de abstención/obsolescencia (recuerdo sembrado + cambio de código ⇒ el agente no lo presenta como vigente).
+- Medición con `specs/archive/010-reliability-lab-v1.md`: suite de abstención/obsolescencia (recuerdo sembrado + cambio de código ⇒ el agente no lo presenta como vigente).
 
 ## 10. Fases
 

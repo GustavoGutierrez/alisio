@@ -559,6 +559,120 @@ forge
     const { printForgeStatus } = await import("./forge.ts");
     await printForgeStatus(options(cmd), !!flags.probe);
   });
+const evalCommand = program
+  .command("eval")
+  .description(
+    "Reliability lab: run a task suite k times, report pass rates with Wilson intervals, compare reports or config variants, record cassettes and replay them without a model",
+  );
+/** `alisio eval` entry points: lazy, and exit codes are returned, not thrown (0 ok, 1 error, 2 replay diverged, 3 incompatible). */
+async function runEval(
+  cmd: Command,
+  action: (
+    api: typeof import("./eval.ts"),
+    env: import("./eval.ts").EvalEnv,
+    flags: import("./eval.ts").EvalFlags,
+  ) => Promise<number>,
+): Promise<void> {
+  const api = await import("./eval.ts");
+  const env = await api.realEvalEnv(
+    async () => options(cmd),
+    async () => cliDefaults(),
+  );
+  process.exitCode = await action(api, env, cmd.optsWithGlobals());
+}
+const evalRunOptions = (command: Command) =>
+  command
+    .option("--tasks <ids>", "Comma-separated task ids (default: every task of the suite)")
+    .option("--k <n>", "Repetitions per task (default 5; below 5 the report warns of low power)")
+    .option("--seed <n>", "Seed of the run order; each run gets seed + repetition")
+    .option(
+      "--mode <mode>",
+      "live (default) or replay (serve the recorded cassettes: no provider, no network; measures the harness, not the model)",
+    )
+    .option(
+      "--cassette-dir <dir>",
+      "Cassette directory (default: <suite>/cassettes; used by --mode replay and by record)",
+    )
+    .option("--keep", "Keep each run's temporary directory (it prints the paths)")
+    .option("--out <dir>", "Write the report files here (default: <state>/eval/<runId>/)")
+    .option("--suite-dir <dir>", "A suite, or a directory of suites; third-party code: needs --yes")
+    .option("--allow-suite-full", "Let a suite run tasks that ask for the full permission mode")
+    .option(
+      "--yes",
+      "Confirm running a --suite-dir suite without asking (required if not interactive)",
+    )
+    .option(
+      "--input-rate <usd>",
+      "USD per million input tokens, to estimate cost (needs --output-rate)",
+    )
+    .option("--output-rate <usd>", "USD per million output tokens (needs --input-rate)");
+evalCommand
+  .command("list")
+  .description("List the available suites (bundled ones plus --suite-dir)")
+  .option("--suite-dir <dir>", "A suite, or a directory of suites")
+  .action((_flags, cmd) => runEval(cmd, (api, env, flags) => api.evalList(env, flags)));
+evalRunOptions(
+  evalCommand
+    .command("run")
+    .description(
+      "Run a suite k times (live, or --mode replay from cassettes) and write report.json, report.md and runs.jsonl; --json prints the run records as JSONL and the report last. Exit 0 when it completed (whatever passed), 1 on a usage or infrastructure error, 2 when a replay diverged from its cassette",
+    )
+    .argument("<suite>"),
+).action((suite: string, _flags, cmd) =>
+  runEval(cmd, (api, env, flags) => api.evalRun(env, flags, suite)),
+);
+evalCommand
+  .command("record")
+  .description(
+    "Run each task of a suite ONCE live and write <suite>/cassettes/<taskId>.cassette.jsonl for `eval run --mode replay`. Refuses (exit 1) a cassette that holds a secret or is over 256 KB (2 MB per directory)",
+  )
+  .argument("<suite>")
+  .option("--tasks <ids>", "Comma-separated task ids (default: every task of the suite)")
+  .option("--seed <n>", "Seed of the run order")
+  .option("--keep", "Keep each run's temporary directory (it prints the paths)")
+  .option("--cassette-dir <dir>", "Write the cassettes here (default: <suite>/cassettes)")
+  .option("--suite-dir <dir>", "A suite, or a directory of suites; third-party code: needs --yes")
+  .option("--allow-suite-full", "Let a suite run tasks that ask for the full permission mode")
+  .option(
+    "--yes",
+    "Confirm running a --suite-dir suite without asking (required if not interactive)",
+  )
+  .action((suite: string, _flags, cmd) =>
+    runEval(cmd, (api, env, flags) => api.evalRecord(env, flags, suite)),
+  );
+evalCommand
+  .command("compare")
+  .description(
+    "Compare two reports of the same suite and version; exit 3 when the suites are incompatible",
+  )
+  .argument("<reportA>", "Baseline report.json (or the directory that holds it)")
+  .argument("<reportB>", "Candidate report.json (or the directory that holds it)")
+  .option("--md", "Print Markdown (the default; --json prints JSON instead)")
+  .action((a: string, b: string, _flags, cmd) =>
+    runEval(cmd, (api, env, flags) => api.evalCompare(env, flags, a, b)),
+  );
+evalRunOptions(
+  evalCommand
+    .command("variants")
+    .description(
+      'Run two or more config variants over the same tasks and seeds and compare them with the first. compare.json: {"suite":"id","variants":[{"id":"baseline","overrides":{}},{"id":"early","overrides":{"compaction.threshold":0.6}}]}',
+    )
+    .argument("<suite>")
+    .requiredOption("--variants <file>", "The compare.json file"),
+).action((suite: string, _flags, cmd) =>
+  runEval(cmd, (api, env, flags) => api.evalVariants(env, flags, suite)),
+);
+evalCommand
+  .command("export")
+  .description(
+    "Write ONE shareable JSON bundle ({schemaVersion, report, runs, markdown}) of a stored run (<state>/eval/<runId>/) with absolute paths replaced by placeholders and endpoint hosts removed from provider ids. Refuses (exit 1) when a secret is found, naming the field; refuses to overwrite FILE without --force. Local only: nothing is uploaded. Scrubbing is pattern-based, not a guarantee",
+  )
+  .argument("<runId>", "Directory name of the run under <state>/eval/")
+  .requiredOption("--out <file>", "The bundle to write")
+  .option("--force", "Overwrite FILE if it exists")
+  .action((runId: string, _flags, cmd) =>
+    runEval(cmd, (api, env, flags) => api.evalExport(env, flags, runId)),
+  );
 const trust = program.command("trust").description("Inspect or revoke per-directory project trust");
 trust.command("list").action(async () => {
   const { listTrust } = await import("@alisio/core");

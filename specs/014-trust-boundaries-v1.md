@@ -9,7 +9,7 @@
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ToolOrigin`, `ToolResult.origin?`, `TrustDecision`, eventos `trust_tainted`, `trust_escalated`, `trust_blocked`), `@alisio/core` (nuevo `packages/core/src/trust/*`; cambios en `permissions/decide.ts`, `core/runner.ts` `executeCall`/`CallScope`, `core/call-internals.ts`, `forge/broker.ts` y `forge/nested.ts`, `tools/webfetch.ts`, `tools/search.ts`, `mcp/connector.ts`, `plugins/host.ts`, `config.ts`, migración del store), `@alisio/plugin-subagents` (herencia del taint en `manager.ts`), `@alisio/server` (`bridges/approval-bridge.ts`, ruta `GET /api/sessions/:sid/trust`), `@alisio/web` (privado: «por qué se pide» en la aprobación, tarjeta de confianza), `@alisio/alisio-code` (TUI: texto de aprobación y `/trust`; CLI headless) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
-| Relación con otras especificaciones | Complementa `specs/018-perimeter-v1.md` (Perímetro declara y verifica el alcance; su O8 dice que **no decide permisos**; esta spec **sí** endurece el gate, en modo opt-in, y por eso es spec separada; Perímetro solo reporta el modo `trust.taint` en una sección «data-flow»). Usa `specs/010-reliability-lab-v1.md` para el corpus de inyección y la medición de falsos positivos (puerta de promoción). Ver `specs/017-goal-milestones-v1.md` (consume taint y ledger de efectos), `specs/013-adaptive-execution-v1.md` (contratos de subagente heredan el taint) y `specs/011-proof-v1.md` (los bloqueos pueden citarse como evidencia). Independiente de `specs/archive/009-forja-v1.md` y `specs/archive/008-forja-python-v1.md` salvo por la propagación a llamadas anidadas (§6.4). |
+| Relación con otras especificaciones | Complementa `specs/018-perimeter-v1.md` (Perímetro declara y verifica el alcance; su O8 dice que **no decide permisos**; esta spec **sí** endurece el gate, en modo opt-in, y por eso es spec separada; Perímetro solo reporta el modo `trust.taint` en una sección «data-flow»). Usa `specs/archive/010-reliability-lab-v1.md` para el corpus de inyección y la medición de falsos positivos (puerta de promoción). Ver `specs/017-goal-milestones-v1.md` (consume taint y ledger de efectos), `specs/013-adaptive-execution-v1.md` (contratos de subagente heredan el taint) y `specs/011-proof-v1.md` (los bloqueos pueden citarse como evidencia). Independiente de `specs/archive/009-forja-v1.md` y `specs/archive/008-forja-python-v1.md` salvo por la propagación a llamadas anidadas (§6.4). |
 | Superficies | Web, TUI y headless (`alisio run`) con paridad funcional; API HTTP de `alisio serve` |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: con `trust.taint: off` y `shadow` el prompt enviado y las decisiones del gate son idénticos a 0.6.x; `enforce` es opt-in. |
 
@@ -70,7 +70,7 @@ Etiqueta de procedencia por resultado, envoltorio del contenido externo en la pr
 | `task` crea runs hijos con su propio runner y aislamiento de escritura | `packages/plugin-subagents/src/manager.ts` | El hijo hereda el taint del padre (y el padre el del hijo al recibir su resultado). |
 | `webfetch`, `websearch` y MCP son efecto `external` | `packages/core/src/tools/webfetch.ts`, `tools/search.ts`, `mcp/connector.ts` | Fuentes principales de datos no confiables. |
 | Aprobaciones llegan a Web/TUI por `bridges/approval-bridge.ts` | `packages/server/src/bridges/approval-bridge.ts` | Aquí se añade «por qué se pide» (taint). |
-| No existe corpus de inyección ni medición de falsos positivos | `tests/` (sin suite de inyección); bench solo de dashboards | Depende de `specs/010-reliability-lab-v1.md`. |
+| No existe corpus de inyección ni medición de falsos positivos | `tests/` (sin suite de inyección); bench solo de dashboards | Depende de `specs/archive/010-reliability-lab-v1.md`. |
 
 ## 3. Decisiones
 
@@ -207,7 +207,7 @@ Por módulo, en `tests/trust-*.test.ts`, sin snapshots:
 - `trust-policy.test.ts`: matriz `mode × taint × efecto × grant`; `off`/`shadow` dan la misma decisión que 0.6.x (prueba de caracterización con el proveedor «scripted» de `tests/runner-gate-characterization.test.ts`).
 - `trust-invariants.test.ts`: I1 — un resultado de herramienta con texto que pide cambiar el modo no altera `Policy` ni grants.
 - `trust-audit.test.ts`: eventos y filas sin contenido ni secretos.
-- Corpus de inyección con canarios (fixtures en `tests/fixtures/eval/injection/`), ejecutado por `specs/010-reliability-lab-v1.md`: tasa de bloqueo y falsos positivos.
+- Corpus de inyección con canarios (fixtures en `tests/fixtures/eval/injection/`), ejecutado por `specs/archive/010-reliability-lab-v1.md`: tasa de bloqueo y falsos positivos.
 
 ## 10. Fases
 
@@ -285,4 +285,4 @@ Ver O1–O8 en §3.1. Las que bloquean la Fase 4 son **O1, O3 y O4**; las que bl
 
 ## 15. Estado
 
-**Borrador — 2026-10-13.** No se ejecuta hasta que el propietario confirme O1–O8 y exista, como mínimo, la Fase 0 de `specs/010-reliability-lab-v1.md` (corpus y medición).
+**Borrador — 2026-10-13.** No se ejecuta hasta que el propietario confirme O1–O8 y exista, como mínimo, la Fase 0 de `specs/archive/010-reliability-lab-v1.md` (corpus y medición).

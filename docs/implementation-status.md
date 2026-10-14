@@ -3805,3 +3805,477 @@ cargados y (d) si terminó bien, más el backend usado (`engine:` en la última 
 | 3 | «Lista los archivos de más de 100 líneas y agrúpalos por carpeta» | `js_run` |
 | 4 | «Calcula media, mediana y desviación típica del CSV y haz un gráfico de barras» | `python_run` |
 | 5 | «Entrena un clasificador sencillo sobre el CSV y dame la exactitud» | `python_run` (`python.ml`/`python.environment`) |
+
+## Reliability Lab, fase 1 (contratos, suite loader y verificadores): alcance de la verificación
+
+Fase 1 de `specs/archive/010-reliability-lab-v1.md` (§8). Solo bloques de construcción: todavía no hay motor de
+ejecución, ni reporte, ni comando `alisio eval` (Fases 2 a 6).
+
+- Cubierto: tipos aditivos del SDK (`EvalBudget`, `EvalVerifier`, `ToolSequenceRule`, `EvalTask`,
+  `EvalSuite`, `EvalRunRecord`, `EvalTaskMetrics`, `EvalReport`), cargador `loadSuite` (esquema con
+  `schemaVersion: 1` y `suiteVersion` semver, ids de tarea y de verificador únicos, fixtures existentes
+  y directorios, rutas relativas confinadas a la suite sin `..`, sin rutas absolutas y sin escapes por
+  enlaces simbólicos, errores que nombran tarea y campo), los seis verificadores de D4 y las funciones
+  estadísticas puras (intervalo de Wilson al 95 %, varianza muestral n-1, mediana, `pass@k`, `pass^k`).
+- Verificado con Vitest (sin red; directorios temporales reales): `tests/eval-suite.test.ts`,
+  `tests/eval-verifiers.test.ts` (incluye `command` real con tiempo límite y entorno limpio, y
+  `tree-diff-within` con archivos modificados, añadidos y borrados fuera de la lista) y
+  `tests/eval-stats.test.ts` (Wilson 0/5, 5/5 y 3/5 contra valores calculados a mano).
+- Decisiones de la fase: un verificador que no puede correr (ruta fuera del directorio, comando que no
+  arranca, snapshot o eventos de herramientas ausentes) devuelve `error`, nunca `fail` (desde la revisión
+  de la Fase 3, un `command` que excede `timeoutMs` es `fail`: es la verificación propia de la tarea
+  corriendo código escrito por el agente); `tree-diff-within` ignora `.git` y `node_modules` y trata `dir/` (barra final) como un
+  directorio completo permitido; `no-repeat-failure` compara llamadas por `argsKey` (si falta, por
+  nombre de herramienta); la regla `before` solo razona sobre nombres de herramienta, no por archivo.
+- No cubierto: ejecución de tareas contra un modelo, presupuestos duros (D5), `incidents`, reporte,
+  comparación, cassettes y replay. El verificador `command` ejecuta un subproceso con los privilegios del
+  usuario: no es un sandbox y las suites son código confiable del repositorio.
+
+## Reliability Lab, fase 2 (motor `live` y registro de condiciones): alcance de la verificación
+
+Fase 2 de `specs/archive/010-reliability-lab-v1.md` (§8). `runTask(task, opts)` en
+`packages/core/src/eval/engine.ts` ejecuta UNA repetición de una tarea con el `Application` real
+(runner, herramientas, store) y devuelve un `EvalRunRecord`. Todavía no hay repeticiones agregadas,
+reporte, `compare`, cassettes ni comando `alisio eval` (Fases 3 a 6).
+
+- Cubierto: copia temporal del fixture con enlaces simbólicos literales y rechazo de los que salen del
+  fixture o son absolutos; directorio de run con `ws/`, `config/`, `state/`, `home/` y `tmp/`;
+  `ALISIO_CONFIG_HOME`, `ALISIO_STATE_HOME` y `ALISIO_TMPDIR` apuntan al run mientras existe la
+  aplicación y se restauran siempre (también si el run falla); los runs se serializan con un cierre a
+  nivel de módulo porque ese entorno es global del proceso; capa de configuración global aislada
+  (sin plugins, MCP, directorios adicionales, raíz de scratch ni `dbPath` de memoria) sin confiar en el
+  proyecto; política por tarea (D16) sobre `PERMISSION_MODE_TABLE`, con rechazo explícito (no
+  recorte silencioso) si la tarea pide un efecto que el invocador no tiene y rechazo de `full` sin
+  `allowSuiteFull`; presupuestos duros (D5) `maxTurns`, `maxTokens`, `maxWallMs` y `maxToolCalls` con
+  estado `budget_exceeded` y `budgetExceeded` con el motivo; `ToolEvent[]` e `incidents` leídos de
+  eventos (D8); `configHash` con lista de permitidos y una prueba que falla si aparece una clave
+  nueva de primer nivel en la configuración; endurecimiento del verificador `command` (HOME y TMPDIR en
+  el tmp del run, proceso desprendido y grupo de procesos terminado al agotar el tiempo, tope de
+  `timeoutMs` de 600000 en el cargador); `policy.allow` del cargador restringido a
+  `write|process|external|analysis`; campos aditivos `budgetExceeded`, `error` y `fixtureGit`.
+- Verificado con Vitest (sin red ni credenciales; proveedor «scripted»): `tests/eval-engine.test.ts`
+  más las ampliaciones de `tests/eval-suite.test.ts` y `tests/eval-verifiers.test.ts`.
+- Límites que hay que conocer:
+  - **No es un sandbox.** Las herramientas de archivos están mediadas (`../x` y rutas absolutas fuera de
+    la copia se rechazan con el efecto `process` apagado), pero cualquier efecto `process` concedido, o un
+    verificador `command`, corre con los privilegios del usuario y puede escribir donde él pueda. Con
+    `process` concedido la garantía «nada fuera de la copia cambia» NO se cumple.
+  - `seed` solo ordena los runs; el proveedor no recibe semilla, así que no hay determinismo en `live`.
+  - En modo `ask` el motor es headless y DENIEGA toda aprobación (cada denegación emite
+    `approval_requested`/`approval_resolved` con `deny` y cuenta como incidente `approval_denied`);
+    `alisio run` en cambio pregunta. En los modos `auto` y `full` no se instala manejador de
+    aprobación: un efecto no concedido se rechaza sin evento de aprobación (solo cuenta `tool_error`).
+  - `maxTokens` solo se detecta si el proveedor informa `usage`; sin él no hay `inputTokens` ni
+    `outputTokens`, se registra el incidente `usage_unreported` y el tope puede excederse en una
+    respuesta antes de detenerse.
+  - `harnessVersion` sale de `loadVersion()` y vale `dev` en ejecuciones desde fuentes sin manifiesto.
+  - Una tarea con `agent` necesita un `resolveAgent` inyectado; sin él el run termina `error` con el
+    motivo. El motor no resuelve proveedores: el invocador los entrega ya resueltos.
+  - `estimated` (costo) no se calcula todavía; el campo se omite, no se inventa.
+
+## Reliability Lab, fase 3 (repeticiones, métricas, reporte, `compare` y comando `alisio eval`): alcance de la verificación
+
+Fase 3 de `specs/archive/010-reliability-lab-v1.md` (§8). Cassettes, replay y `record` llegaron en la Fase 4 y las suites
+incluidas en la Fase 5; la guía de usuario es `docs/eval.md`. `export` llegó después (ver el resumen consolidado al final).
+
+- Cubierto: `buildReport` (`core/src/eval/report.ts`) agrega `EvalRunRecord[]` en un `EvalReport` con
+  tasa de éxito e intervalo de Wilson al 95 %, `pass@k`, `pass^k`, mediana y varianza muestral de tiempo
+  de pared, varianza de tokens, tokens y tiempo por éxito, y `estimated.costUsdPerSuccess` solo si el
+  invocador entrega tarifas; `renderReportMarkdown` (cabecera con modo, línea explícita «replay mide el
+  harness, no el modelo», nota «live no es determinista», aviso de baja potencia con k < 5, y tablas
+  Measured y Estimated separadas); `compareReports` y `compareVariants` (`compare.ts`); `variants.ts`
+  (`compare.json`, validación de claves contra el esquema real de configuración, `applyConfigOverrides`
+  antes del `configHash`); `planRuns` y `runEvaluation` (plan sembrado, rechazo previo del lote entero si
+  una tarea no está permitida, ejecución en serie); y el CLI `alisio eval list|run|compare|variants`
+  (`packages/cli/src/eval.ts`, cableado en `main.ts`).
+- Verificado con Vitest (sin red ni credenciales): `tests/eval-report.test.ts`, `tests/eval-compare.test.ts`,
+  `tests/eval-plan.test.ts` y `tests/cli-eval.test.ts` (funciones del comando con entorno inyectado y el
+  motor real con proveedor «scripted»), más una ampliación de `tests/eval-engine.test.ts`. `pnpm test:cli`
+  y `pnpm test:compiled` ejercen el binario real: `eval list`, `eval compare` con códigos de salida 0 y 3,
+  `--mode replay` rechazado (hasta la Fase 4), y un `eval run` en vivo contra el servidor falso que resuelve el proveedor
+  desde la configuración y escribe `report.json`, `report.md` y `runs.jsonl`.
+- Decisiones estadísticas y de agregación (revisables):
+  - Un run `error` es **solo infraestructura previa a que el modelo actúe** (copia del fixture, creación de
+    la aplicación, red o autenticación del proveedor, un verificador que no puede arrancar): sale de toda
+    tasa y dispersión y se cuenta en `errored` (por tarea y en `summary`). Lo que causa el modelo es
+    `fail` con el incidente `run_aborted` y el detalle en `error`: truncamiento de salida
+    (`RunTruncationError`), más de 64 llamadas a herramientas en un turno, IDs de llamada duplicados o
+    reutilizados, un fin de run que no es `completed`/`turns-exceeded` (violación del protocolo del
+    runner) y un `command` que excede su `timeoutMs`. Excluirlos sería sesgo de supervivencia. Los
+    mensajes del runner para esos tres errores se reconocen por texto exacto (el runner no tiene tipos
+    para ellos y no se tocó); `tests/eval-engine.test.ts` los provoca con el runner real. El fin de run
+    con estado no reconocido no es alcanzable hoy con un proveedor, así que no tiene prueba propia. El `k` de una tarea es su número de runs **juzgados** (`pass`, `fail`,
+    `budget_exceeded`); `budget_exceeded` es no-pass y permanece en la tasa. Con `k = 0` la tasa vale 0
+    con intervalo [0, 1] (sin información) y el Markdown muestra «n/a».
+  - `passAtK` = algún run juzgado pasó; `passPowK` = todos los juzgados pasaron (falso sin runs
+    juzgados). Si un run falló por infraestructura, `pass^k` se calcula sobre los restantes.
+  - Medianas y varianzas (n - 1) sobre los runs juzgados; lo que no se puede calcular con honestidad
+    (mediana sin runs, varianza con menos de dos muestras) se **omite**, no se inventa. Por eso
+    `EvalTaskMetrics.measured.medianWallMs` y `varianceWallMs` pasan a opcionales (cambio aditivo del SDK
+    todavía sin publicar).
+  - `tokensPerSuccess`, `wallMsPerSuccess` y `costUsdPerSuccess` son el gasto TOTAL de los runs juzgados
+    (fallos incluidos) dividido por los éxitos. Los de tokens, `varianceTokens` y costo solo se calculan si
+    todos los runs juzgados informaron `usage` en **todos** sus turnos; si solo algunos turnos lo
+    informaron el motor emite `usage_unreported` y marca `measured.usagePartial` (el run cuenta como sin
+    uso). Sin éxitos se omiten. Los tokens son **tokens del bucle principal (excluyen las llamadas de
+    compactación)**: la compactación descarta el `usage` de su resumen y no se tocó el código de
+    producción; el reporte lo dice en `notes` y en el Markdown. El costo por éxito usa tarifas planas de
+    entrada y salida e ignora el precio de tokens en caché y de razonamiento.
+  - `measured` y `estimated` no comparten campos; sin tarifas no existe `costUsd` en ningún sitio y el
+    reporte ignora un `estimated.costUsd` que traiga un registro. Las tarifas (`--input-rate`,
+    `--output-rate`, USD por millón de tokens) se repiten en `report.rates`; `approxTokens` no se calcula.
+  - `configHash` incluye política y presupuesto de cada tarea, así que puede diferir entre tareas pero
+    no entre repeticiones de una tarea (si difiere, se rechaza). `conditions.configHash` es el valor
+    común o, si difieren entre tareas, el hash de los pares `taskId -> configHash` ordenados. Se rechazan
+    también mezclas de `suiteId`, `suiteVersion`, `model`, `mode`, `provider` y `harnessVersion`, y runs
+    duplicados. Las tareas del reporte salen ordenadas por id.
+  - `summary` cuenta RUNS (salvo `tasks`): `passed + failed + errored + budgetExceeded = runs`
+    (`runs` y `failed` son campos aditivos).
+  - `compare`: rechaza `suiteId` o `suiteVersion` distintos (error tipado, salida 3). El éxito se
+    compara con los intervalos de Wilson: **solapados (incluso si solo se tocan) = «no concluyente»**;
+    `k < 5` en cualquier lado = «baja potencia» y nunca una dirección; «mejora»/«regresión» solo con
+    k ≥ 5 en ambos lados e intervalos disjuntos. Es una regla conservadora de no solapamiento, no una
+    prueba de hipótesis, y no corrige por comparaciones múltiples entre tareas. Con k = 5 solo un 0/5
+    contra un 5/5 puede dar veredicto. Las demás métricas medidas llevan solo delta (candidato menos
+    base), sin veredicto. Los costos estimados solo se comparan si ambos reportes tienen las mismas
+    tarifas.
+  - `compare` no declara «mejora»/«regresión» cuando el resultado no es comparable: con runs `error` en
+    cualquier lado («not comparable: errored runs»; el reporte y la comparación llevan `errored` por
+    lado), con modos distintos («not comparable: mode differs») ni con `conditions.compactionHash`
+    distinto, caso en que se omiten los deltas de tokens y costo («not comparable: compaction settings
+    differ»; un reporte anterior sin ese hash solo genera una advertencia). Con ambos reportes en modo
+    `replay` (la lógica es de esta fase; el replay llega en la Fase 4 y se prueba con reportes
+    sintéticos) no hay intervalo ni «mejora»: cada tarea sale `changed`/`unchanged` según su estado de
+    pase y sus conteos de tokens. Un `k` distinto entre lados se marca (`pass^k` solo es comparable con
+    `k` igual). «Qué cambió» compara el `configHash` solo sobre las tareas compartidas (un subconjunto
+    con `--tasks` no parece un cambio de configuración) y recuerda que las opciones de plugins
+    integrados y los ajustes de endpoint del proveedor no entran en el hash.
+  - Las repeticiones se suponen independientes, nada está pareado (la semilla solo ordena el plan y no
+    llega al proveedor) y el modelo son intervalos independientes. Cada Markdown de comparación lleva
+    una nota al pie con estos límites, con N tareas y E runs excluidos.
+  - `--seed` planifica el orden (barajado con `mulberry32` sobre pares tarea-repetición ordenados por id,
+    igual para todas las variantes); cada run recibe `seed + repetición`. El proveedor no recibe la
+    semilla: no hay determinismo en `live`.
+- Comando `alisio eval`: `run` (modo `live`; `--mode replay` y `record` llegaron en la Fase 4),
+  `list`, `compare` y `variants`; opciones globales `--allow-*`/`--read-only` forman los permisos del
+  invocador (una tarea que pide más se rechaza antes del primer run); el proveedor se resuelve ANTES
+  de ejecutar, con una aplicación desechable en memoria que solo presta proveedor y configuración y no
+  hereda `--read-only`. Salidas: 0 completado (sin importar qué tareas pasaron), 1 error de uso o de
+  infraestructura (también si algún run terminó `error`: el reporte se escribe igualmente), 3 `compare`
+  de suites incompatibles. `--suite-dir` imprime una advertencia («un subproceso no es un sandbox») y
+  exige `--yes` si no es interactivo. Los reportes van a `<stateHome>/eval/<runId>/` o a `--out DIR`
+  (los tres archivos directamente en DIR); con `--json`, `run` emite JSONL de `EvalRunRecord` y una última
+  línea `EvalReport`, y `variants` emite líneas con `type` (`variant_report`, `comparison`).
+- Límites que hay que conocer:
+  - Las suites incluidas llegaron en la Fase 5 (ver su sección): el directorio de suites incluidas se
+    busca en `tests/fixtures/eval` de un checkout de fuentes y no existe en el paquete npm ni en el
+    binario (O4); `list` lo dice cuando no encuentra ninguna.
+  - Una variante solo puede cambiar claves de la configuración medida (las de `CONFIG_HASH_COVERAGE`
+    marcadas `hashed`); `provider`, plugins, MCP, rutas y similares se rechazan porque no entran en
+    `configHash`. Para comparar modelos se usa `--model`. La clave de ejemplo de la spec
+    `context.compactionThreshold` no existe: la real es `compaction.threshold`.
+  - Las variantes se ejecutan **intercaladas** en cada paso del plan (A,B y luego B,A; con más variantes
+    rota el primero), con las mismas tareas, repeticiones y semillas. Esto reparte la deriva del
+    proveedor, no la elimina: los runs de un paso siguen ocurriendo uno tras otro. Sin corrección por
+    comparaciones múltiples entre las N tareas. `report.json` y `comparison.json` guardan los
+    `overrides` de cada variante.
+  - El proveedor se resuelve una vez y se reutiliza durante todo el lote mientras el motor apunta
+    `ALISIO_CONFIG_HOME`/`ALISIO_STATE_HOME` a cada run; un proveedor que lea credenciales de forma
+    perezosa desde el directorio de configuración en cada petición no funcionaría. Solo está verificado
+    el proveedor compatible con OpenAI configurado en un archivo de configuración (prueba e2e con
+    servidor falso); un proveedor de plugin externo no se ha probado aquí.
+  - Una tarea con `agent` usa los agentes principales del plugin `subagents` cargado en la aplicación
+    desechable; un agente desconocido deja el run en `error` con el motivo.
+  - Todo lo de las fases 1 y 2 sigue valiendo (no es un sandbox, `ask` deniega aprobaciones, etc.).
+
+## Reliability Lab, fase 4 (cassettes y replay): alcance de la verificación
+
+`alisio eval record <suite>` graba cada tarea UNA vez en vivo y `alisio eval run --mode replay` la
+reproduce desde la cassette sin proveedor, sin credenciales y sin red. **El replay mide el harness
+(runner, herramientas, instrucciones, compactación, permisos), no el modelo**: las respuestas del
+modelo son las grabadas, así que un replay verde no dice nada sobre la calidad de un modelo (el reporte
+lo marca `mode: "replay"` y lleva las notas de la Fase 3). Las suites y cassettes incluidas llegaron
+en la Fase 5; la guía de usuario es `docs/eval.md`.
+
+- Cubierto:
+  - `core/src/eval/canonical.ts`: JSON canónico (claves ordenadas por unidad UTF-16, `undefined`
+    descartado, `null` conservado, `-0` → `0`, números no finitos rechazados, cadenas en NFC) y hash
+    `sha256:<64 hex>`. `canonicalJson` salió de `engine.ts` (sigue exportado desde `@alisio/core`).
+  - `core/src/eval/fingerprint.ts`: el fingerprint de una petición al proveedor. **Campos hasheados**:
+    `instructions`, cada mensaje, las herramientas reducidas a `{name, description, inputSchema}`
+    ordenadas por nombre, `maxOutputTokens`, `model`, **`nativeTools` y `reasoningEffort`** (la spec D10
+    no los listaba, pero cambian lo que recibe el proveedor, así que se amplió la lista). Quedan fuera
+    `signal` y `sessionId`. El fingerprint es el hash de un registro de partes (un hash corto por parte),
+    que la cassette guarda por llamada: ante una divergencia el diff dice qué parte cambió
+    (`instructions`, `messages[i].<rol>.text|calls|result`, `messages.length`,
+    `tools[<nombre>].description|inputSchema`, `tools.added|removed`, `maxOutputTokens`, `model`,
+    `reasoningEffort`, `nativeTools`), con un extracto de ±120 caracteres alrededor de la primera
+    diferencia (máximo 10 entradas) pasado por el escaneo de secretos. Los textos «antes» se guardan
+    acotados (4 KB por mensaje, descripción o esquema; 48 KB para las instrucciones, una sola vez en la
+    cabecera). Las partes son hashes de 64 bits (16 hex): distinguen versiones de una parte, no son un
+    hash de seguridad.
+  - `core/src/eval/normalize.ts`: normalización **solo de hojas de texto, nunca de claves**, en una
+    pasada con reemplazos literales calculados por el motor al inicio del run (el más largo primero) y
+    marcadores tipados y ordinales: `<WS>` (copia del fixture), `<RUN>`, `<WS_SLUG>`, `<WS_KEY>`/`<WS_KEY8>`,
+    `alisio-<UID>`, `<HOME>`, `<TMP>`, `<SESSION#n>`/`<RUN#n>` y los ids generados por patrón
+    (`task_<ULID>`, `art_…`, `fx_<uuid>`, UUID sueltos → `<id:tipo#n>`, numerados por primera aparición).
+    El `sessionId` aparece DENTRO del texto de `instructions` (la ruta del scratchpad) y por eso se
+    normaliza. Por ser tipados, una regresión real (ruta relativa → absoluta, un id de más o de menos)
+    sí cambia el hash. Los ids de tool calls y los conteos de tokens NO se normalizan (los pone la
+    cassette). `EvalTask.replayNormalize` (aditivo, `[{pattern, replace}]` con expresiones regulares
+    globales, versionado con la suite) permite filtrar ruido de la salida de un fixture.
+  - `core/src/eval/cassette.ts`: formato `cassette/v1` en JSONL (cabecera con `suiteId`, `taskId`,
+    `harnessVersion`, `recordedAt`, `configHash`, proveedor, modelo, catálogo de `listModels`, textos y
+    conjuntos de herramientas; una línea por llamada con `lane`, `fingerprint`, partes, mensajes nuevos,
+    eventos y `error`). `completed.message` se guarda **tal cual** (ids de tool calls, `providerData`,
+    `truncated`) con su `usage`; `reasoning_delta` se descarta (el SDK dice que nunca se reenvía); un
+    error del proveedor se guarda como `{message, code}` para que la recuperación por truncamiento se
+    reproduzca. `RecordingProvider` copia los eventos sin alterarlos; una llamada abortada antes de
+    cualquier evento (reintento por primer token, timeout, presupuesto) o abandonada por el consumidor
+    deja la grabación **inestable** y el run termina `error` con «re-record».
+    `ReplayProvider` sirve el id y el modelo grabados (la sesión los exige), el catálogo, respeta
+    `signal` (lanza la razón si ya está abortada, sin consumir una llamada) y no promete tiempos; el
+    motor fuerza `firstTokenTimeoutMs = 0` en replay. Fallos: `ReplayDivergenceError` (lleva el diff),
+    `ReplayExhausted` (llamada más allá del final) y `assertConsumed()` → `ReplayUnconsumedError`
+    (llamadas grabadas sobrantes). El orden es estricto **por carril**: carril = sesión registrada
+    (`<SESSION#n>`); la compactación comparte el carril de su sesión.
+  - Escritura: `writeCassette` **rechaza** (no recorta) una cassette con un secreto (`sk-…`, `sk-ant-…`,
+    `ghp_`/`gho_`/`github_pat_`, `AKIA…`, `xoxb-`/`xoxp-`, `Bearer …`, cabecera de clave privada PEM,
+    `*_API_KEY=…` y los valores exactos de las credenciales del perfil activo y de variables de entorno
+    con nombre de credencial), nombra el campo (`calls[1].events[0].message.text`) y no escribe nada;
+    también rechaza más de 256 KB por cassette y más de 2 MB por directorio (spec §11).
+  - Motor: `RunTaskOptions.mode` (`live|record|replay`), `cassette` (un `CassetteRecorder` o una
+    `Cassette`) y `onEvent`. En record y replay instala una **fuente de ids con semilla**
+    (`suiteId/taskId`), espera el catálogo de modelos antes del run (para que el límite de salida de la
+    primera petición no dependa de una carrera) y, en replay, una divergencia deja el run en `status:
+    "error"`, `error: "replay_divergence"` y `EvalRunRecord.divergence` (`kind`, `message`, `diff`) en
+    `runs.jsonl`; `EvalRunRecord.mode` es `replay`.
+  - CLI: `alisio eval record <suite> [--tasks] [--cassette-dir]` (k = 1; exit 1 si una tarea falla al
+    grabar, la cassette lleva un secreto o excede los límites; las demás se graban igualmente) y
+    `alisio eval run --mode replay` (lee `<suite>/cassettes/<taskId>.cassette.jsonl` o `--cassette-dir`;
+    **k por defecto 1** en replay porque repetir una cassette determinista no mide nada nuevo; avisa si
+    el `configHash` actual difiere del grabado). Salida **2** si algún run divergió (imprime tarea,
+    llamada, campo y extractos; el reporte se escribe igualmente). `variants` rechaza `--mode replay`.
+    Se retiró el rechazo de la Fase 3.
+- **Archivos de producción fuera de `core/src/eval/` que se tocaron (aditivo, sin cambio de
+  comportamiento si no hay fuente de ids instalada)**: `core/src/runtime/ids.ts` (`setIdSource`,
+  `newUuid`, `seededIdSource`; `ulid` consulta la fuente), `runtime/store.ts` (ids de sesión y de
+  sesión hija), `plan/exit-plan.ts` (`planId`) y `forge/kernel.ts` (ids `fx_`); los ids `task_`, `art_`,
+  `exec_`… pasan por `ulid`. Pruebas de caracterización (pasaban antes del cambio) en
+  `tests/runtime-id-source.test.ts`. Además `core/src/index.ts` y `packages/sdk/src/index.ts`
+  (tipos aditivos: `EvalTask.replayNormalize`, `EvalRunRecord.divergence`, `EvalReplayDivergence`,
+  `EvalDivergenceEntry`) y `packages/cli/src/{eval,main}.ts`.
+- Verificado con Vitest (sin red ni credenciales; proveedor «scripted»): `tests/eval-cassette.test.ts`
+  (canónico, normalizador, fingerprint y diff, formato, escritor, `RecordingProvider`,
+  `ReplayProvider`, carriles), `tests/eval-replay.test.ts` (motor real: la secuencia de `RunEvent`
+  grabada y la reproducida son iguales ignorando EXACTAMENTE `runId`, `sessionId`, `timestamp`,
+  `eventId`, `turn_completed.durationMs`/`ttftMs`, `tool_completed.durationMs` y
+  `request_retry.afterMs`, con `fetch` y `net.Socket.connect` bloqueados; ids de tool calls y
+  `providerData` idénticos; el diff nombra `tools[<nombre>].description`; llamadas sobrantes y
+  faltantes fallan; la cassette no contiene `sessionId` ni claves; 100 replays consecutivos dan la
+  misma secuencia; dos directorios de run distintos no rompen el fingerprint; un chequeo estático
+  comprueba que el grafo de imports de `cassette.ts` no importa módulos de red), `tests/cli-eval.test.ts`
+  y `tests/runtime-id-source.test.ts`. `pnpm test:cli` y `pnpm test:compiled` ejercen el binario real:
+  `eval record`, replay sin llamar al servidor falso y salida 2 ante una divergencia.
+- Límites que hay que conocer:
+  - **El replay no es evidencia de calidad del modelo.** Solo detecta que el harness pide algo distinto
+    de lo grabado (instrucciones, herramientas, mensajes, parámetros) o se comporta distinto ante las
+    mismas respuestas.
+  - **Subagentes concurrentes (límite de la v1)**: el orden es estricto dentro de cada carril. Una
+    sesión que el run no registró (hija/subagente) se une al carril cuya primera petición tiene el mismo
+    fingerprint, así que hijos concurrentes pueden intercalarse distinto; dos hijos con una primera
+    petición idéntica son intercambiables, y un hijo cuya primera petición cambia se informa como
+    divergencia. Un orden relevante entre carriles distintos no se comprueba.
+  - Cualquier cambio del harness que altere lo que recibe el proveedor invalida la cassette (es el
+    comportamiento buscado): hay que regrabar con `alisio eval record`. La normalización no cubre ruido
+    que la tarea imprima (fechas, PIDs): se declara con `replayNormalize`, y una regla demasiado
+    amplia puede ocultar una regresión real.
+  - Una grabación depende de que el modelo y la red se porten bien durante ese run: si algún intento se
+    aborta (reintento por primer token, timeout) la grabación se rechaza como inestable. La cassette
+    guarda el catálogo del proveedor; si `listModels` falla al grabar, el replay no tiene catálogo.
+  - El escaneo de secretos es una red de seguridad por patrones, no una garantía: no reconoce un
+    secreto con forma desconocida ni un valor corto (< 8 caracteres) de credencial. Revisar una
+    cassette antes de versionarla sigue siendo responsabilidad de quien graba.
+  - La fuente de ids con semilla es global del proceso mientras dura un run record/replay (el motor ya
+    serializa los runs). Los `runId` (el del motor y los del runner) no pasan por ella; no entran
+    en ninguna petición.
+  - `reasoningEffort` y `nativeTools` entran en el fingerprint: cambiar el esfuerzo de razonamiento
+    configurado o activar la búsqueda nativa invalida las cassettes grabadas sin ellos.
+  - El replay con `--mode replay` abre una aplicación desechable para obtener la configuración; en
+    ella no se exige un proveedor configurado, pero sí se cargan los plugins configurados.
+
+## Reliability Lab, fase 5 (suites incluidas y CI con replay): alcance de la verificación
+
+Fase 5 de `specs/archive/010-reliability-lab-v1.md` (§8). Tres suites versionadas (`suiteVersion` `1.0.0`) en
+`tests/fixtures/eval/{smoke-coding,tool-sequences,long-context}/`, las cassettes grabadas de
+`tool-sequences` y de un subconjunto de `smoke-coding`, y una prueba que las reproduce en `pnpm test`.
+Guía de usuario: `docs/eval.md`.
+
+**Qué miden las cassettes incluidas, dicho sin rodeos**: se grabaron con un **proveedor scripted**
+(`scripts/eval-record-bundled.ts`: una lista fija de llamadas a herramientas, como las haría un modelo
+ideal), no con un modelo real. Fijan el comportamiento del **harness** (instrucciones, definiciones de
+herramientas, mensajes, ejecución de las llamadas y verificadores) frente a un modelo fijo, así que un
+replay verde no dice nada sobre la calidad de ningún modelo. Para grabar un modelo real con el proveedor
+propio: `alisio eval record <suite>`.
+
+- Suites (todas con el presupuesto aprobado en la Fase 0: `maxTokens` 200000, `maxWallMs` 120000,
+  `maxTurns` 30, `maxToolCalls` 40; ninguna tarea lo necesitó distinto):
+  - `smoke-coding` (7 tareas, TypeScript mínimo; verificadores `command` con un script del fixture o
+    `node --test`, más `tree-diff-within` y `file-equals`): `fix-add`, `add-slugify`, `implement-chunk`
+    (las tres de la Fase 0) y cuatro **más difíciles** exigidas por el efecto techo de la Fase 0:
+    `rename-symbol` (renombrar un símbolo en 3 archivos), `edit-respects-hash` (cambio de un byte con
+    `edit_file` y `expectedHash`, comprobado con `file-equals` sobre el resultado exacto),
+    `bug-across-modules` (la causa está en un módulo distinto del que falla) y
+    `off-by-one-among-passing` (un fallo escondido entre pruebas que pasan).
+  - `tool-sequences` (6 tareas, D13, verificadores `tool-sequence` más `file-*`): `read-before-edit`,
+    `stop-bg-before-delete` (detener un `bg_run` antes de borrar su directorio; **contiene la transición
+    inválida deliberada**), `no-repeat-failed-call`, `sequential-hash-edits`, `no-shell-fix-typo`
+    (`never`) y `read-each-file-once` (`max-calls`).
+  - `long-context` (3 tareas, modo `live`, sin cassettes): `find-late-value` (un id en la línea 584 de
+    un log), `merge-facts-across-files` (tres datos enterrados en tres documentos) y
+    `truncated-command-output` (una salida de comando demasiado larga, con un solo `FAILED`);
+    verificadores `file-contains` de conservación. Para que `specs/012-context-governor-v1.md` mida
+    elisión y compactación.
+  - **No hay suite `injection`**: sigue reservada para `specs/014-trust-boundaries-v1.md`.
+- Cassettes incluidas: 10 (las 6 de `tool-sequences` y `fix-add`, `rename-symbol`,
+  `edit-respects-hash`, `bug-across-modules`), 399 146 bytes en total (tras `smoke-coding` 1.2.0) (límite de la spec: 2 MB; cada
+  una por debajo de 256 KB). Se regraban con **un único comando**: `pnpm eval:record-bundled`
+  (opciones `--tasks suite/tarea,...` y `--out DIR`). Dos grabaciones seguidas producen archivos
+  idénticos byte a byte (la cabecera lleva `recordedAt: 0`, el proveedor se llama `scripted` y los ids
+  salen de la fuente con semilla). Se graban con los plugins integrados del CLI y la configuración por
+  defecto, de modo que `alisio eval run <suite> --mode replay` desde un checkout las reproduce también
+  (hay que dar `--allow-write --allow-process` y usar una configuración limpia, por ejemplo con
+  `ALISIO_CONFIG_HOME` apuntando a un directorio vacío; la configuración propia del usuario cambia lo
+  que recibe el proveedor y se informa como divergencia).
+- `alisio eval list` lista las tres suites incluidas en un checkout de fuentes (origen `bundled`). **No
+  viajan en el paquete npm ni en el binario** (O4): ahí `list` queda vacío y el mensaje lo explica;
+  `--suite-dir` cubre las suites propias. Los fixtures están excluidos de `tsc` y de Biome (son entradas de
+  tareas, algunas con tipos rotos a propósito).
+- Verificado con Vitest (`tests/eval-bundled-suites.test.ts`, sin red ni credenciales): las tres suites
+  cargan con `loadSuite`; recuento de tareas, las tres de la Fase 0, al menos tres más difíciles y el
+  presupuesto aprobado en cada tarea; cada fixture sin resolver **falla** un verificador sin dar
+  `error`; la solución de referencia de cada tarea sin cassette pasa todos sus verificadores en vivo;
+  el replay de las 10 cassettes pasa sin divergencias en unos 2 s (límite del test 10 s, medido en una
+  máquina local, así que en una lenta puede dar falsos positivos: es una señal, no un margen que haya
+  que ensanchar); la transición inválida deliberada (borrar `work/` antes de `bg_stop`) la detecta el
+  verificador `tool-sequence` y la misma tarea con el orden correcto pasa; cambiar la descripción de una
+  herramienta que envía el harness hace fallar el replay con un diff que nombra
+  `tools[<nombre>].description` (criterio U2); grabar dos veces da archivos idénticos byte a byte y la
+  cassette versionada pide al proveedor lo mismo que una grabación nueva; ninguna cassette contiene
+  secretos (el mismo escaneo de la Fase 4), `sessionId`, UUID ni rutas absolutas de la máquina. Pruebas
+  existentes ajustadas: `tests/cli-eval.test.ts` (mensajes cuando no hay suites incluidas) y la prueba
+  de `eval list` de `fixtures/cli-e2e.ts` (modo `node`: las tres suites; binario: ninguna).
+- Límites que hay que conocer:
+  - **Las cassettes incluidas no miden calidad de modelo** (ver arriba). Un cambio legítimo del harness
+    que altere lo que recibe el proveedor las invalida; hay que regrabarlas con
+    `pnpm eval:record-bundled` y revisar el diff.
+  - **Las tareas más difíciles de `smoke-coding` no se han medido con un modelo real**: se probó que
+    cada fixture sin resolver falla, que una solución escrita a mano pasa y que el replay del harness es
+    estable, pero no se sabe si siguen saturando (15/15 en la Fase 0 para las tres fáciles) ni su
+    dificultad real. Hace falta una medición `live` del propietario (`alisio eval run smoke-coding
+    --allow-write --allow-process` con `k=5`) antes de usarlas para decidir.
+  - `long-context` solo se ha validado con respuestas de referencia (los verificadores aceptan la
+    correcta y rechazan el fixture sin resolver); no tiene cassettes ni medición con un modelo.
+  - `stop-bg-before-delete` arranca un proceso real en segundo plano y borra con `rm -rf` (solo POSIX);
+    las cassettes normalizan las marcas de tiempo de la salida de `bg_run` con `replayNormalize`.
+  - La suite `injection` no existe hasta `specs/014`.
+
+## Reliability Lab (resumen consolidado, fase 6): limitaciones y alcance de la verificación
+
+Resumen de `specs/archive/010-reliability-lab-v1.md` (Fases 0 a 6); el detalle por fase está en las secciones
+anteriores y la guía de usuario en `docs/eval.md` (EN) y `docs/es/eval.md` (ES). No se implementó la
+vista opcional de solo lectura del reporte en la Web ni en la TUI (el propietario no la pidió, así que
+no aplica captura de pantalla).
+
+**Limitaciones (spec §1.6 y las que surgieron al implementar):**
+
+- **Sin LLM como juez.** Solo verificadores deterministas y locales; la calidad subjetiva no se mide.
+- **Sin benchmarks de terceros.** El formato de suite podría alojarlos, pero no se incluye ninguno; la
+  suite `injection` sigue reservada para `specs/014-trust-boundaries-v1.md`.
+- **Sin determinismo en `live`.** `--seed` solo ordena los runs y no llega al proveedor; el reporte no
+  lo afirma. El replay mide el harness, no el modelo.
+- **Sin subida de resultados.** Los reportes son archivos locales en `<stateHome>/eval/<runId>/` o
+  `--out`. Sin telemetría. `alisio eval export <runId> --out FILE [--force]` (D9, `core/src/eval/export.ts`,
+  `evalExport` en `packages/cli/src/eval.ts`) escribe un único paquete JSON local
+  `{schemaVersion: 1, report, runs[], markdown}`. Cubierto por `tests/eval-export.test.ts` y
+  `tests/cli-eval.test.ts`: rutas absolutas (home, datos, directorio de la ejecución, temporales y
+  cualquier otra) sustituidas por marcadores, ids de proveedor no simples reducidos a
+  `custom-endpoint`, el escáner de secretos de las cassettes sobre todo el paquete (un acierto **rechaza**
+  con exit 1 y nombra la ruta del campo, nunca el valor), runId validado (sin recorrido de rutas, debe
+  existir), sin sobrescribir sin `--force`, y el reporte exportado se parsea con los mismos números.
+  **Límite honesto**: la limpieza se basa en patrones (rutas, formas conocidas de claves y las credenciales
+  exactas del perfil/entorno); no garantiza eliminar toda cadena sensible que pueda haber en los prompts
+  de las tareas, los detalles de los verificadores o la salida de herramientas. Hay que revisar el
+  paquete antes de compartirlo. No verificado: rutas de Windows en un paquete generado en Windows.
+- **Nunca se ejecuta contra el árbol real**: cada run usa una copia temporal del fixture. Con `process`
+  concedido, o con un verificador `command`, **no hay confinamiento** (un subproceso o una política no
+  es un sandbox); una suite de `--suite-dir` exige confirmación o `--yes`.
+- **Sin interfaz interactiva**; solo CLI headless.
+- Estadística: repeticiones supuestas independientes, sin emparejar, sin corrección por comparaciones
+  múltiples; con `k = 5` solo 0/5 contra 5/5 da veredicto; los tokens excluyen la compactación; sin
+  tarifas no hay costo.
+- `ask` headless deniega aprobaciones (a diferencia de `alisio run`). El replay de las cassettes
+  incluidas necesita `--allow-write --allow-process` y un `ALISIO_CONFIG_HOME` vacío.
+- Las suites y cassettes incluidas viven solo en el checkout (O4), no en el paquete npm ni en el binario.
+- **`scripts/eval-ci.ts` (`pnpm eval:ci`, O7, opcional)**: reproduce las cassettes incluidas por el mismo
+  camino que `alisio eval run --mode replay` (`evalRun`), con `--allow-write --allow-process` y
+  configuración vacía fijados por el script. Sale con 2 si un replay diverge, con 1 si una tarea no pasa,
+  si no hay nada que reproducir (conjunto vacío = mala configuración) o ante un error de infraestructura,
+  y con 0 solo si todo pasa; las suites sin cassettes se omiten y se listan. Escribe
+  `<out>/<suite>/report.{json,md}`. **No está activado**: no figura en `ci.yml` ni en la lista de
+  entrega; la guía (`docs/eval.md`, "Using replay in CI") trae un fragmento de job para que el
+  propietario lo habilite. Informa, no promueve: mide el arnés, no el modelo. Solo checkout (no se
+  publica; `pack:check` no lo incluye). Sin verificar: ejecución en un runner de GitHub real.
+
+**Alcance de la verificación (qué prueba qué, sin red ni credenciales):**
+
+| Área | Prueba |
+| --- | --- |
+| Cargador de suites | `tests/eval-suite.test.ts` |
+| Verificadores | `tests/eval-verifiers.test.ts` |
+| Estadística (Wilson, pass@k, pass^k) | `tests/eval-stats.test.ts` |
+| Motor (aislamiento, presupuestos, política D16, condiciones D2) | `tests/eval-engine.test.ts` |
+| Plan de runs | `tests/eval-plan.test.ts` |
+| Reporte y comparación | `tests/eval-report.test.ts`, `tests/eval-compare.test.ts` |
+| Cassettes, fingerprint y normalización | `tests/eval-cassette.test.ts`, `tests/runtime-id-source.test.ts` |
+| Replay con el motor real y divergencia | `tests/eval-replay.test.ts` |
+| CLI (flags, JSONL, códigos de salida 0/1/2/3) | `tests/cli-eval.test.ts`, más `pnpm test:cli` y `pnpm test:compiled` con el binario real |
+| Suites y cassettes incluidas (CI con replay) | `tests/eval-bundled-suites.test.ts` |
+| Script de línea base de la Fase 0 (`scripts/eval-baseline.ts`) | `tests/eval-baseline.test.ts` |
+| Puerta opcional de CI con replay (`scripts/eval-ci.ts`, `pnpm eval:ci`, O7) | `tests/eval-ci.test.ts` |
+
+**Medición con modelo real (2026-10-14):** `smoke-coding` 1.2.0 se midió en vivo con dos modelos (ver «Reliability Lab: medición live de `smoke-coding` 1.2.0»); el poder discriminante entre modelos NO está establecido. `long-context` y `tool-sequences` no se midieron con un modelo real y las tres tareas de `long-context` solo se validaron con soluciones de referencia y fixtures sin resolver. Las cassettes incluidas se
+grabaron con un proveedor scripted. Solo se verificó el proveedor compatible con OpenAI desde un archivo
+de configuración; un proveedor de plugin externo no se probó. La documentación se comprobó con
+`pnpm docs:check` y `pnpm docs:build`.
+
+### Reliability Lab: primera medición live de `smoke-coding`
+
+El 2026-10-13 se ejecutó `smoke-coding` 1.0.0 en modo live con `opencode-go/deepseek-v4.1-flash` (k=5, 35 ejecuciones): 32 pasaron, 3 excedieron el presupuesto y 0 dieron error. Tres de las cuatro tareas añadidas como más difíciles (`rename-symbol`, `edit-respects-hash`, `off-by-one-among-passing`) siguen pasando 5/5, así que no discriminan para este modelo. `bug-across-modules` pasó 2/5; sus tres fallos fueron excesos de presupuesto (dos de `maxWallMs`, uno de `maxTokens`) y las ejecuciones que pasaron usaron hasta 189k tokens y 82 s, de modo que el presupuesto original medía velocidad. `smoke-coding` 1.1.0 sube esa tarea a 400k tokens y 240 s. El nuevo presupuesto no se ha vuelto a medir con un modelo real, y la medición es de un solo modelo y una sola corrida.
+
+Remedición de `bug-across-modules` con `smoke-coding` 1.1.0 (mismo modelo, k=5): 4/5 [37,6 %; 96,4 %] y ningún exceso de presupuesto. El único fallo modificó `check.ts` y lo detectó el verificador `scope`; no fue una solución incorrecta. Tres de las cuatro ejecuciones que pasaron habrían superado el presupuesto anterior (hasta 301k tokens y 194 s). Con k=5 el intervalo es amplio y no es comparable con la medición de la versión 1.0.0.
+
+### Reliability Lab: `smoke-coding` 1.2.0 (tres tareas endurecidas)
+
+Las tres tareas que saturaban 5/5 con `opencode-go/deepseek-v4.1-flash` (`rename-symbol`, `edit-respects-hash`, `off-by-one-among-passing`) se rehicieron para que un modelo pequeño pero capaz ya no las pase por inercia. `suiteVersion` sube a `1.2.0`; `bug-across-modules` y las tres tareas fáciles no cambian.
+
+- `rename-symbol`: 7 archivos en `src/`. Hay que renombrar `fetchUser` a `loadUser` en la definición, un barrel con re-exportación y alias, una importación con alias, un `import()` dinámico (desestructurado y con acceso por corchetes `api["fetchUser"]`) y una referencia solo de tipos (`typeof fetchUser`). No se debe tocar: `fetchUserByName`, `fetchUsers`, `fetchUserCached`, `fetchUserCacheSize` (prefijo parecido), un método `fetchUser` de una clase sin relación y la clave de métrica `"fetchUser.calls"` (dato, no referencia). Un reemplazo de texto global falla.
+- `edit-respects-hash`: dos archivos y cuatro cambios; `defaults.ts` usa CRLF, una línea con espacios al final, no termina en salto de línea y tiene bloques casi idénticos (`httpDefaults`, `httpDefaultsLegacy`, `queueDefaults`). Cada `edit_file` cambia el hash, así que la segunda y la tercera edición del mismo archivo exigen el hash nuevo; reescribir el archivo con `write_file` normaliza los bytes y falla. Resultado comprobado con `file-equals` (sha256) en ambos archivos. Añade `.gitattributes` (`-text`) para que git no normalice esos bytes.
+- `off-by-one-among-passing`: cinco defectos de borde (`ceilDiv` redondea mal, la lista vacía debe tener una página, páginas menores que 1, `pageRange` sin recorte ni caso vacío, `pagesRemaining` negativo). La suite visible solo revela el primero (un único fallo) y tiene nombres de prueba engañosos. Un segundo verificador `command` oculto (`verifiers/pagination-contract.mjs`, incrustado en `suite.json` como argumento de `node -e`, por lo que no existe en el espacio de trabajo del agente) comprueba lo que prometen los comentarios JSDoc de `src/`; el prompt pide que cada función se comporte como documenta. Arreglar solo `totalPages` o solo `ceilDiv` pasa la suite visible y falla el verificador oculto.
+- **Anti-manipulación** (se observó un run que modificó `check.ts`): `rename-symbol` fija `check.ts` con `file-equals` (sha256) además del alcance `src/`; `off-by-one-among-passing` fija `checks/paginate.check.mjs` con `file-equals`; `edit-respects-hash` limita el árbol a sus dos archivos. Un test comprueba que cada hash fijado coincide con el archivo del fixture. Límite: el motor copia todo el fixture al espacio de trabajo, así que un script de comprobación no puede ocultarse; solo el verificador inline de `off-by-one-among-passing` es invisible para el agente.
+- **Presupuestos** (reemplazan los del 1.1.0 solo donde se indica): `rename-symbol` 400k tokens / 240 s, `edit-respects-hash` y `off-by-one-among-passing` 300k tokens / 180 s; turnos (30) y llamadas a herramientas (40) siguen en el valor aprobado. Motivo: una ejecución live 1.0.0 de `rename-symbol` con 3 archivos ya usó hasta 145k tokens en 10 turnos (~13k por turno); con 7 archivos el presupuesto de 200k mediría velocidad, como pasó con `bug-across-modules`. Registrados en `BUDGET_OVERRIDES` de `tests/eval-bundled-suites.test.ts`. No se midieron con un modelo real.
+- Verificado sin modelo real (`tests/eval-bundled-suites.test.ts`): cada fixture sin resolver falla un verificador sin dar `error`; la solución de referencia scripted pasa todos los verificadores (`scripts/eval-record-bundled.ts`; cassettes regrabadas de `rename-symbol` y `edit-respects-hash`, `off-by-one-among-passing` sin cassette como antes); nueve soluciones **incorrectas pero plausibles** (tres por tarea, `WRONG_SOLUTIONS`) son rechazadas por el verificador esperado y no dan `error`.
+- **Límite honesto: el poder discriminante con un modelo real NO está medido.** Las soluciones incorrectas scripted prueban que los verificadores rechazan errores plausibles, no que un modelo real los cometa; el objetivo de 30-80 % de aciertos es una hipótesis. Pendiente del propietario: `alisio eval run smoke-coding --tasks rename-symbol,edit-respects-hash,off-by-one-among-passing --k 5 --allow-write --allow-process` (modo live, mismo modelo). Si alguna sigue en 5/5, hay que endurecerla más; si cae a 0/5, revisar si el fallo es de presupuesto o de la tarea.
+
+### Reliability Lab: medición live de `smoke-coding` 1.2.0
+
+El 2026-10-14 (arnés 0.6.0, `smoke-coding` 1.2.0, k=5, modo live) se midieron `rename-symbol`, `edit-respects-hash` y `off-by-one-among-passing` con dos modelos. Los presupuestos no se subieron para favorecer al modelo más débil: el presupuesto forma parte de la tarea.
+
+| Modelo | pass | fail | budget_exceeded | error | Tasa por tarea (Wilson 95 %) |
+| --- | --- | --- | --- | --- | --- |
+| `opencode-go/deepseek-v4.1-flash` | 15 | 0 | 0 | 0 | 100 % [56,6 %; 100 %] en las tres |
+| `opencode-go/mimo-v2.6-flash` | 9 | 0 | 6 (5 por `maxWallMs`, 1 por `maxTokens`) | 0 | `rename-symbol` 80 % [37,6 %; 96,4 %]; `edit-respects-hash` 80 % [37,6 %; 96,4 %]; `off-by-one-among-passing` 20 % [3,6 %; 62,4 %] |
+
+- DeepSeek: el objetivo de 30-80 % era una hipótesis y NO se cumplió; las tareas saturan para este modelo. Mediana de tiempo por ejecución 43-106 s; tokens por éxito 117k-256k.
+- MiMo: ninguna ejecución `fail` causada por el modelo, así que los verificadores nunca rechazaron una solución incorrecta. La tasa menor se debe sobre todo al tiempo de reloj (latencia del proveedor, ~30 s por turno), por lo que mezcla capacidad y velocidad. Los intervalos se solapan con los de DeepSeek: `eval compare` daría `inconclusive`.
+- Conclusión: `smoke-coding` es una suite de humo/regresión; satura con un modelo barato y fuerte y solo discrimina (en parte por latencia) con uno más débil. El poder discriminante entre modelos NO está establecido y `long-context` no se midió con un modelo real.

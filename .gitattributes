@@ -1,0 +1,2 @@
+# The byte-exact edit task depends on CRLF line endings and trailing whitespace: never normalize.
+tests/fixtures/eval/smoke-coding/fixtures/edit-respects-hash/src/*.ts -text -whitespace
