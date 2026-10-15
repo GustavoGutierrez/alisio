@@ -28,10 +28,14 @@ export function planAnswer(
   question: Pick<Question, "id">,
   choice: PlanChoice,
   text?: string,
+  criteria?: string,
 ): Record<string, string> {
   const trimmed = (text ?? "").trim();
-  return choice === "context" && trimmed
-    ? { [question.id]: choice, [`${question.id}:text`]: trimmed }
+  if (choice === "context" && trimmed)
+    return { [question.id]: choice, [`${question.id}:text`]: trimmed };
+  // The per-criterion choices (`plan:criteria`) only mean something with an approval.
+  return choice === "approve" && criteria
+    ? { [question.id]: choice, [`${question.id}:criteria`]: criteria }
     : { [question.id]: choice === "context" ? "skip" : choice };
 }
 

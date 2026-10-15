@@ -14,7 +14,7 @@ import {
 import { api, currentId, detail } from "./app.ts";
 import { readPref, writePref } from "./storage.ts";
 
-export type DockTab = "files" | "changes" | "preview" | "tasks" | "scratch";
+export type DockTab = "files" | "changes" | "preview" | "tasks" | "scratch" | "proof";
 
 export interface DirState {
   entries: FileEntry[];
@@ -72,6 +72,16 @@ export function openTasks(): void {
   batch(() => {
     dockOpen.value = true;
     dockTab.value = "tasks";
+  });
+  writePref("alisio.dock", "open");
+  ensureWorkspace();
+}
+
+/** `/proof` and the card's button: opens the dock on its Proof tab. */
+export function openProof(): void {
+  batch(() => {
+    dockOpen.value = true;
+    dockTab.value = "proof";
   });
   writePref("alisio.dock", "open");
   ensureWorkspace();

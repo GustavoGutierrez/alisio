@@ -4,6 +4,11 @@ import { t } from "../../i18n/index.ts";
 import { answer } from "../../store/app.ts";
 import { openArtifact } from "../../store/artifacts.ts";
 import {
+  criteriaSelection,
+  type DraftDecision,
+  initialDecisions,
+} from "../../store/plan-criteria.ts";
+import {
   isPlanChoice,
   OPTION_HINTS,
   OPTION_LABELS,
@@ -31,10 +36,14 @@ export function PlanReviewPanel({ interaction }: { interaction: PendingInteracti
   const [mode, setMode] = useState<"choose" | "text">("choose");
   const [text, setText] = useState("");
   const [sent, setSent] = useState(false);
+  // The user's choice per proposed acceptance criterion (all kept as proposed by default).
+  const [decisions, setDecisions] = useState<DraftDecision[]>([]);
+  const drafts = view?.plan.acceptanceCriteria ?? [];
   useEffect(() => {
     setMode("choose");
     setText("");
     setSent(false);
+    setDecisions(initialDecisions(view?.plan.acceptanceCriteria ?? []));
     panel.current?.focus();
   }, [interaction.interactionId]);
   useEffect(() => {
@@ -46,7 +55,10 @@ export function PlanReviewPanel({ interaction }: { interaction: PendingInteracti
   const decide = (choice: PlanChoice) => {
     if (sent) return;
     setSent(true);
-    void answer(interaction.interactionId, planAnswer(view.question, choice, text));
+    void answer(
+      interaction.interactionId,
+      planAnswer(view.question, choice, text, criteriaSelection(drafts, decisions)),
+    );
   };
   const titleId = `plan-review-${interaction.interactionId}`;
   return (
@@ -97,6 +109,55 @@ export function PlanReviewPanel({ interaction }: { interaction: PendingInteracti
                 </button>
               ) : null}
             </p>
+          ) : null}
+          {drafts.length && mode === "choose" ? (
+            <fieldset class={plan.criteria} disabled={sent}>
+              <legend>{pk("criteriaTitle")}</legend>
+              <p class={plan.criteriaHint}>{pk("criteriaHint")}</p>
+              {drafts.map((draft, i) => {
+                const d = decisions[i] ?? {
+                  keep: true,
+                  text: draft.text,
+                  required: draft.required,
+                };
+                const change = (patch: Partial<DraftDecision>) =>
+                  setDecisions((all) => all.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+                return (
+                  <div key={`${i}-${draft.text}`} class={plan.criterion} data-kept={String(d.keep)}>
+                    <input
+                      type="checkbox"
+                      checked={d.keep}
+                      aria-label={pk("criterionKeep")}
+                      onChange={(event) =>
+                        change({ keep: (event.target as HTMLInputElement).checked })
+                      }
+                    />
+                    <input
+                      type="text"
+                      class={plan.criterionText}
+                      value={d.text}
+                      maxLength={500}
+                      disabled={!d.keep}
+                      aria-label={pk("criterionText")}
+                      onInput={(event) =>
+                        change({ text: (event.target as HTMLInputElement).value })
+                      }
+                    />
+                    <label class={plan.criterionRequired}>
+                      <input
+                        type="checkbox"
+                        checked={d.required}
+                        disabled={!d.keep}
+                        onChange={(event) =>
+                          change({ required: (event.target as HTMLInputElement).checked })
+                        }
+                      />
+                      <span>{pk("criterionRequired")}</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </fieldset>
           ) : null}
           {mode === "choose" ? (
             <div class={styles.options} role="group" aria-labelledby={titleId}>

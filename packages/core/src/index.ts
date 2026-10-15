@@ -517,6 +517,7 @@ export {
   IMPLEMENTATION_AGENT_ID,
   implementationPrompt,
   PLAN_CONTEXT_MAX_CHARS,
+  PLAN_CRITERIA_KEY,
   PLAN_OPTIONS,
   PLAN_QUESTION_ID,
   PLAN_REVIEW_TITLE,
@@ -559,6 +560,7 @@ export {
   sanitizeNpmError,
   updateAllPlugins,
 } from "./plugins/install.ts";
+export * from "./proof/index.ts";
 export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 export {
   availableProviderModels,

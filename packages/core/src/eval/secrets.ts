@@ -45,3 +45,16 @@ export function redactSecrets(text: string, exact: readonly string[] = []): stri
       out = out.replace(new RegExp(escape(value), "g"), "[redacted]");
   return out;
 }
+
+/**
+ * Generic `password=`/`TOKEN=` style assignments (also `"api_token": "..."`). Kept apart from
+ * `RULES` on purpose: a hit there REFUSES a cassette, and widening that net would change the
+ * eval harness. Meant for text that is only displayed or stored as an excerpt.
+ */
+const GENERIC_ASSIGNMENT =
+  /\b[\w.-]*(?:password|passwd|secret|token)[\w.-]*["']?\s*[=:]\s*["']?[^\s"',;&]{3,}/gi;
+
+/** `redactSecrets` plus generic credential assignments, for excerpts of tool output (Proof). */
+export function redactOutput(text: string, exact: readonly string[] = []): string {
+  return redactSecrets(text, exact).replace(GENERIC_ASSIGNMENT, "[redacted]");
+}

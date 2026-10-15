@@ -27,6 +27,7 @@ import {
   goalInfo,
   mobileSidebar,
   newSession,
+  proofCount,
   reloadRequired,
   settingsOpen,
   streamStatus,
@@ -94,6 +95,7 @@ const loadChangelog = () =>
 const loadTrajectory = () =>
   import("./components/trajectory/TrajectoryTab.tsx").then((m) => m.TrajectoryTab);
 const loadMemory = () => import("./components/memory/MemoryTab.tsx").then((m) => m.MemoryTab);
+const loadProofCard = () => import("./components/proof/ProofCard.tsx").then((m) => m.ProofCard);
 const loadGoal = () => import("./components/goal/GoalBar.tsx").then((m) => m.GoalBar);
 const loadArtifacts = () =>
   import("./components/artifacts/ArtifactPanel.tsx").then((m) => m.ArtifactPanel);
@@ -207,6 +209,7 @@ export function App() {
               <Transcript />
             )}
             {goalInfo.value ? <Lazy key="goal" load={loadGoal} /> : null}
+            {proofCount.value > 0 ? <Lazy key="proof" load={loadProofCard} /> : null}
             {approvals.length ? (
               <ApprovalPanel approvals={approvals} />
             ) : interactions[0] && planReviewOf(interactions[0]) ? (

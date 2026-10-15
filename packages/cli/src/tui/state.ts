@@ -1171,6 +1171,12 @@ function reduceEventItems(state: ViewState, event: RunEvent): ViewState {
       }
       return ended;
     }
+    case "proof_divergence":
+      // D8: the claim is only shown; no status changes and nothing is corrected in silence.
+      return addItem(state, {
+        kind: "notice",
+        text: `Proof: "${oneLine(String(d.claim ?? ""))}" has no backing evidence (${String(d.actual ?? "not_checked")}). /proof shows the ledger.`,
+      });
     case "truncation_recovery":
       return { ...state, recovery: { attempt: Number(d.attempt) || 1, of: Number(d.of) || 1 } };
     case "request_retry":

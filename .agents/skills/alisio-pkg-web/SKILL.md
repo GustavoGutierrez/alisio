@@ -37,6 +37,12 @@ Talks only to `@alisio/server` over HTTP/SSE; imports only types from `@alisio/s
   screenshot per `alisio-docs-screenshots`.
 - Persist only small per-user prefs via `store/storage.ts` (`readPref`/`writePref`).
 
+## Proof card
+`components/proof/` (`ProofView.tsx` is hook-free and pure, `ProofCard.tsx` wraps it as thread card and
+dock tab, `strings.ts` EN/ES) and `store/proof.ts` are lazy chunks; the initial bundle only has
+`store/proof-frame.ts`, `proofCount`/`proofTick` and the `/proof` hook. Tests walk the VNode tree of
+`ProofView` (no DOM) in `tests/web-proof.test.ts`. Plan-review criteria choices: `store/plan-criteria.ts`.
+
 ## Testing
 
 Vitest runs in Node (no DOM environment): test pure models, reducers and stores

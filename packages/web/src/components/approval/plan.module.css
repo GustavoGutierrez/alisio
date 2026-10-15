@@ -57,3 +57,60 @@
   outline: none;
   box-shadow: var(--focus);
 }
+
+.criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.criteria legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.criteriaHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.criterion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.criterion[data-kept="false"] {
+  opacity: 0.6;
+}
+
+.criterionText {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.criterionText:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.criterionRequired {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}

@@ -18,6 +18,7 @@ import {
 import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nested.ts";
 import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
 import { decideEffect, effectAskable } from "../permissions/decide.ts";
+import type { ProofRecorder, ProofUpdate } from "../proof/recorder.ts";
 import type { PathAccess } from "../runtime/access.ts";
 import { bindCallInternals } from "./call-internals.ts";
 import {
@@ -153,6 +154,8 @@ export interface RunnerOptions {
   artifacts?: ArtifactPublisherFactory;
   /** Decision Intelligence bound to each tool call (`ToolContext.decisions`). */
   decisions?: DecisionsFactory;
+  /** Captures Proof evidence from executed calls (specs/011). Absent: the runner is unchanged. */
+  proof?: ProofRecorder;
   /**
    * Provider-native tool definitions (for example a hosted `web_search` tool) appended to every
    * request's `tools` alongside the registry's function tools. Opt-in, set once for the whole
@@ -677,6 +680,8 @@ export class AgentRunner {
     /** Set by the call itself (see `CallInternals`): it may have left effects. */
     let effectful = false;
     let dispatcher: NestedCallDispatcher | undefined;
+    /** Proof ledger changes caused by this call, announced after `tool_completed`. */
+    let proofUpdates: ProofUpdate[] = [];
     /** Held from the scratchpad quota check until the write is done (L1). */
     let releaseScratch: (() => void) | undefined;
     // `effect` rides along so the TUI can group consecutive calls by capability kind
@@ -973,6 +978,24 @@ export class AgentRunner {
           })),
       });
       result = await p.tool.execute(p.input, toolContext);
+      // Proof reads the RAW result of a call that really ran, before the model-facing bound below.
+      // It never throws into the call: a failed capture only means no evidence.
+      if (o.proof) {
+        try {
+          proofUpdates = o.proof.capture({
+            sessionId,
+            runId,
+            callId: call.id,
+            name: call.name,
+            input: p.input,
+            result,
+            workspace,
+            durationMs: Date.now() - started,
+          });
+        } catch {
+          proofUpdates = [];
+        }
+      }
       // The bound applies to what the model sees (the text projection): display-only
       // ui/image parts are bounded by their producers and must not push text over it.
       const projected = textProjection(result);
@@ -985,6 +1008,26 @@ export class AgentRunner {
       o.store.endCall(sessionId, call, result);
     } catch (error) {
       result = textResult(error instanceof Error ? error.message : String(error), true);
+      // A `read_file` of a missing file is evidence for a `file` criterion (specs/011): the call
+      // threw, so it never reached the capture above. Capture never throws into the call.
+      if (o.proof && call.name === "read_file") {
+        try {
+          proofUpdates = proofUpdates.concat(
+            o.proof.captureFailure({
+              sessionId,
+              runId,
+              callId: call.id,
+              name: call.name,
+              input: p.input ?? {},
+              result,
+              workspace,
+              durationMs: Date.now() - started,
+            }),
+          );
+        } catch {
+          /* A failed capture only means no evidence. */
+        }
+      }
       // A cancellation after execution may have left effects, so the journal stays pending for
       // the user to inspect. A `read` call cannot have left any (and `exit_plan`, which is one,
       // is exactly what a stop or the run limit interrupts while a person decides): it is closed
@@ -1007,6 +1050,7 @@ export class AgentRunner {
         .join("\n")
         .slice(0, 2_000),
     });
+    for (const update of proofUpdates) emit("proof_updated", update);
     return result;
   }
   /**
@@ -1022,7 +1066,7 @@ export class AgentRunner {
     name: string,
     input: Record<string, unknown>,
     options: RunOptions & { signal?: AbortSignal } = {},
-  ): Promise<{ runId: string; status: "completed"; result: ToolResult }> {
+  ): Promise<{ runId: string; callId: string; status: "completed"; result: ToolResult }> {
     const controller = this.claim(sessionId);
     const runId = options.runId ?? crypto.randomUUID();
     const o = this.options,
@@ -1101,7 +1145,7 @@ export class AgentRunner {
       o.store.append(sessionId, { role: "assistant", text, calls: [] });
       emit("run_completed", { tokens: 0, text });
       finish("completed");
-      return { runId, status: "completed", result };
+      return { runId, callId: call.id, status: "completed", result };
     } catch (error) {
       if (combined.aborted && isTimeoutReason(combined.reason)) {
         const failure = new RunTimeoutError({
@@ -1567,6 +1611,19 @@ export class AgentRunner {
               source: outputLimit.source,
             });
             final.truncated = true;
+          }
+          if (o.proof) {
+            // Display only (D8): the claims of the answer that the Proof ledger does not back.
+            try {
+              for (const d of o.proof.divergences(sessionId, lastText))
+                emit("proof_divergence", {
+                  claim: d.claim,
+                  ...(d.criterionId ? { criterionId: d.criterionId } : {}),
+                  actual: d.actualState,
+                });
+            } catch {
+              // a failed check only means no warning
+            }
           }
           emit("run_completed", final);
           finish("completed");

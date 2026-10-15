@@ -88,7 +88,7 @@ describe("SQLiteStore v7 migration (background tasks, session goals)", () => {
           version: number;
         }[]
       ).map((row) => row.version);
-      expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
       expect(second.db.prepare("SELECT id FROM background_tasks").all()).toEqual([{ id: "t1" }]);
     } finally {
       second.close();

@@ -17,7 +17,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 - Plugins are trusted, in-process code with the full privileges of the Alisio process. A manifest,
   an `effect` label or a subprocess is NOT a sandbox. Never document or imply isolation.
 - New SDK/host capabilities are optional in the contract: feature-detect (`api.views?.register`,
-  `api.decisions?`, `api.paths?`, `api.options?`) so a plugin runs on an older core.
+  `api.decisions?`, `api.paths?`, `api.options?`, `api.proof?`) so a plugin runs on an older core.
 - Use the storage port (`api.storage.sqlite`), never a SQLite driver; no provider SDK or Bun
   global in plugin code except a provider plugin's own client (e.g. `openai` in
   `plugin-openai-compatible`).
@@ -49,6 +49,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 | UI | `api.ui.status/panel/select/askQuestions` (no-op or `undefined` when headless) |
 | Replace a host piece | `api.extensions.register("mascot" \| "startup-screen" \| "websearch", provider, { priority })` |
 | Decisions | `api.decisions?.registerProvider` (see Decision Intelligence rule in `alisio-coding-standards`) |
+| Proof verifier | `api.proof?.registerVerifier({ id, describe, run(input, ctx) })` -> `{ ok, outputHash, callId? }`; no traceable evidence = `manual_review`; `ctx.callTool` goes through the core gate (no extra permission) |
 
 Config: `pluginOverrides[id].options` is read via `api.options` (global only, <= 8 KB, snapshot at
 `setup`, never put secrets there).

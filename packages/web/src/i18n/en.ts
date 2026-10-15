@@ -926,6 +926,7 @@ export const en = {
   "settings.analysis.wasmNote":
     "Runs in a WebAssembly interpreter in a separate process, with no network and only the job folders. Its restrictions are partial: it is not a container.",
   "dock.scratch": "Scratch",
+  "dock.proof": "Proof",
 } as const;
 
 export type MessageKey = keyof typeof en;

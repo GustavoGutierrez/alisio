@@ -8,13 +8,19 @@
  *    ├────skip──────▶ skipped          └─discard─▶ cancelled (the run was cancelled)
  *    └────context───▶ feedback         (a later `exit_plan` call starts a new revision)
  */
-import type { QuestionOption } from "@alisio/sdk";
+import type { PlanCriterionDraft, QuestionOption } from "@alisio/sdk";
 import { type DiagramRecord, planContentHash } from "./manifest.ts";
 
 /** The decision screen title (web: localized; the TUI prints it as is). */
 export const PLAN_REVIEW_TITLE = "Plan complete. What would you like to do?";
 export const PLAN_QUESTION_ID = "plan";
 export const PLAN_TEXT_KEY = `${PLAN_QUESTION_ID}:text`;
+/**
+ * Per-draft decisions on the acceptance criteria (specs/011 phase 5): a JSON object
+ * `{reject?: number[], edit?: {"<index>": "text"}, required?: {"<index>": boolean}}` over the
+ * drafts as the review lists them. Only read together with `approve`.
+ */
+export const PLAN_CRITERIA_KEY = `${PLAN_QUESTION_ID}:criteria`;
 /** The agent an approved plan is handed to. */
 export const IMPLEMENTATION_AGENT_ID = "build";
 export const PLAN_MAX_CHARS = 60_000;
@@ -51,6 +57,11 @@ export interface PlanState {
   artifactId?: string;
   /** The accepted diagrams of this revision (absent without any): what the next one is diffed against. */
   diagrams?: DiagramRecord[];
+  /**
+   * Acceptance-criteria DRAFTS of this revision (specs/011, O3). They are not criteria: they only
+   * become active when the user approves this plan (`exit-plan.ts`), and a later revision replaces them.
+   */
+  criteria?: PlanCriterionDraft[];
   /** The approved snapshot; kept only while `approved` (afterwards it lives in the user message). */
   plan?: string;
   updatedAt: number;
@@ -72,7 +83,8 @@ export interface PlanStore {
 export const planHash = (
   plan: string,
   diagrams: Array<{ id: string; hash: string }> = [],
-): string => planContentHash(plan, diagrams);
+  criteria: PlanCriterionDraft[] = [],
+): string => planContentHash(plan, diagrams, criteria);
 
 const STATUSES: ReadonlySet<string> = new Set([
   "pending",

@@ -193,6 +193,9 @@ export function registerCommandRoutes(
         case "clear":
           check(service.clear(session.id));
           return done("Goal cleared.");
+        case "override":
+          check(service.overrideComplete(session.id, { reason: parsed.reason }));
+          return done("Goal completed by your override; the reason is kept with the goal.");
         case "edit":
           if (parsed.objective === undefined) {
             const current = service.get(session.id);

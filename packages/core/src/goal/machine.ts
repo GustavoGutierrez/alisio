@@ -9,12 +9,23 @@
  *              └──── budget raised / cleared (token_budget only) ── budget_limited
  *
  * Who may do what:
- * - user:   create, pause, resume (paused|blocked), edit, clear, change the budget.
- * - model:  `update_goal` complete / blocked, only while the goal is `active`.
+ * - user:   create, pause, resume (paused|blocked), edit, clear, change the budget, and the Proof
+ *           override (complete over unmet required criteria; never reachable from the model).
+ * - model:  `update_goal` complete / blocked, only while the goal is `active`. `complete` is
+ *           refused while a required criterion of the Proof ledger is failed or not checked.
  * - system: the caps and breakers (pause / budget_limited / blocked on error), user interrupt,
  *           restart. The system never resumes a goal.
  */
-import type { GoalAction, GoalEvidence, GoalInfo, GoalReason, GoalStatus } from "@alisio/sdk";
+import type {
+  GoalAction,
+  GoalEvidence,
+  GoalInfo,
+  GoalProofInfo,
+  GoalReason,
+  GoalStatus,
+  ProofCriterion,
+  ProofLedger,
+} from "@alisio/sdk";
 
 export type GoalActor = "user" | "model" | "system";
 
@@ -58,6 +69,8 @@ export interface GoalRecord {
   detail?: string;
   summary?: string;
   evidence?: GoalEvidence[];
+  /** The Proof snapshot taken when the goal completed with criteria (absent without criteria). */
+  proof?: GoalProofInfo;
   epoch: number;
   tokenBudget?: number;
   tokensUsed: number;
@@ -167,18 +180,81 @@ function moveTo(
 
 export type GoalRefusal = "not_allowed" | "not_active";
 
+/** A required criterion that blocks completion (`failed` or `not_checked`). */
+export interface GoalUnmet {
+  criterionId: string;
+  text: string;
+  status: "failed" | "not_checked";
+}
+
 export type GoalResult<T = GoalRecord> =
   | { ok: true; goal: T }
-  | { ok: false; code: GoalRefusal; message: string };
+  | { ok: false; code: GoalRefusal; message: string; unmet?: GoalUnmet[] };
 
 const refuse = (
   code: GoalRefusal,
   message: string,
-): { ok: false; code: GoalRefusal; message: string } => ({
+  unmet?: GoalUnmet[],
+): { ok: false; code: GoalRefusal; message: string; unmet?: GoalUnmet[] } => ({
   ok: false,
   code,
   message,
+  ...(unmet ? { unmet } : {}),
 });
+
+/**
+ * What the Proof ledger says about one goal (specs/011 3.6): the criteria that apply to it and
+ * the evidence ids the model declared that resolved to captured evidence.
+ */
+export interface GoalProofInput {
+  criteria: ProofCriterion[];
+  linkedEvidence: string[];
+}
+
+/** The criteria that apply to a goal: its own and the session-wide ones (no `goalId`). */
+export const criteriaForGoal = (ledger: ProofLedger, goalId: string): ProofCriterion[] =>
+  ledger.criteria.filter((c) => c.goalId === undefined || c.goalId === goalId);
+
+/**
+ * Required criteria that are `failed` or `not_checked`. `manual_review` and `not_applicable` do
+ * not block (O6 names only the first two; a manual review is the user's own call).
+ */
+export function unmetRequired(criteria: readonly ProofCriterion[]): GoalUnmet[] {
+  const unmet: GoalUnmet[] = [];
+  for (const c of criteria)
+    if (c.required && (c.status === "failed" || c.status === "not_checked"))
+      unmet.push({ criterionId: c.criterionId, text: c.text, status: c.status });
+  return unmet;
+}
+
+const proofInfo = (
+  proof: GoalProofInput,
+  unmet: GoalUnmet[],
+  override?: { reason: string; at: number },
+): GoalProofInfo => ({
+  criteria: proof.criteria.map((c) => ({
+    criterionId: c.criterionId,
+    required: c.required,
+    status: c.status,
+  })),
+  unmet: unmet.map((u) => u.criterionId),
+  linkedEvidence: [...new Set(proof.linkedEvidence)],
+  ...(override ? { override } : {}),
+});
+
+const UNMET_LISTED = 5;
+const unmetMessage = (unmet: GoalUnmet[]): string => {
+  const listed = unmet
+    .slice(0, UNMET_LISTED)
+    .map((u) => `"${clip(u.text, 80)}" (${u.status})`)
+    .join(", ");
+  const more = unmet.length > UNMET_LISTED ? ` and ${unmet.length - UNMET_LISTED} more` : "";
+  return (
+    `Completion refused: required acceptance criteria are not verified: ${listed}${more}. ` +
+    "Run their verifiers and report again, or report the goal blocked. Only the user can " +
+    "override this."
+  );
+};
 
 /** A new goal (the user's `/goal <objective>`). The caller supplies the id and the limits. */
 export function newGoal(input: {
@@ -313,6 +389,7 @@ export function modelComplete(
   goal: GoalRecord,
   now: number,
   report: { summary: string; evidence: GoalEvidence[] },
+  proof?: GoalProofInput,
 ): GoalResult {
   if (goal.status !== "active")
     return refuse(
@@ -321,11 +398,66 @@ export function modelComplete(
     );
   if (!report.evidence.length)
     return refuse("not_allowed", "Completion needs evidence (files, tests, logs or commands).");
+  // O6: with criteria the ledger decides, not the model's declaration (free text backs nothing).
+  const unmet = proof ? unmetRequired(proof.criteria) : [];
+  if (unmet.length) return refuse("not_allowed", unmetMessage(unmet), unmet);
   return {
     ok: true,
     goal: moveTo(goal, now, "complete", "model_complete", {
       summary: report.summary,
       evidence: report.evidence,
+      inflight: goal.inflight,
+      ...(proof?.criteria.length ? { proof: proofInfo(proof, unmet) } : {}),
+    }),
+  };
+}
+
+/** Different runs that may be refused a completion over the ledger before the goal pauses. */
+export const COMPLETION_REFUSAL_LIMIT = 3;
+
+/**
+ * A model that keeps reporting `complete` over unmet required criteria, run after run, is not
+ * making progress: the goal pauses as `no_progress` (the user resumes or overrides it). The caller
+ * counts the refusals; the in-flight claim stays so the running turn still settles.
+ */
+export function pauseForRefusedCompletions(goal: GoalRecord, now: number): GoalRecord {
+  return moveTo(goal, now, "paused", "no_progress", {
+    detail: "completion_refused",
+    inflight: goal.inflight,
+  });
+}
+
+/** The longest override reason kept. */
+export const GOAL_OVERRIDE_REASON_MAX = 500;
+
+/**
+ * The USER completes a goal over unmet required criteria (O6). It exists only to bypass that
+ * gate: with nothing unmet there is nothing to override. Only a goal that can still be worked
+ * on (`active`, `paused`, `blocked`) can be overridden; `budget_limited` and `complete` are final
+ * (raise the budget first). The in-flight claim stays, as for a model completion: the running
+ * turn still settles. The caller (the service) has already checked that a person asked for it.
+ */
+export function userOverrideComplete(
+  goal: GoalRecord,
+  now: number,
+  input: { reason: string; proof: GoalProofInput },
+): GoalResult {
+  if (goal.status !== "active" && goal.status !== "paused" && goal.status !== "blocked")
+    return refuse(
+      "not_allowed",
+      `The goal is ${goal.status}; only an active, paused or blocked goal can be overridden.`,
+    );
+  const unmet = unmetRequired(input.proof.criteria);
+  if (!unmet.length)
+    return refuse(
+      "not_allowed",
+      "Nothing to override: no required criterion is failed or not checked.",
+    );
+  const reason = clip(input.reason.trim(), GOAL_OVERRIDE_REASON_MAX);
+  return {
+    ok: true,
+    goal: moveTo(goal, now, "complete", "user_override", {
+      proof: proofInfo(input.proof, unmet, { reason, at: now }),
       inflight: goal.inflight,
     }),
   };
@@ -532,6 +664,7 @@ export function toGoalInfo(goal: GoalRecord): GoalInfo {
     maxWallMs: goal.maxWallMs,
     ...(goal.summary ? { summary: goal.summary } : {}),
     ...(goal.evidence?.length ? { evidence: goal.evidence } : {}),
+    ...(goal.proof ? { proof: goal.proof } : {}),
     actions: userActions(goal.status),
     createdAt: goal.createdAt,
     updatedAt: goal.updatedAt,

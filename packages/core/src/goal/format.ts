@@ -36,11 +36,13 @@ const REASON_TEXT: Record<GoalReason, string> = {
   max_wall: "The time limit was reached",
   no_progress: "No progress",
   restart: "Alisio restarted while the goal was running",
+  user_override: "You completed the goal over unmet acceptance criteria",
 };
 
 const DETAIL_TEXT: Record<string, string> = {
   repeated_reply: "the same reply repeated",
   no_tool_turns: "several turns without tool calls",
+  completion_refused: "completion was refused while required criteria were not verified",
 };
 
 /** Why the goal is in its state, as one short sentence (empty when there is nothing to say). */

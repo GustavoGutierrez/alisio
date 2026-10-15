@@ -360,6 +360,17 @@ approvals, unlike `alisio run`. The bundled suites and cassettes exist only in a
 optional `pnpm eval:ci` gate replays them and exits non-zero on a divergence or a failing task; it is
 opt-in and not part of the default CI. User guide: [Reliability Lab](/eval).
 
+**Proof (acceptance criteria).** Proof records operational evidence; it does not prove that the code
+is correct. Claim-versus-evidence detection is a heuristic signal, and `treeFingerprint` is a bounded
+audit anchor (1 MiB of diff, 3 s, 200 files). Edits through `shell`, `run_process`, `js_run` or nested
+Forja do not expire evidence, and nested `js_run` calls produce none; a `file` criterion without
+`scope` expires on any workspace edit. The terminal plan review is all-or-nothing (the web UI decides
+per criterion). The reason a `coverage` criterion is disabled is not stored in the ledger (only
+`alisio run` stderr, the `--proof` brief and `verifyCriterion` show it). `verifyCriterion` has no route
+or button yet, and a plugin verification outside a run emits no `proof_updated`. Criteria created over
+HTTP are optional by default, those from the command line required. The counter of refused `complete`
+attempts that pauses a goal as `no_progress` lives in memory. User guide: [Proof](/proof#limits).
+
 ## Verification scope
 
 The source file records a dedicated verification-scope section for each area below; the summary
@@ -530,3 +541,13 @@ discriminates only partly (through latency) on a weaker one, so its power to tel
 established. Not verified with a real model: `long-context`; the bundled cassettes were recorded with a
 scripted provider and pin harness behavior only. Only an OpenAI-compatible provider from a config
 file was exercised. User guide: [Reliability Lab](/eval).
+
+**Proof.** Verified with Vitest without network or credentials: ledger derivation, migrations v11 to
+v13, the recorder with the real runner, permission gate and SQLite and a scripted provider (command,
+file, data-check, coverage and plugin verifiers; harmless tool-result text; read-only), staleness,
+divergence corpus in English and Spanish, plan drafts and goal gate and override, the HTTP routes, the
+exports, the web and terminal views, and a parity test that checks the same statuses in the terminal,
+web, JSONL, JSON and Markdown; plus the `run --proof` scenario of `pnpm test:cli`. Not verified:
+browser behavior (components are tested as VNode trees and the screenshot is manual), mutation
+testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
+command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).

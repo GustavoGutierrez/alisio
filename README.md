@@ -61,6 +61,10 @@ you can disable), and exposes a typed plugin SDK so you can extend it without to
   pass rates with Wilson intervals, compares reports and config variants, and replays recorded
   cassettes to catch harness regressions without a model (replay measures the harness, not the
   model). See the [Reliability Lab docs](https://gustavogutierrez.github.io/alisio/eval).
+- **Proof**: acceptance criteria whose status comes from evidence Alisio captured from the commands,
+  file reads and data queries the agent really ran, not from what the model says. Shown in the web UI,
+  the terminal and `alisio run --proof` (exit codes 0/10/11, `proof/v1` JSON). It does not prove the
+  code is correct. See the [Proof docs](https://gustavogutierrez.github.io/alisio/proof).
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned

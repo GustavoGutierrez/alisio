@@ -6,7 +6,7 @@ dist/
 coverage/
 .atl/
 packages/core/probe.mjs
-.playwright-mcp/*
+.playwright-mcp
 # Mutation testing (Stryker, lite)
 .stryker-tmp/
 .vitest/

@@ -408,6 +408,34 @@ tasks of the session run, in plan mode, while you have a turn running, or after 
 `restart`) after the restart and never resumes by itself. Goals use the session's permission preset
 like any turn and never widen it. `alisio run` has no `/goal` in v1.
 
+### Proof: acceptance criteria {#proof}
+
+When a session has [Proof](/proof) criteria, a compact **card** appears above the message box and the
+right panel gains a **Proof** tab (also opened by `/proof`). Both load on demand and read the ledger
+from the server, so they show the same statuses as the terminal and `alisio run --json`. The tab lets
+you add a criterion (with an optional command), edit its wording or required flag, mark it **Not
+applicable** with a reason and download `proof.md` or `proof.json`. With a goal that has unmet required
+criteria it also offers **Complete the goal anyway** (a reason is required; only you can). In a plan
+review that proposes criteria you can keep, edit or reject each one before approving.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/proof_web_ui.webp" alt="The Proof card above the message box and the Proof tab of the right panel with five acceptance criteria in different statuses." width="1360" height="820" loading="lazy" decoding="async" />
+  <figcaption>The Proof card and the Proof tab with synthetic data.</figcaption>
+</figure>
+
+The routes (same authentication and Origin rules as the other session routes):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/sessions/:sid/proof` | The ledger: criteria, evidence and the claims without evidence of the last run |
+| `POST /api/sessions/:sid/proof/criteria` | Create a criterion, or edit one (`criterionId` with `text` and `required`) |
+| `POST /api/sessions/:sid/proof/criteria/:id/not-applicable` | `{"reason"}`: mark it not applicable |
+| `GET /api/sessions/:sid/proof/export?format=md\|json` | Download `proof.md` or the `proof/v1` JSON |
+| `POST /api/sessions/:sid/goal/override` | `{"reason"}`: you complete the goal over unmet required criteria |
+
+Stream: `proof_updated` and `proof_divergence` arrive as ordinary `event` frames, and the snapshot
+carries `proof: {criteria: n}` when the session has criteria.
+
 ### `/reload` and `/changelog` {#reload-and-changelog}
 
 `/reload` re-reads the configuration, agents, skills, prompt templates and MCP servers of the

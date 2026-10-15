@@ -24,6 +24,8 @@ async function cliDefaults() {
     reservedPromptNames: reservedCommandNames(),
   };
 }
+/** Commander collector of a repeatable option. */
+const collect = (value: string, previous: string[]): string[] => [...previous, value];
 const program = new Command();
 program
   .name("alisio")
@@ -135,6 +137,12 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
     const trusted = await withProjectTrust(opts);
     return runTui({ ...trusted, ...(sessionId ? { session: sessionId } : {}) });
   }
+  const proofFlags = opts as unknown as import("./proof.ts").ProofFlags;
+  // Invalid criteria fail before a session or a provider exists.
+  const proofCriteria =
+    proofFlags.criterion?.length || proofFlags.verify?.length || proofFlags.proofFile
+      ? await (await import("./proof.ts")).collectProofCriteria(proofFlags)
+      : [];
   const { createApplication, formatBytes, KIND_LABELS } = await import("@alisio/core");
   const app = await createApplication({
     ...(await cliDefaults()),
@@ -222,11 +230,50 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       const match = /^\/skill:([a-z0-9-]+)\s*([\s\S]*)$/.exec(prompt);
       if (match?.[1])
         prompt = `${await app.skills.load(match[1])}\n\nUser request: ${match[2] ?? ""}`;
-      await app.runner.run(session, template?.text ?? prompt, controller.signal, {
-        ...activeRunOptions,
-        ...(template ? { display: template.display } : {}),
-      });
+      const proof = await import("./proof.ts");
+      const judged = proof.proofRequested(proofFlags, app.config.proof);
+      for (const criterion of proofCriteria)
+        app.proof.addCriterion({ sessionId: session, ...criterion });
+      if (
+        judged &&
+        opts.readOnly &&
+        proofCriteria.some(
+          (c) =>
+            c.verifier?.kind === "command" ||
+            (c.verifier?.kind === "coverage" && app.config.proof.coverage.enabled),
+        )
+      )
+        process.stderr.write(
+          "proof: --read-only denies processes, so command and coverage criteria stay not_checked\n",
+        );
+      const coverageEnabled = app.config.proof.coverage.enabled;
+      if (proofCriteria.some((c) => c.verifier?.kind === "coverage") && !coverageEnabled)
+        process.stderr.write(
+          "proof: coverage verification is off (proof.coverage.enabled is false), so coverage criteria stay not_checked and Proof never runs their command\n",
+        );
+      await app.runner.run(
+        session,
+        proof.withProofBrief(template?.text ?? prompt, proofCriteria, { coverageEnabled }),
+        controller.signal,
+        {
+          ...activeRunOptions,
+          ...(template ? { display: template.display } : {}),
+        },
+      );
       if (!opts.json) process.stdout.write(`\nSession: ${session}\n`);
+      if (judged) {
+        const code = await proof.finishProof(
+          {
+            proof: app.proof,
+            write: (text) => process.stdout.write(text),
+            writeErr: (text) => process.stderr.write(text),
+            publisher: proof.sessionPublisher(app, session),
+          },
+          session,
+          { json: !!opts.json, codes: app.config.proof.exitCodes },
+        );
+        if (code) process.exitCode = code;
+      }
       return;
     }
     if (opts.json || !process.stdin.isTTY)
@@ -341,6 +388,26 @@ program
     'Run one prompt headless; "/name args" runs a prompt template (e.g. "/init") or a plugin command ("/plugin.id:name")',
   )
   .argument("<prompt>")
+  .option(
+    "--proof",
+    "Judge the run against its acceptance criteria: print the Proof ledger (the final JSONL event with --json) and exit 0, 10 (a required criterion failed) or 11 (a required one is not verified); the codes are proof.exitCodes",
+  )
+  .option(
+    "--criterion <text>",
+    "An acceptance criterion (repeatable); pair it with --verify <command>",
+    collect,
+    [] as string[],
+  )
+  .option(
+    "--verify <command>",
+    "The command that verifies the n-th --criterion; Alisio records the evidence when the agent runs exactly it",
+    collect,
+    [] as string[],
+  )
+  .option(
+    "--proof-file <path>",
+    'JSON file with {"criteria":[{"text","verify"|"verifier","required","scope"}]} (or a plain array)',
+  )
   .action((prompt, _options, cmd) => run(cmd, prompt));
 program
   .command("resume")

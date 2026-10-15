@@ -49,6 +49,7 @@ const decisionPack = (v: unknown) =>
   record(v) &&
   str((v as Record<string, unknown>).id) &&
   num((v as Record<string, unknown>).version);
+const proofStatus = oneOf("verified", "failed", "not_checked", "manual_review", "not_applicable");
 const hookFailure: Check = (d) =>
   str(d.source) && str(d.hook) && str(d.error) && d.continued === true;
 
@@ -196,6 +197,12 @@ const contract: { [K in RunEventType]: Check } = {
       "unsupported",
       "all_rejected",
     )(d.reason),
+  proof_updated: (d) =>
+    str(d.criterionId) &&
+    proofStatus(d.status) &&
+    typeof d.stale === "boolean" &&
+    opt(d.evidenceId, str),
+  proof_divergence: (d) => str(d.claim) && opt(d.criterionId, str) && proofStatus(d.actual),
 };
 
 const conforms = (event: RunEvent): boolean => {

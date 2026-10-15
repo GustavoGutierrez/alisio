@@ -165,6 +165,36 @@ const forgeServer = await serve(async (req) => {
     { headers: { "Content-Type": "text/event-stream" } },
   );
 });
+/**
+ * A fake model for Proof: it runs `node -e 0` through `run_process` once, then answers. A criterion
+ * bound to that command ends up verified from the captured evidence; any other stays unchecked.
+ */
+const proofServer = await serve(async (req) => {
+  const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
+  const answered = body.messages.some((m) => m.role === "tool");
+  const choice = answered
+    ? { delta: { content: "Done" }, finish_reason: "stop" }
+    : {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: "proof_call_1",
+              type: "function",
+              function: {
+                name: "run_process",
+                arguments: JSON.stringify({ command: "node", args: ["-e", "0"] }),
+              },
+            },
+          ],
+        },
+        finish_reason: "tool_calls",
+      };
+  return new Response(
+    `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+});
 const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   const [program = "", ...prefix] = command;
   const child = spawn(program, [...prefix, ...args], {
@@ -195,6 +225,29 @@ const execute = async (args: string[], checkStderr = false, expectCode = 0) => {
   assert.doesNotMatch(stderr, /ExperimentalWarning/);
   if (checkStderr) assert.doesNotMatch(stderr, /MASCOT-MARKER|SCREEN-MARKER|Alisio v/);
   return stdout;
+};
+/** Runs the CLI and returns the exit code with both streams (for exit-code contracts). */
+const executeAny = async (args: string[]) => {
+  const [program = "", ...prefix] = command;
+  const child = spawn(program, [...prefix, ...args], {
+    cwd: directory,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ALISIO_CONFIG_HOME: join(directory, "global"),
+      ALISIO_STATE_HOME: join(directory, "state"),
+      ALISIO_MODEL: "",
+      OPENAI_BASE_URL: "",
+      ALISIO_API_MODE: "",
+      HERDR_ENV: "0",
+    },
+  });
+  let stdout = "",
+    stderr = "";
+  child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+  child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  const code = await new Promise<number>((done) => child.on("close", (c) => done(c ?? 1)));
+  return { code, stdout, stderr };
 };
 /** Like `execute` but returns stderr too (for diagnostics such as the ripgrep hint). */
 const executeWithStderr = async (args: string[]) => {
@@ -438,6 +491,50 @@ try {
     bgRun.stdout,
   );
   assert.match(bgRun.stderr, /1 background task was still running and was stopped/);
+  // Proof (specs/011): `run --proof` judges the run against its criteria and exits 0, 10 or 11.
+  await writeFile(
+    join(directory, "proof-config.json"),
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${proofServer.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+    }),
+  );
+  const proofArgs = (...more: string[]) => [
+    "run",
+    "Run the check",
+    "--cwd",
+    directory,
+    "--config",
+    join(directory, "proof-config.json"),
+    "--allow-process",
+    "--json",
+    "--proof",
+    ...more,
+  ];
+  const verified = await executeAny(
+    proofArgs("--criterion", "The check passes", "--verify", "node -e 0"),
+  );
+  assert.equal(verified.code, 0, verified.stderr);
+  const verifiedLedger = JSON.parse(verified.stdout.trim().split("\n").at(-1) ?? "{}");
+  assert.equal(verifiedLedger.type, "proof_ledger");
+  assert.equal(verifiedLedger.schema, "proof/v1");
+  assert.equal(verifiedLedger.ledger.criteria[0].status, "verified");
+  assert.equal(verifiedLedger.ledger.criteria[0].evidenceIds.length, 1);
+  const unchecked = await executeAny(
+    proofArgs("--criterion", "A check nobody ran", "--verify", "node -e 1"),
+  );
+  assert.equal(unchecked.code, 11, unchecked.stderr);
+  assert.equal(
+    JSON.parse(unchecked.stdout.trim().split("\n").at(-1) ?? "{}").ledger.criteria[0].status,
+    "not_checked",
+  );
+  const invalid = await executeAny(proofArgs("--verify", "node -e 0"));
+  assert.notEqual(invalid.code, 0);
+  assert.match(invalid.stderr, /--verify needs a --criterion/);
   // Forja (phase 3b): js_run runs a script in the QuickJS-WASM isolate (a worker on Node, a child
   // process of the binary itself on Bun), reads a file through the gate, and stops on SIGINT.
   // The binary is also copied to a path with spaces to prove nothing depends on a clean path.
@@ -1071,7 +1168,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(diverged, /DIVERGED .*messages\[0\]\.user\.text/s);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 9 + forgeSessions); // includes the two plugin-command runs and the Forja runs
+  assert.equal(sessions.length, 11 + forgeSessions); // includes the two plugin-command runs, the two Proof runs and the Forja runs
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {
@@ -1180,6 +1277,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio serve: --help, --allow-remote refusal, health/token/cookie smoke, SIGTERM exit",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
         "alisio eval list/compare/run: a live run against the fake server writes its report files; exit 0 and 3 (incompatible suites); eval record + replay without calling the model, exit 2 on divergence",
+        "alisio run --proof: criteria from --criterion/--verify, the proof/v1 ledger as the final --json event, exit 0 (verified) and 11 (unchecked), a --verify without --criterion refused",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
       ],
     }),
@@ -1189,5 +1287,6 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   await dataServer.close();
   await forgeServer.close();
   await bgServer.close();
+  await proofServer.close();
   await rm(directory, { recursive: true, force: true });
 }

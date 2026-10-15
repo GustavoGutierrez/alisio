@@ -7,9 +7,10 @@
  * also makes it continue now; changes arrive in every window as `goal_changed` frames.
  *
  * Only the user changes a goal through here; the model has `update_goal` (complete / blocked).
+ * `POST …/goal/override` is the user's way past unmet required Proof criteria (a reason is required).
  */
 import type { GoalErrorCode, GoalExpectation } from "@alisio/core";
-import { GOAL_OBJECTIVE_MAX } from "@alisio/core";
+import { GOAL_OBJECTIVE_MAX, GOAL_OVERRIDE_REASON_MAX } from "@alisio/core";
 import type { GoalDriver } from "../host/goal.ts";
 import type { SessionService } from "../host/sessions.ts";
 import { readJson } from "../http/body.ts";
@@ -138,6 +139,19 @@ export function registerGoalRoutes(
     if (!outcome.ok) throw goalError(outcome.code, outcome.message);
     goals.refresh(session.id);
     return reply(session.id);
+  });
+
+  // The USER completes the goal over unmet required Proof criteria (O6). The model has no route
+  // here: `update_goal` cannot carry an override. A reason is required and kept in the goal.
+  router.post("/api/sessions/:sid/goal/override", async ({ req, params }) => {
+    const input = validate<{ reason: string; expect?: GoalExpectation }>(await readJson(req), {
+      reason: { check: is.nonEmpty(GOAL_OVERRIDE_REASON_MAX + 200), required: true },
+      expect: { check: EXPECT },
+    });
+    const { session, service } = await open(params.sid, true);
+    const outcome = service.overrideComplete(session.id, { reason: input.reason }, input.expect);
+    if (!outcome.ok) throw goalError(outcome.code, outcome.message);
+    return settled(session.id);
   });
 
   for (const action of ["pause", "resume"] as const)

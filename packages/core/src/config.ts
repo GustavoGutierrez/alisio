@@ -545,6 +545,38 @@ const configObjectSchema = z
         blockedRepeats: 2,
       })),
     /**
+     * Proof (specs/011): acceptance criteria with evidence. `ci` makes `alisio run` behave as
+     * with `--proof` (the ledger as the final event and the exit codes below). `exitCodes` are
+     * what `--proof` exits with: `failed` when a required criterion failed, `unverified` when a
+     * required one is not checked or needs a manual review (0 when every required one is verified).
+     */
+    proof: z
+      .object({
+        ci: z.boolean().default(false),
+        exitCodes: z
+          .object({
+            failed: z.number().int().min(1).max(125).default(10),
+            unverified: z.number().int().min(1).max(125).default(11),
+          })
+          .strict()
+          .default(() => ({ failed: 10, unverified: 11 })),
+        /**
+         * The `coverage` verifier (opt-in). Off: a `coverage` criterion stays `not_checked` and
+         * Proof records nothing for its command. On: the percentage a coverage command printed
+         * (through the normal permission gate) is compared with the criterion's `minPercent`.
+         */
+        coverage: z
+          .object({ enabled: z.boolean().default(false) })
+          .strict()
+          .default(() => ({ enabled: false })),
+      })
+      .strict()
+      .default(() => ({
+        ci: false,
+        exitCodes: { failed: 10, unverified: 11 },
+        coverage: { enabled: false },
+      })),
+    /**
      * Plan diagrams (`exit_plan`): the plan agent may add Mermaid diagrams to a plan. `diagrams`
      * off removes them from the tool and from the agent's instructions; `maxDiagrams` caps how
      * many one plan keeps (0 to 8). The size and node limits of one diagram are constants.

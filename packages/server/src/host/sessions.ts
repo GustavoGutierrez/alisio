@@ -5,6 +5,7 @@ import {
   goalOptInTools,
   PLAN_AGENT_ID,
   type Policy,
+  ProofStore,
   resolveActiveAgent,
   type Session,
   type SQLiteStore,
@@ -49,9 +50,12 @@ export class SessionService {
   private policies = new Map<string, Policy>();
   readonly ceiling: Ceiling;
   private readonly goals: GoalStore;
+  /** Reads of the Proof ledger over the server's own store connection (writes use the app). */
+  readonly proof: ProofStore;
 
   constructor(private options: SessionServiceOptions) {
     this.goals = new GoalStore(options.catalog.db);
+    this.proof = new ProofStore(options.catalog.db);
     const base = options.base;
     const readOnly = !!base.readOnly;
     this.ceiling = {

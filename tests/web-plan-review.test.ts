@@ -214,3 +214,42 @@ describe("strings and loading", () => {
     expect(app).toMatch(/import\("\.\/components\/approval\/PlanReviewPanel\.tsx"\)/);
   });
 });
+
+describe("per-criterion decisions of the plan review (Proof, phase 5)", () => {
+  const drafts = [
+    { text: "Unit tests pass", required: true, origin: "inferred" as const },
+    { text: "Docs mention the flag", required: false, origin: "inferred" as const },
+    { text: "Lint is clean", required: false, origin: "inferred" as const },
+  ];
+  it("sends nothing extra when every draft is kept as proposed (a plain approve)", async () => {
+    const { criteriaSelection } = await import("../packages/web/src/store/plan-criteria.ts");
+    expect(
+      criteriaSelection(
+        drafts,
+        drafts.map((d) => ({ keep: true, text: d.text, required: d.required })),
+      ),
+    ).toBeUndefined();
+  });
+  it("lists rejected drafts, edited wording and changed required flags by position", async () => {
+    const { criteriaSelection } = await import("../packages/web/src/store/plan-criteria.ts");
+    const selection = criteriaSelection(drafts, [
+      { keep: true, text: "Unit tests pass", required: true },
+      { keep: false, text: "Docs mention the flag", required: false },
+      { keep: true, text: "  Lint   passes ", required: true },
+    ]);
+    expect(JSON.parse(selection as string)).toEqual({
+      reject: [1],
+      edit: { "2": "Lint passes" },
+      required: { "2": true },
+    });
+  });
+  it("travels only with approve, under plan:criteria", () => {
+    const question = { id: "plan" };
+    expect(planAnswer(question, "approve", undefined, '{"reject":[0]}')).toEqual({
+      plan: "approve",
+      "plan:criteria": '{"reject":[0]}',
+    });
+    expect(planAnswer(question, "skip", undefined, '{"reject":[0]}')).toEqual({ plan: "skip" });
+    expect(planAnswer(question, "approve")).toEqual({ plan: "approve" });
+  });
+});

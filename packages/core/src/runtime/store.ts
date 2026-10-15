@@ -343,6 +343,70 @@ export class SQLiteStore implements SessionStore {
         this.db.exec("PRAGMA foreign_keys=ON");
       }
     }
+    if (!has(11))
+      this.db.transaction(() => {
+        // v11: the Proof ledger (specs/011). Criteria and evidence die with their session;
+        // evidence is append-only (the trigger rejects UPDATE). The status is never stored.
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS proof_criteria(
+            criterion_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            goal_id TEXT,
+            text TEXT NOT NULL,
+            required INTEGER NOT NULL DEFAULT 0,
+            origin TEXT NOT NULL,
+            verifier_json TEXT,
+            scope_json TEXT,
+            na_reason TEXT,
+            created_at INTEGER NOT NULL);
+          CREATE INDEX IF NOT EXISTS proof_criteria_session ON proof_criteria(session_id, created_at);
+          CREATE TABLE IF NOT EXISTS proof_evidence(
+            evidence_id TEXT PRIMARY KEY,
+            criterion_id TEXT NOT NULL REFERENCES proof_criteria(criterion_id) ON DELETE CASCADE,
+            run_id TEXT NOT NULL,
+            call_id TEXT NOT NULL,
+            ok INTEGER NOT NULL,
+            verifier_kind TEXT NOT NULL,
+            fingerprint TEXT,
+            exit_code INTEGER,
+            duration_ms INTEGER NOT NULL,
+            output_hash TEXT NOT NULL,
+            excerpt TEXT,
+            tree_fingerprint TEXT NOT NULL,
+            files_json TEXT NOT NULL,
+            captured_at TEXT NOT NULL);
+          CREATE INDEX IF NOT EXISTS proof_evidence_criterion ON proof_evidence(criterion_id);
+          CREATE TRIGGER IF NOT EXISTS proof_evidence_append_only
+            BEFORE UPDATE ON proof_evidence
+            BEGIN SELECT RAISE(ABORT, 'proof_evidence is append-only'); END;
+          INSERT OR IGNORE INTO schema_migrations VALUES(11);`);
+      });
+    if (!has(12))
+      this.db.transaction(() => {
+        // v12: the newest successful write_file/edit_file per path for sessions with Proof
+        // criteria (specs/011 3.4, D5). One row per path keeps it bounded; it dies with the session.
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS proof_edits(
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            path TEXT NOT NULL,
+            edited_at TEXT NOT NULL,
+            PRIMARY KEY(session_id, path));
+          INSERT OR IGNORE INTO schema_migrations VALUES(12);`);
+      });
+    if (!has(13))
+      this.db.transaction(() => {
+        // v13 (additive): the Proof snapshot a completed goal keeps (specs/011 3.6, O6): which
+        // required criteria were unmet and the user's override reason, as JSON. Old binaries
+        // ignore the column; goals without criteria keep it NULL.
+        const columns = new Set(
+          (this.db.prepare("PRAGMA table_info(session_goals)").all() as { name: string }[]).map(
+            (c) => c.name,
+          ),
+        );
+        if (!columns.has("proof_json"))
+          this.db.exec("ALTER TABLE session_goals ADD COLUMN proof_json TEXT");
+        this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(13);");
+      });
   }
   /**
    * The root of a session (itself for roots), following `parent_id`. Unknown ids are their own

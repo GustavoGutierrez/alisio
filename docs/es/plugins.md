@@ -112,6 +112,7 @@ plugin se elimina automáticamente cuando se descarga.
 | `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
 | `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
+| `proof.registerVerifier(verifier)` | Registra un [verificador de Proof](#proof-verifiers) (`{ id, describe, run(input, ctx) }`) al que se enlazan los criterios como `<pluginId>:<id>`. Ausente en un núcleo anterior a Proof: use `api.proof?.registerVerifier(...)` |
 | `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId, options?)` (`options.recommend` preselecciona Yes tras una acción explícita del usuario). Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: directorios por plugin resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
 | `options` | `pluginOverrides[id].options` de solo lectura (o `{}`), congelado cuando se ejecuta `setup`. Ausente en un núcleo anterior |
@@ -347,6 +348,34 @@ setup(api) {
   de la configuración global (consulte [`pluginOverrides`](/es/configuration#plugins)). Es solo
   global, de como máximo 8 KB, y una instantánea tomada en `setup`: cambiarlo requiere reiniciar. No
   guarde secretos ahí.
+
+### Verificadores de Proof {#proof-verifiers}
+
+Un plugin puede aportar un verificador para los criterios de aceptación de [Proof](/proof). El
+miembro es **opcional**: detéctelo por presencia y el plugin sigue funcionando en un núcleo sin Proof.
+
+```ts
+setup(api) {
+  api.proof?.registerVerifier({
+    id: "links",
+    describe: "Checks that the docs have no broken links",
+    async run(input, ctx) {
+      const { callId, result } = await ctx.callTool("read_file", { path: "docs/index.md" });
+      const text = result.content.map((p) => (p.type === "text" ? p.text : "")).join("");
+      return { ok: !text.includes("](broken)"), outputHash: sha256(text), callId };
+    },
+  });
+}
+```
+
+Un usuario enlaza un criterio con `{ "kind": "plugin", "verifierId": "<pluginId>:links" }`. El
+resultado debe llevar evidencia referenciable: `outputHash` (sha256 en hexadecimal de lo que respalda
+el veredicto) y, si hizo llamadas a herramientas del núcleo, el `callId` de la que lo respalda. Sin un
+`outputHash` válido, o con un `callId` que la sesión nunca hizo, el criterio pasa a `manual_review`.
+Si `run` lanza un error o tarda más de 60 s, el criterio queda como estaba. Un verificador **no gana
+permisos**: `ctx.callTool` ejecuta una herramienta del núcleo por la misma compuerta que el agente
+(una llamada rechazada vuelve con `isError`). Es código de confianza dentro del proceso, no un
+sandbox, y nunca crea ni edita criterios.
 
 ### Sesiones hijas {#child-sessions}
 

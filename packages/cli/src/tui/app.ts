@@ -173,7 +173,11 @@ import {
 } from "./modes.ts";
 import { cannotOpenMessage, openPath, revealPath } from "./open-path.ts";
 import { initialPanelState, reducePanel, visibleRows } from "./panel.ts";
-import { planDiagramsMarkdown, planTranscriptMarkdown } from "./plan-review.ts";
+import {
+  planCriteriaMarkdown,
+  planDiagramsMarkdown,
+  planTranscriptMarkdown,
+} from "./plan-review.ts";
 import { summarizeAnswers } from "./questions.ts";
 import { InteractiveQueue } from "./queue.ts";
 import { type SettingRow, type SettingsNavigationAction, settingsMenuRows } from "./settings.ts";
@@ -997,6 +1001,13 @@ export async function runTui(options: TuiOptions): Promise<void> {
             reasoning: "",
             done: true,
           });
+          if (plan.acceptanceCriteria?.length)
+            push({
+              kind: "assistant",
+              text: planCriteriaMarkdown(plan.acceptanceCriteria),
+              reasoning: "",
+              done: true,
+            });
           if (plan.diagrams?.length) {
             // The folder is resolved from the store, never from the model.
             const record = plan.artifact ? app.artifacts.get(plan.artifact.id) : undefined;
@@ -1297,6 +1308,13 @@ export async function runTui(options: TuiOptions): Promise<void> {
               : app.goals.clear(root);
         applied(outcome, done);
         return plan.action === "resume" ? kickGoal() : undefined;
+      }
+      case "override": {
+        applied(
+          app.goals.overrideComplete(root, { reason: plan.reason }),
+          "Goal completed by your override; the reason is kept with the goal.",
+        );
+        return;
       }
       case "edit": {
         applied(app.goals.edit(root, plan.objective), "Goal objective updated.");
@@ -3269,7 +3287,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       "- `/init` (above) writes AGENTS.md; the shell command `alisio setup` only scaffolds `.alisio/config.json`",
       "- `/plugin.id:name args` or `/command plugin.id:name args` — run a plugin command",
       "",
-      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll · Ctrl+X agent panel · Ctrl+B background running agents · Shift+Tab cycle the main agents (build, plan, your own)",
+      "**Keys**: Enter send · Shift+Enter / Alt+Enter / Ctrl+J newline · Tab complete · ↑↓ history · Esc interrupt · Ctrl+C clear input (twice to exit) · Ctrl+D exit on empty input · c / y copy last response (empty input) · x expand/collapse latest thought/tool batch/output (empty input) · click a collapsible header row to toggle it · PgUp/PgDn or mouse wheel scroll (Ctrl+Home / Ctrl+End jump to the top / bottom) · Ctrl+X agent panel · Ctrl+B background running agents · Shift+Tab cycle the main agents (build, plan, your own)",
       `**Paste**: multi-line text pastes as one block automatically · Ctrl+V attach a clipboard image (PNG/JPEG/GIF/WebP, up to ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)} MB, up to ${MAX_ATTACHMENTS_PER_MESSAGE} per message) · Ctrl+R remove the last attached image`,
     ].join("\n");
 
@@ -3423,6 +3441,17 @@ export async function runTui(options: TuiOptions): Promise<void> {
           return showTasks();
         case "goal":
           return goalCommand(parsed.args);
+        case "proof": {
+          const { runProofCommand } = await import("./proof.ts");
+          const { sessionPublisher } = await import("../proof.ts");
+          const proofSession = goalRoot();
+          const result = await runProofCommand(parsed.args, {
+            proof: app.proof,
+            sessionId: proofSession,
+            publisher: sessionPublisher(app, proofSession),
+          });
+          return result.tone === "notice" ? notice(result.text) : info(result.text);
+        }
         case "permission": {
           const action = parsePermissionCommand(parsed.args);
           if (action.type === "menu") return openPermissionMenu();

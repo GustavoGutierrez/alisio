@@ -37,6 +37,14 @@ Wire types come from `@alisio/sdk` (web protocol v1). Related: `alisio-pkg-web`,
 - SSE frames are additive; clients ignore unknown frames.
 - Added server work must stay free of runtime-specific APIs (Node and Bun).
 
+## Proof routes (`routes/proof.ts`)
+`GET /api/sessions/:sid/proof`, `POST …/proof/criteria` (create, or edit with `criterionId`),
+`POST …/criteria/:id/not-applicable`, `GET …/proof/export?format=md|json`, and `POST
+/api/sessions/:sid/goal/override` in `routes/goal.ts`. Reads use `SessionService.proof` (server store
+connection); writes go through the workspace app (`app.proof`), refuse archived sessions and subagents,
+and 404 a criterion of another session. The snapshot carries `proof: {criteria}` only when > 0.
+Tests: `tests/proof-routes.test.ts`.
+
 ## Testing
 
 `tests/server-helpers.ts` starts a real server on a free port with a scripted provider and issues

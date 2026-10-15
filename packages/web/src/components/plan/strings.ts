@@ -49,6 +49,12 @@ const en = {
   diagramCount: "{n} diagrams",
   diagramCountOne: "1 diagram",
   openViewer: "Open plan viewer",
+  criteriaTitle: "Proposed acceptance criteria",
+  criteriaHint:
+    "Approving the plan activates the ones you keep. Untick to reject one; edit the wording or mark it required.",
+  criterionKeep: "Keep this criterion",
+  criterionText: "Criterion",
+  criterionRequired: "Required",
 };
 
 const es: typeof en = {
@@ -92,6 +98,12 @@ const es: typeof en = {
   diagramCount: "{n} diagramas",
   diagramCountOne: "1 diagrama",
   openViewer: "Abrir el visor del plan",
+  criteriaTitle: "Criterios de aceptación propuestos",
+  criteriaHint:
+    "Al aprobar el plan se activan los que conserves. Desmarca uno para rechazarlo; edita su texto o márcalo como requerido.",
+  criterionKeep: "Conservar este criterio",
+  criterionText: "Criterio",
+  criterionRequired: "Requerido",
 };
 
 /** Both dictionaries (the tests check that they keep the same keys). */

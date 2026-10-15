@@ -66,6 +66,10 @@ import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
+import { ProofVerifierRegistry } from "./proof/plugin-verifiers.ts";
+import { ProofRecorder } from "./proof/recorder.ts";
+import { ProofStore } from "./proof/store.ts";
+import { verifyCriterion } from "./proof/verify.ts";
 import { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 import {
   availableProviderModels,
@@ -106,6 +110,8 @@ export interface AppOptions {
   /** Extra directories the tools may touch outside the workspace (per-run `--add-dir`). */
   addDirs?: string[];
   noHerdr?: boolean;
+  /** Home directory for user-level resources (skills, agents); defaults to `os.homedir()`. */
+  home?: string;
   model?: string;
   baseURL?: string;
   apiMode?: string;
@@ -389,6 +395,9 @@ export async function createApplication(options: AppOptions = {}) {
       },
     },
   });
+  // Proof verifiers contributed by plugins (`api.proof`); bound before any plugin loads.
+  const proofVerifiers = new ProofVerifierRegistry();
+  plugins.setProofVerifiers(proofVerifiers);
   const stateRoot = options.db && options.db !== ":memory:" ? dirname(options.db) : stateHome();
   plugins.setPluginEnvironment({
     stateRoot,
@@ -408,7 +417,7 @@ export async function createApplication(options: AppOptions = {}) {
       cwd,
       stateHome: stateHome(),
       configHome: configHome(),
-      home: homedir(),
+      home: options.home ?? homedir(),
       trusted: !!options.trustProject || !!options.config,
       configDir: dirname(
         configFile(
@@ -583,7 +592,7 @@ export async function createApplication(options: AppOptions = {}) {
       skillRoots({
         workspace,
         cwd,
-        home: homedir(),
+        home: options.home ?? homedir(),
         configHome: configHome(),
         trusted: !!options.trustProject || !!options.config,
         configSkills: config.skills,
@@ -763,6 +772,8 @@ export async function createApplication(options: AppOptions = {}) {
     // tools are opt-in: a run only sees them while its session has an active goal.
     const goals = new GoalService({
       store: new GoalStore(store.db),
+      // Proof (specs/011): `update_goal complete` is judged against the session's criteria.
+      proof: new ProofStore(store.db),
       settings: () => config.goal,
       ...(options.goals?.onChange ? { onChange: options.goals.onChange } : {}),
       ...(options.goals?.onLog ? { onLog: options.goals.onLog } : {}),
@@ -869,6 +880,8 @@ export async function createApplication(options: AppOptions = {}) {
       store,
       ui: plugins.ui,
       readOnly: !!options.readOnly,
+      // Criteria the model proposes become active only when the user approves the plan.
+      proof: new ProofStore(store.db),
       diagrams: () => ({
         enabled: config.plan.diagrams,
         max: config.plan.diagrams ? config.plan.maxDiagrams : 0,
@@ -1215,6 +1228,7 @@ export async function createApplication(options: AppOptions = {}) {
         return known;
       },
       ...(options.approve && !options.readOnly ? { approve: options.approve } : {}),
+      proof: new ProofRecorder(store.db, { coverage: () => config.proof.coverage.enabled }),
       pathAccess,
       ...(analysisEnabled
         ? {
@@ -1362,6 +1376,38 @@ export async function createApplication(options: AppOptions = {}) {
       tasks,
       /** Session goals (`/goal`): state, user actions, the continuation controller. */
       goals,
+      /** The Proof ledger (specs/011): criteria and evidence of every session; user surfaces only. */
+      proof: new ProofStore(store.db),
+      /** Verifiers plugins registered with `api.proof.registerVerifier`, keyed `<plugin>:<id>`. */
+      proofVerifiers,
+      /**
+       * Runs the verifier of one criterion on demand (`file`, `data-check`, `coverage`, `plugin`): a USER
+       * action, never reachable by the model. Core tool calls go through the normal gate.
+       */
+      verifyCriterion: (
+        sessionId: string,
+        criterionId: string,
+        verifyOptions: { signal?: AbortSignal } = {},
+      ) =>
+        verifyCriterion(
+          {
+            store: new ProofStore(store.db),
+            registry: proofVerifiers,
+            db: store.db,
+            coverage: () => config.proof.coverage.enabled,
+            callTool: (id, name, input, signal) =>
+              runner.runToolCall(id, name, input, {
+                signal,
+                workspace: sessionWorkspace(id),
+              }),
+          },
+          {
+            sessionId,
+            criterionId,
+            workspace: sessionWorkspace(sessionId),
+            ...(verifyOptions.signal ? { signal: verifyOptions.signal } : {}),
+          },
+        ),
       /** Python discovery and job folders of `python_run`; `enabled` is false under --read-only. */
       analysis: {
         enabled: analysisEnabled,
@@ -1778,7 +1824,7 @@ export async function createApplication(options: AppOptions = {}) {
        */
       agentDefinitions: new AgentDefinitionService({
         workspace,
-        home: homedir(),
+        home: options.home ?? homedir(),
         registry: {
           async reload() {
             const handler = plugins.commands.get("agents");

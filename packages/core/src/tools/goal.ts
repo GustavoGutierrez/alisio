@@ -42,17 +42,29 @@ function brief(goal: GoalRecord): Record<string, unknown> {
   };
 }
 
-/** Parses the evidence list defensively (the schema is advisory for some providers). */
+const MAX_EVIDENCE_ID = 100;
+const MAX_UNMET_LISTED = 20;
+
+/**
+ * Parses the evidence list defensively (the schema is advisory for some providers). An optional
+ * `evidenceId` is kept as declared here; the goal service later drops every id that does not
+ * resolve to captured evidence of the session (the declaration is then plain text).
+ */
 export function parseEvidence(raw: unknown): GoalEvidence[] | string {
   if (!Array.isArray(raw) || !raw.length) return "evidence must list at least one item.";
   if (raw.length > MAX_EVIDENCE) return `evidence has more than ${MAX_EVIDENCE} items.`;
   const items: GoalEvidence[] = [];
   for (const entry of raw) {
-    const item = entry as { kind?: unknown; detail?: unknown };
+    const item = entry as { kind?: unknown; detail?: unknown; evidenceId?: unknown };
     const detail = typeof item?.detail === "string" ? item.detail.trim() : "";
     if (!detail) return "every evidence item needs a detail (a path, a test name, a log line).";
     const kind = KINDS.find((candidate) => candidate === item.kind) ?? "other";
-    items.push({ kind, detail: detail.slice(0, MAX_DETAIL) });
+    const evidenceId = typeof item?.evidenceId === "string" ? item.evidenceId.trim() : "";
+    items.push({
+      kind,
+      detail: detail.slice(0, MAX_DETAIL),
+      ...(evidenceId && evidenceId.length <= MAX_EVIDENCE_ID ? { evidenceId } : {}),
+    });
   }
   return items;
 }
@@ -92,7 +104,16 @@ export function registerGoalTools(registry: ToolRegistry, deps: { goals: GoalSer
           minItems: 1,
           maxItems: MAX_EVIDENCE,
           items: objectSchema(
-            { kind: { enum: [...KINDS] }, detail: { type: "string", maxLength: MAX_DETAIL } },
+            {
+              kind: { enum: [...KINDS] },
+              detail: { type: "string", maxLength: MAX_DETAIL },
+              evidenceId: {
+                type: "string",
+                maxLength: MAX_EVIDENCE_ID,
+                description:
+                  "Optional: the id of captured Proof evidence this item refers to. Without a valid id the item is plain text and verifies nothing.",
+              },
+            },
             ["kind", "detail"],
           ),
         },
@@ -114,7 +135,22 @@ export function registerGoalTools(registry: ToolRegistry, deps: { goals: GoalSer
       if (typeof evidence === "string")
         return textResult(JSON.stringify({ ok: false, error: evidence }));
       const result = goals.report(sessionId, context.runId, { status, summary, evidence });
-      if (!result.ok) return textResult(JSON.stringify({ ok: false, error: result.message }));
+      if (!result.ok)
+        return textResult(
+          JSON.stringify({
+            ok: false,
+            error: result.message,
+            ...(result.unmet
+              ? {
+                  unmet: result.unmet.slice(0, MAX_UNMET_LISTED).map((u) => ({
+                    criterionId: u.criterionId,
+                    text: u.text,
+                    status: u.status,
+                  })),
+                }
+              : {}),
+          }),
+        );
       if (status === "complete")
         return textResult(
           JSON.stringify({

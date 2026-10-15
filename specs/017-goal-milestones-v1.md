@@ -5,11 +5,11 @@
 | Versión | 0.1 |
 | Origen | 🔬 **Investigación arXiv** (`specs/research/022-arxiv-features-research.md`) · **Orden de ejecución: 8 de 8** |
 | Proyecto | Alisio |
-| Estado | **Borrador.** Propuesta, no implementada. Decisiones O1–O8 pendientes (propuesta, a confirmar por el propietario). No se ejecuta hasta que `specs/011-proof-v1.md` tenga cerradas sus fases de ledger y verificadores. |
+| Estado | **Borrador.** Propuesta, no implementada. Decisiones O1–O8 pendientes (propuesta, a confirmar por el propietario). No se ejecuta hasta que `specs/archive/011-proof-v1.md` tenga cerradas sus fases de ledger y verificadores. |
 | Fecha | 2026-10-13 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `GoalMilestone`, `MilestoneStatus`, `EffectLedgerEntry`; campos opcionales en `GoalInfo`; nuevos códigos en `GoalReason`; nuevos eventos de goal), `@alisio/core` (`packages/core/src/goal/{machine,service,store,blockers,prompts,command,format,host}.ts`, `packages/core/src/tools/goal.ts` (`update_goal`), nuevo `packages/core/src/goal/milestones.ts` y `packages/core/src/goal/effects.ts`, `packages/core/src/runtime/store.ts` (migración)), `@alisio/server` (`packages/server/src/routes/goal.ts`, `packages/server/src/host/goal.ts`), `@alisio/web` (privado: panel de goal con hitos), `@alisio/alisio-code` (`packages/cli/src/tui/goal.ts`; CLI headless `alisio run --goal`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción (los checkpoints usan `git` como subproceso con `runProcess`, `packages/core/src/runtime/process.ts`). |
-| Relación con otras especificaciones | **Obligatoria**: `specs/011-proof-v1.md` (criterios y verificadores de cada hito). **Fuertes**: `specs/014-trust-boundaries-v1.md` (procedencia/taint de resultados y efectos externos), `specs/013-adaptive-execution-v1.md` (guardia de progreso reutilizada por hito). **De medición**: `specs/archive/010-reliability-lab-v1.md` (mide reanudaciones). **Opcionales**: `specs/016-code-intelligence-v1.md` (diagnósticos como verificadores de hito), `specs/015-project-memory-v1.md` (los hitos cerrados pueden ser recuerdos con procedencia). Extiende de forma **aditiva** `specs/archive/003-modes-goal-background-v1.md` (`/goal` de 0.6.x). Respeta `specs/018-perimeter-v1.md` (no decide permisos). |
+| Relación con otras especificaciones | **Obligatoria**: `specs/archive/011-proof-v1.md` (criterios y verificadores de cada hito). **Fuertes**: `specs/014-trust-boundaries-v1.md` (procedencia/taint de resultados y efectos externos), `specs/013-adaptive-execution-v1.md` (guardia de progreso reutilizada por hito). **De medición**: `specs/archive/010-reliability-lab-v1.md` (mide reanudaciones). **Opcionales**: `specs/016-code-intelligence-v1.md` (diagnósticos como verificadores de hito), `specs/015-project-memory-v1.md` (los hitos cerrados pueden ser recuerdos con procedencia). Extiende de forma **aditiva** `specs/archive/003-modes-goal-background-v1.md` (`/goal` de 0.6.x). Respeta `specs/018-perimeter-v1.md` (no decide permisos). |
 | Superficies | Web, TUI y headless (`alisio run`) con paridad funcional; API HTTP de `alisio serve` |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**; aditiva. Sin hitos, `/goal` se comporta **byte a byte como en 0.6.x** (criterio de aceptación transversal). |
 
@@ -113,7 +113,7 @@ export type MilestoneStatus =
 export interface GoalMilestone {
   id: string;                 // estable: `m1`, `m2`, ...
   title: string;
-  /** Criterios en el formato de Proof (`specs/011-proof-v1.md`); ids de criterio, no texto libre. */
+  /** Criterios en el formato de Proof (`specs/archive/011-proof-v1.md`); ids de criterio, no texto libre. */
   criteria: string[];
   status: MilestoneStatus;
   checkpointRef?: string;     // `refs/alisio/goals/<goalId>/<id>` o `blob:<id>`
@@ -184,7 +184,7 @@ La reanudación calcula la política de nuevo (`permissions/decide.ts`, `permiss
 
 ### 4.7 Persistencia (migración)
 
-Nueva migración forward-only, **siguiente migración libre (v11 si es la primera en ejecutarse)**; coordinar con `specs/011-proof-v1.md` y `specs/014-trust-boundaries-v1.md`, que también la pueden necesitar. Contenido:
+Nueva migración forward-only, **siguiente migración libre (v11 si es la primera en ejecutarse)**; coordinar con `specs/archive/011-proof-v1.md` y `specs/014-trust-boundaries-v1.md`, que también la pueden necesitar. Contenido:
 
 - Tabla `goal_milestones(goal_id, id, ord, title, criteria_json, status, checkpoint_ref, budget_json, turns_used, tokens_used, verified_at, evidence_json, updated_at)`, PK `(goal_id, id)`.
 - Tabla `effect_ledger(id, goal_id, milestone_id, tool, call_id, fingerprint, idempotent, outcome, at, confirmed_repeat)`, índice por `(goal_id, milestone_id)`.
@@ -276,4 +276,4 @@ Dependencias entre hitos (grafo), hitos paralelos, plantillas de hitos reutiliza
 
 ## 14. Estado
 
-**Borrador (2026-10-13).** Pendiente de revisión del propietario: decisiones O1–O8 y umbral de la Fase 0. No se ejecuta hasta que `specs/011-proof-v1.md` haya cerrado ledger y verificadores.
+**Borrador (2026-10-13).** Pendiente de revisión del propietario: decisiones O1–O8 y umbral de la Fase 0. No se ejecuta hasta que `specs/archive/011-proof-v1.md` haya cerrado ledger y verificadores.

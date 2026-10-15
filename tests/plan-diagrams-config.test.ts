@@ -77,16 +77,16 @@ describe("plan settings", () => {
 
   it("change what exit_plan offers the model, live", async () => {
     const a = await app();
-    expect(offered(a).fields).toEqual(["title", "plan", "diagrams"]);
+    expect(offered(a).fields).toEqual(["title", "plan", "acceptanceCriteria", "diagrams"]);
     expect(offered(a).description).toContain("up to 5");
     await a.updateSetting("plan.maxDiagrams", 3);
     expect(offered(a).description).toContain("up to 3");
     await a.updateSetting("plan.diagrams", false);
-    expect(offered(a).fields).toEqual(["title", "plan"]);
+    expect(offered(a).fields).toEqual(["title", "plan", "acceptanceCriteria"]);
     expect(offered(a).description).not.toContain("diagrams");
     await a.updateSetting("plan.diagrams", true);
     await a.updateSetting("plan.maxDiagrams", 0);
-    expect(offered(a).fields).toEqual(["title", "plan"]);
+    expect(offered(a).fields).toEqual(["title", "plan", "acceptanceCriteria"]);
   });
 
   it("start switched off when the configuration says so, and the tool still validates diagrams", async () => {
@@ -97,7 +97,7 @@ describe("plan settings", () => {
       JSON.stringify({ plan: { diagrams: false } }),
     );
     const a = await app();
-    expect(offered(a).fields).toEqual(["title", "plan"]);
+    expect(offered(a).fields).toEqual(["title", "plan", "acceptanceCriteria"]);
     // Turning them on later offers the field again, and the tool accepts it (the schema compiled
     // at start allows `diagrams`).
     await a.updateSetting("plan.diagrams", true);

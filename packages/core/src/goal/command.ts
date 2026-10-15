@@ -5,6 +5,7 @@
  *   /goal <objective> [budget=N]  create (or replace) the goal and start working on it
  *   /goal pause | resume | clear | help
  *   /goal edit [<objective>]      change the objective of the current goal
+ *   /goal override <reason>       complete the goal over unmet required Proof criteria (you only)
  *   /goal budget=50k              set the token budget of the current goal (budget=clear removes it)
  */
 import { parseTokenBudget } from "./budget.ts";
@@ -12,7 +13,7 @@ import { parseTokenBudget } from "./budget.ts";
 /** The longest objective accepted, in characters (it is sent to the model on the kickoff). */
 export const GOAL_OBJECTIVE_MAX = 4000;
 
-export const GOAL_SUBCOMMANDS = ["pause", "resume", "edit", "clear", "help"] as const;
+export const GOAL_SUBCOMMANDS = ["pause", "resume", "edit", "clear", "help", "override"] as const;
 
 export type GoalCommand =
   | { type: "show" }
@@ -20,6 +21,8 @@ export type GoalCommand =
   | { type: "pause" }
   | { type: "resume" }
   | { type: "clear" }
+  /** The user completes the goal over unmet required Proof criteria (a reason is required). */
+  | { type: "override"; reason: string }
   /** `objective` is absent when the UI should ask for the new text. */
   | { type: "edit"; objective?: string }
   | { type: "budget"; tokens: number | null }
@@ -29,7 +32,7 @@ export type GoalCommand =
 const BUDGET_WORD = /^budget=(.*)$/i;
 
 export const GOAL_USAGE =
-  "Usage: /goal [<objective> [budget=50k]] | pause | resume | edit [<objective>] | clear | budget=<n|clear> | help";
+  "Usage: /goal [<objective> [budget=50k]] | pause | resume | edit [<objective>] | clear | override <reason> | budget=<n|clear> | help";
 
 /** Markdown help shown by `/goal help` (identical on every surface). */
 export const GOAL_HELP = [
@@ -40,6 +43,7 @@ export const GOAL_HELP = [
   "- `/goal <objective> budget=50k` also sets a token budget (`50k`, `1.5M`, `250000`).",
   "- `/goal pause` stops the automatic continuation; `/goal resume` continues a paused or blocked goal.",
   "- `/goal edit <objective>` changes the objective; `/goal clear` removes the goal.",
+  "- `/goal override <reason>` completes the goal over acceptance criteria that are not verified (Proof); only you can, and the reason is kept.",
   "- `/goal budget=50k` sets the token budget; `/goal budget=clear` (also `none`, `off`, `0`) removes it.",
   "",
   `The objective can be up to ${GOAL_OBJECTIVE_MAX} characters. Only you pause, resume, edit or clear a goal or change its budget; the agent marks it complete or blocked, with evidence.`,
@@ -76,6 +80,11 @@ export function parseGoalCommand(args: string): GoalCommand {
       const objective = text.slice(text.search(/\s/) + 1).trim();
       if (rest.length === 1) return { type: "edit" };
       return validateObjective(objective, (value) => ({ type: "edit", objective: value }));
+    }
+    if (subcommand === "override") {
+      const reason = text.slice(text.search(/\s/) + 1).trim();
+      if (rest.length === 1) return { type: "error", message: "/goal override needs a reason." };
+      return { type: "override", reason };
     }
     if (rest.length > 1)
       return {

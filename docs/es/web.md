@@ -436,6 +436,35 @@ activo, vuelve **en pausa** (motivo `restart`) tras el reinicio y nunca se reanu
 usan el preset de permisos de la sesión como cualquier turno y nunca lo amplían. `alisio run` no tiene
 `/goal` en la v1.
 
+### Proof: criterios de aceptación {#proof}
+
+Cuando una sesión tiene criterios de [Proof](/proof), aparece una **tarjeta** compacta sobre la caja
+de mensaje y el panel derecho gana una pestaña **Proof** (que también abre `/proof`). Ambas cargan
+bajo demanda y leen el ledger del servidor, así que muestran los mismos estados que la terminal y
+`alisio run --json`. La pestaña permite añadir un criterio (con un comando opcional), editar su texto
+o su marca de requerido, marcarlo **No aplica** con un motivo y descargar `proof.md` o `proof.json`.
+Con un objetivo que tiene criterios requeridos sin cumplir, ofrece también **Completar el objetivo de
+todos modos** (el motivo es obligatorio; solo tú puedes). En una revisión de plan que propone
+criterios puedes conservar, editar o rechazar cada uno antes de aprobar.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/proof_web_ui.webp" alt="La tarjeta Proof sobre la caja de mensaje y la pestaña Proof del panel derecho con cinco criterios de aceptación en distintos estados." width="1360" height="820" loading="lazy" decoding="async" />
+  <figcaption>La tarjeta Proof y la pestaña Proof con datos sintéticos (interfaz en inglés).</figcaption>
+</figure>
+
+Las rutas (misma autenticación y reglas de Origin que las demás rutas de sesión):
+
+| Ruta | Propósito |
+| --- | --- |
+| `GET /api/sessions/:sid/proof` | El ledger: criterios, evidencia y las afirmaciones sin evidencia de la última ejecución |
+| `POST /api/sessions/:sid/proof/criteria` | Crear un criterio, o editar uno (`criterionId` con `text` y `required`) |
+| `POST /api/sessions/:sid/proof/criteria/:id/not-applicable` | `{"reason"}`: marcarlo como no aplicable |
+| `GET /api/sessions/:sid/proof/export?format=md\|json` | Descargar `proof.md` o el JSON `proof/v1` |
+| `POST /api/sessions/:sid/goal/override` | `{"reason"}`: completas el objetivo sobre criterios requeridos sin cumplir |
+
+Flujo: `proof_updated` y `proof_divergence` llegan como frames `event` normales, y el snapshot lleva
+`proof: {criteria: n}` cuando la sesión tiene criterios.
+
 ### `/reload` y `/changelog` {#reload-and-changelog}
 
 `/reload` vuelve a leer la configuración, los agentes, las skills, las plantillas de prompt y los

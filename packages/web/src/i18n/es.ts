@@ -937,4 +937,5 @@ export const es: Record<MessageKey, string> = {
   "settings.analysis.wasmNote":
     "Se ejecuta en un intérprete WebAssembly en un proceso aparte, sin red y solo con las carpetas del trabajo. Sus restricciones son parciales: no es un contenedor.",
   "dock.scratch": "Scratch",
+  "dock.proof": "Proof",
 };

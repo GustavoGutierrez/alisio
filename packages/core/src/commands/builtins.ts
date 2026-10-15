@@ -160,6 +160,13 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
+    name: "proof",
+    description: "Show the acceptance criteria of this session and the evidence behind each one",
+    argumentHint: "[add | edit | required | optional | na | export | help]",
+    surfaces: INTERACTIVE,
+    execution: "surface",
+  },
+  {
     name: "decisions",
     description: "Show Decision Intelligence status, provider health and session metrics",
     surfaces: ALL,

@@ -453,6 +453,25 @@ Spanish) and from `/settings` in the [TUI](/tui), with the same validated writer
 They are read live: the next continuation (or the next `/goal`) uses the new value, but the turn and
 time caps of a goal that already exists were fixed when it was created.
 
+## `proof` {#proof}
+
+[Proof](/proof) acceptance criteria. Criteria exist only when you, a plan or the command line create them;
+without any, a run is unchanged.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `ci` | `false` | `true` makes `alisio run` behave as with `--proof`: it prints the ledger and exits with the codes below |
+| `exitCodes.failed` | `10` | Exit code when a required criterion is `failed` (1–125) |
+| `exitCodes.unverified` | `11` | Exit code when none failed but a required one is `not_checked` or `manual_review` (1–125) |
+| `coverage.enabled` | `false` | Opt-in [`coverage` verifier](/proof#coverage): off, a `coverage` criterion stays `not_checked` and Proof never records its command |
+
+```json
+{ "proof": { "ci": true, "exitCodes": { "failed": 20, "unverified": 21 } } }
+```
+
+These keys are not in the settings menu. Flags of `alisio run`: `--proof`, `--criterion <text>` and
+`--verify <command>` (repeatable, paired by position) and `--proof-file <path>`.
+
 ## `plan` {#plan}
 
 [Plan diagrams](/tools#exit-plan): the plan agent may add small Mermaid diagrams to a plan, which the

@@ -85,6 +85,12 @@ const LEGACY_COMMANDS = [
     description: "Start or manage the current Session Goal",
     argumentHint: "[objective | pause | resume | edit | clear | help | budget=<n>]",
   },
+  // Added with Proof (specs/011): the acceptance-criteria ledger.
+  {
+    name: "proof",
+    description: "Show the acceptance criteria of this session and the evidence behind each one",
+    argumentHint: "[add | edit | required | optional | na | export | help]",
+  },
   // Added with Decision Intelligence.
   {
     name: "decisions",

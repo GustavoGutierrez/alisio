@@ -6,7 +6,7 @@ description: "Working in packages/cli (@alisio/alisio-code, the `alisio` binary)
 # `@alisio/alisio-code` (`packages/cli`)
 
 Binary `alisio` (`dist/main.js`). Depends on core, server, sdk, the three built-in plugins,
-`@earendil-works/pi-tui` (patched, see `patches/`) and `commander`. Related: `alisio-architecture`,
+`@earendil-works/pi-tui` and `commander`. Related: `alisio-architecture`,
 `alisio-plugins`, `alisio-pkg-server`.
 
 ## Layout (`src/`)
@@ -33,6 +33,11 @@ Binary `alisio` (`dist/main.js`). Depends on core, server, sdk, the three built-
   (`--conditions=alisio-source`); `pnpm build:binary` builds the standalone binary.
 - TUI text: English; width-aware, no assumptions about color/unicode (use terminal capabilities).
 - New flag or command: update `--help`, `docs/` EN/ES (`docs/tui.md`, `docs/configuration.md`...).
+
+## Proof
+`src/proof.ts` (`run --proof`: flags, `finishProof`, exit 0/10/11, final `proof_ledger` JSONL line) and
+`tui/proof.ts` (`/proof`, injected env, tested without a terminal). `/goal override <reason>` is a
+goal plan kind. The TUI plan review stays all-or-nothing for criteria (the web one is per criterion).
 
 ## Testing
 

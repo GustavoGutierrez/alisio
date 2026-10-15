@@ -36,7 +36,7 @@ import {
 import { LAST_SEEN_KEY, newsAction } from "./changelog.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
 import { pushDatasetNotice } from "./datasets.ts";
-import { liveTasks, openTasks } from "./dock.ts";
+import { liveTasks, openProof, openTasks } from "./dock.ts";
 import { errorText } from "./errors.ts";
 import { goalFromFrame } from "./goal-frame.ts";
 import { nextAgentId } from "./modes.ts";
@@ -51,6 +51,7 @@ import {
   type SessionTab,
 } from "./plugins.ts";
 import { applyCompacting, applyProgress, type RunProgress } from "./progress.ts";
+import { receiveProofFrame } from "./proof-frame.ts";
 import {
   applySessionStatus,
   emptySidebar,
@@ -159,6 +160,13 @@ export const permissionsOpen = signal(false);
  * `goal_changed` frames). Everything that shows or edits it is its own chunk (`store/goal.ts`).
  */
 export const goalInfo = signal<GoalInfo | null>(null);
+/**
+ * How many Proof criteria the open session has (from the stream snapshot; 0 = none, and then
+ * nothing of Proof loads). `proofTick` moves with every `proof_updated` event. The card and the
+ * ledger are their own chunk (`store/proof.ts`).
+ */
+export const proofCount = signal(0);
+export const proofTick = signal(0);
 /** Bumped by `capabilities_changed` for the open session (permissions are refetched). */
 export const capabilitiesTick = signal(0);
 /** `/artifacts [filter]` from the composer: the panel opens with its switcher. */
@@ -374,6 +382,14 @@ function applyServerFrames(frames: ServerFrame[]): void {
       // The goal of the open session: the snapshot after a (re)connect, then every change.
       const goal = goalFromFrame(frame, currentId.value);
       if (goal !== undefined) goalInfo.value = goal;
+      const proofFrame = receiveProofFrame(frame, currentId.value);
+      if (proofFrame) {
+        if (proofFrame.count !== undefined) proofCount.value = proofFrame.count;
+        if (proofFrame.changed) {
+          proofTick.value++;
+          if (!proofCount.value) proofCount.value = 1;
+        }
+      }
       if (frame.t === "catalog_changed") {
         scopes.add(frame.scope);
         if (frame.scope === "commands") catalog = true;
@@ -441,6 +457,7 @@ export async function openSession(id: string | undefined): Promise<void> {
     mobileSidebar.value = false;
     btw.value = undefined;
     goalInfo.value = null;
+    proofCount.value = 0;
   });
   const hash = id ? `#/s/${encodeURIComponent(id)}` : "#/";
   if (location.hash !== hash) history_replace(hash);
@@ -828,6 +845,10 @@ export async function submit(
   }
   if (slash?.name === "tasks") {
     openTasks();
+    return;
+  }
+  if (slash?.name === "proof" && commands.value.some((c) => c.name === "proof")) {
+    openProof();
     return;
   }
   if (slash?.name === "goal" && commands.value.some((c) => c.name === "goal")) {

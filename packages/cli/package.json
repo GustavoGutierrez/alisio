@@ -1,6 +1,6 @@
 {
   "name": "@alisio/alisio-code",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Alisio: an extensible, provider-agnostic coding-agent harness for your terminal. TUI, OpenAI-compatible providers, permissioned local tools, context compaction, persistent memory and a typed plugin SDK.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",
@@ -55,7 +55,7 @@
     "@alisio/plugin-subagents": "workspace:*",
     "@alisio/sdk": "workspace:*",
     "@alisio/server": "workspace:*",
-    "@earendil-works/pi-tui": "0.87.1",
+    "@earendil-works/pi-tui": "1.2.0",
     "commander": "15.0.0"
   },
   "publishConfig": {

@@ -34,6 +34,7 @@ import { requestDecisionActivation } from "../decisions/activation.ts";
 import type { DecisionRegistry } from "../decisions/registry.ts";
 import type { DecisionService, DecisionsConfig } from "../decisions/service.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
+import type { ProofVerifierRegistry } from "../proof/plugin-verifiers.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import { exists, readJson } from "../runtime/fs.ts";
 import { resolvePluginSpec } from "../runtime/modules.ts";
@@ -252,6 +253,14 @@ export class PluginHost implements RunnerExtensions {
    * Binds the directories and options plugins receive (`api.paths`, `api.options`). Plugins
    * activated before this call, or on a host without it, see neither member.
    */
+  /**
+   * Binds the Proof verifier registry. Plugins activated afterwards see `api.proof`; without it
+   * the member is absent, exactly like on a core that predates Proof.
+   */
+  setProofVerifiers(registry: ProofVerifierRegistry) {
+    this.proofVerifiers = registry;
+  }
+  private proofVerifiers?: ProofVerifierRegistry;
   setPluginEnvironment(environment: PluginEnvironment) {
     this.environment = environment;
   }
@@ -503,6 +512,14 @@ export class PluginHost implements RunnerExtensions {
               options: deepFreeze(structuredClone(options(plugin.id, builtin))),
             };
           })(this.environment)
+        : {}),
+      ...(this.proofVerifiers
+        ? {
+            proof: ((registry) =>
+              ({
+                registerVerifier: (verifier) => track(registry.register(plugin.id, verifier)),
+              }) satisfies PluginAPI["proof"])(this.proofVerifiers),
+          }
         : {}),
       ...(this.decisionsImpl
         ? {

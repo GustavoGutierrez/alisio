@@ -29,7 +29,7 @@ import { makeSuite, type ScriptedTurn, scriptedProvider, task } from "./eval-hel
 
 let root: string;
 let tmpRoot: string;
-const ENV_KEYS = ["ALISIO_CONFIG_HOME", "ALISIO_STATE_HOME", "ALISIO_TMPDIR"] as const;
+const ENV_KEYS = ["ALISIO_CONFIG_HOME", "ALISIO_STATE_HOME", "ALISIO_TMPDIR", "HOME"] as const;
 let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
@@ -666,5 +666,29 @@ describe("configHash (D2)", () => {
   it("covers every top-level config key: a new key must be classified as hashed or excluded", () => {
     const keys = Object.keys(configSchema.parse({})).sort();
     expect(Object.keys(CONFIG_HASH_COVERAGE).sort()).toEqual(keys);
+  });
+});
+
+describe("hermetic host (skills)", () => {
+  it("does not let a skill installed in the host home change the model request", async () => {
+    const t = task({ verifiers: [] });
+    const instructionsOf = async () => {
+      const opts = options(t, [done]);
+      await runTask(t, opts);
+      return opts.provider.requests[0]?.instructions;
+    };
+    const before = await instructionsOf();
+    const fakeHome = join(root, "host-home");
+    mkdirSync(join(fakeHome, ".agents", "skills", "host-only-skill"), { recursive: true });
+    writeFileSync(
+      join(fakeHome, ".agents", "skills", "host-only-skill", "SKILL.md"),
+      "---\nname: host-only-skill\ndescription: Installed on the developer machine only.\n---\nBody\n",
+    );
+    process.env.HOME = fakeHome;
+    const after = await instructionsOf();
+    expect(after).toContain("Alisio");
+    expect(before).toBeTruthy();
+    expect(before).not.toContain("host-only-skill");
+    expect(after).not.toContain("host-only-skill");
   });
 });

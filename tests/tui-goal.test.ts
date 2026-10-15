@@ -193,3 +193,13 @@ describe("the notice when a goal stops by itself", () => {
     );
   });
 });
+
+describe("/goal override in the terminal", () => {
+  it("plans an override with the reason, and says so without a goal", () => {
+    expect(plan("override Verified on staging", goal())).toEqual({
+      kind: "override",
+      reason: "Verified on staging",
+    });
+    expect(plan("override Verified on staging")).toMatchObject({ kind: "say" });
+  });
+});

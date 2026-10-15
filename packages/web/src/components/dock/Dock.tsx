@@ -5,7 +5,14 @@ import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
 import CodeView from "../../renderers/code/view.tsx";
 import { RendererHost } from "../../renderers/RendererHost.tsx";
-import { currentId, detail, insertIntoComposer, runEnded, showToast } from "../../store/app.ts";
+import {
+  currentId,
+  detail,
+  insertIntoComposer,
+  proofCount,
+  runEnded,
+  showToast,
+} from "../../store/app.ts";
 import {
   changes,
   closeFileMenu,
@@ -32,7 +39,7 @@ import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import styles from "./dock.module.css";
 
-const TABS: DockTab[] = ["files", "changes", "preview", "tasks", "scratch"];
+const TABS: DockTab[] = ["files", "changes", "preview", "tasks", "scratch", "proof"];
 
 /** The Tasks tab is its own chunk (the initial bundle has a size budget). */
 function LazyTasks() {
@@ -56,6 +63,21 @@ function LazyScratch() {
     let alive = true;
     void import("./ScratchTab.tsx").then((m) => {
       if (alive) setView(() => m.ScratchTab);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return View ? <View /> : <p class={styles.empty}>{t("common.loading")}</p>;
+}
+
+/** The Proof tab is its own chunk too (and so are its store, its view and its strings). */
+function LazyProof() {
+  const [View, setView] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    let alive = true;
+    void import("../proof/ProofCard.tsx").then((m) => {
+      if (alive) setView(() => m.ProofTab);
     });
     return () => {
       alive = false;
@@ -348,25 +370,30 @@ export function Dock(props: { width?: number } = {}) {
     >
       <div class={styles.head}>
         <div class={styles.tabs} role="tablist">
-          {TABS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              class={styles.tab}
-              onClick={() => {
-                dockTab.value = id;
-              }}
-            >
-              {t(`dock.${id}`)}
-              {id === "tasks" && liveTasks.value ? (
-                <span class={styles.count} title={t("dock.tasksLive", { count: liveTasks.value })}>
-                  {liveTasks.value}
-                </span>
-              ) : null}
-            </button>
-          ))}
+          {TABS.filter((id) => id !== "proof" || proofCount.value > 0 || tab === "proof").map(
+            (id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                class={styles.tab}
+                onClick={() => {
+                  dockTab.value = id;
+                }}
+              >
+                {t(`dock.${id}`)}
+                {id === "tasks" && liveTasks.value ? (
+                  <span
+                    class={styles.count}
+                    title={t("dock.tasksLive", { count: liveTasks.value })}
+                  >
+                    {liveTasks.value}
+                  </span>
+                ) : null}
+              </button>
+            ),
+          )}
         </div>
         <button
           type="button"
@@ -416,6 +443,8 @@ export function Dock(props: { width?: number } = {}) {
           <LazyTasks />
         ) : tab === "scratch" ? (
           <LazyScratch />
+        ) : tab === "proof" ? (
+          <LazyProof />
         ) : (
           <PreviewBody />
         )}

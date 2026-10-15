@@ -382,6 +382,7 @@ goal or change its budget. There is no separate evaluator model in v1.
 | Command | What it does |
 | --- | --- |
 | `/goal` | With a goal: opens the menu (status, pause, resume, edit, budget, clear, help). Without one: says how to start it |
+| `/proof` | Show the Proof ledger (acceptance criteria and evidence) and manage it: `add`, `edit`, `required`, `optional`, `na`, `export`; see [Proof](#proof) |
 | `/goal <objective>` | Creates the goal and starts working. One goal per session: if there is one, asks before replacing it |
 | `/goal <objective> budget=50k` | Same, with a token budget (`50k`, `1.5M`, `250000`) |
 | `/goal pause` | Stops continuing automatically; the turn in progress finishes |
@@ -458,6 +459,17 @@ If Alisio stops while a goal is active (closed, killed), the next start brings i
 reason `restart`: it never resumes by itself, run `/goal resume`. `alisio run` (headless) has no
 `/goal` in v1.
 
+## Proof: acceptance criteria {#proof}
+
+`/proof` prints the [Proof](/proof) ledger of the session: one line per criterion with its status
+(`verified`, `failed`, `not_checked`, `manual_review`, `not_applicable`), the same ones the web card and
+`alisio run --json` show. Your actions are `/proof add [required] <text> [-- <command>]`,
+`/proof edit <n> <text>`, `/proof required <n>`, `/proof optional <n>`, `/proof na <n> <reason>` and
+`/proof export` (publishes `proof.md` and `proof.json`). A claim in the final answer that no evidence
+backs ("tests pass") appears as a notice. `/goal override <reason>` completes a goal over unmet
+required criteria; only you can. The plan review lists the criteria the plan proposes; approving
+activates all of them (the web review lets you decide each one).
+
 ## MCP manager {#mcp}
 
 `/mcps` in the TUI lists servers by source and, for the selected one, separates configured/enabled,
@@ -483,6 +495,7 @@ that preference and disconnects servers. `--read-only` blocks the whole manager.
 | `x` | Expand or collapse the nearest collapsible row — a finished **Thought** section, a grouped batch of tool calls, or a long command output (when the input is empty; see [Tool & reasoning display](#tool-reasoning-display)) |
 | Mouse click | On a collapsible header row, expand or collapse it (see [Tool & reasoning display](#tool-reasoning-display)) |
 | PgUp / PgDn, mouse wheel | Scroll the conversation |
+| Ctrl+Home / Ctrl+End | Jump to the top / bottom of the conversation (Home / End move the input cursor) |
 | Shift+Tab | Cycle the main agents: `build`, `plan`, then your own primary agents, wrapping around (see [Cycling agents](#cycle-agents)) |
 | Ctrl+X | Focus the [agent panel](#agent-panel) |
 | Ctrl+B | Move running foreground agents to the background (during a turn) |
@@ -603,7 +616,7 @@ the TUI renders them natively under the tool head:
   highlighted lines, and the closing fence.
 - **Markdown** renders through the regular response Markdown renderer (headings, lists, tables…).
 - **Images** render inline when the terminal supports the kitty or iTerm2 graphics protocol
-  (pi-tui 0.87.1 auto-detection). Without image support — or with `NO_COLOR` — a dim placeholder
+  (pi-tui 1.2.0 auto-detection). Without image support — or with `NO_COLOR` — a dim placeholder
   `[image: image/png 640x480]` is shown instead.
 
 Every block has a canonical **text projection** that is always part of the tool result, so the

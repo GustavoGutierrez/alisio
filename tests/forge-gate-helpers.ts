@@ -60,6 +60,10 @@ export interface GateFixtureOptions {
   pathAccess?: (root: string) => NonNullable<RunnerOptions["pathAccess"]>;
   readConcurrency?: number;
   onEvent?: RunnerOptions["onEvent"];
+  /** Builds the Proof recorder over the fixture's store (spec 011, phase 2). */
+  proof?: (store: SQLiteStore) => NonNullable<RunnerOptions["proof"]>;
+  /** The text of the final assistant message (default "done"). */
+  finalText?: string;
 }
 
 /** A runner whose provider plays one scripted turn of tool calls and then finishes. */
@@ -96,7 +100,11 @@ export async function gateFixture(options: GateFixtureOptions) {
           : [];
       yield {
         type: "completed",
-        message: { role: "assistant", text: calls.length ? "" : "done", calls },
+        message: {
+          role: "assistant",
+          text: calls.length ? "" : (options.finalText ?? "done"),
+          calls,
+        },
       };
     },
   };
@@ -120,6 +128,7 @@ export async function gateFixture(options: GateFixtureOptions) {
     ...(options.pathAccess ? { pathAccess: options.pathAccess(root) } : {}),
     ...(options.readConcurrency ? { readConcurrency: options.readConcurrency } : {}),
     ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+    ...(options.proof ? { proof: options.proof(store) } : {}),
   });
   const session = store.create(root, "test", "m").id;
   return {

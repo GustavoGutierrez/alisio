@@ -110,6 +110,7 @@ removed automatically when it is unloaded.
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
 | `views.register(view)` | Registers a named, read-only [data view](#data-views) hosts such as the web UI can read. Absent on a core that predates it: use `api.views?.register(...)` |
+| `proof.registerVerifier(verifier)` | Registers a [Proof verifier](#proof-verifiers) (`{ id, describe, run(input, ctx) }`) that criteria bind to as `<pluginId>:<id>`. Absent on a core that predates Proof: use `api.proof?.registerVerifier(...)` |
 | `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()`, `tryDecide(request, options?)` and the optional `activate(providerId, options?)` (`options.recommend` pre-selects Yes after an explicit user action). Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: per-plugin directories resolved by the host and created with mode `0700` on first read. Absent on a core that predates it |
 | `options` | Read-only `pluginOverrides[id].options` (or `{}`), frozen when `setup` runs. Absent on a core that predates it |
@@ -337,6 +338,33 @@ setup(api) {
 - **`api.options`** holds the JSON you or the user put in `pluginOverrides[id].options` of the
   global configuration (see [`pluginOverrides`](/configuration#plugins)). It is global only, at most
   8 KB, and a snapshot taken at `setup`: changing it needs a restart. Do not keep secrets there.
+
+### Proof verifiers {#proof-verifiers}
+
+A plugin can contribute a verifier for [Proof](/proof) acceptance criteria. The member is
+**optional**: feature-detect it, and the plugin keeps working on a core without Proof.
+
+```ts
+setup(api) {
+  api.proof?.registerVerifier({
+    id: "links",
+    describe: "Checks that the docs have no broken links",
+    async run(input, ctx) {
+      const { callId, result } = await ctx.callTool("read_file", { path: "docs/index.md" });
+      const text = result.content.map((p) => (p.type === "text" ? p.text : "")).join("");
+      return { ok: !text.includes("](broken)"), outputHash: sha256(text), callId };
+    },
+  });
+}
+```
+
+A user binds a criterion to it with `{ "kind": "plugin", "verifierId": "<pluginId>:links" }`. The
+result must carry referenceable evidence: `outputHash` (sha256 hex of what the verdict rests on) and,
+when you made core tool calls, the `callId` of the one that backs it. Without a valid `outputHash`,
+or with a `callId` the session never made, the criterion becomes `manual_review`. If `run` throws or
+exceeds 60 s the criterion stays as it was. A verifier gains **no permissions**: `ctx.callTool` runs
+a core tool through the same gate as the agent (a refused call comes back with `isError`). It is
+trusted, in-process code, not a sandbox, and it never creates or edits criteria.
 
 ### Child sessions {#child-sessions}
 

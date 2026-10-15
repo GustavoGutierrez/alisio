@@ -29,6 +29,8 @@ export type GoalPlan =
   | { kind: "confirm-replace"; objective: string; tokenBudget?: number }
   | { kind: "create"; objective: string; tokenBudget?: number }
   | { kind: "act"; action: "pause" | "resume" | "clear" }
+  /** The user completes the goal over unmet required Proof criteria. */
+  | { kind: "override"; reason: string }
   | { kind: "edit"; objective: string }
   /** `/goal edit` without text: put the current objective in the editor to change it. */
   | { kind: "edit-prefill"; text: string }
@@ -72,6 +74,8 @@ export function planGoalCommand(
     case "resume":
     case "clear":
       return goal ? { kind: "act", action: command.type } : say(NO_GOAL_TEXT);
+    case "override":
+      return goal ? { kind: "override", reason: command.reason } : say(NO_GOAL_TEXT);
     case "edit":
       if (!goal) return say(NO_GOAL_TEXT);
       return command.objective === undefined

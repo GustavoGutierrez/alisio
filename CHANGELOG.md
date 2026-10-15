@@ -4,6 +4,31 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.8.0] - 2026-10-14
+
+Proof: acceptance criteria backed by evidence, not by what the model says.
+
+### Added
+
+- Proof ledger: acceptance criteria whose status (`verified`, `failed`, `not_checked`, `manual_review`,
+  `not_applicable`) is computed from evidence captured from the commands, file reads and data queries
+  the agent really ran. A criterion without a verifier stays `not_checked`.
+- Verifiers `command`, `file`, `data-check`, opt-in `coverage` (`proof.coverage.enabled`) and plugin
+  verifiers (`api.proof.registerVerifier`). An edit after the evidence expires it.
+- The Proof card and tab in the web UI, `/proof` and `/goal override <reason>` in the terminal, and
+  per-criterion review of the criteria a plan proposes (all-or-nothing in the terminal).
+- `alisio run --proof`, `--criterion`, `--verify` and `--proof-file`: the run prints the ledger, ends
+  with a `proof_ledger` JSONL line under `--json`, exits `0`, `10` or `11` (`proof.exitCodes`,
+  `proof.ci`) and publishes `proof.md` and `proof.json`.
+- A warning when the final answer claims tests, types or lint passed without matching evidence.
+- Export in Markdown and versioned JSON (`proof/v1`) and the routes `GET /api/sessions/:sid/proof`,
+  `POST` `…/proof/criteria`, `…/not-applicable` and `…/goal/override`.
+
+### Improved
+
+- `update_goal` with `complete` is refused while a required criterion is `failed` or `not_checked`;
+  only you can complete the goal over it. Without criteria, goal or plan nothing changes.
+
 ## [0.7.0] - 2026-10-14
 
 The Reliability Lab: measure how reliably Alisio solves your tasks.

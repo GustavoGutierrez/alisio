@@ -337,3 +337,30 @@ describe("the plan's diagrams in the terminal", () => {
     }
   });
 });
+
+describe("the proposed acceptance criteria in the terminal (Proof, phase 5)", () => {
+  it("lists each draft with its verifier and says approving activates all of them", async () => {
+    const { planCriteriaMarkdown } = await import("../packages/cli/src/tui/plan-review.ts");
+    const text = planCriteriaMarkdown([
+      {
+        text: "Unit tests pass",
+        required: true,
+        origin: "inferred",
+        verifier: { kind: "command", command: "pnpm test" },
+      },
+      { text: "Docs mention the flag", required: false, origin: "inferred", scope: ["docs/**"] },
+    ]);
+    expect(text).toContain("Acceptance criteria (2)");
+    expect(text).toContain("1. Unit tests pass");
+    expect(text).toContain("`pnpm test`");
+    expect(text).toContain("required");
+    expect(text).toContain("2. Docs mention the flag");
+    expect(text).toMatch(/approving.*all/i);
+    expect(text).toContain("web");
+  });
+  it("is empty without drafts", async () => {
+    const { planCriteriaMarkdown } = await import("../packages/cli/src/tui/plan-review.ts");
+    expect(planCriteriaMarkdown(undefined)).toBe("");
+    expect(planCriteriaMarkdown([])).toBe("");
+  });
+});

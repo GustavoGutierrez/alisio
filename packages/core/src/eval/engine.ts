@@ -163,6 +163,7 @@ export const CONFIG_HASH_COVERAGE = {
   tasks: "excluded",
   goal: "excluded",
   plan: "excluded",
+  proof: "excluded",
   tui: "excluded",
   agents: "excluded",
   web: "excluded",
@@ -706,6 +707,8 @@ async function execute(
         db: join(dirs.state, "sessions.sqlite"),
         provider: effectiveProvider,
         noHerdr: true,
+        // Hermetic: user-level skills and agents never come from the developer's real home.
+        home: dirs.home,
         trustProject: false,
         allowWrite: plan.policy.write,
         allowProcess: plan.policy.process,

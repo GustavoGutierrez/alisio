@@ -7,7 +7,7 @@
  * Pure functions: no I/O.
  */
 import { createHash } from "node:crypto";
-import type { PlanDiagramStatus, PlanManifest } from "@alisio/sdk";
+import type { PlanCriterionDraft, PlanDiagramStatus, PlanManifest } from "@alisio/sdk";
 import { diagramHash, type PlanDiagram } from "./diagrams.ts";
 
 export interface PlanHeading {
@@ -251,6 +251,8 @@ export interface ManifestInput {
   diagrams: PlanDiagram[];
   /** Diagrams of the previous revision (from the plan state), when there was one. */
   previous?: DiagramRecord[];
+  /** Acceptance-criteria drafts of this revision (specs/011); absent or empty = none. */
+  acceptanceCriteria?: PlanCriterionDraft[];
 }
 
 /** The diff of this revision's diagrams against the previous one. */
@@ -366,6 +368,7 @@ export function buildPlanManifest(input: ManifestInput): PlanManifest {
       };
     }),
     removed,
+    ...(input.acceptanceCriteria?.length ? { acceptanceCriteria: input.acceptanceCriteria } : {}),
   };
 }
 
@@ -373,9 +376,19 @@ export function buildPlanManifest(input: ManifestInput): PlanManifest {
 export function planContentHash(
   markdown: string,
   diagrams: Array<{ id: string; hash: string }>,
+  criteria: PlanCriterionDraft[] = [],
 ): string {
   const hash = createHash("sha256").update(markdown, "utf8");
   if (diagrams.length)
     hash.update(`\n--diagrams--\n${diagrams.map((d) => `${d.id}:${d.hash}`).join("\n")}`, "utf8");
+  // The criteria are part of what the user approves, so they are part of the hash (only when
+  // present: a plan without criteria keeps the hash it always had).
+  if (criteria.length)
+    hash.update(
+      `\n--criteria--\n${JSON.stringify(
+        criteria.map((c) => [c.text, c.required, c.verifier ?? null, c.scope ?? null]),
+      )}`,
+      "utf8",
+    );
   return hash.digest("hex");
 }

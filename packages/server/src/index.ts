@@ -57,6 +57,7 @@ import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
+import { registerProofRoutes } from "./routes/proof.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerScratchRoutes } from "./routes/scratch.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
@@ -275,6 +276,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       const service = sessions as SessionService;
       const session = service.get(sessionId);
       const current = inflight.get(sessionId);
+      const proofCount = (sessions as SessionService).proof.criteriaCount(sessionId);
       return {
         t: "snapshot",
         sessionId,
@@ -287,6 +289,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
           interactions: interactions?.pending(sessionId) ?? [],
         },
         ...(goalDriver?.info(sessionId) ? { goal: goalDriver.info(sessionId) as GoalInfo } : {}),
+        ...(proofCount ? { proof: { criteria: proofCount } } : {}),
       };
     },
     messagesAfter: (sessionId, after) => catalog.messagesPage(sessionId, { after, limit: 200 }),
@@ -517,6 +520,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   });
   registerPromptRoutes(router, { sessions, scheduler });
   registerGoalRoutes(router, { sessions, goals: goalDriver });
+  registerProofRoutes(router, { sessions });
   const management = {
     workspaces,
     scheduler,

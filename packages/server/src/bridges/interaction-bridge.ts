@@ -95,6 +95,10 @@ export class InteractionBridge {
             .filter((q) => q.options.some((o) => o.textInput))
             .map((q) => `${q.id}:text`),
         );
+        // `"<questionId>:criteria"` carries the user's per-draft choices of a plan review that
+        // lists acceptance criteria (a JSON string the core validates; bounded like free text).
+        if (request.plan?.acceptanceCriteria?.length)
+          for (const q of request.questions) textKeys.add(`${q.id}:criteria`);
         return this.ask<AskQuestionsResult>(
           {
             interactionId: randomUUID(),

@@ -464,6 +464,25 @@ inglés y español) y desde `/settings` en la [TUI](/es/tui), con el mismo escri
 de ajustes. Se leen en caliente: la siguiente continuación (o el siguiente `/goal`) usa el valor
 nuevo, pero los topes de turnos y de tiempo de un objetivo que ya existe se fijaron al crearlo.
 
+## `proof` {#proof}
+
+Criterios de aceptación de [Proof](/proof). Los criterios existen solo cuando tú, un plan o la línea
+de comandos los crean; sin ninguno, una ejecución no cambia.
+
+| Campo | Valor por defecto | Descripción |
+| --- | --- | --- |
+| `ci` | `false` | `true` hace que `alisio run` se comporte como con `--proof`: imprime el ledger y sale con los códigos de abajo |
+| `exitCodes.failed` | `10` | Código de salida cuando un criterio requerido está `failed` (1–125) |
+| `exitCodes.unverified` | `11` | Código de salida cuando ninguno falló pero uno requerido está `not_checked` o `manual_review` (1–125) |
+| `coverage.enabled` | `false` | [Verificador `coverage`](/es/proof#coverage) opcional: desactivado, un criterio `coverage` queda `not_checked` y Proof nunca registra su comando |
+
+```json
+{ "proof": { "ci": true, "exitCodes": { "failed": 20, "unverified": 21 } } }
+```
+
+Estas claves no están en el menú de ajustes. Flags de `alisio run`: `--proof`, `--criterion <texto>` y
+`--verify <comando>` (repetibles, emparejados por posición) y `--proof-file <ruta>`.
+
 ## `plan` {#plan}
 
 [Diagramas del plan](/es/tools#exit-plan): el agente de plan puede añadir pequeños diagramas Mermaid a

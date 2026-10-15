@@ -16,23 +16,29 @@
  * finds the claim and waits.
  */
 import { randomUUID } from "node:crypto";
-import type { GoalEvidence, GoalInfo, GoalWaiting } from "@alisio/sdk";
+import type { GoalEvidence, GoalInfo, GoalWaiting, ProofLedger } from "@alisio/sdk";
 import { type GoalBlocker, type GoalHostState, goalBlocker, waitingOf } from "./blockers.ts";
 import { objectiveError } from "./command.ts";
 import {
+  COMPLETION_REFUSAL_LIMIT,
   checkCaps,
+  criteriaForGoal,
   DEFAULT_GOAL_LIMITS,
   type GoalLimits,
   type GoalLog,
+  type GoalProofInput,
   type GoalRecord,
   type GoalRunOutcome,
+  type GoalUnmet,
   modelBlocked,
   modelComplete,
   newGoal,
+  pauseForRefusedCompletions,
   settleRun,
   toGoalInfo,
   userBudget,
   userEdit,
+  userOverrideComplete,
   userPause,
   userResume,
 } from "./machine.ts";
@@ -101,6 +107,31 @@ export interface GoalServiceOptions {
   onChange?: (sessionId: string, goal: GoalRecord | undefined) => void;
   /** Breaker observations (counts only; never the objective or the reply). */
   onLog?: (sessionId: string, log: GoalLog) => void;
+  /**
+   * Where the Proof ledger comes from (`ProofStore` fits). Without it criteria do not exist for
+   * the goal: completion behaves as in 0.7.x and a declared `evidenceId` is dropped.
+   */
+  proof?: { ledger(sessionId: string): ProofLedger };
+}
+
+/**
+ * The declared evidence with every `evidenceId` that does not resolve to captured evidence of the
+ * session removed (such a declaration is free text and backs nothing), and the ids that resolved.
+ */
+function linkEvidence(
+  evidence: GoalEvidence[],
+  ledger: ProofLedger | undefined,
+): { evidence: GoalEvidence[]; linked: string[] } {
+  const known = new Set(ledger?.evidence.map((e) => e.evidenceId));
+  const linked: string[] = [];
+  const out = evidence.map((item) => {
+    const { evidenceId, ...rest } = item;
+    if (evidenceId === undefined) return item;
+    if (!known.has(evidenceId)) return rest;
+    linked.push(evidenceId);
+    return item;
+  });
+  return { evidence: out, linked };
 }
 
 export class GoalService {
@@ -208,6 +239,8 @@ export class GoalService {
     if (!this.enabled)
       return { ok: false, code: "disabled", message: "Goals are turned off (goal.enabled)." };
     const limits = this.limits();
+    const current = this.store.get(sessionId);
+    if (current) this.refusals.delete(current.goalId);
     return this.act(sessionId, expect, (goal) => userResume(goal, this.clock(), limits, this.pid));
   }
 
@@ -335,6 +368,19 @@ export class GoalService {
     if (result.ok) this.emit(sessionId, result.goal);
   }
 
+  /** Runs whose `complete` the ledger refused, per goal (memory only: a restart pauses goals). */
+  private readonly refusals = new Map<string, Set<string>>();
+
+  /** Records a refused completion of `runId`; true once enough different runs were refused. */
+  private refusedRuns(goalId: string, runId: string): boolean {
+    const runs = this.refusals.get(goalId) ?? new Set<string>();
+    runs.add(runId);
+    this.refusals.set(goalId, runs);
+    if (runs.size < COMPLETION_REFUSAL_LIMIT) return false;
+    this.refusals.delete(goalId);
+    return true;
+  }
+
   /** `update_goal` (the model): the only transitions the model can cause. */
   report(
     sessionId: string,
@@ -342,22 +388,48 @@ export class GoalService {
     report: { status: "complete" | "blocked"; summary: string; evidence: GoalEvidence[] },
   ):
     | { ok: true; goal: GoalRecord; stopped: boolean; needed?: number }
-    | { ok: false; code: GoalErrorCode; message: string } {
+    | { ok: false; code: GoalErrorCode; message: string; unmet?: GoalUnmet[] } {
     const limits = this.limits();
     type Reported =
       | { ok: true; stopped: boolean; needed: number | undefined }
-      | { ok: false; message: string };
+      | { ok: false; message: string; unmet?: GoalUnmet[]; paused?: true };
     const outcome = this.store.update<Reported>(sessionId, (goal) => {
+      // The ledger is read inside this transaction, so the verdict and the write see one state.
+      // Only a completion, or a declaration that links evidence, needs it (D7: no extra reads).
+      const needsLedger =
+        report.status === "complete" || report.evidence.some((e) => e.evidenceId !== undefined);
+      const ledger = needsLedger ? this.options.proof?.ledger(sessionId) : undefined;
+      const linked = linkEvidence(report.evidence, ledger);
       if (report.status === "complete") {
-        const result = modelComplete(goal, this.clock(), report);
-        return result.ok
-          ? { goal: result.goal, value: { ok: true, stopped: true, needed: undefined } }
-          : { value: { ok: false, message: result.message } };
+        const proof: GoalProofInput | undefined = ledger
+          ? { criteria: criteriaForGoal(ledger, goal.goalId), linkedEvidence: linked.linked }
+          : undefined;
+        const result = modelComplete(
+          goal,
+          this.clock(),
+          { summary: report.summary, evidence: linked.evidence },
+          proof,
+        );
+        if (result.ok)
+          return { goal: result.goal, value: { ok: true, stopped: true, needed: undefined } };
+        // A refusal over the ledger counts per run; the third run that tries pauses the goal.
+        if (result.unmet?.length && runId && this.refusedRuns(goal.goalId, runId)) {
+          return {
+            goal: pauseForRefusedCompletions(goal, this.clock()),
+            value: {
+              ok: false,
+              message: `${result.message} The goal is paused: completion was refused in ${COMPLETION_REFUSAL_LIMIT} different runs. The user decides: resume, or complete it with an override.`,
+              unmet: result.unmet,
+              paused: true,
+            },
+          };
+        }
+        return { value: { ok: false, message: result.message, unmet: result.unmet } };
       }
       const result = modelBlocked(
         goal,
         this.clock(),
-        { summary: report.summary, evidence: report.evidence, runId },
+        { summary: report.summary, evidence: linked.evidence, runId },
         limits,
       );
       return result.ok
@@ -369,7 +441,14 @@ export class GoalService {
     });
     if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
     const value = outcome.value;
-    if (!value.ok) return { ok: false, code: "not_allowed", message: value.message };
+    if (!value.ok && value.paused) this.emit(sessionId, outcome.goal);
+    if (!value.ok)
+      return {
+        ok: false,
+        code: "not_allowed",
+        message: value.message,
+        ...(value.unmet ? { unmet: value.unmet } : {}),
+      };
     this.emit(sessionId, outcome.goal);
     return {
       ok: true,
@@ -377,6 +456,39 @@ export class GoalService {
       stopped: value.stopped,
       ...(value.needed ? { needed: value.needed } : {}),
     };
+  }
+
+  /**
+   * The USER completes the goal over unmet required criteria (O6). A separate method on purpose:
+   * `report` is the model's only door and has no way to carry an override, so the model cannot
+   * reach this path whatever it sends. Hosts call it from a user action only (Phase 5 surfaces).
+   */
+  overrideComplete(
+    sessionId: string,
+    input: { reason: string },
+    expect?: GoalExpectation,
+  ): GoalOutcome {
+    const reason = input.reason.trim();
+    if (!reason) return { ok: false, code: "invalid", message: "An override needs a reason." };
+    const outcome = this.store.update<ReturnType<typeof userOverrideComplete>>(
+      sessionId,
+      (goal) => {
+        const ledger = this.options.proof?.ledger(sessionId);
+        const result = userOverrideComplete(goal, this.clock(), {
+          reason,
+          proof: {
+            criteria: ledger ? criteriaForGoal(ledger, goal.goalId) : [],
+            linkedEvidence: goal.proof?.linkedEvidence ?? [],
+          },
+        });
+        return result.ok ? { goal: result.goal, value: result } : { value: result };
+      },
+      expect,
+    );
+    if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
+    const result = outcome.value;
+    if (!result.ok) return { ok: false, code: "not_allowed", message: result.message };
+    return this.done(sessionId, { ok: true, goal: result.goal });
   }
 
   /** Startup: goals whose driver process is gone pause with reason `restart`. */

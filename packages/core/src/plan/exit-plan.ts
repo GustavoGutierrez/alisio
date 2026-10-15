@@ -26,8 +26,14 @@ import { textResult } from "@alisio/sdk";
 import type { CoreArtifactPublisher } from "../core/contracts.ts";
 import { EXIT_PLAN_TOOL } from "../core/opt-in.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import type { NewCriterion } from "../proof/types.ts";
 import { newUuid } from "../runtime/ids.ts";
 import { objectSchema } from "../tools/standard.ts";
+import {
+  applyCriteriaSelection,
+  type DroppedCriterion,
+  validateCriteriaDrafts,
+} from "./criteria.ts";
 import {
   DIAGRAM_MAX_BYTES,
   DIAGRAM_MAX_NODES,
@@ -41,6 +47,7 @@ import {
   decidePlan,
   nextPlanRevision,
   PLAN_CONTEXT_MAX_CHARS,
+  PLAN_CRITERIA_KEY,
   PLAN_MAX_CHARS,
   PLAN_OPTIONS,
   PLAN_QUESTION_ID,
@@ -64,7 +71,33 @@ export interface ExitPlanDeps {
   readOnly?: boolean;
   /** `plan.diagrams` and `plan.maxDiagrams`, read on every request (they change live). */
   diagrams?: () => { enabled: boolean; max: number };
+  /**
+   * Where approved acceptance criteria go (`ProofStore` fits). Without it the `acceptanceCriteria`
+   * field is not offered and is ignored: a core without Proof plans exactly as before.
+   */
+  proof?: { addCriterion(input: NewCriterion): unknown };
 }
+
+const CRITERIA_SCHEMA = {
+  type: "array",
+  description:
+    "Optional acceptance criteria you PROPOSE for this plan. They are drafts: they only become " +
+    "active if the user approves the plan, and a criterion with no verifier stays unchecked.",
+  items: {
+    type: "object",
+    properties: {
+      text: { type: "string", description: "A verifiable statement, e.g. 'Unit tests pass'" },
+      required: { type: "boolean", description: "Must hold before the work counts as done" },
+      verifier: {
+        type: "object",
+        description:
+          "How to check it: {kind:'command', command:'pnpm test'}, {kind:'file', path} or {kind:'manual'}",
+      },
+      scope: { type: "array", items: { type: "string" }, description: "Globs it covers" },
+    },
+    required: ["text"],
+  },
+};
 
 const DIAGRAM_SCHEMA = {
   type: "array",
@@ -168,8 +201,17 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
     },
     ["plan"],
   );
+  const withCriteria = deps.proof ? { acceptanceCriteria: CRITERIA_SCHEMA } : {};
+  const plainCriteria = objectSchema(
+    { ...(plain.properties as Record<string, unknown>), ...withCriteria },
+    ["plan"],
+  );
   const withDiagrams = objectSchema(
-    { ...(plain.properties as Record<string, unknown>), diagrams: DIAGRAM_SCHEMA },
+    {
+      ...(plain.properties as Record<string, unknown>),
+      ...withCriteria,
+      diagrams: DIAGRAM_SCHEMA,
+    },
     ["plan"],
   );
   // The input is always VALIDATED with `diagrams` allowed (a call made while they were switched
@@ -180,12 +222,15 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
     name: EXIT_PLAN_TOOL,
     effect: "read",
     get description() {
-      return offered()
-        ? `${BASE_DESCRIPTION} Optional \`diagrams\`: up to ${settings().max} small Mermaid diagrams (see your instructions).`
+      const base = deps.proof
+        ? `${BASE_DESCRIPTION} Optional \`acceptanceCriteria\`: drafts the user approves together with the plan.`
         : BASE_DESCRIPTION;
+      return offered()
+        ? `${base} Optional \`diagrams\`: up to ${settings().max} small Mermaid diagrams (see your instructions).`
+        : base;
     },
     get inputSchema() {
-      return registering || offered() ? withDiagrams : plain;
+      return registering || offered() ? withDiagrams : plainCriteria;
     },
     async execute(input, context) {
       const plan = String(input.plan ?? "").trim();
@@ -219,6 +264,16 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
           outcome.dropped = validated.dropped;
         }
       }
+      // Acceptance criteria are DRAFTS here (O3): validated, shown in the review, stored in the plan
+      // state, and turned into real criteria only by the user's approval below. Nothing in this
+      // block writes the ledger.
+      const rawCriteria = deps.proof ? input.acceptanceCriteria : undefined;
+      const proposed =
+        rawCriteria === undefined || (Array.isArray(rawCriteria) && !rawCriteria.length)
+          ? undefined
+          : validateCriteriaDrafts(rawCriteria);
+      const drafts = proposed?.accepted ?? [];
+      const droppedCriteria: DroppedCriterion[] = proposed?.dropped ?? [];
       const preManifest = buildPlanManifest({
         planId,
         revision,
@@ -227,12 +282,14 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
         markdown: plan,
         diagrams: outcome.accepted,
         ...(previous ? { previous } : {}),
+        ...(drafts.length ? { acceptanceCriteria: drafts } : {}),
       });
       outcome.removed = preManifest.removed;
       if (outcome.removed.length) outcome.involved = true;
       const hash = planHash(
         plan,
         preManifest.diagrams.map((d) => ({ id: d.id, hash: d.hash })),
+        drafts,
       );
       const manifest = { ...preManifest, hash };
       const diagrams: PlanDiagramInfo[] = manifest.diagrams.map((entry, index) => ({
@@ -253,7 +310,7 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
       const publisher = context.artifacts as CoreArtifactPublisher | undefined;
       if (publisher) {
         // A folder (plan.md + plan.json + diagrams) when diagrams are involved, else plan.md alone.
-        if (outcome.accepted.length || outcome.removed.length)
+        if (outcome.accepted.length || outcome.removed.length || drafts.length)
           try {
             artifact = await publishPlanFolder(
               publisher,
@@ -288,12 +345,24 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
         title,
         ...(context.callId ? { callId: context.callId } : {}),
         ...(artifact ? { artifactId: artifact.id } : {}),
+        ...(drafts.length ? { criteria: drafts } : {}),
         ...(manifest.diagrams.length
           ? {
               diagrams: manifest.diagrams.map((d) => ({ id: d.id, title: d.title, hash: d.hash })),
             }
           : {}),
       };
+      const criteriaReport = (activated?: number | "failed"): Record<string, unknown> =>
+        drafts.length || droppedCriteria.length
+          ? {
+              criteria: {
+                proposed: drafts.length,
+                ...(droppedCriteria.length ? { dropped: droppedCriteria } : {}),
+                ...(activated === undefined ? {} : { activated }),
+                ...(rejectedDrafts ? { rejected: rejectedDrafts } : {}),
+              },
+            }
+          : {};
       const report = diagramReport(outcome);
 
       if (!reviewable) {
@@ -330,6 +399,7 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
         markdown: plan,
         ...(artifact ? { artifact } : {}),
         ...(diagrams.length ? { diagrams } : {}),
+        ...(drafts.length ? { acceptanceCriteria: drafts } : {}),
       };
       const result = await deps.ui.askQuestions({
         questions: [
@@ -369,11 +439,36 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
         hash,
         decision,
       });
+      // The only place a draft becomes a criterion: the user's own approval, applied once by the
+      // compare-and-set above, of exactly the drafts stored with that proposal.
+      let activated: number | "failed" | undefined;
+      let rejectedDrafts = 0;
+      if (decision === "approve" && deps.proof && decided.criteria?.length) {
+        // The user may approve, edit or reject each draft (`plan:criteria`); a selection that is
+        // not clean activates none of them.
+        const picked = applyCriteriaSelection(decided.criteria, result[PLAN_CRITERIA_KEY]);
+        rejectedDrafts = picked ? picked.rejected : decided.criteria.length;
+        try {
+          for (const draft of picked?.kept ?? [])
+            deps.proof.addCriterion({
+              sessionId,
+              text: draft.text,
+              origin: draft.origin,
+              required: draft.required,
+              ...(draft.verifier ? { verifier: draft.verifier } : {}),
+              ...(draft.scope ? { scope: draft.scope } : {}),
+            });
+          activated = picked?.kept.length ?? 0;
+        } catch {
+          activated = "failed";
+        }
+      }
       const base = {
         planId,
         revision,
         ...(artifact ? { artifactId: artifact.id } : {}),
         ...report,
+        ...criteriaReport(activated),
       };
       const body =
         decision === "approve"
@@ -381,7 +476,12 @@ export function registerExitPlan(registry: ToolRegistry, deps: ExitPlanDeps): vo
               "approved",
               "The user approved the plan. The build agent will implement exactly this plan in the " +
                 "next turn. Do not implement anything yourself: reply with one short sentence and " +
-                "call no more tools.",
+                "call no more tools." +
+                (typeof activated === "number"
+                  ? ` ${activated} acceptance criteria are now active.`
+                  : activated === "failed"
+                    ? " The acceptance criteria could not be saved; they are not active."
+                    : ""),
               base,
             )
           : decision === "context"

@@ -8,7 +8,14 @@
  * The `epoch` counter moves with every VISIBLE change (status, objective, budget); the running
  * totals only move `updated_at`, so a UI that read the goal a moment ago can still act on it.
  */
-import type { GoalEvidence, GoalReason, GoalStatus, SqlDatabase, SqlRow } from "@alisio/sdk";
+import type {
+  GoalEvidence,
+  GoalProofInfo,
+  GoalReason,
+  GoalStatus,
+  SqlDatabase,
+  SqlRow,
+} from "@alisio/sdk";
 import { isProcessAlive } from "../runtime/process.ts";
 import { GOAL_STATUSES, type GoalRecord, systemRestart } from "./machine.ts";
 
@@ -37,6 +44,23 @@ function parseEvidence(raw: unknown): GoalEvidence[] | undefined {
   }
 }
 
+function parseProof(raw: unknown): GoalProofInfo | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as Partial<GoalProofInfo> | null;
+    return value && Array.isArray(value.criteria) && Array.isArray(value.unmet)
+      ? {
+          criteria: value.criteria,
+          unmet: value.unmet,
+          linkedEvidence: Array.isArray(value.linkedEvidence) ? value.linkedEvidence : [],
+          ...(value.override ? { override: value.override } : {}),
+        }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function goalFromRow(row: SqlRow): GoalRecord {
   const status = String(row.status) as GoalStatus;
   return {
@@ -50,6 +74,7 @@ export function goalFromRow(row: SqlRow): GoalRecord {
     ...(parseEvidence(row.evidence)
       ? { evidence: parseEvidence(row.evidence) as GoalEvidence[] }
       : {}),
+    ...(parseProof(row.proof_json) ? { proof: parseProof(row.proof_json) as GoalProofInfo } : {}),
     epoch: Number(row.epoch ?? 1),
     ...(num(row.token_budget) !== undefined
       ? { tokenBudget: num(row.token_budget) as number }
@@ -80,7 +105,7 @@ export function goalFromRow(row: SqlRow): GoalRecord {
 const COLUMNS = `session, goal_id, objective, status, reason, detail, summary, evidence, epoch,
   token_budget, tokens_used, turns_used, max_turns, max_wall_ms, active_ms, no_tool_streak,
   repeat_streak, last_reply_hash, blocked_streak, blocked_run, continuations, inflight,
-  last_run_id, kickoff_sent, owner_pid, created_at, updated_at, completed_at`;
+  last_run_id, kickoff_sent, owner_pid, created_at, updated_at, completed_at, proof_json`;
 
 export class GoalStore {
   constructor(private readonly db: SqlDatabase) {}
@@ -116,7 +141,7 @@ export class GoalStore {
            continuations=excluded.continuations, inflight=excluded.inflight,
            last_run_id=excluded.last_run_id, kickoff_sent=excluded.kickoff_sent,
            owner_pid=excluded.owner_pid, updated_at=excluded.updated_at,
-           completed_at=excluded.completed_at`,
+           completed_at=excluded.completed_at, proof_json=excluded.proof_json`,
       )
       .run(
         goal.sessionId,
@@ -147,6 +172,7 @@ export class GoalStore {
         goal.createdAt,
         goal.updatedAt,
         goal.completedAt ?? null,
+        goal.proof ? JSON.stringify(goal.proof) : null,
       );
   }
 

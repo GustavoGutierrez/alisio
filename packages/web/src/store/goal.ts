@@ -112,6 +112,18 @@ export async function resumeGoal(goal: GoalInfo): Promise<void> {
   );
 }
 
+/**
+ * The USER completes the goal over unmet required Proof criteria. The server needs a reason and
+ * refuses it when there is nothing to override; the model has no such route. The goal changes
+ * through the `goal_changed` frame like every other action.
+ */
+export async function overrideGoal(goal: GoalInfo, reason: string): Promise<boolean> {
+  const done = await act(goal.sessionId, () =>
+    api.request("POST", `${base(goal.sessionId)}/override`, { reason, expect: seen(goal) }),
+  );
+  return done !== undefined;
+}
+
 export async function clearGoal(goal: GoalInfo): Promise<void> {
   if (!window.confirm(gk("clearConfirm"))) return;
   const { goalId, epoch } = seen(goal);

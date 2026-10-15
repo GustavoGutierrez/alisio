@@ -398,6 +398,7 @@ aparte.
 | Comando | Qué hace |
 | --- | --- |
 | `/goal` | Con un objetivo: abre el menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda). Sin uno: explica cómo iniciarlo |
+| `/proof` | Muestra el ledger de Proof (criterios de aceptación y evidencia) y lo gestiona: `add`, `edit`, `required`, `optional`, `na`, `export`; véase [Proof](#proof) |
 | `/goal <objetivo>` | Crea el objetivo y empieza a trabajar. Un objetivo por sesión: si ya hay uno, pregunta antes de reemplazarlo |
 | `/goal <objetivo> budget=50k` | Igual, con un presupuesto de tokens (`50k`, `1.5M`, `250000`) |
 | `/goal pause` | Deja de continuar automáticamente; el turno en curso termina |
@@ -478,6 +479,17 @@ Si Alisio se detiene mientras un objetivo está activo (se cierra, se mata), en 
 vuelve **en pausa** con el motivo `restart`: nunca se reanuda solo, ejecuta `/goal resume`. `alisio
 run` (headless) no tiene `/goal` en la v1.
 
+## Proof: criterios de aceptación {#proof}
+
+`/proof` imprime el ledger de [Proof](/proof) de la sesión: una línea por criterio con su estado
+(`verified`, `failed`, `not_checked`, `manual_review`, `not_applicable`), los mismos que muestran la
+tarjeta web y `alisio run --json`. Tus acciones son `/proof add [required] <texto> [-- <comando>]`,
+`/proof edit <n> <texto>`, `/proof required <n>`, `/proof optional <n>`, `/proof na <n> <motivo>` y
+`/proof export` (publica `proof.md` y `proof.json`). Una afirmación de la respuesta final que ninguna
+evidencia respalda («tests pass») aparece como aviso. `/goal override <motivo>` completa un objetivo
+sobre criterios requeridos sin cumplir; solo tú puedes. La revisión del plan lista los criterios que
+propone; aprobar los activa todos (la revisión web te deja decidir cada uno).
+
 ## Gestor MCP {#mcp}
 
 `/mcps` en la TUI lista los servidores por origen y, para el seleccionado, separa los estados
@@ -504,6 +516,7 @@ desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
 | `x` | Expandir o plegar la fila plegable más cercana — una sección **Thought** terminada, un lote agrupado de llamadas a herramientas o una salida de comando larga (cuando la entrada está vacía; véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | Clic del ratón | En la fila de cabecera de un bloque plegable, expandirlo o plegarlo (véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
+| Ctrl+Home / Ctrl+End | Ir al inicio / final de la conversación (Inicio / Fin mueven el cursor de la entrada) |
 | Shift+Tab | Alterna los agentes principales: `build`, `plan` y después sus agentes primarios, con vuelta al inicio (véase [Alternar agentes](#cycle-agents)) |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
@@ -633,7 +646,7 @@ Alisio y la TUI los renderiza de forma nativa bajo la cabecera de la herramienta
   atenuada ` ```lang `, líneas resaltadas y la cerca de cierre.
 - **Markdown** con el renderizador de Markdown habitual de las respuestas (títulos, listas, tablas…).
 - **Imágenes** en línea cuando la terminal soporta el protocolo de gráficos kitty o iTerm2
-  (detección automática de pi-tui 0.87.1). Sin soporte de imágenes —o con `NO_COLOR`— se muestra
+  (detección automática de pi-tui 1.2.0). Sin soporte de imágenes —o con `NO_COLOR`— se muestra
   un marcador atenuado `[image: image/png 640x480]`.
 
 Cada bloque tiene una **proyección de texto canónica** que siempre forma parte del resultado de la

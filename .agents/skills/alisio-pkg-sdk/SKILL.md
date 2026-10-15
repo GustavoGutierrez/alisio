@@ -24,7 +24,7 @@ plugins and (types only) web. Plugin authoring guide: `alisio-plugins`.
 - No provider SDKs, no runtime-specific imports, no Node-only modules, no new dependencies.
 - Changes are additive: new fields optional, new event types allowed, nothing removed or renamed
   without a breaking-version decision by the owner. `RunEvent.schemaVersion` stays `1`.
-- New host capabilities on `PluginAPI` are optional members (`views?`, `decisions?`, `paths?`) so
+- New host capabilities on `PluginAPI` are optional members (`views?`, `decisions?`, `paths?`, `proof?`) so
   plugins feature-detect on older cores.
 - Consumers must ignore unknown fields/event types; document that in the type's comment.
 - A type change usually needs: core implementation, server schema/route if on the wire, web

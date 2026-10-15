@@ -256,7 +256,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   Se muestra como primer bloque de la TUI y en stderr (si es TTY) en modo `--no-tui`; nunca en
   `run`, `--json`, `--quiet`, `--no-banner`, `CI` ni sin TTY. Ejemplo publicable en
   `examples/plugins/custom-mascot/`.
-- TUI con `@earendil-works/pi-tui` 0.87.1 (pantalla alternativa, renderizado diferencial):
+- TUI con `@earendil-works/pi-tui` 1.2.0 (pantalla alternativa, renderizado diferencial):
   cabecera con modelo/host/permisos, conversación con Markdown, bloques de herramientas con
   spinner, duración, vista previa y diff de ediciones, barra de contexto y tokens (ventana real
   del modelo cuando el catálogo la expone; `~9.9k / ?` honesto cuando no), comandos
@@ -300,7 +300,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   de herramienta con `ui?`/`image?`; `ToolBlock` renderiza tablas alineadas con celdas que se
   ajustan al ancho, clave-valor en dos columnas, árboles con `├─/└─/│` (ASCII `|-/`- /|` sin
   Unicode), bloques de código con el mismo `highlightCode`, markdown con el renderizador habitual,
-  e imágenes en línea vía el componente `Image` de pi-tui 0.87.1 (detección `getCapabilities`),
+  e imágenes en línea vía el componente `Image` de pi-tui 1.2.0 (detección `getCapabilities`),
   con marcador atenuado `[image: mime WxH]` si no hay soporte o hay `NO_COLOR`; `itemsFromHistory`
   reproduce los bloques al reanudar. Documentado en `docs/tools.md`, `docs/es/tools.md`,
   `docs/tui.md` y `docs/es/tui.md`.
@@ -352,11 +352,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   El ajuste `tui.skillSlashCommands` (por defecto `true`) oculta SOLO esas entradas `skill:<id>`
   cuando está desactivado: el gestor `/skills` y su autocompletado de argumentos siguen disponibles,
   y el proveedor del editor se reconstruye al guardar, sin reinicio.
-- Dependencia con parche (`patchedDependencies` en `pnpm-workspace.yaml`, `patches/`): pi-tui 0.87.1
-  filtraba los nombres `skill:*` quitando el prefijo al emparejar (diseñado para `/branch…`), lo que
-  hacía imposible que `/ski…` mostrara `skill:branch-pr`; el parche empareja el nombre completo.
-  Cualquier comando que reconstruya `node_modules` (instalación limpia/CI) aplica el parche solo si
-  `pnpm install` corre con `patchedDependencies` presente.
+- pi-tui 1.2.0 ya empareja el nombre completo `skill:*` (`/ski…` muestra `skill:branch-pr`), por lo que el parche local de pi-tui se eliminó (sin `patchedDependencies`). Con el editor enfocado, Inicio/Fin mueven el cursor y Ctrl+Inicio/Ctrl+Fin saltan al inicio/final de la conversación.
 - Versión en tiempo de ejecución por paquete: metadatos de plugins, `user-agent` por defecto y el
   cliente MCP leen la versión de su propio `package.json` (con la inyección
   `ALISIO_PACKAGE_VERSION` para binarios autónomos y `dev` como último recurso); la cabecera de la
@@ -4279,3 +4275,42 @@ El 2026-10-14 (arnés 0.6.0, `smoke-coding` 1.2.0, k=5, modo live) se midieron `
 - DeepSeek: el objetivo de 30-80 % era una hipótesis y NO se cumplió; las tareas saturan para este modelo. Mediana de tiempo por ejecución 43-106 s; tokens por éxito 117k-256k.
 - MiMo: ninguna ejecución `fail` causada por el modelo, así que los verificadores nunca rechazaron una solución incorrecta. La tasa menor se debe sobre todo al tiempo de reloj (latencia del proveedor, ~30 s por turno), por lo que mezcla capacidad y velocidad. Los intervalos se solapan con los de DeepSeek: `eval compare` daría `inconclusive`.
 - Conclusión: `smoke-coding` es una suite de humo/regresión; satura con un modelo barato y fuerte y solo discrimina (en parte por latencia) con uno más débil. El poder discriminante entre modelos NO está establecido y `long-context` no se midió con un modelo real.
+
+## Proof (criterios de aceptación con evidencia): alcance de la verificación
+
+Implementado `specs/archive/011-proof-v1.md` completo (fases 0 a 8, 2026-10-14). Proof responde a «¿qué comprobó realmente el agente?»: un criterio de aceptación tiene un verificador y evidencia inmutable, y su estado se calcula en cada lectura (nunca se guarda). Sin criterios, objetivo con criterios ni plan que los proponga, un run no cambia (D7; prueba de caracterización).
+
+Qué se entrega:
+
+- **Contrato** (`@alisio/sdk`, aditivo): `ProofStatus` (`verified|failed|not_checked|manual_review|not_applicable`), `ProofVerifierSpec` (`command|file|data-check|coverage|plugin|manual`), `ProofCriterion`, `ProofEvidence`, `ProofLedger`, eventos `proof_updated` y `proof_divergence`, `GoalEvidence.evidenceId?` y `PluginAPI.proof?.registerVerifier`.
+- **Núcleo** (`packages/core/src/proof/`): `deriveStatus`/`buildLedger` puros y `ProofStore`. Migraciones aditivas **v11** (`proof_criteria`, `proof_evidence` de solo anexado con trigger que rechaza `UPDATE`), **v12** (`proof_edits`) y **v13** (`session_goals.proof_json`). Un criterio sin verificador es `not_checked`; `verified` exige evidencia con `runId`, `callId` y fecha válida; una edición posterior o simultánea la caduca.
+- **Captura** (`ProofRecorder`, enganchado en `executeCall` sobre el resultado crudo, antes del acotado de 48 000 caracteres): `command` desde `run_process`/`shell` (huella v1 `sha256({v:1, argv, cwd})`; `pnpm test` coincide con `run_process pnpm test` y con `shell`), `bg_run` vía el `bg_output` con código de salida, `file` desde `read_file` (existencia, `sha256`, `pattern`), `data-check` desde `data_query` (solo la consulta canónica), `coverage` (opcional, `proof.coverage.enabled`, por defecto `false`) y verificadores de plugin (`<pluginId>:<id>`; sin evidencia trazable el criterio pasa a `manual_review`). Solo se anexa evidencia para una llamada que existe en el diario `tool_calls` con el mismo `runId` y nombre; una llamada denegada (`--read-only`) nunca llega al hook. Los extractos (últimos 4 KB) se redactan con `redactOutput`.
+- **Caducidad y divergencia**: `write_file`/`edit_file` anotan la ruta editada; un criterio caduca si se edita algo dentro de su `scope` (sin `scope`, todo el workspace). `treeFingerprint` es un ancla de auditoría. `detectDivergence` (patrones cerrados EN/ES) emite `proof_divergence` antes de `run_completed`; nunca cambia texto ni estados (D8).
+- **Plan y objetivo**: `exit_plan` acepta `acceptanceCriteria?` como borradores (origen `inferred`) que solo la aprobación del usuario activa. `update_goal complete` se rechaza mientras un criterio requerido sea `failed|not_checked` (el objetivo sigue `active`; el modelo recibe `unmet`); tres rechazos en ejecuciones distintas pausan el objetivo (`no_progress`). El override es solo del usuario (`GoalService.overrideComplete`, `/goal override <motivo>`, botón de la pestaña Proof, `POST …/goal/override`); el modelo no tiene ruta.
+- **Superficies**: servidor (`GET /api/sessions/:sid/proof`, `POST …/proof/criteria`, `POST …/criteria/:id/not-applicable`, `GET …/proof/export?format=md|json`, `POST …/goal/override`; mismas reglas de auth, Host y Origin), Web (tarjeta y pestaña Proof en chunk propio; presupuesto inicial 88,7/90 KB gzip; revisión de plan por criterio), TUI (`/proof`, aviso de divergencia, `/goal override`) y headless (`alisio run --proof|--criterion|--verify|--proof-file`, `proof.ci`, evento final `proof_ledger` en `--json`, `proof.md` y `proof.json` como artefactos de sesión, salida 0/10/11 configurable con `proof.exitCodes`). Export versionado `proof/v1` con orden de claves fijo.
+- Documentación: `docs/proof.md` y `docs/es/proof.md`, `docs/web.md`, `docs/configuration.md`, `docs/plugins.md`, `docs/{,es/}architecture.md`, captura `docs/assets/web-ui/proof_web_ui.webp`.
+
+Límites conocidos (no los oculte ningún texto de producto):
+
+- **Proof no prueba corrección.** Registra evidencia operativa: un criterio `command` verificado dice que ese comando terminó como se esperaba, no que el código sea correcto. Un verificador débil da un `verified` débil.
+- **La detección de divergencia es una heurística**, no una garantía: patrones cerrados EN/ES, una pasada sobre los primeros 100 000 caracteres; puede fallar por exceso o por defecto (una negación en la misma cláusula oculta una afirmación real). Es una señal y nunca cambia un estado.
+- **`treeFingerprint` es acotada**: `git diff HEAD` limitado a 1 MiB y 3 s (sin `HEAD` usa el índice; fuera de git, la constante `nogit`) y hasta 200 archivos tocados. Es un ancla de auditoría; no decide la caducidad ni se compara en lecturas.
+- **Las ediciones por `shell`, `run_process`, `js_run` o Forja anidada NO caducan la evidencia**; solo `write_file`/`edit_file` del bucle principal. Las ediciones fuera del workspace se ignoran. Un dataset que cambia en disco no caduca la evidencia de `data-check`.
+- **Las llamadas anidadas de `js_run` o Forja no pasan por `executeCall` y no producen evidencia.**
+- Un criterio `file` **sin `scope` caduca con cualquier edición del workspace**, no solo con las de su ruta.
+- **La revisión de plan del TUI es todo o nada** (aprobar activa todos los borradores; se editan luego con `/proof`); la Web decide criterio por criterio (`plan:criteria`).
+- **El motivo de «cobertura desactivada» no se guarda en el ledger** (el servidor no conoce la configuración): lo ven el stderr de `alisio run`, el resumen de `--proof` y `app.verifyCriterion`; Web y TUI muestran `not_checked` sin motivo. `coverage` lee un único porcentaje global (líneas en tablas y resúmenes), no comprueba qué archivos cubre el informe y no admite `cwd` ni tiempo propios.
+- **`verifyCriterion` (`app.verifyCriterion`, acción solo de usuario) no tiene ruta, comando ni botón todavía**; solo lo usa quien integra Alisio.
+- **Una verificación de plugin fuera de una ejecución no emite `proof_updated`** (no hay ejecución en curso). Un verificador de plugin es código de confianza en el proceso, no un sandbox; sin `callId` su evidencia es la palabra del plugin más el hash, con un id `verify_<uuid>` en lugar de una llamada del diario. Un verificador que lanza error o excede 60 s no registra nada.
+- **El contador de rechazos de `complete` que pausa el objetivo (`no_progress`) vive en memoria** y `/goal resume` o un reinicio lo reinician. Un modelo que insista consume turnos hasta los topes habituales.
+- **Los criterios creados por HTTP son opcionales por defecto; los de la CLI, requeridos.** El verificador y el alcance de un criterio no se editan (la evidencia ya capturada seguiría significando otra cosa).
+- La tarea de `bg_run` solo se recuerda en memoria (un reinicio entre `bg_run` y `bg_output` pierde la captura) y su evidencia cubre solo la ventana de salida leída. La redacción es por patrones y no garantiza ausencia de secretos. El trigger de solo anexado no bloquea `DELETE` (la cascada de sesión debe poder borrar evidencia) y el archivo SQLite no es a prueba de manipulación.
+- Sin pruebas con navegador: los componentes se prueban como árboles VNode y la captura es manual (Playwright).
+
+Medición de coste (puerta de la fase 8; proveedor scripted, sin red, 2026-10-14, Node 22.19 linux/x64, SQLite en disco): turnos de 20 llamadas `run_process` instantáneas (salida de 4 KB) con el runner real. Sin recorder: mediana 216-231 ms por turno; recorder y sin criterios: 212-247 ms (indistinguible, D7); recorder con 3 criterios `command`: 541-612 ms, es decir **+16 a +19 ms por llamada capturada**. Esto **no confirma** la medición de la fase 0 (<5 %, hecha con SQLite en memoria y solo el trabajo de hash/redacción): con una herramienta instantánea el coste relativo es alto, aunque absoluto pequeño frente a un comando real (`pnpm test`, segundos) o a un turno del modelo. `treeFingerprint` aporta ≈4 ms por llamada fuera de git y ≈31 ms en este repositorio (git, árbol sucio); el resto no se desglosó. Tokens: el resumen `--proof` añade ~324 caracteres (≈80 tokens, estimación de 4 caracteres por token) para 3 criterios y nada sin criterios; el texto de los resultados de herramienta que ve el modelo no cambia. No se midió el efecto en tokens totales ni en latencia de extremo a extremo de una tarea con un modelo real (los rechazos de `complete` pueden añadir turnos): el Reliability Lab (`alisio eval`) no tiene variantes con Proof y comparar exigiría grabar cassettes con un proveedor real.
+
+Verificación: `tests/proof-ledger.test.ts`, `proof-store.test.ts`, `proof-ledger-contract.test.ts`, `proof-recorder.test.ts`, `proof-command.test.ts`, `proof-staleness.test.ts`, `proof-divergence.test.ts`, `proof-plan.test.ts`, `proof-goal.test.ts`, `proof-export.test.ts`, `proof-routes.test.ts`, `proof-cli.test.ts`, `tui-proof.test.ts`, `web-proof.test.ts`, `proof-surfaces-parity.test.ts` (los mismos estados en TUI, Web, JSONL, JSON y Markdown), `proof-verifiers.test.ts`, `proof-plugin-api.test.ts` y `proof-coverage.test.ts`, más ampliaciones de `run-events-contract`, `web-plan-review`, `tui-plan-review`, las pruebas de migración (versión 13) y el escenario `run --proof` de `test:cli` (salida 0 y 11). El runner, la compuerta y SQLite son reales; el proveedor es scripted. No se ha medido mutación. Los fallos previos de `eval-bundled-suites` y `eval-ci` (huella de instrucciones por skills globales del desarrollador) se corrigieron con el aislamiento del home descrito en la sección «Reliability Lab: aislamiento del home».
+
+## Reliability Lab: aislamiento del home
+
+`alisio eval` ahora construye la aplicación con `home` apuntando al home temporal de la ejecución (opción nueva `home` de `createApplication`, por defecto `os.homedir()`). Antes, las skills de `~/.agents/skills` y los agentes de `~/.agents/agents` del equipo del desarrollador entraban en el prompt y en la descripción de la herramienta `task`, de modo que los cassettes dependían de la máquina que los grabó. Los cassettes incluidos se regrabaron de forma hermética (`pnpm eval:record-bundled`, dos grabaciones byte a byte idénticas). Verificación: `tests/eval-engine.test.ts` ("hermetic host (skills)"), `eval-bundled-suites` y `eval-ci`. Límite: el normalizador sigue tratando `os.homedir()` como literal a ocultar; el resto del entorno del proceso (variables de proveedor, PATH) no se aísla.

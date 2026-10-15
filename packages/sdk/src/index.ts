@@ -685,6 +685,15 @@ export interface RunEventDataMap {
     latencyMs: number;
     reason: DecisionFallbackReason;
   };
+  /** A Proof criterion changed derived status or gained evidence. */
+  proof_updated: {
+    criterionId: string;
+    status: ProofStatus;
+    stale: boolean;
+    evidenceId?: string;
+  };
+  /** The final text claims something the Proof ledger does not back (display only). */
+  proof_divergence: { claim: string; criterionId?: string; actual: ProofStatus };
 }
 /** Every `RunEvent.type` the core emits today. `RunEvent.type` itself stays `string`. */
 export type RunEventType = keyof RunEventDataMap;
@@ -1037,6 +1046,11 @@ export interface PlanReview {
   artifact?: ArtifactRef;
   /** The diagrams that were accepted for this revision (absent without diagrams). */
   diagrams?: PlanDiagramInfo[];
+  /**
+   * Acceptance criteria the model proposed (drafts). Approving the plan activates exactly these;
+   * any other decision discards them (absent when none were proposed).
+   */
+  acceptanceCriteria?: PlanCriterionDraft[];
 }
 /** What a diagram illustrates: a purpose, not a Mermaid syntax. */
 export type PlanDiagramType =
@@ -1095,6 +1109,8 @@ export interface PlanManifest {
   }>;
   /** Diagrams of the previous revision that this one no longer has. */
   removed: Array<{ id: string; title: string }>;
+  /** The acceptance-criteria drafts of this revision (absent when none were proposed). */
+  acceptanceCriteria?: PlanCriterionDraft[];
 }
 /** Lifecycle of a background task (`bg_run`); a terminal state is never left. */
 export type BackgroundTaskStatus =
@@ -1168,7 +1184,9 @@ export type GoalReason =
   | "max_turns"
   | "max_wall"
   | "no_progress"
-  | "restart";
+  | "restart"
+  /** The user completed the goal over unmet required criteria (Proof override). */
+  | "user_override";
 /** What an active goal is waiting for before its next continuation (never stored: computed). */
 export type GoalWaiting = "approval" | "question" | "user_input" | "plan_mode" | "background_tasks";
 /** What the user can do to a goal (the actions the UIs offer per state). */
@@ -1177,6 +1195,140 @@ export type GoalAction = "pause" | "resume" | "edit" | "clear" | "budget";
 export interface GoalEvidence {
   kind: "file" | "test" | "log" | "command" | "denied" | "other";
   detail: string;
+  /** Links this declaration to captured Proof evidence; without it the text is a free claim. */
+  evidenceId?: string;
+}
+
+/** Derived state of an acceptance criterion (never stored as an independent truth). */
+export type ProofStatus =
+  | "verified"
+  | "failed"
+  | "not_checked"
+  | "manual_review"
+  | "not_applicable";
+/** How a criterion is checked. Consumers must ignore verifier kinds they do not know. */
+export type ProofVerifierSpec =
+  | {
+      kind: "command";
+      command: string;
+      cwd?: string;
+      successExitCodes?: number[];
+      outputPattern?: string;
+    }
+  | { kind: "file"; path: string; sha256?: string; pattern?: string }
+  | {
+      kind: "data-check";
+      datasetId: string;
+      check: "row_count" | "sum" | "equals";
+      column?: string;
+      expected: number | string;
+      /** Table to query; `data` (CSV/TSV/JSON/JSONL) when absent, `s_<sheet>` for XLSX. */
+      table?: string;
+    }
+  | { kind: "coverage"; command: string; minPercent: number }
+  | { kind: "manual" }
+  | { kind: "plugin"; verifierId: string; input?: unknown };
+/**
+ * What a plugin verifier returns. The evidence is the `outputHash` (sha256 hex of the output the
+ * verdict rests on) and, when the verifier made core tool calls, the `callId` of the one that
+ * backs the verdict. A result without a valid `outputHash`, or naming a call the session never
+ * made, is degraded to `manual_review`: a verdict nobody can trace is not a verification.
+ */
+export interface ProofResult {
+  ok: boolean;
+  outputHash: string;
+  callId?: string;
+  /** Short human-readable summary; redacted and bounded by the host. */
+  excerpt?: string;
+}
+
+/** What the host hands a plugin verifier. It carries no permission of its own. */
+export interface ProofVerifierContext {
+  sessionId: string;
+  criterionId: string;
+  workspace: string;
+  signal: AbortSignal;
+  /**
+   * Runs a core tool through the same gate as a model call (permission mode, `--read-only`,
+   * path policy). A refused or failed call resolves with `result.isError` set and nothing ran.
+   * `callId` is what a `ProofResult` may reference.
+   */
+  callTool(
+    name: string,
+    input: Record<string, unknown>,
+  ): Promise<{ callId: string; result: ToolResult }>;
+}
+
+/** A verifier a plugin contributes to Proof; criteria bind to it as `<pluginId>:<id>`. */
+export interface ProofVerifierRegistration {
+  /** Lowercase letters, digits, `.`, `_` and `-` (max 64). */
+  id: string;
+  describe: string;
+  run(input: unknown, ctx: ProofVerifierContext): Promise<ProofResult>;
+}
+
+/** One acceptance criterion with its derived status. */
+export interface ProofCriterion {
+  criterionId: string;
+  sessionId: string;
+  goalId?: string;
+  text: string;
+  required: boolean;
+  origin: "plan" | "goal" | "user" | "inferred" | "cli";
+  verifier?: ProofVerifierSpec;
+  /** Globs of the files the criterion covers; absent means the whole workspace. */
+  scope?: string[];
+  status: ProofStatus;
+  /** True when the criterion had successful evidence that a later edit in its scope invalidated. */
+  stale?: boolean;
+  evidenceIds: string[];
+  notApplicableReason?: string;
+}
+/** Immutable record that a verifier ran. A new run creates a new evidence, never an edit. */
+export interface ProofEvidence {
+  evidenceId: string;
+  criterionId: string;
+  verifierKind: ProofVerifierSpec["kind"];
+  runId: string;
+  callId: string;
+  ok: boolean;
+  commandFingerprint?: string;
+  exitCode?: number;
+  durationMs: number;
+  outputHash: string;
+  excerpt?: string;
+  treeFingerprint: string;
+  filesTouched: string[];
+  capturedAt: string;
+}
+/** The criteria and evidence of one session, as shown by every surface. */
+export interface ProofLedger {
+  sessionId: string;
+  criteria: ProofCriterion[];
+  evidence: ProofEvidence[];
+  divergences: { claim: string; criterionId?: string; actual: ProofStatus }[];
+  generatedAt: string;
+}
+/**
+ * What a completed goal records about its Proof criteria: a compact snapshot taken inside the
+ * completing transaction (never a second source of truth: the ledger derives statuses on read).
+ */
+export interface GoalProofInfo {
+  criteria: { criterionId: string; required: boolean; status: ProofStatus }[];
+  /** Required criteria that were `failed` or `not_checked` at completion. */
+  unmet: string[];
+  /** Evidence ids the model declared that resolved to captured evidence of the session. */
+  linkedEvidence: string[];
+  /** Present only when the USER completed the goal over unmet criteria. */
+  override?: { reason: string; at: number };
+}
+/** A criterion the model proposed in `exit_plan`: a draft until the user approves the plan. */
+export interface PlanCriterionDraft {
+  text: string;
+  required: boolean;
+  verifier?: ProofVerifierSpec;
+  scope?: string[];
+  origin: "inferred";
 }
 /** A session goal as shown by routes and UIs. */
 export interface GoalInfo {
@@ -1201,6 +1353,8 @@ export interface GoalInfo {
   /** The model's last `update_goal` report. */
   summary?: string;
   evidence?: GoalEvidence[];
+  /** The Proof snapshot of a completed goal that had criteria (absent without criteria). */
+  proof?: GoalProofInfo;
   /** What the next continuation waits for (set by the host: it knows the live state). */
   waiting?: GoalWaiting;
   /** The user actions allowed in this state. */
@@ -1602,6 +1756,11 @@ export interface PluginAPI {
    */
   views?: { register(view: ViewDefinition): () => void };
   /**
+   * Proof verifiers (specs/011). Absent on a core that predates Proof: feature-detect with
+   * `api.proof?.registerVerifier(...)` so the plugin keeps working there.
+   */
+  proof?: { registerVerifier(verifier: ProofVerifierRegistration): () => void };
+  /**
    * Decision Intelligence: register a `DecisionProvider` or consume decisions. Absent on a core
    * that predates it: feature-detect with `api.decisions?.registerProvider(...)`.
    */
@@ -1834,6 +1993,8 @@ export type ServerFrame =
       pending: { approvals: PendingApproval[]; interactions: PendingInteraction[] };
       /** The session's goal, when it has one (so a reload shows the goal bar at once). */
       goal?: GoalInfo;
+      /** How many Proof criteria the session has; absent without any (the card loads on demand). */
+      proof?: { criteria: number };
     }
   /** Durable event; its SSE `id` is `event.eventId`. */
   | { t: "event"; sessionId: string; event: RunEvent }

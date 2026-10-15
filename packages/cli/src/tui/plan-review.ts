@@ -4,7 +4,7 @@
  * {state, effect}, fully testable without a terminal. Esc means "Skip for now" while choosing and
  * "back to the choices" while typing; Enter submits; an empty text never submits.
  */
-import type { PlanDiagramInfo } from "@alisio/sdk";
+import type { PlanCriterionDraft, PlanDiagramInfo } from "@alisio/sdk";
 import { type ConnectInputState, printableInput, reduceConnectInput } from "./connect-input.ts";
 
 export interface PlanReviewOption {
@@ -157,5 +157,30 @@ export function planDiagramsMarkdown(plan: {
     plan.folder
       ? `Plan folder: \`${plan.folder}\` (plan.md, plan.json, diagrams/*.mmd). Open it from /artifacts.`
       : "The plan folder could not be saved, so these diagrams are only shown here.",
+  ].join("\n\n");
+}
+
+/**
+ * The acceptance criteria the plan proposes (Proof), as Markdown for the transcript. The terminal
+ * keeps the review all-or-nothing: approving activates every one of them (`/proof` edits or marks
+ * them afterwards); the web review lets the user keep, edit or reject each one first.
+ */
+export function planCriteriaMarkdown(drafts: readonly PlanCriterionDraft[] | undefined): string {
+  if (!drafts?.length) return "";
+  const lines = drafts.map((draft, index) => {
+    const how =
+      draft.verifier?.kind === "command"
+        ? ` · verified by \`${draft.verifier.command}\``
+        : draft.verifier?.kind === "coverage"
+          ? ` · coverage ≥ ${draft.verifier.minPercent}% by \`${draft.verifier.command}\``
+          : draft.verifier?.kind === "manual"
+            ? " · manual review"
+            : "";
+    return `${index + 1}. ${draft.text}${draft.required ? " (required)" : ""}${how}`;
+  });
+  return [
+    `**Acceptance criteria (${drafts.length})** · proposed by the plan`,
+    ...lines,
+    "Approving the plan activates all of them as acceptance criteria (use `/proof` to edit or mark them later, or review them one by one in the web UI).",
   ].join("\n\n");
 }
