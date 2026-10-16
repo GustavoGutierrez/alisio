@@ -7,7 +7,7 @@
 | Proyecto | Alisio |
 | Estado | **Aprobada por el propietario (2026-10-15). NO implementada.** Decisiones O1..O8 confirmadas; sin preguntas abiertas. |
 | Fecha | 2026-10-13 (aprobada 2026-10-15; base verificada re-auditada contra 0.8.0) |
-| Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ContextSegment`, `ContextReport`, `CompactionCheckpoint.invariants?`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
+| Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ContextSegment`, `ContextReport`, `CompactionCheckpoint.invariants?` (Fase 4); `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
 | Relación con otras especificaciones | Mide su efecto con `specs/archive/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/archive/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
 | Superficies | Web, TUI y headless con paridad funcional; API HTTP de `alisio serve` |
@@ -78,7 +78,7 @@ Inventario de segmentos; elisión por sustitución (lecturas superadas, `bg_outp
 | Hecho (verificado) | Ubicación | Implicación |
 | --- | --- | --- |
 | `planCompaction()`, `boundaries()`, `reduceMessagesToBudget()`, `renderCheckpoint()`, `checkpointInstructions()` | `packages/core/src/core/compaction.ts` (l.~95, ~242, ~363, ~376) | Puntos de extensión; la regla llamada/resultado ya existe y solo requiere prueba de regresión. |
-| `CompactionCheckpoint {goal, instructions, discoveries, accomplished, currentState, nextSteps, relevantFiles}` | `packages/sdk/src/index.ts` l.~710 | Gana `invariants?: string[]` aditivo. |
+| `CompactionCheckpoint {goal, instructions, discoveries, accomplished, currentState, nextSteps, relevantFiles}` | `packages/sdk/src/index.ts` l.~710 | Gana `invariants?: string[]` aditivo **en la Fase 4** (la Fase 3 no toca el SDK: usa un tipo interno del núcleo, `GovernedCheckpoint`). |
 | `CompactionStart {sessionId, reason: manual\|auto\|budget, messages, focus?, signal}` y `CompactionHooks` | `sdk/src/index.ts` l.~720+ | Los hooks de plugins siguen invocándose; el Governor aporta invariantes por el mismo camino. |
 | `context_reduced: { messages: number }` | `sdk/src/index.ts` l.665 | Se amplía con campos opcionales (`reason`, `elided`, `tokensSaved`). |
 | Presupuesto y reducción en el bucle (`contextBudget`, `estimateContext`) | `core/src/core/runner.ts` (l.~1290–1365) | Punto de proyección y medición. |
@@ -116,7 +116,11 @@ La sustitución conserva el mensaje `tool_result` con su `callId` y rol; solo ca
 
 ### 3.3 Invariantes
 
-`collectInvariants(session)` reúne: instrucciones vigentes del usuario (extraídas del campo `instructions` del último checkpoint y de mensajes marcados), aprobaciones de sesión (grants), objetivo de goal activo, plan aprobado, y criterios de `specs/archive/011-proof-v1.md` si existe `proof` (feature-detect). Se renderizan en un bloque `<invariants>` colocado **cerca del final del prompt** (mitiga «lost in the middle») y se reinyectan tras cada compactación. El checkpoint gana `invariants` y `renderCheckpoint()` los emite aparte; el resumen con modelo **no** los reescribe: se pasan literales (D4).
+`collectInvariants(input)` reúne, en este orden fijo: (1) las **instrucciones del usuario** guardadas, (2) el objetivo del goal vigente (`active|paused|blocked|budget_limited`), (3) el plan aprobado (`approved|implementing`: título, revisión y prefijo del hash), (4) los criterios de `specs/archive/011-proof-v1.md` si existe `proof` (feature-detect; texto y `[required]`/`[optional]`, sin estado en vivo y sin los que tienen `notApplicableReason`) y (5) los permisos de sesión: solo efectos aprobados para la sesión, capacidades concedidas para la sesión y un **recuento** de directorios externos (nunca rutas, scripts ni argumentos; sin modo de permisos). Se deduplica por texto exacto con espacios normalizados (gana el primero).
+
+Las instrucciones **no** son «mensajes marcados» ni se extraen del campo `instructions` del checkpoint (el resumidor las parafrasea). Cuando el governor está en `on`, el resumidor recibe un campo extra de nivel superior `alisio_invariants`: citas literales de mensajes del usuario. Solo se aceptan las citas que son **subcadena exacta** (con espacios colapsados) de un mensaje `user` normal (no `summary`) de los que se resumen; se descartan paráfrasis, citas del asistente, de resultados y de checkpoints. Se guardan, con tope de 20 elementos de 500 caracteres (con la lista llena se conservan las más antiguas y se cuentan los rechazos), en `sessions.options.contextInvariants` (`{version: 1, instructions, compactions, updatedAt}`, clave del servidor, sin migración, D9) antes de `store.compact`. `renderCheckpoint()` **no** emite invariantes y el esquema del checkpoint descarta cualquier `invariants` que el modelo ponga dentro de `checkpoint`; el resumen con modelo nunca recibe el bloque (D4).
+
+Se renderizan en un bloque `<invariants policy="1">` (cabecera fija, secciones en orden fijo, cada elemento una línea `JSON.stringify` con `</invariants` escapado, nunca cortado; límite `context.invariants.maxChars`, pie `[N invariants omitted: context.invariants.maxChars]`). El bloque es un último mensaje `user` **transitorio**: se construye en cada petición, nunca se guarda, se añade tras la proyección de la Fase 2 y antes del aviso de recuperación, y no entra en el array que recibe `projectContext` (jamás es candidato a elisión). Se inyecta solo si el historial activo empieza por un checkpoint de compactación (`messages[0].summary` y texto que empieza por `[Checkpoint of`) o `contextInvariants.compactions > 0`; nunca antes de la primera compactación. Las sesiones con checkpoints de texto antiguos no se analizan: reciben solo las fuentes en vivo.
 
 ### 3.4 Ledger observado/usado
 
@@ -165,7 +169,7 @@ export interface ContextReport {
 }
 ```
 
-- `CompactionCheckpoint.invariants?: string[]` (opcional; ausente en checkpoints antiguos).
+- `CompactionCheckpoint.invariants?: string[]` (opcional; ausente en checkpoints antiguos). **Fase 4:** la Fase 3 no modifica `@alisio/sdk`.
 - `RunEventDataMap.context_reduced`: `{ messages: number; reason?: "elided" | "budget"; elided?: number; tokensSaved?: number }`.
 - `RunEventDataMap.context_governed`: ver §3.6.
 - Ruta `GET /api/sessions/:sid/context` → `ContextReport` (solo lectura).
@@ -260,6 +264,8 @@ Trabajo: `collectInvariants`, bloque `<invariants>`, campo `invariants` en el ch
 Aceptación: los invariantes sobreviven a N compactaciones consecutivas (N≥5) sin duplicarse ni resumirse; un checkpoint sin `invariants` (sesión antigua) se lee sin error.
 Pruebas: `tests/context-invariants.test.ts` (N compactaciones, límite `maxChars`, checkpoints antiguos), ampliación de las pruebas de compactación sin cambiar sus expectativas.
 
+Registro de implementación (2026-10-16): implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto) con las decisiones D15 a D24. Ficheros: `context/invariants.ts`, `context/sources.ts`, `core/compaction.ts` (`INVARIANTS_FIELD` y tercer parámetro de `checkpointInstructions`), `core/runner.ts` (`invariantSources`, bloque transitorio, promoción en `compactLocked`, `clearInvariants`), `core/contracts.ts` (`mutateSessionOptions?` opcional), `config.ts`, `eval/engine.ts` y `application.ts`. Pruebas: `tests/context-invariants.test.ts`, `tests/context-invariants-runner.test.ts` (6 compactaciones consecutivas con SQLite real), `tests/context-sources.test.ts` y ampliaciones de `compaction`, `config-layers`, `eval-engine` y `context-shadow-identity` sin cambiar ninguna expectativa existente. `@alisio/sdk` no cambia: el campo `CompactionCheckpoint.invariants?` queda para la Fase 4.
+
 ### Fase 4 — Ledger observado/usado y eventos
 
 Trabajo: `usageLedger`; eventos `context_governed` y ampliación de `context_reduced`; resumen en `/stats`.
@@ -329,9 +335,19 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D9** Sin migración de base de datos en esta versión.
 - **D10** (Fase 2, 2026-10-16) **Elisión por épocas:** `context.elide.epochMessages` (por defecto 32; 0 = inmediata). Solo el prefijo `floor(n / E) * E` del historial es elegible, para que la petición crezca solo añadiendo al final entre épocas y la caché de prompt del proveedor siga válida.
 - **D11** (Fase 2) **`context.policyVersion` es una fijación opcional:** sin definir equivale a la versión actual (`CONTEXT_POLICY_VERSION`, hoy 1); el rango permitido es 1..versión actual y `policyVersion: 2` se rechaza hoy.
-- **D12** (Fase 2) **Los `configHash` de la Fase 0 siguen siendo válidos:** `computeConfigHash` omite `governor`, `elide` y `policyVersion` cuando el governor es `off` y el resto son los valores por defecto. Una prueba fija el hash de la configuración por defecto.
-- **D13** (Fase 2) **El Governor solo proyecta lo que se envía al proveedor, y solo en `on`:** los disparadores de compactación, el límite duro, `estimateContext`/`contextBudget` y la entrada del resumidor siguen usando el historial **crudo**.
+- **D12** (Fase 2) **Los `configHash` de la Fase 0 siguen siendo válidos:** `computeConfigHash` omite `governor`, `elide` y `policyVersion` cuando el governor es `off` y el resto son los valores por defecto. Una prueba fija el hash de la configuración por defecto. Fase 3: `context.invariants.maxChars` se une a esa exclusión (se omite con el governor en `off` y `maxChars` = 4000).
+- **D13** (Fase 2; enmendada en la Fase 3) **El Governor solo proyecta lo que se envía al proveedor, y solo en `on`:** los disparadores de compactación, el límite duro, `estimateContext`/`contextBudget` y la entrada del resumidor siguen usando el historial **crudo**. Enmienda (D21): en `on`, la longitud del bloque `<invariants>` se suma al término de instrucciones de `chars()`, `charsConversation()` y del objetivo de `reduceInPlace`.
 - **D14** (Fase 2) **La capa de proyecto sigue reemplazando la sección `context` completa** (precedencia existente); no se fusiona clave a clave.
+- **D15** (Fase 3, 2026-10-16) **Solo `on` envía o guarda algo:** `shadow` solo calcula recuentos (en `governance()`), no envía bloque, no cambia las instrucciones del resumidor, no promueve nada y no escribe en `sessions.options`; `off` no lee ni calcula nada. Las peticiones al modelo y al resumidor y las filas guardadas son byte-idénticas en `off`, `shadow` y sin governor.
+- **D16** (Fase 3) **El bloque se inyecta solo tras la primera compactación** (historial que empieza por un checkpoint, o `compactions > 0`).
+- **D17** (Fase 3) **Tope de instrucciones: 20 elementos de 500 caracteres;** con la lista llena se conservan las más antiguas, se rechazan las nuevas y se cuentan los rechazos.
+- **D18** (Fase 3) **El bloque es el último mensaje `user` transitorio,** construido en cada petición, nunca guardado, añadido tras la proyección y `textProjection` y antes del aviso de recuperación; no pasa por `projectContext`.
+- **D19** (Fase 3) **El objetivo del goal nunca se recorta:** si no cabe, se omite y se cuenta.
+- **D20** (Fase 3) **No se analizan los checkpoints de texto antiguos** para sembrar invariantes: las sesiones antiguas reciben solo fuentes en vivo.
+- **D21** (Fase 3) **En `on`, el bloque cuenta como instrucciones** en `chars()`, `charsConversation()` y `reduceInPlace` (enmienda de D13).
+- **D22** (Fase 3) **`clearInvariants(sessionId)` es solo del núcleo** (borra `contextInvariants` y las entradas en memoria); sin retirada por elemento hasta la Fase 5.
+- **D23** (Fase 3) **Permisos:** solo efectos aprobados para la sesión (mapa nuevo del runner), capacidades de sesión y un recuento de directorios externos; nunca rutas, scripts ni argumentos; sin modo de permisos.
+- **D24** (Fase 3) **Criterios:** texto y marca `required`, sin estado en vivo; se excluyen los que tienen `notApplicableReason`.
 
 ## 10. Criterios de aceptación globales
 
@@ -345,12 +361,12 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 - Propiedad: para cualquier historial generado, la proyección conserva el emparejamiento `tool_call`/`tool_result`.
 - Identidad `off` y `shadow` contra el payload de 0.6.x (proveedor scripted).
-- Compatibilidad de sesiones persistidas anteriores (checkpoints sin `invariants`).
+- Compatibilidad de sesiones persistidas anteriores (opciones de sesión sin `contextInvariants`, o malformadas, y checkpoints de texto antiguos).
 - Cada plugin con `CompactionHooks` sigue funcionando sin cambios.
 
 ## 12. Estado de implementación
 
-Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. Medición con modelo pendiente de la puerta de la Fase 6.
+Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. Medición con modelo pendiente de la puerta de la Fase 6.
 
 ## 13. Asignación de modelos
 

@@ -182,6 +182,14 @@ export interface SessionStore {
   eventsPage?(session: string, options?: PageOptions): EventPage;
   /** Marks queued/running runs whose owner process is not alive as interrupted. */
   interruptRuns?(): number;
+  /**
+   * Atomic read-modify-write of the session's `options` (`SQLiteStore` implements it). Without it
+   * the runner keeps what it would store there, for the context invariants, in memory.
+   */
+  mutateSessionOptions?<T>(
+    id: string,
+    change: (current: Record<string, unknown>) => { patch?: Record<string, unknown>; value: T },
+  ): T;
 }
 export interface ContextSource {
   /** System instructions; `sessionId` scopes lazily attached nested instructions. */

@@ -295,3 +295,123 @@ describe("S6 shadow replay of the bundled cassettes", () => {
     }
   }, 60_000);
 });
+
+describe("S7 invariants stay invisible until the governor is on", () => {
+  const LITERAL = "Never use semicolons in generated code";
+  const summaryJson = JSON.stringify({
+    checkpoint: {
+      goal: "g",
+      instructions: ["paraphrase"],
+      discoveries: [],
+      accomplished: [],
+      currentState: "s",
+      nextSteps: [],
+      relevantFiles: [],
+    },
+    alisio_invariants: [LITERAL],
+  });
+
+  async function compacting(gov: Governor | undefined, tag: string) {
+    const store = new SQLiteStore(join(root, `store-inv-${tag}.sqlite`));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "hello",
+      effect: "read",
+      description: "hello",
+      inputSchema: { type: "object" },
+      async execute() {
+        return textResult("world");
+      },
+    });
+    const raw: string[] = [];
+    const provider = {
+      id: "test",
+      model: "test",
+      async *stream(request: {
+        instructions: string;
+        messages: Message[];
+        tools?: unknown[];
+      }): AsyncGenerator<ProviderEvent> {
+        raw.push(JSON.stringify([request.instructions, request.messages, !!request.tools?.length]));
+        const text = request.tools?.length ? "ok" : summaryJson;
+        yield { type: "completed", message: { role: "assistant", text, calls: [] } };
+      },
+    };
+    const session = store.create(root, "test", "test");
+    const runner = new AgentRunner({
+      provider: provider as never,
+      registry,
+      store,
+      context: new ProjectContext(root),
+      workspace: root,
+      policy: { write: false, process: false, external: false },
+      compaction: { keepTurns: 1 },
+      ...(gov ? { contextGovernor: gov } : {}),
+      invariantSources: {
+        goal: () => ({ goalId: "g1", objective: "Ship the parser" }),
+        grants: () => ({ capabilities: ["analysis.run"], externalDirectories: 1 }),
+      },
+    });
+    try {
+      await runner.run(session.id, `Remember this rule: ${LITERAL}.`);
+      await runner.run(session.id, "second");
+      await runner.compact(session.id);
+      await runner.run(session.id, "third");
+      await runner.run(session.id, "fourth");
+      await runner.compact(session.id);
+      await runner.run(session.id, "fifth");
+      return {
+        raw,
+        stored: JSON.stringify(store.messages(session.id)),
+        options: JSON.stringify(store.get(session.id).options ?? null),
+        governance: runner.governance(session.id),
+      };
+    } finally {
+      store.close();
+    }
+  }
+
+  it("S7 off and shadow match a runner without the governor, requests and rows alike", async () => {
+    const bare = await compacting(undefined, "bare");
+    const off = await compacting(governor("off"), "off");
+    const shadow = await compacting(governor("shadow"), "shadow");
+    expect(bare.raw.some((r) => r.includes("alisio_invariants"))).toBe(false);
+    expect(bare.raw.some((r) => r.includes("<invariants"))).toBe(false);
+    expect(off.raw).toEqual(bare.raw);
+    expect(shadow.raw).toEqual(bare.raw);
+    expect(off.stored).toBe(bare.stored);
+    expect(shadow.stored).toBe(bare.stored);
+    expect(off.options).toBe(bare.options);
+    expect(shadow.options).toBe(bare.options);
+    expect(bare.options).not.toContain("contextInvariants");
+  });
+
+  it("S7 on does change the requests: the summarizer is asked for quotes and the block is sent", async () => {
+    const bare = await compacting(undefined, "bare-on");
+    const on = await compacting(governor("on"), "on");
+    expect(on.raw.some((r) => r.includes("alisio_invariants"))).toBe(true);
+    expect(on.raw.at(-1)).toContain("<invariants");
+    expect(on.stored).not.toContain("<invariants");
+    expect(on.options).toContain("contextInvariants");
+    expect(on.stored).toBe(bare.stored);
+  });
+
+  it("S8 shadow records invariant counts in governance() and no content", async () => {
+    const shadow = await compacting(governor("shadow"), "shadow8");
+    const off = await compacting(governor("off"), "off8");
+    expect(off.governance).toBeUndefined();
+    const g = shadow.governance as { invariants: { count: number; chars: number } };
+    expect(g.invariants.count).toBeGreaterThan(0);
+    expect(g.invariants.chars).toBeGreaterThan(0);
+    expect(g.invariants).toEqual({
+      count: g.invariants.count,
+      chars: g.invariants.chars,
+      omitted: 0,
+      promoted: 0,
+      rejected: 0,
+    });
+    const text = JSON.stringify(shadow.governance);
+    expect(text).not.toContain("Ship the parser");
+    expect(text).not.toContain(LITERAL);
+  });
+});

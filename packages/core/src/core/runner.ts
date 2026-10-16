@@ -21,6 +21,14 @@ import {
   type GovernanceSnapshot,
   governanceSnapshot,
 } from "../context/governance.ts";
+import {
+  collectInvariants,
+  type InvariantSources,
+  type InvariantState,
+  promoteInstructions,
+  readInvariantState,
+  renderInvariants,
+} from "../context/invariants.ts";
 import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nested.ts";
 import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
 import { decideEffect, effectAskable } from "../permissions/decide.ts";
@@ -30,6 +38,7 @@ import { bindCallInternals } from "./call-internals.ts";
 import {
   checkpointInstructions,
   estimateTokens,
+  INVARIANTS_FIELD,
   MAX_TRUSTED_WINDOW,
   parseCheckpointOutput,
   planCompaction,
@@ -144,6 +153,11 @@ export interface RunnerOptions {
    * sends the projected history. Compaction, limits and persistence always use the raw history.
    */
   contextGovernor?: ContextGovernorOptions;
+  /**
+   * Live sources of the `<invariants>` block (goal, plan, Proof criteria, grants). Only read when
+   * the governor is `shadow` or `on`; a missing source leaves its section out.
+   */
+  invariantSources?: InvariantSources;
   /** When set, write/process tools not allowed by the policy are offered and ask first. */
   approve?: ApprovalHandler;
   /**
@@ -309,6 +323,9 @@ interface CallScope {
   /** Adjusts the result of an executed call (e.g. pending instructions appended to a read). */
   amend?: (result: ToolResult, effect: string) => ToolResult;
 }
+/** `{ [key]: value }`, or nothing when there is no value (optional properties stay absent). */
+const optional = <K extends string, V>(key: K, value: V | undefined) =>
+  (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 /** A short id for a tool call the user started from a UI (alphanumeric, 9 characters). */
 const uiCallId = () => {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -326,6 +343,12 @@ export class AgentRunner {
   private compactedChars = new Map<string, number>();
   /** What the Context Governor decided for the latest request of each session (shadow and on). */
   private governed = new Map<string, GovernanceSnapshot>();
+  /** Effects the user approved for the whole session, per session (`on` mode; process-local). */
+  private sessionEffects = new Map<string, Set<"write" | "process" | "external">>();
+  /** Instruction quotes of a session whose store cannot keep session options (process-local). */
+  private invariantMemory = new Map<string, InvariantState>();
+  /** Quotes promoted and refused by the compactions of this process, per session. */
+  private promotions = new Map<string, { promoted: number; rejected: number }>();
   /** Where human waits are opened; the clocks of the active runs listen to it. */
   readonly humanWaits: HumanWaits;
   constructor(private options: RunnerOptions) {
@@ -540,6 +563,97 @@ export class AgentRunner {
   governance(sessionId: string): GovernanceSnapshot | undefined {
     return this.governed.get(sessionId);
   }
+  /**
+   * Forgets the user instructions kept for a session: the stored `contextInvariants` and every
+   * in-memory entry. Core-internal; there is no per-item removal before phase 5.
+   */
+  clearInvariants(sessionId: string): void {
+    this.invariantMemory.delete(sessionId);
+    this.sessionEffects.delete(sessionId);
+    this.promotions.delete(sessionId);
+    this.options.store.mutateSessionOptions?.(sessionId, (current) => ({
+      ...("contextInvariants" in current ? { patch: { contextInvariants: undefined } } : {}),
+      value: undefined,
+    }));
+  }
+  /** The stored instruction list of a session, or undefined for old or never-compacted sessions. */
+  private invariantState(sessionId: string): InvariantState | undefined {
+    const store = this.options.store;
+    return store.mutateSessionOptions
+      ? readInvariantState(store.get(sessionId).options)
+      : this.invariantMemory.get(sessionId);
+  }
+  /**
+   * The `<invariants>` block for the next request of a session: empty before the first compaction
+   * (a history that starts with a checkpoint, or a stored compaction count). Built fresh from the
+   * stored instructions and the live sources, never saved.
+   */
+  private invariantBlock(sessionId: string, messages: Message[], maxChars: number) {
+    const state = this.invariantState(sessionId);
+    const first = messages[0];
+    const compacted =
+      (state?.compactions ?? 0) > 0 ||
+      (first?.role === "user" && !!first.summary && first.text.startsWith("[Checkpoint of"));
+    if (!compacted) return { text: "", included: 0, omitted: 0 };
+    const sources = this.options.invariantSources;
+    // A broken source never stops a request: its section is simply left out.
+    const read = <T>(source: (() => T) | undefined): T | undefined => {
+      try {
+        return source?.();
+      } catch {
+        return undefined;
+      }
+    };
+    const grants = read(sources?.grants?.bind(sources, sessionId));
+    const effects = [...(this.sessionEffects.get(sessionId) ?? [])];
+    return renderInvariants(
+      collectInvariants({
+        instructions: state?.instructions ?? [],
+        ...optional("goal", read(sources?.goal?.bind(sources, sessionId))),
+        ...optional("plan", read(sources?.plan?.bind(sources, sessionId))),
+        ...optional("criteria", read(sources?.criteria?.bind(sources, sessionId))),
+        ...(grants || effects.length
+          ? {
+              grants: {
+                effects,
+                capabilities: grants?.capabilities ?? [],
+                externalDirectories: grants?.externalDirectories ?? 0,
+              },
+            }
+          : {}),
+      }),
+      maxChars,
+    );
+  }
+  /** Keeps the user's verbatim quotes the summarizer proposed (see `promoteInstructions`). */
+  private promoteInvariants(sessionId: string, proposed: unknown, summarized: Message[]): void {
+    const store = this.options.store;
+    const apply = (state: InvariantState | undefined) => {
+      const out = promoteInstructions(state?.instructions ?? [], proposed, summarized);
+      const next: InvariantState = {
+        version: 1,
+        instructions: out.instructions,
+        compactions: (state?.compactions ?? 0) + 1,
+        updatedAt: Date.now(),
+      };
+      return { next, out };
+    };
+    const { out } = store.mutateSessionOptions
+      ? store.mutateSessionOptions(sessionId, (current) => {
+          const result = apply(readInvariantState(current));
+          return { patch: { contextInvariants: result.next }, value: result };
+        })
+      : (() => {
+          const result = apply(this.invariantMemory.get(sessionId));
+          this.invariantMemory.set(sessionId, result.next);
+          return result;
+        })();
+    const total = this.promotions.get(sessionId) ?? { promoted: 0, rejected: 0 };
+    this.promotions.set(sessionId, {
+      promoted: total.promoted + out.accepted,
+      rejected: total.rejected + out.rejected,
+    });
+  }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {
     const id = model.trim();
@@ -622,12 +736,16 @@ export class AgentRunner {
           });
         }
       reportFailures(contribution.failures);
+      // Only `on` asks the summarizer for verbatim quotes; a plugin field of the same name is ignored.
+      const govern = o.contextGovernor?.mode === "on";
       const fields = Object.fromEntries(
-        Object.entries(contribution.fields).map(([name, f]) => [name, f.description]),
+        Object.entries(contribution.fields)
+          .filter(([name]) => !(govern && name === INVARIANTS_FIELD))
+          .map(([name, f]) => [name, f.description]),
       );
       const provider = await (o.providerFor?.(o.store.get(sessionId)) ?? o.provider);
       const { text: raw, truncated: summaryTruncated } = await summarize(provider, {
-        instructions: checkpointInstructions(contribution.instructions, fields),
+        instructions: checkpointInstructions(contribution.instructions, fields, govern),
         messages: plan.summarized,
         focus,
         model,
@@ -635,7 +753,12 @@ export class AgentRunner {
         signal,
         sessionId,
       });
-      const output = parseCheckpointOutput(raw, Object.keys(fields));
+      const parsed = parseCheckpointOutput(
+        raw,
+        govern ? [...Object.keys(fields), INVARIANTS_FIELD] : Object.keys(fields),
+      );
+      const { [INVARIANTS_FIELD]: proposed, ...extracted } = parsed.extracted;
+      const output = govern ? { ...parsed, extracted } : parsed;
       let after: Awaited<ReturnType<RunnerExtensions["afterCompact"]>> = {
         inject: [],
         reports: {},
@@ -660,6 +783,8 @@ export class AgentRunner {
         .filter((x) => x.trim())
         .join("\n\n");
       const summary = summaryMessage(body, plan.cut) as CompactionResult["summary"];
+      // Before the history is replaced: if the process dies in between, the next compaction dedupes.
+      if (govern) this.promoteInvariants(sessionId, proposed, plan.summarized);
       o.store.compact(sessionId, plan.cut, summary);
       this.reported.delete(sessionId);
       this.governed.delete(sessionId);
@@ -865,7 +990,16 @@ export class AgentRunner {
         if (decision === "deny")
           throw new Error(`Capability ${capability ?? effect} denied by the user for this call`);
         // A capability grant never widens the effect: only effect approvals do.
-        if (decision === "session" && !capability) policy[effect] = true;
+        if (decision === "session" && !capability) {
+          policy[effect] = true;
+          if (
+            o.contextGovernor?.mode === "on" &&
+            (effect === "write" || effect === "process" || effect === "external")
+          ) {
+            const effects = this.sessionEffects.get(sessionId) ?? new Set();
+            this.sessionEffects.set(sessionId, effects.add(effect));
+          }
+        }
       }
       o.store.beginCall(sessionId, call, { runId, effect });
       const publisher = o.artifacts?.({ sessionId, runId, callId: call.id }, (published) =>
@@ -1336,8 +1470,23 @@ export class AgentRunner {
         let messages = o.store.messages(sessionId);
         const tools = this.availableTools(options, sessionId);
         const toolsText = this.toolsText(tools);
+        // The `<invariants>` block (`on` only) is part of every request after the first compaction,
+        // so it counts like instructions. Built once per history; shadow measures it at the seam.
+        const maxInvariantChars = o.contextGovernor?.invariantMaxChars ?? 4000;
+        let invariantMemo:
+          | { for: Message[]; value: ReturnType<typeof renderInvariants> }
+          | undefined;
+        const invariants = () => {
+          if (invariantMemo?.for !== messages)
+            invariantMemo = {
+              for: messages,
+              value: this.invariantBlock(sessionId, messages, maxInvariantChars),
+            };
+          return invariantMemo.value;
+        };
+        const blockChars = () => (o.contextGovernor?.mode === "on" ? invariants().text.length : 0);
         const chars = () =>
-          instructions.length + JSON.stringify(messages).length + toolsText.length;
+          instructions.length + blockChars() + JSON.stringify(messages).length + toolsText.length;
         // REDUCIBLE content only (instructions + transcript). The fixed tool catalog
         // (`toolsText`) is a deployment reality — a huge MCP catalog with dozens of tools is
         // part of every request regardless of history, so it is deliberately excluded from the
@@ -1345,7 +1494,8 @@ export class AgentRunner {
         // and still fake-fail. Oversized catalogs are a `/plugins` decision, not session growth;
         // auto-compaction above still measures the FULL request (`chars()`), because window
         // thresholds protect what the model really sees, tools included.
-        const charsConversation = () => instructions.length + JSON.stringify(messages).length;
+        const charsConversation = () =>
+          instructions.length + blockChars() + JSON.stringify(messages).length;
         const used = () => {
           const last = this.reported.get(sessionId);
           return last && last.count <= messages.length
@@ -1389,7 +1539,10 @@ export class AgentRunner {
         // limit) the run fails with an actionable error.
         if (charsConversation() > limit) {
           const reduceInPlace = () => {
-            const targetChars = Math.max(MIN_MESSAGE_BUDGET_FLOOR, limit - instructions.length);
+            const targetChars = Math.max(
+              MIN_MESSAGE_BUDGET_FLOOR,
+              limit - instructions.length - blockChars(),
+            );
             const reduction = reduceMessagesToBudget(messages, targetChars);
             if (reduction.truncated > 0) {
               o.store.overwrite(sessionId, reduction.messages);
@@ -1438,15 +1591,32 @@ export class AgentRunner {
         // projected history. The stored transcript, the compaction triggers and the limits above
         // always use the raw `messages`.
         let sent = messages;
+        let invariantsText = "";
         const governor = o.contextGovernor;
         if (governor && governor.mode !== "off") {
           const projection = projectContext(messages, governor);
-          this.governed.set(sessionId, governanceSnapshot(projection, governor, requests + 1));
-          if (governor.mode === "on") sent = projection.messages;
+          const snapshot = governanceSnapshot(projection, governor, requests + 1);
+          const block = invariants();
+          const done = this.promotions.get(sessionId);
+          snapshot.invariants = {
+            count: block.included,
+            chars: block.text.length,
+            omitted: block.omitted,
+            promoted: done?.promoted ?? 0,
+            rejected: done?.rejected ?? 0,
+          };
+          this.governed.set(sessionId, snapshot);
+          if (governor.mode === "on") {
+            sent = projection.messages;
+            invariantsText = block.text;
+          }
         }
         const providerMessages: Message[] = sent.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
+        // The invariants block is the last message: built fresh, never saved, never an elision
+        // candidate (it joins the request after the projection).
+        if (invariantsText) providerMessages.push({ role: "user", text: invariantsText });
         // After a cut-off response the request carries a transient continuation notice (never
         // persisted: the stored transcript only ever holds what the model really answered).
         if (recoveryNotice) providerMessages.push({ role: "user", text: recoveryNotice });

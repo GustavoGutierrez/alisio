@@ -854,3 +854,32 @@ describe("context governor configuration", () => {
     expect((await loadConfig(workspace)).context.governor).toBe("shadow");
   });
 });
+
+describe("context invariants configuration", () => {
+  it("defaults maxChars to 4000", () => {
+    expect(configSchema.parse({}).context.invariants).toEqual({ maxChars: 4000 });
+    expect(configSchema.parse({ context: { governor: "on" } }).context.invariants).toEqual({
+      maxChars: 4000,
+    });
+  });
+
+  it("bounds maxChars to 1000..20000 integers and rejects unknown keys", () => {
+    const ok = (maxChars: number) =>
+      configSchema.parse({ context: { invariants: { maxChars } } }).context.invariants.maxChars;
+    expect(ok(1000)).toBe(1000);
+    expect(ok(20_000)).toBe(20_000);
+    for (const bad of [999, 20_001, 1500.5, "4000"])
+      expect(() => configSchema.parse({ context: { invariants: { maxChars: bad } } })).toThrow();
+    expect(() => configSchema.parse({ context: { invariants: { other: 1 } } })).toThrow();
+  });
+
+  it("is replaced as part of the whole context section by a trusted project layer", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), { context: { invariants: { maxChars: 9000 } } });
+    expect((await loadConfig(workspace)).context.invariants.maxChars).toBe(9000);
+    await json(join(workspace, ".alisio", "config.json"), { context: { governor: "on" } });
+    expect((await loadConfig(workspace, { trustProject: true })).context.invariants.maxChars).toBe(
+      4000,
+    );
+  });
+});

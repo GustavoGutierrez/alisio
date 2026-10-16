@@ -40,6 +40,7 @@ import {
   stateHome,
 } from "./config.ts";
 import { CONTEXT_POLICY_VERSION } from "./context/elide.ts";
+import { createInvariantSources } from "./context/sources.ts";
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
 import { HumanWaits } from "./core/human-wait.ts";
@@ -66,6 +67,7 @@ import { GoalService } from "./goal/service.ts";
 import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { McpConnector } from "./mcp/connector.ts";
+import { currentPlan } from "./plan/state.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
 import { ProofVerifierRegistry } from "./proof/plugin-verifiers.ts";
 import { ProofRecorder } from "./proof/recorder.ts";
@@ -1223,7 +1225,21 @@ export async function createApplication(options: AppOptions = {}) {
         mode: config.context.governor,
         ...config.context.elide,
         policyVersion: config.context.policyVersion ?? CONTEXT_POLICY_VERSION,
+        invariantMaxChars: config.context.invariants.maxChars,
       },
+      invariantSources: createInvariantSources({
+        goal: (sessionId) => goals.get(sessionId),
+        plan: (sessionId) => currentPlan(store, sessionId),
+        criteria: (sessionId) => new ProofStore(store.db).criteria(sessionId),
+        ...(analysisEnabled
+          ? {
+              capabilities: {
+                granted: (capability, sessionId) => capabilityGrants.granted(capability, sessionId),
+              },
+            }
+          : {}),
+        externalDirectories: () => pathAccess.approvedDirectories().length,
+      }),
       extensions: plugins,
       contextWindow,
       modelOutputLimit: declaredOutputLimit,

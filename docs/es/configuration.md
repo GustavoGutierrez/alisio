@@ -197,6 +197,7 @@ Proveedor de búsqueda web (o configurando `websearch.provider` directamente); a
 | `elide.minAgeTurns` | `2` | Mensajes del asistente (1–20) de antigüedad que debe superar un resultado redundante antes de que el governor lo sustituya |
 | `elide.epochMessages` | `32` | La proyección crece en pasos de este número de mensajes (0–1000); `0` es inmediato |
 | `policyVersion` | sin definir | Fijación opcional de las reglas de elisión (de 1 a la versión actual, que es 1) |
+| `invariants.maxChars` | `4000` | Tamaño máximo del bloque `<invariants>` que se reenvía tras una compactación (1000–20000); consulte [Invariantes](/es/context#context-invariants) |
 
 Consulte [Contexto: AGENTS.md y skills](/es/context).
 

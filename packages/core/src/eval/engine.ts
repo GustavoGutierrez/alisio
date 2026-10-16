@@ -189,12 +189,13 @@ export interface ConfigHashExtras {
  * settings leaves them out, so the hashes of runs recorded before they existed stay valid.
  */
 function hashedContext(context: Config["context"]): Record<string, unknown> {
-  const { governor, elide, policyVersion, ...rest } = context;
+  const { governor, elide, policyVersion, invariants, ...rest } = context;
   const untouched =
     governor === "off" &&
     policyVersion === undefined &&
     elide.minAgeTurns === 2 &&
-    elide.epochMessages === 32;
+    elide.epochMessages === 32 &&
+    invariants.maxChars === 4000;
   return untouched ? rest : context;
 }
 

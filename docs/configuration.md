@@ -198,6 +198,7 @@ option.
 | `elide.minAgeTurns` | `2` | Assistant messages (1–20) a redundant tool result must be older than before the governor replaces it |
 | `elide.epochMessages` | `32` | The projection grows in steps of this many messages (0–1000); `0` is eager |
 | `policyVersion` | unset | Optional pin of the elision rules (1 up to the current version, which is 1) |
+| `invariants.maxChars` | `4000` | Maximum size of the `<invariants>` block re-sent after a compaction (1000–20000); see [Invariants](/context#context-invariants) |
 
 See [Context: AGENTS.md and skills](/context).
 

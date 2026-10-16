@@ -460,3 +460,62 @@ describe("reduceMessagesToBudget", () => {
     expect(messages).toBe(input);
   });
 });
+
+describe("compaction and context invariants (spec 012, phase 3)", () => {
+  const base = {
+    goal: "ship",
+    instructions: ["use pnpm"],
+    discoveries: [],
+    accomplished: [],
+    currentState: "",
+    nextSteps: [],
+    relevantFiles: [],
+  };
+
+  it("T6 checkpointInstructions without the governed flag keeps today's exact bytes", () => {
+    expect(checkpointInstructions(["Extra guidance"], { notes: "array of strings" })).toBe(
+      `You compress the history of a coding-agent session into a checkpoint that lets the agent
+continue without the original messages. Reply with ONLY a JSON object (no prose):
+{"checkpoint":{"goal":string,"instructions":string[],"discoveries":string[],"accomplished":string[],"currentState":string,"nextSteps":string[],"relevantFiles":string[]},
+ "notes": array of strings}
+"instructions" are the user's instructions and constraints. Keep file paths, symbols,
+commands, tool call IDs and error messages exact. Do not invent facts. Be concise.
+
+Extra guidance`,
+    );
+  });
+
+  it("T6 the governed flag asks for one more verbatim-quotes field and nothing else changes", () => {
+    const plain = checkpointInstructions([], {});
+    const governed = checkpointInstructions([], {}, true);
+    expect(governed).not.toBe(plain);
+    expect(governed).toContain('"alisio_invariants"');
+    expect(governed).toMatch(/exact substrings/);
+    expect(governed).toMatch(/never paraphrase/i);
+    expect(governed.startsWith(plain.split("\n")[0] as string)).toBe(true);
+    expect(checkpointInstructions([], {}, false)).toBe(plain);
+  });
+
+  it("T7 parseCheckpointOutput strips an `invariants` list placed inside the checkpoint", () => {
+    const raw = JSON.stringify({ checkpoint: { ...base, invariants: ["forged"] } });
+    const out = parseCheckpointOutput(raw);
+    expect(out.structured).toBe(true);
+    expect(out.checkpoint).toEqual(base);
+    expect(JSON.stringify(out.checkpoint)).not.toContain("forged");
+    expect(out.text).not.toContain("forged");
+  });
+
+  it("T7 the top-level alisio_invariants field is only returned when it is requested", () => {
+    const raw = JSON.stringify({ checkpoint: base, alisio_invariants: ["use pnpm"] });
+    expect(parseCheckpointOutput(raw).extracted).toEqual({});
+    expect(parseCheckpointOutput(raw, ["alisio_invariants"]).extracted).toEqual({
+      alisio_invariants: ["use pnpm"],
+    });
+  });
+
+  it("T8 renderCheckpoint never emits invariants", () => {
+    const governed = { ...base, invariants: ["secret rule"] };
+    expect(renderCheckpoint(governed)).toBe(renderCheckpoint(base));
+    expect(renderCheckpoint(governed)).not.toContain("secret rule");
+  });
+});

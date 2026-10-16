@@ -260,6 +260,13 @@ const configObjectSchema = z
           })
           .strict()
           .default(() => ({ minAgeTurns: 2, epochMessages: 32 })),
+        invariants: z
+          .object({
+            /** Size cap of the `<invariants>` block sent after a compaction (`on` mode only). */
+            maxChars: z.number().int().min(1000).max(20_000).default(4000),
+          })
+          .strict()
+          .default(() => ({ maxChars: 4000 })),
       })
       .strict()
       .default(() => ({
@@ -267,6 +274,7 @@ const configObjectSchema = z
         maxBytes: 32 * 1024,
         governor: "off" as const,
         elide: { minAgeTurns: 2, epochMessages: 32 },
+        invariants: { maxChars: 4000 },
       })),
     compaction: z
       .object({

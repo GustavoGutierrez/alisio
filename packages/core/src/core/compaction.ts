@@ -372,12 +372,22 @@ export function renderCheckpoint(c: CompactionCheckpoint): string {
   ].join("\n\n");
 }
 
-/** Summarizer instructions: JSON checkpoint plus any extension-requested fields. */
+/** Top-level field the governed summarizer fills with verbatim user quotes (spec 012, phase 3). */
+export const INVARIANTS_FIELD = "alisio_invariants";
+const INVARIANTS_ASK = `array of strings: verbatim quotes (exact substrings) of USER messages that state durable instructions or constraints; never paraphrase; [] if none`;
+
+/**
+ * Summarizer instructions: JSON checkpoint plus any extension-requested fields. `governed` (the
+ * Context Governor in `on` mode) asks for one more field; without it the text is unchanged.
+ */
 export function checkpointInstructions(
   extraInstructions: string[] = [],
   fields: Record<string, string> = {},
+  governed = false,
 ): string {
-  const extra = Object.entries(fields)
+  const extra = Object.entries(
+    governed ? { ...fields, [INVARIANTS_FIELD]: INVARIANTS_ASK } : fields,
+  )
     .map(([name, description]) => `,\n "${name}": ${description}`)
     .join("");
   return [

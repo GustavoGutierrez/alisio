@@ -682,6 +682,16 @@ describe("configHash (D2)", () => {
     expect(hash({ governor: "off", policyVersion: 1 })).not.toBe(base);
   });
 
+  it("hashes context.invariants.maxChars only when it is not the default or the governor is on", () => {
+    const base = computeConfigHash(config(), extras);
+    const hash = (context: object) => computeConfigHash(configSchema.parse({ context }), extras);
+    expect(hash({ invariants: { maxChars: 4000 } })).toBe(base);
+    expect(hash({ invariants: { maxChars: 6000 } })).not.toBe(base);
+    expect(hash({ governor: "on", invariants: { maxChars: 6000 } })).not.toBe(
+      hash({ governor: "on" }),
+    );
+  });
+
   it("ignores secrets, endpoints, models, plugin options and absolute paths", () => {
     const base = computeConfigHash(config(), extras);
     const noisy = configSchema.parse({

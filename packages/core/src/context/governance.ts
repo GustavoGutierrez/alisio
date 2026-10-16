@@ -9,6 +9,22 @@ export interface ContextGovernorOptions {
   minAgeTurns: number;
   epochMessages: number;
   policyVersion: number;
+  /** Size cap of the `<invariants>` block (`context.invariants.maxChars`); default 4000. */
+  invariantMaxChars?: number;
+}
+
+/** Counts of the invariants block; never its content (spec 012 D7). */
+export interface InvariantCounts {
+  /** Invariants rendered into the latest request's block. */
+  count: number;
+  /** Length of that block in characters (0 when none was built). */
+  chars: number;
+  /** Invariants left out because they did not fit `maxChars`. */
+  omitted: number;
+  /** Instruction quotes promoted by the compactions of this process (`on` only). */
+  promoted: number;
+  /** Proposed quotes refused by the substring check or the cap (`on` only). */
+  rejected: number;
 }
 
 /**
@@ -30,6 +46,7 @@ export interface GovernanceSnapshot {
   tokensAfter: number;
   tokensSaved: number;
   elisions: Array<Pick<Elision, "index" | "callId" | "segmentId" | "reason" | "tokensSaved">>;
+  invariants: InvariantCounts;
 }
 
 export function governanceSnapshot(
@@ -61,5 +78,6 @@ export function governanceSnapshot(
       reason,
       tokensSaved,
     })),
+    invariants: { count: 0, chars: 0, omitted: 0, promoted: 0, rejected: 0 },
   };
 }

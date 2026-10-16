@@ -390,6 +390,31 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `off`/`shadow` con un proveedor scripted (`tests/context-shadow-identity.test.ts`) y repetición de
   los cassettes empaquetados en `shadow` sin divergencia; **no se ha medido ningún efecto sobre el
   éxito de tareas ni el ahorro real con un modelo** (eso es la puerta de la Fase 6).
+- Context Governor, Fase 3 (`specs/012-context-governor-v1.md`): invariantes del contexto
+  (`context/invariants.ts`, `context/sources.ts`) con `context.invariants.maxChars` (4000 por defecto,
+  1000..20000). **Experimental; solo `on` envía o guarda algo.** Con el governor en `on`, el resumidor
+  recibe un campo extra `alisio_invariants` (citas literales de mensajes del usuario) y Alisio solo
+  conserva las citas que son subcadena exacta de un mensaje de usuario normal que se resume (nunca de
+  checkpoints, asistente ni resultados); la lista (máx. 20 de 500 caracteres; con la lista llena se
+  conservan las más antiguas) vive en `sessions.options.contextInvariants` sin migración. Tras la
+  primera compactación (o con un checkpoint al inicio del historial) cada petición lleva un bloque
+  `<invariants>` como último mensaje `user`, reconstruido en cada petición y nunca guardado, con las
+  citas, el goal vivo, el plan aprobado, los criterios de Proof (texto y `required`, sin estado) y los
+  permisos de sesión (solo nombres y un recuento de directorios externos). El bloque cuenta como
+  instrucciones en el presupuesto y los disparadores de compactación (enmienda de D13). `shadow` solo
+  cuenta (`GovernanceSnapshot.invariants`, sin contenido) y es byte-idéntico a `off` en peticiones al
+  modelo y al resumidor, filas guardadas y `sessions.options`. **Límites:** sin retirada de elementos
+  individuales hasta la Fase 5; `/btw` y la barra de contexto no cuentan el bloque; los efectos
+  aprobados y el recuento de directorios son de proceso y se reducen tras un reinicio; las sesiones
+  con checkpoints antiguos solo reciben las fuentes en vivo (no se analiza su texto); `shadow` no
+  puede medir las promociones; el campo `CompactionCheckpoint.invariants` del SDK espera a la Fase 4;
+  el efecto de un mensaje `user` final en cada modelo lo medirá la puerta de la Fase 6.
+  `clearInvariants` existe en el runner (probado) pero `/clear` crea una sesión nueva con opciones
+  vacías, así que no hay nada que limpiar y no se conecta. **Alcance de la verificación:** pruebas
+  unitarias y de propiedad (`tests/context-invariants.test.ts`, 300 semillas), integración con
+  proveedor scripted y SQLite real durante 6 compactaciones (`tests/context-invariants-runner.test.ts`),
+  identidad de bytes `off`/`shadow` (`tests/context-shadow-identity.test.ts`); no se ha medido ningún
+  efecto con un modelo real.
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del
