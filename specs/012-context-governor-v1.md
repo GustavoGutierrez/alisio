@@ -5,13 +5,13 @@
 | Versión | 0.1 |
 | Origen | 🔬 **Investigación arXiv** (`specs/research/022-arxiv-features-research.md`) · **Orden de ejecución: 3 de 8** |
 | Proyecto | Alisio |
-| Estado | **Borrador. Propuesta, no implementada.** Las decisiones O1..O8 están pendientes (propuesta, a confirmar por el propietario). |
-| Fecha | 2026-10-13 |
+| Estado | **Aprobada por el propietario (2026-10-15). NO implementada.** Decisiones O1..O8 confirmadas; sin preguntas abiertas. |
+| Fecha | 2026-10-13 (aprobada 2026-10-15; base verificada re-auditada contra 0.8.0) |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ContextSegment`, `ContextReport`, `CompactionCheckpoint.invariants?`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
 | Relación con otras especificaciones | Mide su efecto con `specs/archive/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/archive/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
 | Superficies | Web, TUI y headless con paridad funcional; API HTTP de `alisio serve` |
-| Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: `context.governor` arranca en `off`; en `shadow` lo enviado al proveedor es byte-idéntico a 0.6.x. `RunEvent.schemaVersion` sigue en 1. |
+| Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar** (0.9.0 sobre la base 0.8.0). Aditiva: `context.governor` arranca en `off`; en `shadow` lo enviado al proveedor es byte-idéntico a la versión previa a esta spec (0.8.0). `RunEvent.schemaVersion` sigue en 1. |
 
 ## 0. Cómo usar este documento (para agentes de código)
 
@@ -173,6 +173,67 @@ Trabajo: con `specs/archive/010-reliability-lab-v1.md` (Fase 0) o un arnés mín
 Aceptación: línea base documentada en esta spec; umbral aprobado por el propietario.
 Pruebas: ninguna de producción.
 
+#### Registro de la Fase 0 (2026-10-15/16; **cerrada por el propietario el 2026-10-16**)
+
+Estado: **Fase 0 CERRADA (2026-10-16).** El propietario revisó el registro y aprobó el protocolo de la puerta (sustituto de O2). Todo es de la jornada del 2026-10-15, harness 0.8.0, modo live, `--seed 12`, y se reporta como medido salvo donde se marca otra cosa.
+
+**Decisiones de la Fase 0 (propietario, 2026-10-15).** Variante `small-context` = `limits.maxContextChars: 40000` (`STRESS_COMPACTION_LIMIT_CHARS`); `maxTokens` 450000 por run; se usa el incidente `compaction` existente (sin `measured.compactions` ni cambios en `@alisio/sdk`); la línea base oficial usa la API directa `deepseek-flash`; la Fase 1 no arranca antes de esta revisión.
+
+**1. Línea base oficial: `long-context-stress` v1.0.0 (4 tareas), `deepseek-flash` (API directa de DeepSeek, nombre de DeepSeek-V4.1-Flash), `eval variants`, k=5, 40 runs, `--allow-write`.** 0 errores de infraestructura, 0 `HTTP 400`.
+
+| Tarea | `default-limit` | `small-context` | Compactaciones por run (`small-context`) | Veredicto del Lab |
+| --- | --- | --- | --- | --- |
+| `chain-walk-format-rule` | 5/5 [56,6%, 100%] | **2/5** [11,8%, 76,9%] | 1,8 | inconcluso (intervalos solapados) |
+| `frozen-area-tickets` | 5/5 | 5/5 | 2,4 | inconcluso |
+| `order-ledger-reconcile` | 5/5 | 5/5 | 1,0 | inconcluso |
+| `sequential-config-edits` | 5/5 | 5/5 | 0,6 | inconcluso |
+| **Total** | **20/20** | **17/20** | | |
+
+- `configHash`: `default-limit` `sha256:61333653…08b4c0`; `small-context` `sha256:3ff71449…be3c1ee`. Con `default-limit` no hubo ninguna compactación (0 en las 20 runs).
+- Tokens de entrada por run (media): `default-limit` 155k a 254k; `small-context` 136k a 268k. **No se comparan** deltas de tokens: los de compactación no entran en el main loop (el Lab lo declara no comparable). Los tokens del resumidor siguen sin medirse.
+- **Señal (corregida, ver punto 5):** la brecha (−3 de 20 runs, −60 pp en esa tarea) viene de `chain-walk-format-rule` (5/5 → 2/5), pero el análisis de las sesiones muestra que **no es pérdida de la regla**: es una mala lectura de un enunciado ambiguo tras la paráfrasis del resumen. Con k=5 el Lab no declara dirección y Fisher da p≈0,08 (una cola, cálculo propio, no del Lab).
+- **Saturación:** tres de las cuatro tareas pasan 5/5 en ambas variantes y no discriminan, y la cuarta mide ambigüedad (punto 5); `sequential-config-edits` compacta solo 0,6 veces por run. Ninguna tarea de la suite 1.0.0 sirve como control positivo.
+- **Consecuencia para O2:** un umbral de ≤2 pp no es medible (con 5/5 el intervalo de Wilson es [56,6%, 100%] y haría falta del orden de miles de runs por brazo). Se propone sustituirlo por el **protocolo de la puerta de la Fase 6** (más abajo), aprobado por el propietario el 2026-10-16.
+
+**2. Suite `long-context` v1.0.0 (3 tareas, k=5), `opencode-go/deepseek-v4.1-flash`.** 14/14 juzgados pasan (1 error `HTTP 400`); ~3 turnos y ~18k tokens de entrada por run; sin compactación. **Saturada**: no sirve como puerta de la Fase 6 y no se modificó, para conservar su línea base.
+
+**3. `HTTP 400` en OpenCode (causa no determinada).** En el piloto con `opencode-go/deepseek-v4.1-flash` (k=2, 16 runs), 4 terminaron en `OpenCode request failed: HTTP 400` entre los turnos 1 y 3. El plugin externo `@alisio/plugin-opencode-go` 0.1.6 descarta el cuerpo de error (`dist/provider.js:56`). Con la API directa no apareció en 14 runs de diagnóstico (2 + 12, con capturador de `fetch`) ni en los 40 de la línea base: es consistente con un fallo del plugin o del proveedor OpenCode, **no demostrado**. Los resultados de OpenCode y de la API directa no son comparables entre sí.
+
+**4. Archivos añadidos en esta fase (sin commit).** `tests/fixtures/eval/long-context-stress/` (suite, `compare.json`, fixtures), `scripts/eval-gen-long-context-stress.ts` (`pnpm eval:gen-stress`), referencias en `scripts/eval-record-bundled.ts`, pruebas en `tests/eval-bundled-suites.test.ts` y `tests/eval-ci.test.ts`, y docs EN/ES en `docs/eval.md`, `docs/es/eval.md`, `docs/limitations.md` y `docs/implementation-status.md`. Verificado el 2026-10-15: `pnpm build`, `pnpm test` (4520 pruebas), `typecheck`, `lint`, `docs:check` y `docs:build` en verde; **pendientes** `test:cli`, `test:compiled` y `pack:check`.
+
+**5. Corrección de la señal de `chain-walk-format-rule` (2026-10-16).** Se repitió la tarea con `deepseek-flash`, `small-context`, 6 runs y `--keep` (semilla 40: 3 pasan, 3 fallan; acumulado con `small-context` 6/14) y se leyeron las 6 sesiones conservadas. El checkpoint de compactación **conserva la regla casi literal** en las 6, también en las que fallaron. Los 3 fallos escriben `01|CODE: amber-meadow-21` (con `CODE:` literal): la regla del prompt dice «exact form NN|CODE:» con ese `CODE:` literal, y el resumen la parafrasea como `NN|CODE: <value>`. **La tarea mide una mala lectura de un enunciado ambiguo tras una paráfrasis, no pérdida de reglas**; la lectura «fallar es perder la regla tras compactar» de los puntos de arriba queda corregida. No es válida como puerta. Evidencia: sesiones temporales (`/tmp/alisio-eval-*`), no persistidas.
+
+**6. Criba de modelos (2026-10-16; `chain-walk-format-rule`, `small-context`, k=5, perfil `opencode-go`).** `glm-5.3-flash` 5/5 (5 compactaciones en todos los runs) y `mimo-v2.6-flash` 5/5 (1 a 6), sin errores: tampoco pierden la regla. `qwen3.8-flash`: 5 de 5 runs con `HTTP 401` («Go requires a credential») en la ruta `/zen/go/v1/messages`; causa probable sin verificar: el plugin solo envía `Bearer` y `anthropic-version` en esa ruta. El catálogo `GET /zen/go/v1/models` respondió 200 con 37 modelos y no informa de la ventana de contexto.
+
+**7. Suite 1.1.0 y piloto de `chain-walk-rules` (2026-10-16).** Se añadió la tarea `chain-walk-rules` (5 instancias, tres reglas sin ambigüedad con un verificador por regla, `--instances`; suite `long-context-stress` 1.1.0, 9 tareas; las 4 originales intactas). Piloto con `deepseek-flash`, `eval variants`, k=2 por instancia: `default-limit` 10/10 y `small-context` 10/10 (0,7 compactaciones por run), 0 errores. **No discrimina**: con reglas sin ambigüedad el modelo las retiene. Es coherente con la criba (punto 6).
+
+**Riesgo conocido.** Un modelo que usa `search_text` para saltar entre archivos puede resolver tareas con menos turnos y compactar menos. Los reportes crudos de la línea base viven en el scratchpad de la sesión (temporal); lo relevante está resumido arriba.
+
+#### Protocolo de la puerta de la Fase 6 (**aprobado por el propietario el 2026-10-16**; T por fijar tras las Fases 1 y 2)
+
+Sustituye el criterio «≤2 pp en `long-context`» de O2. Motivo (medido, ver el registro de la Fase 0): `long-context` está saturada, un umbral de 2 pp exigiría miles de runs por brazo, y la única tarea que parecía discriminar (`chain-walk-format-rule`) resultó medir la ambigüedad de su enunciado y no la pérdida de reglas. Los parámetros de abajo se fijan **antes** de medir; cambiarlos tras ver datos obliga a una nueva versión de este protocolo con la razón escrita.
+
+**Tres afirmaciones, tres tipos de prueba.**
+
+| ID | Afirmación | Tipo | Cómo se prueba |
+| --- | --- | --- | --- |
+| G1 | El Governor reduce los tokens enviados | Determinista | Reproducir sesiones largas grabadas con `off` y `on` y comparar tokens de entrada por vuelta y acumulados (medidos con el `usage` del proveedor cuando exista, estimados y etiquetados en otro caso). Umbral mínimo de reducción **T: por fijar por el propietario** con los datos de las Fases 1 y 2; no se inventa aquí. Sin estadística. |
+| G2 | Se respetan las invariantes | Determinista | Pruebas de propiedad (llamada/resultado emparejados, D2, D3, D4) y criterios 1 a 4 de la sección 10. |
+| G3 | El éxito no cae más de M | Estadística | Prueba de no inferioridad (abajo). Es un guardarraíl, no el objetivo. |
+
+**G3: prueba de no inferioridad.**
+- **Comparación primaria:** `context.governor=on` frente a `off`, ambos con `limits.maxContextChars: 40000` (la variante `small-context`), mismas tareas y semillas. `default-limit` es el techo de referencia, no el comparador.
+- **Hipótesis:** H0: `p_on − p_off ≤ −M`. Se rechaza H0 (la puerta pasa) si el límite inferior del intervalo de confianza unilateral del 95% de `p_on − p_off` es mayor que `−M`. Intervalo: Newcombe (Wilson híbrido) para dos proporciones independientes; es un cálculo propio de `scripts/`, porque el veredicto del Lab («intervalos de Wilson disjuntos») es mucho más conservador y no es una prueba de no inferioridad.
+- **Parámetros:** α = 0,05 unilateral; potencia 80%; **M = 10 pp** (confirmado por el propietario el 2026-10-16).
+- **Tamaño de muestra (fijo de antemano, sin parada anticipada):** `n = ceil((1,645 + 0,8416)² · 2·p·(1−p) / M²)` por brazo, con `p` = tasa de éxito de `off` observada en un piloto previo, redondeado hacia arriba. Valores por brazo (M = 10 pp / M = 15 pp): p = 0,85: 158 / 71; p = 0,90: 112 / 50; p = 0,95: 59 / 27; p = 0,98: 25 / 11 (cálculo propio, verificado el 2026-10-16). Cada brazo debe tener al menos 30 runs y estar repartido en partes iguales entre las instancias de `chain-walk-rules` (`--instances` ≥ 5) y las demás tareas de la suite.
+- **Modelos:** al menos dos de proveedores o familias distintos; el Governor debe pasar en **todos**. Primario: `deepseek-flash` (API directa). Segundo modelo: **`opencode-go/mimo-v2.6-flash`** (confirmado por el propietario el 2026-10-16; medido sin errores en la criba; `glm-5.3-flash` queda de reserva; `qwen3.*` y `minimax-*` descartados por `HTTP 401` en la ruta `messages` del plugin). Riesgo conocido: el plugin descarta el cuerpo de los errores, así que un `HTTP 400` no se podría diagnosticar sin el capturador de `fetch`.
+- **Control negativo (validez):** `default-limit` debe superar el 85% de éxito con cada modelo; si no, ese modelo no es válido para la puerta.
+- **Runs con error:** se excluyen de las tasas (es la regla del Lab), pero si superan el 10% de un brazo la medición no es válida: se arregla la causa y se repite el brazo completo.
+- **Decisión:** puerta superada = G1 (≥ T) y G2 y G3 en todos los modelos, sin degradación relevante de `cachedInput` (sección Fase 6). En cualquier otro caso el default queda `off` y se documenta el resultado. No hay estado «inconcluso»: con n fijado de antemano, un intervalo ambiguo se informa como no superada.
+- **Entregable de la Fase 6:** `scripts/governor-gate.ts` (calcula n, el intervalo de Newcombe y el veredicto a partir de los `runs.jsonl` del Lab), con pruebas unitarias sobre tablas de casos conocidos.
+
+**Límite conocido (no se oculta).** No existe hoy una tarea donde la compactación actual degrade el éxito de forma demostrada (no hay control positivo): con las suites medidas, la puerta puede probar que el Governor **no empeora** el éxito, no que lo **mejore**. El valor del Governor se demuestra en G1. Si más adelante se encuentra una tarea sin ambigüedad donde `small-context` pierda éxito de forma reproducible, se añadiría un contraste de superioridad (con 18 a 33 runs por brazo si el efecto es de 40% a 70–80%; cálculo propio), sin cambiar G1 a G3.
+
 ### Fase 1 — Inventario y regresión de límites
 
 Trabajo: `core/src/context/{types,inventory}.ts`; clasificación de criticidad; prueba de regresión de que `planCompaction`/`reduceMessagesToBudget` nunca separan llamada y resultado.
@@ -209,6 +270,8 @@ Trabajo: ejecutar la suite `long-context` del Lab con `off` vs `on` (y `shadow`)
 Aceptación: reducción de tokens medida **sin caída de éxito mayor al umbral de la Fase 0** y sin degradación de `cachedInput` relevante; si no se cumple, el default queda `off` y se documenta el resultado. Resultados reportados como medidos (no estimados).
 Pruebas: el propio Lab; sin pruebas unitarias nuevas.
 
+Ver el **Protocolo de la puerta de la Fase 6** (G1 a G3), aprobado por el propietario el 2026-10-16 bajo el registro de la Fase 0; es lo que cuenta como «umbral de la Fase 0» en esta fase y en la sección 10.
+
 ### Fase 7 — Documentación y estado
 
 Trabajo: `docs/context-governor.md` EN/ES en paridad; `docs/implementation-status.md` con límites; entrada de changelog.
@@ -232,12 +295,12 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 | Estimación de tokens imprecisa | Etiquetar medido vs estimado; usar el `usage` real del proveedor cuando exista. |
 | Heurística de «usado» con falsos negativos | Es métrica orientativa, no decide elisión. |
 
-## 8. Decisiones del propietario (O1..O8, pendientes: propuesta, a confirmar)
+## 8. Decisiones del propietario (O1..O8, confirmadas el 2026-10-15)
 
-| ID | Pregunta | Recomendación |
+| ID | Pregunta | Decisión confirmada |
 | --- | --- | --- |
 | O1 | ¿Default inicial de `context.governor`? | `off`; pasar a `shadow` en la siguiente minor y a `on` solo tras la puerta de la Fase 6. |
-| O2 | ¿Umbral de «sin caída de éxito»? | ≤2 puntos porcentuales en `long-context`, fijado en la Fase 0. |
+| O2 | ¿Umbral de «sin caída de éxito»? | Confirmado el 2026-10-15: ≤2 pp en `long-context`. **Sustituida el 2026-10-16 por el propietario** con el protocolo G1 a G3 de la Fase 6 (no inferioridad con M = 10 pp; ver el protocolo bajo la Fase 0), porque la Fase 0 mostró que ≤2 pp no es medible. |
 | O3 | ¿Antigüedad mínima para elidir? | 2 vueltas (`minAgeTurns`), configurable. |
 | O4 | ¿Los invariantes incluyen aprobaciones de sesión? | Sí, como texto breve («grants activos»), sin valores sensibles. |
 | O5 | ¿Persistir el ledger observado/usado? | No en v1 (memoria de sesión + eventos); revisar tras la Fase 6. |
@@ -263,7 +326,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 2. La política explica qué segmentos seleccionó o elidió y por qué.
 3. Los invariantes sobreviven a N compactaciones.
 4. En `shadow`, lo enviado es byte-idéntico a 0.6.x.
-5. El Lab muestra reducción de tokens sin caída de éxito mayor al umbral de la Fase 0.
+5. Se supera el protocolo de la puerta de la Fase 6 (G1 a G3; reduce tokens y el éxito no cae más de M, medido en todos los modelos del protocolo). Aprobado el 2026-10-16.
 
 ## 11. Pruebas transversales
 
@@ -274,7 +337,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 ## 12. Estado de implementación
 
-Estado: **Borrador (2026-10-13).** Nada implementado. Actualizar `docs/implementation-status.md` al cerrar cada fase.
+Estado: **Aprobada (2026-10-15).** Código del Governor sin implementar (`packages/core/src/context/` no existe, verificado 2026-10-15 sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase.
 
 ## 13. Asignación de modelos
 
