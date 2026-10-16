@@ -166,12 +166,17 @@ describe("call/result boundaries survive compaction projections", () => {
   });
 });
 
-describe("Context Governor phase 1 is not wired", () => {
-  it("runner.ts does not import context/* (governor off changes nothing)", () => {
+describe("Context Governor wiring stays minimal", () => {
+  it("runner.ts imports only the elision and governance modules of context/*", () => {
     const source = readFileSync(
       new URL("../packages/core/src/core/runner.ts", import.meta.url),
       "utf8",
     );
-    expect(source).not.toMatch(/from\s+["'][^"']*\/context\/[^"']*["']/);
+    const imports = [...source.matchAll(/from\s+["']([^"']*\/context\/[^"']*)["']/g)].map(
+      (m) => m[1],
+    );
+    expect(imports.sort()).toEqual(["../context/elide.ts", "../context/governance.ts"]);
+    // The inventory is still not wired: only `elide.ts`/`governance.ts` are phase 2 material.
+    expect(source).not.toMatch(/context\/inventory/);
   });
 });

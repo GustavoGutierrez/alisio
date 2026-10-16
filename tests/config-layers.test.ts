@@ -805,3 +805,52 @@ describe("web.iconTheme across layers", () => {
     expect((await loadConfig(workspace, { trustProject: true })).web.iconTheme).toBe("none");
   });
 });
+
+describe("context governor configuration", () => {
+  it("defaults to off with the documented elision settings and no policy pin", () => {
+    const { context } = configSchema.parse({});
+    expect(context.governor).toBe("off");
+    expect(context.elide).toEqual({ minAgeTurns: 2, epochMessages: 32 });
+    expect(context.policyVersion).toBeUndefined();
+    expect(context.claudeMdFallback).toBe(false);
+  });
+
+  it("accepts off, shadow and on and rejects any other mode", () => {
+    for (const governor of ["off", "shadow", "on"])
+      expect(configSchema.parse({ context: { governor } }).context.governor).toBe(governor);
+    expect(() => configSchema.parse({ context: { governor: "auto" } })).toThrow();
+    expect(() => configSchema.parse({ context: { governor: true } })).toThrow();
+  });
+
+  it("pins policyVersion only inside 1..current and rejects a version this build does not have", () => {
+    expect(configSchema.parse({ context: { policyVersion: 1 } }).context.policyVersion).toBe(1);
+    expect(() => configSchema.parse({ context: { policyVersion: 2 } })).toThrow();
+    expect(() => configSchema.parse({ context: { policyVersion: 0 } })).toThrow();
+    expect(() => configSchema.parse({ context: { policyVersion: 1.5 } })).toThrow();
+  });
+
+  it("bounds the elision settings and rejects unknown keys", () => {
+    const ok = configSchema.parse({ context: { elide: { minAgeTurns: 3, epochMessages: 0 } } });
+    expect(ok.context.elide).toEqual({ minAgeTurns: 3, epochMessages: 0 });
+    expect(() => configSchema.parse({ context: { elide: { minAgeTurns: 0 } } })).toThrow();
+    expect(() => configSchema.parse({ context: { elide: { minAgeTurns: 21 } } })).toThrow();
+    expect(() => configSchema.parse({ context: { elide: { epochMessages: -1 } } })).toThrow();
+    expect(() => configSchema.parse({ context: { elide: { epochMessages: 1001 } } })).toThrow();
+    expect(() => configSchema.parse({ context: { elide: { other: 1 } } })).toThrow();
+  });
+
+  it("lets a trusted project layer replace the whole context section", async () => {
+    const { global, workspace } = await fixture();
+    await json(join(global, "config.json"), {
+      context: { governor: "shadow", elide: { minAgeTurns: 5, epochMessages: 8 } },
+    });
+    expect((await loadConfig(workspace)).context.governor).toBe("shadow");
+    await json(join(workspace, ".alisio", "config.json"), { context: { governor: "on" } });
+    const merged = (await loadConfig(workspace, { trustProject: true })).context;
+    expect(merged.governor).toBe("on");
+    // Existing precedence: the project section replaces the global one, it is not merged key by key.
+    expect(merged.elide).toEqual({ minAgeTurns: 2, epochMessages: 32 });
+    // An untrusted project never changes the mode.
+    expect((await loadConfig(workspace)).context.governor).toBe("shadow");
+  });
+});

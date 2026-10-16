@@ -193,6 +193,10 @@ Proveedor de búsqueda web (o configurando `websearch.provider` directamente); a
 | --- | --- | --- |
 | `claudeMdFallback` | `false` | Usar `CLAUDE.md` en directorios sin archivo `AGENTS` |
 | `maxBytes` | `32768` | Bytes totales de contenido `AGENTS.md` inyectado (1024–1048576); se conservan los archivos más cercanos |
+| `governor` | `"off"` | Modo del Context Governor: `"off"`, `"shadow"` o `"on"` (consulte [Context Governor](/es/context#context-governor)) |
+| `elide.minAgeTurns` | `2` | Mensajes del asistente (1–20) de antigüedad que debe superar un resultado redundante antes de que el governor lo sustituya |
+| `elide.epochMessages` | `32` | La proyección crece en pasos de este número de mensajes (0–1000); `0` es inmediato |
+| `policyVersion` | sin definir | Fijación opcional de las reglas de elisión (de 1 a la versión actual, que es 1) |
 
 Consulte [Contexto: AGENTS.md y skills](/es/context).
 

@@ -185,6 +185,20 @@ export interface ConfigHashExtras {
 }
 
 /**
+ * The Context Governor keys exist only since spec 012. A switched-off governor with default
+ * settings leaves them out, so the hashes of runs recorded before they existed stay valid.
+ */
+function hashedContext(context: Config["context"]): Record<string, unknown> {
+  const { governor, elide, policyVersion, ...rest } = context;
+  const untouched =
+    governor === "off" &&
+    policyVersion === undefined &&
+    elide.minAgeTurns === 2 &&
+    elide.epochMessages === 32;
+  return untouched ? rest : context;
+}
+
+/**
  * `sha256:` of the allowlisted effective configuration plus policy, approval mode, budget and
  * enabled built-ins. Excludes secrets, env names, plugin options, absolute paths, endpoints, the
  * provider and the model (those are separate columns of the run record).
@@ -194,7 +208,7 @@ export function computeConfigHash(config: Config, extras: ConfigHashExtras): str
   const picked = {
     limits: config.limits,
     compaction: config.compaction,
-    context: config.context,
+    context: hashedContext(config.context),
     forge: {
       javascript: forge.javascript,
       state: forge.state,

@@ -104,6 +104,14 @@ Reglas en `context/elide.ts`, aplicadas solo a la proyección y solo a segmentos
 3. **Búsquedas duplicadas**: mismo `search_text` (patrón + opciones) con resultado idéntico (`outputHash`).
 4. Nunca se elide: el último resultado de un `path`; los resultados de la última vuelta; resultados con `isError` de la última vuelta; mensajes de usuario; cualquier segmento `pinned`.
 
+**Correcciones de la Fase 2 (2026-10-16, confirmadas por el propietario):**
+
+- **Regla 1, formato del stub (3.2.1):** el `path` se cita como JSON (`[elided: read_file "src/a.ts"@<sha8>; re-read to view]`) para que una ruta con comillas o saltos de línea no rompa la línea ni el análisis; si la lectura pidió `startLine`/`limit`, se añade ` lines <startLine>+<limit>` antes del `;`; sin `sha256` (archivo de más de 1 MiB) el stub dice `@unknown`.
+- **Regla 2, `bg_output` (3.2.2), estrechada:** la lectura literal «anteriores a la más reciente» destruiría información, porque `bg_output` es incremental (`offset`/`next_offset`). Solo se elide si existe un `bg_output` posterior de la misma tarea con argumentos normalizados idénticos (`offset` por defecto 0, `limit` por defecto el de la herramienta) **o** si el resultado anterior es una consulta vacía (`text === ""`) y existe una posterior.
+- **Regla 3, búsquedas duplicadas (3.2.3):** el `outputHash` se calcula sobre el código de salida y las líneas `match`/`context` del JSON de ripgrep, no sobre el texto crudo, porque `elapsed` aparece en las líneas `summary`/`end` y haría que dos búsquedas idénticas nunca coincidieran. Si el texto no se puede interpretar, se usa el hash del texto crudo. El inventario usa el mismo predicado.
+- **Todas las reglas son existenciales** («existe un resultado posterior»), con el testigo más temprano, y el testigo debe ser un resultado sin error. Esto corrige el parpadeo de `a → b → a` que tenía la comparación «última lectura posterior» de la Fase 1 y hace el conjunto de candidatos monótono al añadir mensajes.
+- **Antigüedad y épocas:** la antigüedad es el número de mensajes del asistente posteriores dentro del prefijo elegible; un resultado dentro de la ventana protegida se elide más tarde **por envejecimiento**, una sola vez. Con `epochMessages` E > 0 solo el prefijo `floor(n / E) * E` es elegible.
+
 La sustitución conserva el mensaje `tool_result` con su `callId` y rol; solo cambia el contenido textual de la proyección (D2). La función es **monótona y estable**: dado el mismo historial produce la misma proyección y, al añadir mensajes, no reescribe elisiones anteriores salvo que un nuevo mensaje supere una lectura (así se protege la caché de prompt del proveedor).
 
 ### 3.3 Invariantes
@@ -319,6 +327,11 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D7** Todo evento es acotado y sin contenido de archivos.
 - **D8** Ningún cambio de default sin pasar la puerta de medición de la Fase 6.
 - **D9** Sin migración de base de datos en esta versión.
+- **D10** (Fase 2, 2026-10-16) **Elisión por épocas:** `context.elide.epochMessages` (por defecto 32; 0 = inmediata). Solo el prefijo `floor(n / E) * E` del historial es elegible, para que la petición crezca solo añadiendo al final entre épocas y la caché de prompt del proveedor siga válida.
+- **D11** (Fase 2) **`context.policyVersion` es una fijación opcional:** sin definir equivale a la versión actual (`CONTEXT_POLICY_VERSION`, hoy 1); el rango permitido es 1..versión actual y `policyVersion: 2` se rechaza hoy.
+- **D12** (Fase 2) **Los `configHash` de la Fase 0 siguen siendo válidos:** `computeConfigHash` omite `governor`, `elide` y `policyVersion` cuando el governor es `off` y el resto son los valores por defecto. Una prueba fija el hash de la configuración por defecto.
+- **D13** (Fase 2) **El Governor solo proyecta lo que se envía al proveedor, y solo en `on`:** los disparadores de compactación, el límite duro, `estimateContext`/`contextBudget` y la entrada del resumidor siguen usando el historial **crudo**.
+- **D14** (Fase 2) **La capa de proyecto sigue reemplazando la sección `context` completa** (precedencia existente); no se fusiona clave a clave.
 
 ## 10. Criterios de aceptación globales
 
@@ -337,7 +350,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 ## 12. Estado de implementación
 
-Estado: **Aprobada (2026-10-15).** Código del Governor sin implementar (`packages/core/src/context/` no existe, verificado 2026-10-15 sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase.
+Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. Medición con modelo pendiente de la puerta de la Fase 6.
 
 ## 13. Asignación de modelos
 

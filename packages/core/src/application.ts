@@ -39,6 +39,7 @@ import {
   setProjectSkillEnabled,
   stateHome,
 } from "./config.ts";
+import { CONTEXT_POLICY_VERSION } from "./context/elide.ts";
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
 import { HumanWaits } from "./core/human-wait.ts";
@@ -1218,6 +1219,11 @@ export async function createApplication(options: AppOptions = {}) {
       policy: runtimePolicy,
       ...config.limits,
       compaction: config.compaction,
+      contextGovernor: {
+        mode: config.context.governor,
+        ...config.context.elide,
+        policyVersion: config.context.policyVersion ?? CONTEXT_POLICY_VERSION,
+      },
       extensions: plugins,
       contextWindow,
       modelOutputLimit: declaredOutputLimit,

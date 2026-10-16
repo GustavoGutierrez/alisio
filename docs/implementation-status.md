@@ -367,8 +367,29 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   transaccional (migración 2: columna `messages.compacted`).
 - Context Governor, Fase 1 (`specs/012-context-governor-v1.md`): existe el inventario interno de
   segmentos (`packages/core/src/context/`) y una prueba de propiedad de que la compactación nunca separa
-  una llamada de su resultado. **No está conectado al runner, a la configuración ni a ninguna superficie:
-  el Governor no está disponible para los usuarios.**
+  una llamada de su resultado.
+- Context Governor, Fase 2 (`specs/012-context-governor-v1.md`): elisión determinista por
+  sustitución (`context/elide.ts`), conectada al runner y a la configuración `context.governor`
+  (`off` por defecto, `shadow`, `on`), `context.elide.{minAgeTurns,epochMessages}` y
+  `context.policyVersion` (fijación opcional; hoy solo existe la versión 1). **Experimental.**
+  Reglas: lectura superada (escritura/edición posterior de la ruta o relectura con otro `sha256`),
+  `bg_output` estrecho (solo argumentos normalizados idénticos o consulta anterior vacía; las lecturas
+  incrementales por `offset` nunca se elide) y búsqueda duplicada (mismo `search_text` y mismas
+  coincidencias, sin el tiempo transcurrido). Solo cambia lo enviado en `on`; en `off` y `shadow` el
+  payload al proveedor es byte-idéntico (probado contra un runner sin Governor) y la transcripción
+  guardada no cambia en ningún modo. Compactación, límite duro, `estimateContext` y resumidor siguen
+  usando el historial completo. Con `epochMessages` > 0 (32 por defecto) la proyección solo crece por
+  épocas para no invalidar la caché de prompt. **Límites:** no es monótona ante una compactación, ante
+  la reducción en el sitio de un historial que supera el límite (recortar un resultado testigo de
+  una búsqueda puede volver a mostrar el anterior) ni ante un cambio de modo o de ajustes; las rutas
+  no se normalizan (`./a.ts` ≠ `a.ts`: se pierde un ahorro, no hay riesgo); un `read_file` sin
+  `sha256` (más de 1 MiB) solo se elide por escritura/edición posterior; los tokens son estimaciones
+  de 4 caracteres/token; las decisiones viven solo en memoria (`AgentRunner.governance`), sin
+  eventos ni superficies (Fases 4 y 5). **Alcance de la verificación:** pruebas unitarias y de
+  propiedad con historiales generados (`tests/context-elide.test.ts`), identidad de bytes
+  `off`/`shadow` con un proveedor scripted (`tests/context-shadow-identity.test.ts`) y repetición de
+  los cassettes empaquetados en `shadow` sin divergencia; **no se ha medido ningún efecto sobre el
+  éxito de tareas ni el ahorro real con un modelo** (eso es la puerta de la Fase 6).
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del

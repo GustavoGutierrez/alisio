@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { JsonValue } from "@alisio/sdk";
 import { z } from "zod";
+import { CONTEXT_POLICY_VERSION } from "./context/elide.ts";
 import { DEFAULT_DECISIONS_CONFIG } from "./decisions/service.ts";
 import { DEFAULT_FORGE_LIMITS, type ForgeLimitKey, MAX_FORGE_LIMITS } from "./forge/limits.ts";
 import { exists, readJson } from "./runtime/fs.ts";
@@ -243,9 +244,30 @@ const configObjectSchema = z
           .min(1024)
           .max(1_048_576)
           .default(32 * 1024),
+        /**
+         * Context Governor (spec 012): `off` changes nothing, `shadow` computes what it would elide
+         * without changing what is sent, `on` sends the projected history.
+         */
+        governor: z.enum(["off", "shadow", "on"]).default("off"),
+        /** Optional pin of the elision rules; unset follows this build's current version. */
+        policyVersion: z.number().int().min(1).max(CONTEXT_POLICY_VERSION).optional(),
+        elide: z
+          .object({
+            /** Assistant messages a redundant result must be older than before it is replaced. */
+            minAgeTurns: z.number().int().min(1).max(20).default(2),
+            /** Projection grows in steps of this many messages (cache-friendly); 0 is eager. */
+            epochMessages: z.number().int().min(0).max(1000).default(32),
+          })
+          .strict()
+          .default(() => ({ minAgeTurns: 2, epochMessages: 32 })),
       })
       .strict()
-      .default(() => ({ claudeMdFallback: false, maxBytes: 32 * 1024 })),
+      .default(() => ({
+        claudeMdFallback: false,
+        maxBytes: 32 * 1024,
+        governor: "off" as const,
+        elide: { minAgeTurns: 2, epochMessages: 32 },
+      })),
     compaction: z
       .object({
         auto: z.boolean().default(true),

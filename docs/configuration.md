@@ -194,6 +194,10 @@ option.
 | --- | --- | --- |
 | `claudeMdFallback` | `false` | Use `CLAUDE.md` in directories without an `AGENTS` file |
 | `maxBytes` | `32768` | Total bytes of `AGENTS.md` content injected (1024–1048576); the closest files are kept |
+| `governor` | `"off"` | Context Governor mode: `"off"`, `"shadow"` or `"on"` (see [Context Governor](/context#context-governor)) |
+| `elide.minAgeTurns` | `2` | Assistant messages (1–20) a redundant tool result must be older than before the governor replaces it |
+| `elide.epochMessages` | `32` | The projection grows in steps of this many messages (0–1000); `0` is eager |
+| `policyVersion` | unset | Optional pin of the elision rules (1 up to the current version, which is 1) |
 
 See [Context: AGENTS.md and skills](/context).
 

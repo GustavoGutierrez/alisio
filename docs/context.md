@@ -100,3 +100,82 @@ alisio skills validate ./.agents/skills
 
 The headless commands include source/status metadata and trusted diagnostic paths. The ordinary TUI
 catalog never shows absolute paths or skill bodies.
+
+## Context Governor {#context-governor}
+
+The Context Governor is an **experimental, opt-in** projection of the conversation history. Long
+sessions keep re-sending tool results that a later result has made redundant; with the governor
+`on`, those results are replaced in the request by a one-line stub. It is off by default
+(`context.governor: "off"`) and then changes nothing.
+
+| Mode | What is sent to the provider | What it computes |
+| --- | --- | --- |
+| `off` | The history, exactly as before | Nothing |
+| `shadow` | The history, byte for byte as before | What `on` would elide and how many tokens that would save |
+| `on` | The history with redundant tool results replaced by stubs | The same, and applies it |
+
+### What is elided
+
+Only successful tool results, and only when a later successful result makes them redundant:
+
+| Reason | A result is replaced when | Stub |
+| --- | --- | --- |
+| `superseded_read` | A later `write_file` or `edit_file` changed the same path, or a later `read_file` of that path returned a different `sha256` | `[elided: read_file "src/a.ts"@1a2b3c4d; re-read to view]` (with ` lines 10+50` before the `;` when `startLine` or `limit` were given; `@unknown` when the read had no `sha256`) |
+| `stale_bg_output` | A later `bg_output` of the same task has identical arguments (the `offset` defaults to 0 and the `limit` to its default), or the earlier poll returned empty text | `[elided: bg_output "task-id" offset 0; a later bg_output covers it]` |
+| `duplicate_search` | A later `search_text` has the same arguments and the same matches (the exit code and the `match`/`context` lines; the elapsed time is ignored) | `[elided: search_text "pattern"; identical to a later result]` |
+
+A `bg_output` poll that continues from a previous `next_offset` is **never** elided: background
+output is read incrementally, so every chunk is new information.
+
+Never elided: the latest result for a path, anything in the last turn, results that are errors,
+user messages, compaction checkpoints and assistant messages. A result is replaced only once it is
+`elide.minAgeTurns` assistant messages old. Stubs are one line of ASCII (paths and patterns are
+JSON-quoted) and depend only on the elided call, so the same history always produces the same stub. A result is never replaced when its stub would not be shorter than the original.
+
+### Guarantees
+
+- The stored transcript is never changed. The projection exists only in the request.
+- Tool call IDs, roles, ordering and provider continuation data are untouched: a result keeps its
+  `callId`, and only its text changes.
+- `shadow` sends exactly the bytes `off` sends.
+- Compaction triggers, the hard context limit, the context bar and the summarizer input use the
+  **full** history, not the projection.
+- Applied to sub-agent sessions too, each with its own history.
+
+### Settings
+
+```json
+{
+  "context": {
+    "governor": "shadow",
+    "elide": { "minAgeTurns": 2, "epochMessages": 32 }
+  }
+}
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `governor` | `"off"` | `"off"`, `"shadow"` or `"on"` |
+| `elide.minAgeTurns` | `2` | Assistant messages (1–20) a redundant result must be older than before it is replaced |
+| `elide.epochMessages` | `32` | The projection grows in steps of this many messages (0–1000); `0` projects as eagerly as possible |
+| `policyVersion` | unset | Optional pin of the elision rules (an integer from 1 to the current version, which is 1); unset follows this build |
+
+With `epochMessages` greater than 0, only the first `floor(length / epochMessages) * epochMessages`
+messages are eligible. Between two epochs the request grows only by appending, so a provider prompt
+cache keeps hitting; at an epoch boundary the newly redundant results are elided at once.
+
+### Limits of the guarantees
+
+The projection is stable when messages are appended, with these exceptions, each of which rewrites
+or reinterprets the history on purpose:
+
+- A compaction replaces old messages with a checkpoint.
+- The in-place reduction of an over-limit transcript clips tool results; clipping the later result
+  that justified an elision can make the earlier one visible again.
+- Changing the mode or the `elide` settings changes the policy.
+
+Paths are compared as written: `./a.ts` and `a.ts` are different files to the governor, which only
+costs a missed saving. A `read_file` result without a `sha256` (files over 1 MiB) can only be
+elided by a later write or edit. The token figures are estimates (about four characters per
+token), not provider usage. In this version the decisions are kept in memory only; no event or
+screen exposes them yet.

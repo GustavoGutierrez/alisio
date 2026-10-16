@@ -23,6 +23,7 @@ import {
   type RunTaskOptions,
   runTask,
 } from "../packages/core/src/eval/engine.ts";
+import { applyConfigOverrides } from "../packages/core/src/eval/variants.ts";
 import { snapshotTree } from "../packages/core/src/eval/verifiers.ts";
 import { type BuiltinPlugin, configSchema } from "../packages/core/src/index.ts";
 import { makeSuite, type ScriptedTurn, scriptedProvider, task } from "./eval-helpers.ts";
@@ -649,6 +650,36 @@ describe("configHash (D2)", () => {
       computeConfigHash(config(), { ...extras, policy: { ...extras.policy, process: true } }),
     ).not.toBe(base);
     expect(computeConfigHash(config(), { ...extras, builtinIds: [] })).not.toBe(base);
+  });
+
+  it("keeps the hashes of runs recorded before the Context Governor existed", () => {
+    // Computed on the commit before the governor keys were added to the config schema.
+    expect(computeConfigHash(config(), extras)).toBe(
+      "sha256:a3bb76aea488a2c6449e01aa80d5db63559a92d73228b4491fa457e67d3615df",
+    );
+    expect(
+      computeConfigHash(
+        applyConfigOverrides(config(), { "limits.maxContextChars": 40_000 }),
+        extras,
+      ),
+    ).toBe("sha256:aa80f2ef8c92c2ba76f44b1e7bad619c854e7d20fe7000c977cdea3804a6fb8c");
+  });
+
+  it("hashes the governor once it is not off, and each of its settings", () => {
+    const base = computeConfigHash(config(), extras);
+    const hash = (context: object) => computeConfigHash(configSchema.parse({ context }), extras);
+    const shadow = hash({ governor: "shadow" });
+    expect(shadow).not.toBe(base);
+    expect(hash({ governor: "on" })).not.toBe(shadow);
+    expect(hash({ governor: "on", elide: { minAgeTurns: 3 } })).not.toBe(hash({ governor: "on" }));
+    expect(hash({ governor: "on", elide: { epochMessages: 0 } })).not.toBe(
+      hash({ governor: "on" }),
+    );
+    expect(hash({ governor: "on", policyVersion: 1 })).not.toBe(hash({ governor: "on" }));
+    // Only a fully default, switched-off governor is left out of the hash (old hashes stay valid).
+    expect(hash({ governor: "off" })).toBe(base);
+    expect(hash({ governor: "off", elide: { minAgeTurns: 7 } })).not.toBe(base);
+    expect(hash({ governor: "off", policyVersion: 1 })).not.toBe(base);
   });
 
   it("ignores secrets, endpoints, models, plugin options and absolute paths", () => {

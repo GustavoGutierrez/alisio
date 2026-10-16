@@ -15,6 +15,12 @@ import {
   textProjection,
   textResult,
 } from "@alisio/sdk";
+import { projectContext } from "../context/elide.ts";
+import {
+  type ContextGovernorOptions,
+  type GovernanceSnapshot,
+  governanceSnapshot,
+} from "../context/governance.ts";
 import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nested.ts";
 import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
 import { decideEffect, effectAskable } from "../permissions/decide.ts";
@@ -132,6 +138,12 @@ export interface RunnerOptions {
    *  unknown (or absurdly large, see `MAX_TRUSTED_WINDOW`) the char budget falls back. */
   contextWindow?: (model: string) => number | undefined;
   compaction?: CompactionSettings;
+  /**
+   * Context Governor (spec 012). Unset or `mode: "off"` changes nothing. `shadow` computes what
+   * would be elided and keeps it in `governance()` while the request stays byte-identical; `on`
+   * sends the projected history. Compaction, limits and persistence always use the raw history.
+   */
+  contextGovernor?: ContextGovernorOptions;
   /** When set, write/process tools not allowed by the policy are offered and ask first. */
   approve?: ApprovalHandler;
   /**
@@ -312,6 +324,8 @@ export class AgentRunner {
   private reported = new Map<string, { tokens: number; count: number }>();
   /** Conversation size in characters right after the last automatic compaction, per session. */
   private compactedChars = new Map<string, number>();
+  /** What the Context Governor decided for the latest request of each session (shadow and on). */
+  private governed = new Map<string, GovernanceSnapshot>();
   /** Where human waits are opened; the clocks of the active runs listen to it. */
   readonly humanWaits: HumanWaits;
   constructor(private options: RunnerOptions) {
@@ -522,6 +536,10 @@ export class AgentRunner {
       fallback: o.fallbackMaxOutputTokens ?? 4096,
     });
   }
+  /** Latest Context Governor decision for a session (core-internal; counts and ids only). */
+  governance(sessionId: string): GovernanceSnapshot | undefined {
+    return this.governed.get(sessionId);
+  }
   /** Change the model used by subsequent turns of a session; recorded in the store. */
   setModel(sessionId: string, model: string): void {
     const id = model.trim();
@@ -530,6 +548,7 @@ export class AgentRunner {
     if (previous === id) return;
     this.options.store.setModel(sessionId, id);
     this.reported.delete(sessionId);
+    this.governed.delete(sessionId);
     this.emitter(sessionId)("model_changed", { model: id, previous });
   }
   /** Manually compact a session outside a run. */
@@ -643,6 +662,7 @@ export class AgentRunner {
       const summary = summaryMessage(body, plan.cut) as CompactionResult["summary"];
       o.store.compact(sessionId, plan.cut, summary);
       this.reported.delete(sessionId);
+      this.governed.delete(sessionId);
       const afterTokens = await this.estimateContext(sessionId);
       emit("compaction_completed", {
         reason,
@@ -1414,7 +1434,17 @@ export class AgentRunner {
         // Providers only ever see the text projection of tool results: ui/image parts are a
         // display-only extension of the persisted transcript and never reach a model prompt
         // (raw image bytes included). The store keeps the rich parts for TUI replay.
-        const providerMessages: Message[] = messages.map((m) =>
+        // Context Governor: `off` costs one property read. `shadow` only measures; `on` sends the
+        // projected history. The stored transcript, the compaction triggers and the limits above
+        // always use the raw `messages`.
+        let sent = messages;
+        const governor = o.contextGovernor;
+        if (governor && governor.mode !== "off") {
+          const projection = projectContext(messages, governor);
+          this.governed.set(sessionId, governanceSnapshot(projection, governor, requests + 1));
+          if (governor.mode === "on") sent = projection.messages;
+        }
+        const providerMessages: Message[] = sent.map((m) =>
           m.role === "tool" ? { ...m, result: textProjection(m.result) } : m,
         );
         // After a cut-off response the request carries a transient continuation notice (never
