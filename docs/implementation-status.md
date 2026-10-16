@@ -4132,6 +4132,34 @@ propio: `alisio eval record <suite>`.
     `truncated-command-output` (una salida de comando demasiado larga, con un solo `FAILED`);
     verificadores `file-contains` de conservación. Para que `specs/012-context-governor-v1.md` mida
     elisión y compactación.
+  - `long-context-stress` 1.1.0 (4 tareas más 5 instancias de `chain-walk-rules`, modo `live`, sin cassettes; Fase 0 de `specs/012-context-governor-v1.md`):
+    `chain-walk-format-rule` (16 segmentos que hay que recorrer en orden; formato `NN|CODE` y «sin shell» fijados al
+    inicio), `sequential-config-edits` (8 tickets que editan un mismo archivo y lo releen cada vez; un ticket
+    restaura un valor que solo existe en una lectura anterior ya superada; `write_file` prohibido),
+    `frozen-area-tickets` (10 tickets, 3 piden cambiar `legacy/`, que la regla inicial congela; se registran en
+    `skipped.txt`) y `order-ledger-reconcile` (totales acumulados entre 6 logs con precios leídos al principio; sin
+    archivos de notas). Solo verificadores existentes (`file-equals`, `file-contains`, `tree-diff-within`,
+    `tool-sequence`). Presupuesto propio: 60 turnos, 450 000 tokens (el presupuesto suma la entrada de cada turno,
+    así que crece de forma cuadrática), 360 s, 80 llamadas. Los fixtures y los sha256 de `suite.json` los genera
+    `pnpm eval:gen-stress` (`scripts/eval-gen-long-context-stress.ts`); una prueba falla si lo commiteado está
+    desactualizado. **Con el `limits.maxContextChars` por defecto (800 000) no se compacta nada**: la suite solo
+    discrimina bajando el límite, lo que una tarea no puede expresar; se hace con `alisio eval variants` y
+    `tests/fixtures/eval/long-context-stress/compare.json` (variantes `default-limit` y `small-context`, 40 000
+    caracteres). La compactación se mide como el incidente `compaction` de `EvalRunRecord.incidents` (no hay campo
+    propio en `measured`); las llamadas del resumidor siguen fuera de los tokens medidos. Verificación: las
+    referencias pasan y compactan al menos 2 veces con el límite bajo y 0 con el límite por defecto, y cuatro
+    soluciones erróneas (formato perdido, `write_file`, edición de `legacy/`, total incorrecto) se rechazan, todo con
+    un proveedor scripted en `tests/eval-bundled-suites.test.ts`. **No medida con un modelo real.** Un modelo que use
+    `search_text` para saltar entre archivos resolverá algunas tareas con pocos turnos y compactará menos.
+  - 1.1.0 añade `chain-walk-rules-01..05` (`--instances N` en `pnpm eval:gen-stress` genera más en local): mismo recorrido
+    de 16 segmentos que `chain-walk-format-rule`, pero con tres reglas arbitrarias y sin ambigüedad (`NN~CODE` con código
+    en mayúsculas, primera línea `# walk-report`, última `-- end of walk --` con un único salto de línea final) y un
+    verificador `command` (`node -e`, sin archivos en el workspace) por regla: `r1-line-shape`, `r2-header`,
+    `r3-footer`. Motivo: medida del 2026-10-15, `chain-walk-format-rule` es ambigua (tras compactar, el modelo escribe
+    `01|CODE: valor` con el `CODE:` literal aunque el checkpoint conserva la regla), así que no mide pérdida de
+    información; se deja intacta para conservar su línea base. Verificación: la referencia pasa y compacta con el límite
+    bajo, y cinco salidas erróneas (prefijo `CODE:`, minúsculas, sin cabecera, sin pie, sin salto final) fallan solo el
+    verificador de su regla (más `report-exact`). **No medida con un modelo real.**
   - **No hay suite `injection`**: sigue reservada para `specs/014-trust-boundaries-v1.md`.
 - Cassettes incluidas: 10 (las 6 de `tool-sequences` y `fix-add`, `rename-symbol`,
   `edit-respects-hash`, `bug-across-modules`), 399 146 bytes en total (tras `smoke-coding` 1.2.0) (límite de la spec: 2 MB; cada

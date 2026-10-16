@@ -364,6 +364,20 @@ proveedor invalida las cassettes, incluido tu esfuerzo de razonamiento o activar
 | `smoke-coding` 1.2.0 | 7 tareas pequeñas de TypeScript (tres fáciles, cuatro más difíciles; tres endurecidas tras saturar) | live; 4 cassettes |
 | `tool-sequences` | 6 tareas de uso de herramientas con estado, una con una transición inválida deliberada | replay; 6 cassettes |
 | `long-context` | 3 tareas con datos enterrados en archivos largos y salidas de comandos truncadas | live; sin cassettes |
+| `long-context-stress` 1.1.0 | 4 tareas largas (recorrer una cadena, editar un archivo varias veces, un directorio congelado, totales acumulados entre logs) más 5 instancias de `chain-walk-rules` que fijan una regla al inicio y solo discriminan si se baja `limits.maxContextChars` para que corra la compactación de contexto | live; sin cassettes |
+
+`long-context-stress` 1.1.0 añade `chain-walk-rules` (instancias `chain-walk-rules-01` a `-05`, cada una una
+cadena distinta de 16 segmentos generada con semilla). La antigua `chain-walk-format-rule` resultó ser
+ambigua: su regla dice que cada línea tiene la forma `NN|CODE:`, y tras la compactación el modelo leyó el
+`CODE:` final como texto literal y escribió `01|CODE: amber-meadow-21`, aunque el checkpoint conservaba la
+regla textual. Eso mide una especificación mal leída, no pérdida de información, así que la tarea se
+mantiene sin cambios (su línea base sigue siendo comparable) y `chain-walk-rules` fija una sola vez tres
+reglas arbitrarias y sin ambigüedad, cada una con su verificador: `r1-line-shape` (`NN~CODE` con el código
+en mayúsculas), `r2-header` (primera línea `# walk-report`) y `r3-footer` (última línea `-- end of walk --`
+y un único salto de línea final). Los resultados muestran qué regla abandonó una ejecución. Se elige con
+`--tasks`, por ejemplo `--tasks long-context-stress/chain-walk-rules-01`. `pnpm eval:gen-stress -- --instances 12`
+escribe más instancias en local (las cinco primeras no cambian; usa `--out DIR` para no tocar la suite
+versionada).
 
 Existen **solo en el checkout del repositorio** (`tests/fixtures/eval`), no en el paquete npm ni en el
 binario; allí `list` sale vacío y lo explica. Las cassettes incluidas se grabaron con un proveedor
@@ -465,8 +479,11 @@ del propietario. Tras un cambio intencional del arnés, regraba con `pnpm eval:r
   local depurado, y su limpieza se basa en patrones, no es una garantía. Las suites nunca se ejecutan
   contra tu árbol de trabajo real.
 - **Las cassettes incluidas fijan solo el arnés**, y un cambio legítimo del arnés las invalida.
-- **Sin verificar con un modelo real**: `long-context` aún no se ha medido con un modelo real; no lo
-  uses para decidir hasta ejecutarlo en vivo con `k = 5`. Ver [Resultados medidos](#measured).
+- **Sin verificar con un modelo real**: `long-context` y `long-context-stress` aún no se han medido con un modelo real; no los
+  uses para decidir hasta ejecutarlos en vivo con `k = 5`. `long-context-stress` no compacta nada
+  con el `limits.maxContextChars` por defecto: compáralo con
+  `alisio eval variants long-context-stress --variants tests/fixtures/eval/long-context-stress/compare.json`
+  y lee el conteo del incidente `compaction` de cada variante. Ver [Resultados medidos](#measured).
 - **Solo está verificado el proveedor compatible con OpenAI desde un archivo de configuración**; el
   proveedor se resuelve una vez por comando, así que un plugin de proveedor que lea credenciales de
   forma perezosa en cada petición puede no funcionar.

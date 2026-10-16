@@ -538,7 +538,7 @@ statistics, engine, reports and comparison, cassettes and replay with the real e
 exit codes, and the bundled suites replayed in `pnpm test`), plus `pnpm test:cli` and
 `pnpm test:compiled` on the real binary. Measured live (2026-10-14) with two models: `smoke-coding` 1.2.0 saturates on a strong cheap model and
 discriminates only partly (through latency) on a weaker one, so its power to tell models apart is not
-established. Not verified with a real model: `long-context`; the bundled cassettes were recorded with a
+established. Not verified with a real model: `long-context` and `long-context-stress`; the bundled cassettes were recorded with a
 scripted provider and pin harness behavior only. Only an OpenAI-compatible provider from a config
 file was exercised. User guide: [Reliability Lab](/eval).
 

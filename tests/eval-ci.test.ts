@@ -45,7 +45,7 @@ describe("all green", () => {
     expect(result.passed).toBe(10);
     expect(result.diverged).toEqual([]);
     expect(result.suites.map((s) => s.suiteId).sort()).toEqual(["smoke-coding", "tool-sequences"]);
-    expect(result.skipped).toEqual(["long-context"]);
+    expect(result.skipped.sort()).toEqual(["long-context", "long-context-stress"]);
     for (const suite of ["smoke-coding", "tool-sequences"]) {
       expect(existsSync(join(out, suite, "report.json"))).toBe(true);
       expect(existsSync(join(out, suite, "report.md"))).toBe(true);

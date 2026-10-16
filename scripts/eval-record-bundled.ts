@@ -33,12 +33,14 @@ import {
 } from "../packages/core/src/eval/cassette.ts";
 import type { InvokerPermissions } from "../packages/core/src/eval/engine.ts";
 import {
+  applyConfigOverrides,
   type BuiltinPlugin,
   configSchema,
   loadSuite,
   runTask,
   writeCassette,
 } from "../packages/core/src/index.ts";
+import { stress } from "./eval-gen-long-context-stress.ts";
 
 /** `tests/fixtures/eval` of this checkout. */
 export const BUNDLED_DIR = resolve(
@@ -152,6 +154,90 @@ function taskIdOf(context: TurnContext): string {
     if (typeof id === "string") return id;
   }
   throw new Error("bg_run did not return a task id.");
+}
+
+// long-context-stress ---------------------------------------------------------------------------
+
+const STRESS = "long-context-stress";
+
+/**
+ * Reference solutions of the long-context-stress tasks. They follow the rules of the prompts and
+ * re-read after every edit, so they are as long as an honest run: the tests lower the context
+ * limit and check that compaction triggers while they still pass.
+ */
+function stressReferenceScripts(): Record<string, ScriptTurn[]> {
+  const { chain, rules, config, frozen, orders } = stress().expected;
+
+  const chainTurns: ScriptTurn[] = [
+    read("START.md"),
+    ...chain.segments.map((segment) => read(segment.path)),
+    write("report.txt", chain.report, null),
+    done("report.txt written."),
+  ];
+
+  // chain-walk-rules-NN: one honest walk per instance, report with the header, the shaped lines
+  // and the footer.
+  const rulesTurns = Object.fromEntries(
+    rules.map((instance): [string, ScriptTurn[]] => [
+      `${STRESS}/${instance.id}`,
+      [
+        read("START.md"),
+        ...instance.segments.map((segment) => read(segment.path)),
+        write("report.txt", instance.report, null),
+        done("report.txt written."),
+      ],
+    ]),
+  );
+
+  const configTurns: ScriptTurn[] = [read(config.path)];
+  let configBefore = config.original;
+  config.tickets.forEach((ticket, index) => {
+    const after = config.finals[index] as string;
+    configTurns.push(
+      read(`tickets/${ticket.id}.md`),
+      edit(
+        config.path,
+        `${ticket.key} = ${ticket.old}`,
+        `${ticket.key} = ${ticket.next}`,
+        configBefore,
+      ),
+      read(config.path),
+    );
+    configBefore = after;
+  });
+  configTurns.push(done("All tickets applied."));
+
+  const frozenTurns: ScriptTurn[] = [];
+  const current = { ...frozen.originals };
+  for (const ticket of frozen.tickets) {
+    frozenTurns.push(read(`tickets/${ticket.id}.md`));
+    if (ticket.frozen) continue;
+    const before = current[ticket.file] as string;
+    frozenTurns.push(
+      read(ticket.file),
+      edit(ticket.file, `${ticket.key} = ${ticket.old}`, `${ticket.key} = ${ticket.next}`, before),
+    );
+    current[ticket.file] = before.replace(
+      `${ticket.key} = ${ticket.old}\n`,
+      `${ticket.key} = ${ticket.next}\n`,
+    );
+  }
+  frozenTurns.push(write("skipped.txt", frozen.skipped, null), done("Tickets applied or skipped."));
+
+  const orderTurns: ScriptTurn[] = [
+    read(orders.catalog),
+    ...orders.logs.map((log) => read(log)),
+    write("report.txt", orders.report, null),
+    done("report.txt written."),
+  ];
+
+  return {
+    [`${STRESS}/chain-walk-format-rule`]: chainTurns,
+    ...rulesTurns,
+    [`${STRESS}/sequential-config-edits`]: configTurns,
+    [`${STRESS}/frozen-area-tickets`]: frozenTurns,
+    [`${STRESS}/order-ledger-reconcile`]: orderTurns,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -276,6 +362,7 @@ function paginationFixes(fixes: PaginationFixes, patchTotalPages = false): Scrip
 }
 
 export const REFERENCE_SCRIPTS: Record<string, ScriptTurn[]> = {
+  ...stressReferenceScripts(),
   // smoke-coding ------------------------------------------------------------------------------
   [`${SMOKE}/fix-add`]: [
     read("src/math.ts"),
@@ -559,6 +646,47 @@ export interface RunScriptedOptions {
   cassette?: CassetteRecorder | Cassette;
   builtins?: BuiltinPlugin[];
   tmpRoot?: string;
+  /** Dotted config overrides on top of the default configuration (for example a lower limit). */
+  configOverrides?: Record<string, unknown>;
+  /**
+   * Answer the summarizer call of context compaction with a fixed checkpoint instead of the next
+   * scripted turn, so a scripted run can cross a compaction without its turns shifting.
+   */
+  answerCompactions?: boolean;
+}
+
+/** The first user message of a compaction summarizer call (see `summarize()` in core). */
+const COMPACTION_PROMPT = "Checkpoint this session transcript.";
+const SCRIPTED_CHECKPOINT = JSON.stringify({
+  checkpoint: {
+    goal: "Finish the task described in the first user message.",
+    instructions: ["Keep following the rules of the first user message."],
+    discoveries: [],
+    accomplished: ["Earlier steps were completed."],
+    currentState: "Mid-task.",
+    nextSteps: ["Continue with the next step."],
+    relevantFiles: [],
+  },
+});
+
+function withCompactionAnswers(inner: ModelProvider): ModelProvider {
+  return {
+    id: inner.id,
+    model: inner.model,
+    stream(request) {
+      const first = request.messages[0];
+      const summarizing = first?.role === "user" && first.text.startsWith(COMPACTION_PROMPT);
+      if (!summarizing) return inner.stream(request);
+      return (async function* (): AsyncGenerator<ProviderEvent> {
+        yield { type: "text_delta", delta: SCRIPTED_CHECKPOINT };
+        yield {
+          type: "completed",
+          message: { role: "assistant", text: SCRIPTED_CHECKPOINT, calls: [] },
+          usage: TURN_USAGE,
+        };
+      })();
+    },
+  };
 }
 
 /** Runs one bundled task through the real engine and returns its record. */
@@ -571,9 +699,17 @@ export async function runScripted(options: RunScriptedOptions): Promise<EvalRunR
   const { record } = await runTask(task, {
     suite: loaded,
     mode,
-    ...(mode === "replay" ? {} : { provider: scriptProvider(options.turns ?? []) }),
+    ...(mode === "replay"
+      ? {}
+      : {
+          provider: options.answerCompactions
+            ? withCompactionAnswers(scriptProvider(options.turns ?? []))
+            : scriptProvider(options.turns ?? []),
+        }),
     ...(options.cassette ? { cassette: options.cassette } : {}),
-    config: defaults.config,
+    config: options.configOverrides
+      ? applyConfigOverrides(defaults.config, options.configOverrides)
+      : defaults.config,
     invoker: defaults.invoker,
     builtins: options.builtins ?? defaults.builtins,
     seed: 0,

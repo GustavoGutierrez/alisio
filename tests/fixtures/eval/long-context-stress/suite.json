@@ -1,0 +1,624 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "long-context-stress",
+  "suiteVersion": "1.1.0",
+  "description": "Long runs that outgrow a small context budget: a rule stated in the prompt must still hold at the end, the same file is read, edited and read again, and facts read early are needed late. Meant to be measured with a lowered limits.maxContextChars (see compare.json) so compaction triggers; with the default limit nothing compacts. Live mode, no cassettes (specs/012 Phase 0).",
+  "tasks": [
+    {
+      "id": "chain-walk-format-rule",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Every line of report.txt has the exact form NN|CODE: NN is the two-digit step number (01, 02, ...) and CODE is the value after `CODE:` in that segment. No spaces, one line per segment, in walk order, ending with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-format-rule",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "29721226ca8c977f646d586dedd55c39254922b4f78d9a38bb5598daa4ccdb59"
+        },
+        {
+          "kind": "file-contains",
+          "id": "first-line",
+          "path": "report.txt",
+          "text": "01|amber-meadow-21\n"
+        },
+        {
+          "kind": "file-contains",
+          "id": "last-line",
+          "path": "report.txt",
+          "text": "16|plain-kiln-42\n"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "format-rule"
+      ]
+    },
+    {
+      "id": "sequential-config-edits",
+      "prompt": "Rules for the whole task. They stay in force until you finish:\n1. The only file you may change is config/app.conf.\n2. Apply every change with edit_file. Never use write_file: rewriting the file would drop its comments and key order.\n3. Work through tickets/T01.md to tickets/T08.md in numeric order, one ticket at a time. After applying a ticket, read config/app.conf again to confirm the change before you open the next ticket.\n\nTask: each ticket asks for one change to config/app.conf. Apply them all.",
+      "fixture": "fixtures/sequential-config-edits",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "config-exact",
+          "path": "config/app.conf",
+          "sha256": "00e33630c8a07fb28482594744364768b314165f9a949151a79d3ff774a7d818"
+        },
+        {
+          "kind": "file-contains",
+          "id": "restored-value",
+          "path": "config/app.conf",
+          "text": "s04.log_level = warn\n"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "config/app.conf"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-rewrite",
+          "rule": {
+            "type": "never",
+            "tool": "write_file"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "superseded-reads",
+        "edit-rule",
+        "revert-needs-early-value"
+      ]
+    },
+    {
+      "id": "frozen-area-tickets",
+      "prompt": "Rules for the whole task. They stay in force until you finish, whatever a ticket says:\n1. legacy/ is frozen: never change or create anything under legacy/.\n2. A ticket that asks for a change under legacy/ is skipped, not applied. Record every skipped ticket in skipped.txt, one line per ticket in ticket order, in the form Tnn|<path> (for example T03|legacy/x.ini), ending with a newline.\n3. Apply every other ticket to the file it names. Change only the named key and keep every other byte of the file.\n\nTask: tickets/T01.md to tickets/T10.md each ask for one change to an ini file. Work through them in numeric order.",
+      "fixture": "fixtures/frozen-area-tickets",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "app-server-ini",
+          "path": "app/server.ini",
+          "sha256": "540a1ac7296d17dee852e541a877c7157b2382309432f2bc352e1349149c3907"
+        },
+        {
+          "kind": "file-equals",
+          "id": "app-cache-ini",
+          "path": "app/cache.ini",
+          "sha256": "d1563fe0b3cbce1ff3f417410b030954a8a64b36122d6c07b58ed4d0d350c60b"
+        },
+        {
+          "kind": "file-equals",
+          "id": "app-queue-ini",
+          "path": "app/queue.ini",
+          "sha256": "ef11ff3f626a83d3769adcce8c56377bc36f280397399a0f70051b96954d9f02"
+        },
+        {
+          "kind": "file-equals",
+          "id": "app-limits-ini",
+          "path": "app/limits.ini",
+          "sha256": "6b9d5522e44c00f341a32c5b35e559bc037b9b7e89615ccf81f256b175ebd0d9"
+        },
+        {
+          "kind": "file-equals",
+          "id": "app-paths-ini",
+          "path": "app/paths.ini",
+          "sha256": "e570611c389633e110c9f6c9d202c9587792a82374ef5194e8ddcb6794458a4b"
+        },
+        {
+          "kind": "file-equals",
+          "id": "skipped-exact",
+          "path": "skipped.txt",
+          "sha256": "b83c9f30b176afbf1079fd1a608e3dbbba9a2f00c7d4a06dada0c9513d6e784e"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "app/",
+            "skipped.txt"
+          ]
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "frozen-rule",
+        "late-conflict"
+      ]
+    },
+    {
+      "id": "order-ledger-reconcile",
+      "prompt": "Rules for the whole task. They stay in force until you finish:\n1. The only file you may create is report.txt. Do not create notes or scratch files.\n2. Only orders whose STATUS line says `shipped` count. Cancelled and returned orders count for nothing.\n3. Revenue is quantity times the price in catalog.txt. All numbers are plain integers: no currency symbol, no separators.\n4. report.txt has one line per SKU in the form SKU|units|revenue, sorted by SKU, then a last line TOTAL|units|revenue, ending with a newline.\n\nTask: catalog.txt lists the SKUs and their prices. Each file in orders/ is one day of logs; an ORDER line gives an order id, SKU and quantity, and a STATUS line with the same id gives what happened to it. Reconcile all days and write report.txt.",
+      "fixture": "fixtures/order-ledger-reconcile",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "680622ff5a74e6fddcd46e0ef7b8cad3c0ed2cadab3ec2ca5edde0e9a80c73cb"
+        },
+        {
+          "kind": "file-contains",
+          "id": "total-line",
+          "path": "report.txt",
+          "text": "TOTAL|136|4493"
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "running-totals",
+        "early-facts-late"
+      ]
+    },
+    {
+      "id": "chain-walk-rules-01",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Line shape: between the first and the last line of report.txt there is one line per segment, in walk order. Each of those lines is the two-digit step number (01, 02, ...), then the tilde character ~, then the segment code in UPPERCASE, where the segment code is the value that follows `CODE:` in that segment. No prefix and no spaces. Example with made-up values: step 07 with code rusty-comet-58 gives the line 07~RUSTY-COMET-58\n4. The first line of report.txt is exactly # walk-report\n5. The last line of report.txt is exactly -- end of walk -- and the file ends with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-rules-01",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "743494c38f8fb2698956f035fe4d04fc3c8de0b3e335c91113f5ad85143a7726"
+        },
+        {
+          "kind": "command",
+          "id": "r1-line-shape",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");const want=[\"01~GILDED-FJORD-34\",\"02~LUNAR-FALCON-91\",\"03~BRISK-LEDGER-73\",\"04~EMBER-LANTERN-78\",\"05~KEEN-CINDER-68\",\"06~DUSKY-MEADOW-88\",\"07~MOSSY-HARBOR-74\",\"08~IVORY-HARBOR-71\",\"09~PLAIN-FJORD-48\",\"10~COBALT-DELTA-76\",\"11~FROST-ISLAND-60\",\"12~JADE-ENGINE-55\",\"13~HOLLOW-ENGINE-18\",\"14~AMBER-GARNET-80\",\"15~NIMBLE-LANTERN-36\",\"16~OPAL-ANCHOR-70\"];const got=t.split(\"\\n\");if(got[got.length-1]===\"\")got.pop();const body=got.filter(l=>l!==\"# walk-report\"&&l!==\"-- end of walk --\");if(JSON.stringify(body)!==JSON.stringify(want)){console.log(\"segment lines differ\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r2-header",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(t.split(\"\\n\")[0]!==\"# walk-report\"){console.log(\"wrong first line\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r3-footer",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(!t.endsWith(\"\\n-- end of walk --\\n\")){console.log(\"wrong ending\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "rules"
+      ]
+    },
+    {
+      "id": "chain-walk-rules-02",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Line shape: between the first and the last line of report.txt there is one line per segment, in walk order. Each of those lines is the two-digit step number (01, 02, ...), then the tilde character ~, then the segment code in UPPERCASE, where the segment code is the value that follows `CODE:` in that segment. No prefix and no spaces. Example with made-up values: step 07 with code rusty-comet-58 gives the line 07~RUSTY-COMET-58\n4. The first line of report.txt is exactly # walk-report\n5. The last line of report.txt is exactly -- end of walk -- and the file ends with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-rules-02",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "9e073adf426cbf2b20cf1cea9ba1e5758bc24e481440e3f4b2c7b1682cc982bf"
+        },
+        {
+          "kind": "command",
+          "id": "r1-line-shape",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");const want=[\"01~OPAL-HELM-72\",\"02~PLAIN-JETTY-84\",\"03~GILDED-CINDER-26\",\"04~NIMBLE-LEDGER-67\",\"05~COBALT-DELTA-84\",\"06~LUNAR-KILN-10\",\"07~HOLLOW-LANTERN-93\",\"08~DUSKY-HARBOR-88\",\"09~JADE-ISLAND-77\",\"10~KEEN-FALCON-38\",\"11~AMBER-FALCON-12\",\"12~FROST-GARNET-60\",\"13~MOSSY-HARBOR-98\",\"14~IVORY-BEACON-65\",\"15~EMBER-JETTY-65\",\"16~BRISK-CINDER-91\"];const got=t.split(\"\\n\");if(got[got.length-1]===\"\")got.pop();const body=got.filter(l=>l!==\"# walk-report\"&&l!==\"-- end of walk --\");if(JSON.stringify(body)!==JSON.stringify(want)){console.log(\"segment lines differ\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r2-header",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(t.split(\"\\n\")[0]!==\"# walk-report\"){console.log(\"wrong first line\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r3-footer",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(!t.endsWith(\"\\n-- end of walk --\\n\")){console.log(\"wrong ending\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "rules"
+      ]
+    },
+    {
+      "id": "chain-walk-rules-03",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Line shape: between the first and the last line of report.txt there is one line per segment, in walk order. Each of those lines is the two-digit step number (01, 02, ...), then the tilde character ~, then the segment code in UPPERCASE, where the segment code is the value that follows `CODE:` in that segment. No prefix and no spaces. Example with made-up values: step 07 with code rusty-comet-58 gives the line 07~RUSTY-COMET-58\n4. The first line of report.txt is exactly # walk-report\n5. The last line of report.txt is exactly -- end of walk -- and the file ends with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-rules-03",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "8ebc2c2fc393e953460f7853db17eed662fcc81e71dde7db27af622cf3518506"
+        },
+        {
+          "kind": "command",
+          "id": "r1-line-shape",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");const want=[\"01~HOLLOW-HELM-52\",\"02~JADE-FJORD-81\",\"03~OPAL-MEADOW-47\",\"04~KEEN-ANCHOR-15\",\"05~NIMBLE-JETTY-62\",\"06~BRISK-ISLAND-42\",\"07~DUSKY-BEACON-34\",\"08~PLAIN-HELM-91\",\"09~AMBER-JETTY-13\",\"10~COBALT-DELTA-67\",\"11~EMBER-HELM-23\",\"12~IVORY-FALCON-34\",\"13~FROST-DELTA-33\",\"14~MOSSY-ANCHOR-25\",\"15~LUNAR-KILN-95\",\"16~GILDED-FALCON-55\"];const got=t.split(\"\\n\");if(got[got.length-1]===\"\")got.pop();const body=got.filter(l=>l!==\"# walk-report\"&&l!==\"-- end of walk --\");if(JSON.stringify(body)!==JSON.stringify(want)){console.log(\"segment lines differ\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r2-header",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(t.split(\"\\n\")[0]!==\"# walk-report\"){console.log(\"wrong first line\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r3-footer",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(!t.endsWith(\"\\n-- end of walk --\\n\")){console.log(\"wrong ending\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "rules"
+      ]
+    },
+    {
+      "id": "chain-walk-rules-04",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Line shape: between the first and the last line of report.txt there is one line per segment, in walk order. Each of those lines is the two-digit step number (01, 02, ...), then the tilde character ~, then the segment code in UPPERCASE, where the segment code is the value that follows `CODE:` in that segment. No prefix and no spaces. Example with made-up values: step 07 with code rusty-comet-58 gives the line 07~RUSTY-COMET-58\n4. The first line of report.txt is exactly # walk-report\n5. The last line of report.txt is exactly -- end of walk -- and the file ends with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-rules-04",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "82511b8f141342163b3c68d94ca3ad922cdcbc18942f7bf1f9f3ef7c9d2233b1"
+        },
+        {
+          "kind": "command",
+          "id": "r1-line-shape",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");const want=[\"01~AMBER-DELTA-41\",\"02~NIMBLE-ENGINE-89\",\"03~PLAIN-BEACON-32\",\"04~LUNAR-FALCON-13\",\"05~EMBER-FJORD-51\",\"06~HOLLOW-GARNET-70\",\"07~COBALT-HARBOR-68\",\"08~JADE-BEACON-12\",\"09~IVORY-CINDER-18\",\"10~GILDED-FJORD-47\",\"11~MOSSY-JETTY-75\",\"12~DUSKY-HELM-39\",\"13~BRISK-ISLAND-65\",\"14~FROST-ENGINE-69\",\"15~OPAL-GARNET-15\",\"16~KEEN-CINDER-39\"];const got=t.split(\"\\n\");if(got[got.length-1]===\"\")got.pop();const body=got.filter(l=>l!==\"# walk-report\"&&l!==\"-- end of walk --\");if(JSON.stringify(body)!==JSON.stringify(want)){console.log(\"segment lines differ\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r2-header",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(t.split(\"\\n\")[0]!==\"# walk-report\"){console.log(\"wrong first line\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r3-footer",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(!t.endsWith(\"\\n-- end of walk --\\n\")){console.log(\"wrong ending\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "rules"
+      ]
+    },
+    {
+      "id": "chain-walk-rules-05",
+      "prompt": "Rules for the whole task. They stay in force until you finish, however long it takes:\n1. The only file you may create or change is report.txt.\n2. Do not run shell commands or processes; use the file tools only.\n3. Line shape: between the first and the last line of report.txt there is one line per segment, in walk order. Each of those lines is the two-digit step number (01, 02, ...), then the tilde character ~, then the segment code in UPPERCASE, where the segment code is the value that follows `CODE:` in that segment. No prefix and no spaces. Example with made-up values: step 07 with code rusty-comet-58 gives the line 07~RUSTY-COMET-58\n4. The first line of report.txt is exactly # walk-report\n5. The last line of report.txt is exactly -- end of walk -- and the file ends with a single newline.\n\nTask: START.md names the first segment of a chain. Every segment ends with a `NEXT:` line naming the following segment, or `NEXT: END` for the last one. Visit every segment in order, and write report.txt.",
+      "fixture": "fixtures/chain-walk-rules-05",
+      "budget": {
+        "maxTurns": 60,
+        "maxTokens": 450000,
+        "maxWallMs": 360000,
+        "maxToolCalls": 80
+      },
+      "policy": {
+        "mode": "auto"
+      },
+      "verifiers": [
+        {
+          "kind": "file-equals",
+          "id": "report-exact",
+          "path": "report.txt",
+          "sha256": "cafa6da23c1e89a2584411f9dbe862de317b7395999ef2ac04158e4e12069aac"
+        },
+        {
+          "kind": "command",
+          "id": "r1-line-shape",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");const want=[\"01~AMBER-HARBOR-15\",\"02~LUNAR-JETTY-16\",\"03~IVORY-DELTA-14\",\"04~NIMBLE-KILN-60\",\"05~PLAIN-ANCHOR-46\",\"06~FROST-LANTERN-12\",\"07~BRISK-CINDER-65\",\"08~HOLLOW-JETTY-77\",\"09~OPAL-JETTY-70\",\"10~GILDED-LANTERN-53\",\"11~KEEN-GARNET-13\",\"12~MOSSY-FJORD-67\",\"13~JADE-GARNET-90\",\"14~COBALT-JETTY-49\",\"15~DUSKY-ENGINE-78\",\"16~EMBER-MEADOW-81\"];const got=t.split(\"\\n\");if(got[got.length-1]===\"\")got.pop();const body=got.filter(l=>l!==\"# walk-report\"&&l!==\"-- end of walk --\");if(JSON.stringify(body)!==JSON.stringify(want)){console.log(\"segment lines differ\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r2-header",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(t.split(\"\\n\")[0]!==\"# walk-report\"){console.log(\"wrong first line\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "command",
+          "id": "r3-footer",
+          "command": [
+            "node",
+            "-e",
+            "const t=require(\"node:fs\").readFileSync(\"report.txt\",\"utf8\");if(!t.endsWith(\"\\n-- end of walk --\\n\")){console.log(\"wrong ending\");process.exit(1)}"
+          ],
+          "timeoutMs": 15000
+        },
+        {
+          "kind": "tree-diff-within",
+          "id": "scope",
+          "allowed": [
+            "report.txt"
+          ]
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-shell",
+          "rule": {
+            "type": "never",
+            "tool": "shell"
+          }
+        },
+        {
+          "kind": "tool-sequence",
+          "id": "no-process",
+          "rule": {
+            "type": "never",
+            "tool": "run_process"
+          }
+        }
+      ],
+      "tags": [
+        "long-context-stress",
+        "walk",
+        "rules"
+      ]
+    }
+  ]
+}

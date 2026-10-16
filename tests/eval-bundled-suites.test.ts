@@ -22,6 +22,7 @@ import { join, resolve } from "node:path";
 import type { EvalRunRecord } from "@alisio/sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { evalList } from "../packages/cli/src/eval.ts";
+import { configSchema } from "../packages/core/src/config.ts";
 import {
   CASSETTE_SUFFIX,
   MAX_CASSETTE_BYTES,
@@ -30,8 +31,21 @@ import {
 } from "../packages/core/src/eval/cassette.ts";
 import { findSecrets } from "../packages/core/src/eval/secrets.ts";
 import { loadSuite } from "../packages/core/src/eval/suite.ts";
+import { applyConfigOverrides, loadVariantsFile } from "../packages/core/src/eval/variants.ts";
 import { runVerifiers, snapshotTree } from "../packages/core/src/eval/verifiers.ts";
 import type { BuiltinPlugin } from "../packages/core/src/index.ts";
+import {
+  buildStress,
+  RULES_FOOTER,
+  RULES_HEADER,
+  STRESS_BUDGET,
+  STRESS_COMPACTION_LIMIT_CHARS,
+  STRESS_RULES_INSTANCES,
+  STRESS_SUITE_ID,
+  STRESS_SUITE_VERSION,
+  stress,
+  writeStress,
+} from "../scripts/eval-gen-long-context-stress.ts";
 import {
   BUNDLED_DIR,
   bundledRunOptions,
@@ -43,7 +57,7 @@ import {
   WRONG_SOLUTIONS,
 } from "../scripts/eval-record-bundled.ts";
 
-const SUITES = ["smoke-coding", "tool-sequences", "long-context"] as const;
+const SUITES = ["smoke-coding", "tool-sequences", "long-context", "long-context-stress"] as const;
 const APPROVED_BUDGET = { maxTurns: 30, maxTokens: 200_000, maxWallMs: 120_000, maxToolCalls: 40 };
 // smoke-coding 1.1.0: the live run showed bug-across-modules passing at up to 189k tokens and 82 s,
 // so the phase 0 budget made it measure speed instead of capability. Owner-approved override.
@@ -62,6 +76,12 @@ const BUDGET_OVERRIDES: Record<string, typeof APPROVED_BUDGET> = {
   },
 };
 
+// long-context-stress 1.0.0: every task re-sends a growing transcript for up to 60 turns, and the
+// token budget sums the input of every turn, so the saturated suite's 200k would measure the
+// quadratic cost of the transcript instead of whether an instruction survives compaction.
+for (const task of loadSuite(join(BUNDLED_DIR, "long-context-stress")).suite.tasks)
+  BUDGET_OVERRIDES[`long-context-stress/${task.id}`] = { ...STRESS_BUDGET };
+
 let root: string;
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "eval-bundled-test-"));
@@ -78,7 +98,13 @@ describe("the bundled suites load (criterion a)", () => {
   it.each(SUITES)("%s loads with loadSuite at its pinned version", (suiteId) => {
     const loaded = loadSuite(join(BUNDLED_DIR, suiteId));
     expect(loaded.suite.suiteId).toBe(suiteId);
-    expect(loaded.suite.suiteVersion).toBe(suiteId === "smoke-coding" ? "1.2.0" : "1.0.0");
+    expect(loaded.suite.suiteVersion).toBe(
+      suiteId === "smoke-coding"
+        ? "1.2.0"
+        : suiteId === "long-context-stress"
+          ? STRESS_SUITE_VERSION
+          : "1.0.0",
+    );
     expect(loaded.suite.tasks.length).toBeGreaterThan(0);
   });
 
@@ -95,6 +121,7 @@ describe("the bundled suites load (criterion a)", () => {
     expect(ids("tool-sequences").length).toBeGreaterThanOrEqual(4);
     expect(ids("tool-sequences").length).toBeLessThanOrEqual(6);
     expect(ids("long-context")).toHaveLength(3);
+    expect(ids("long-context-stress")).toHaveLength(4 + STRESS_RULES_INSTANCES);
   });
 
   it("reserves injection for spec 014: no such suite is bundled", () => {
@@ -469,7 +496,9 @@ describe("re-recording (criterion 3 and determinism)", () => {
         `${key}: the committed cassette is stale; run pnpm eval:record-bundled`,
       ).toEqual(committed.calls.map((c) => c.fingerprint));
     }
-  });
+    // Two full recordings of every bundled task: it grew with suite 1.1.0 and
+    // ran past the 30 s default when the machine was busy.
+  }, 90_000);
 });
 
 describe("what the bundled cassettes hold (criterion f)", () => {
@@ -507,5 +536,333 @@ describe("what the bundled cassettes hold (criterion f)", () => {
       expect(header.provider, file).toBe("scripted");
       expect(header.recordedAt, file).toBe(0);
     }
+  });
+});
+
+describe("long-context-stress (specs/012 Phase 0): a suite that can tell compaction apart", () => {
+  const suiteDir = join(BUNDLED_DIR, STRESS_SUITE_ID);
+  const taskIds = () => loadSuite(suiteDir).suite.tasks.map((t) => t.id);
+  const compactions = (record: EvalRunRecord) =>
+    record.incidents.find((i) => i.kind === "compaction")?.count ?? 0;
+  const lowLimit = { "limits.maxContextChars": STRESS_COMPACTION_LIMIT_CHARS };
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  const step = (name: string, args: Record<string, unknown>) => ({ calls: [{ name, args }] });
+  const read = (path: string) => step("read_file", { path });
+
+  it("is the committed output of the generator (fixtures, verifiers and compare.json)", () => {
+    const out = join(root, "stress-regenerated");
+    const written = writeStress(out);
+    const onDisk = readdirSync(suiteDir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => join(entry.parentPath, entry.name).slice(suiteDir.length + 1))
+      .sort();
+    expect(onDisk, "run `pnpm eval:gen-stress`").toEqual(written);
+    for (const file of written)
+      expect(
+        readFileSync(join(suiteDir, file), "utf8") === readFileSync(join(out, file), "utf8"),
+        `${file} is stale: run pnpm eval:gen-stress`,
+      ).toBe(true);
+  });
+
+  it("keeps fixtures small: under 500 KB in total (the 1.0.0 tasks plus five rules instances)", () => {
+    const total = readdirSync(suiteDir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .reduce((n, entry) => n + statSync(join(entry.parentPath, entry.name)).size, 0);
+    expect(total).toBeLessThan(500 * 1024);
+  });
+
+  it("asks only for the permissions it needs: write comes with auto, nothing is added", () => {
+    for (const task of loadSuite(suiteDir).suite.tasks) {
+      expect(task.policy, task.id).toEqual({ mode: "auto" });
+      expect(task.budget.maxTurns, task.id).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it("states each early rule in the prompt and verifies it from files or tool calls", () => {
+    const tasks = Object.fromEntries(loadSuite(suiteDir).suite.tasks.map((t) => [t.id, t]));
+    const kinds = (id: string) => tasks[id]?.verifiers.map((v) => v.kind) ?? [];
+    expect(kinds("chain-walk-format-rule")).toContain("tool-sequence");
+    expect(kinds("sequential-config-edits")).toContain("tool-sequence");
+    for (const id of taskIds()) {
+      expect(tasks[id]?.prompt, id).toMatch(/^Rules for the whole task/);
+      expect(kinds(id), id).toContain("file-equals");
+      expect(kinds(id), id).toContain("tree-diff-within");
+    }
+    const frozen = tasks["frozen-area-tickets"]?.verifiers.find(
+      (v) => v.kind === "tree-diff-within",
+    );
+    expect(frozen?.kind === "tree-diff-within" ? frozen.allowed : []).toEqual([
+      "app/",
+      "skipped.txt",
+    ]);
+  });
+
+  it("gives the late checks something to elide: config edits re-read the same file", () => {
+    const { config } = stress().expected;
+    expect(config.tickets.length).toBeGreaterThanOrEqual(8);
+    expect(config.tickets.some((t) => t.reverts)).toBe(true);
+    // The value a revert needs exists only in an earlier (later superseded) read of the file.
+    const reverted = config.tickets.find((t) => t.reverts);
+    expect(config.original).toContain(`${reverted?.key} = ${reverted?.next}\n`);
+    expect(config.final).toContain(`${reverted?.key} = ${reverted?.next}\n`);
+  });
+
+  it("ships a compare.json whose override is valid config and matches the stress limit", () => {
+    const file = loadVariantsFile(join(suiteDir, "compare.json"));
+    expect(file.suite).toBe(STRESS_SUITE_ID);
+    expect(file.variants.map((v) => v.id)).toEqual(["default-limit", "small-context"]);
+    const base = configSchema.parse({});
+    const [plain, small] = file.variants.map((v) => applyConfigOverrides(base, v.overrides));
+    expect(plain?.limits.maxContextChars).toBe(base.limits.maxContextChars);
+    expect(small?.limits.maxContextChars).toBe(STRESS_COMPACTION_LIMIT_CHARS);
+  });
+
+  it.each(taskIds())(
+    "%s: the reference run passes with and without the lowered limit",
+    async (id) => {
+      const key = `${STRESS_SUITE_ID}/${id}`;
+      const turns = REFERENCE_SCRIPTS[key] ?? [];
+      const plain = await runScripted({
+        suiteId: STRESS_SUITE_ID,
+        taskId: id,
+        turns,
+        tmpRoot: root,
+      });
+      expect(plain.error).toBeUndefined();
+      expect(plain.verifiers.filter((v) => v.status !== "pass")).toEqual([]);
+      // With the default limit (800 000 characters) nothing compacts: the saturated-suite problem.
+      expect(compactions(plain), `${key} compacted without a lowered limit`).toBe(0);
+
+      const small = await runScripted({
+        suiteId: STRESS_SUITE_ID,
+        taskId: id,
+        turns,
+        tmpRoot: root,
+        configOverrides: lowLimit,
+        answerCompactions: true,
+      });
+      expect(small.error).toBeUndefined();
+      expect(small.verifiers.filter((v) => v.status !== "pass")).toEqual([]);
+      expect(small.status).toBe("pass");
+      // The lowered limit makes the compaction path run, and the run still ends correct.
+      expect(
+        compactions(small),
+        `${key} never compacted at ${STRESS_COMPACTION_LIMIT_CHARS}`,
+      ).toBeGreaterThanOrEqual(2);
+      // The two runs differ in configuration, so the lab hashes them as different conditions.
+      expect(small.configHash).not.toBe(plain.configHash);
+    },
+  );
+
+  it("measures compactions as an incident of the run record", async () => {
+    const small = await runScripted({
+      suiteId: STRESS_SUITE_ID,
+      taskId: "chain-walk-format-rule",
+      turns: REFERENCE_SCRIPTS[`${STRESS_SUITE_ID}/chain-walk-format-rule`] ?? [],
+      tmpRoot: root,
+      configOverrides: lowLimit,
+      answerCompactions: true,
+    });
+    expect(small.incidents.find((i) => i.kind === "compaction")?.count).toBeGreaterThan(0);
+  });
+
+  describe("chain-walk-rules (1.1.0): three unambiguous rules, one verifier each", () => {
+    const rulesIds = () => taskIds().filter((id) => id.startsWith("chain-walk-rules-"));
+    const write = (content: string) =>
+      step("write_file", { path: "report.txt", content, expectedHash: null });
+
+    it("keeps the 1.0.0 content byte-identical: only new files and suite metadata were added", () => {
+      const { files } = buildStress();
+      const digest = createHash("sha256");
+      const original = Object.keys(files)
+        .filter((f) => /^fixtures\/(chain-walk-format-rule|sequential|frozen|order)/.test(f))
+        .sort();
+      for (const file of original) digest.update(`${file}\0${files[file]}\0`);
+      const tasks = (JSON.parse(files["suite.json"] as string) as { tasks: unknown[] }).tasks;
+      digest.update(JSON.stringify(tasks.slice(0, 4)));
+      expect(original).toHaveLength(51);
+      expect(digest.digest("hex")).toBe(
+        "ba80307a7ea31265e5977574acaa1d8388b1847f001f4a52368d230d7cf36a8e",
+      );
+    });
+
+    it("generates --instances independent chains and the first n never depend on n", () => {
+      expect(rulesIds()).toHaveLength(STRESS_RULES_INSTANCES);
+      const { rules } = stress().expected;
+      const reports = new Set(rules.map((r) => r.report));
+      expect(reports.size).toBe(STRESS_RULES_INSTANCES);
+      const few = buildStress({ instances: 2 });
+      const many = buildStress({ instances: 7 });
+      expect(many.expected.rules).toHaveLength(7);
+      for (const file of Object.keys(few.files).filter((f) =>
+        f.startsWith("fixtures/chain-walk-rules-"),
+      ))
+        expect(many.files[file], file).toBe(few.files[file]);
+      expect(() => buildStress({ instances: 0 })).toThrow(/--instances/);
+    });
+
+    it("states the rules once, with a worked example that occurs in no fixture", () => {
+      const suite = loadSuite(suiteDir).suite;
+      const { files } = buildStress();
+      for (const id of rulesIds()) {
+        const prompt = suite.tasks.find((t) => t.id === id)?.prompt ?? "";
+        expect(prompt).toContain("tilde character ~");
+        expect(prompt).toContain(RULES_HEADER);
+        expect(prompt).toContain(RULES_FOOTER);
+        expect(prompt).not.toMatch(/NN\|CODE/);
+        expect(prompt).toContain("07~RUSTY-COMET-58");
+      }
+      for (const [file, content] of Object.entries(files))
+        if (file.startsWith("fixtures/chain-walk-rules-"))
+          expect(content.toLowerCase(), file).not.toContain("rusty-comet");
+    });
+
+    it("has one verifier per rule next to scope, no-shell and no-process", () => {
+      const task = loadSuite(suiteDir).suite.tasks.find((t) => t.id === "chain-walk-rules-01");
+      expect(task?.verifiers.map((v) => v.id)).toEqual([
+        "report-exact",
+        "r1-line-shape",
+        "r2-header",
+        "r3-footer",
+        "scope",
+        "no-shell",
+        "no-process",
+      ]);
+    });
+
+    const variants = (): Array<{ name: string; content: string; failing: string[] }> => {
+      const { bodyLines, report, segments } = stress().expected.rules[0] as ReturnType<
+        typeof stress
+      >["expected"]["rules"][number];
+      const wrap = (body: string[], head = RULES_HEADER, foot = RULES_FOOTER) =>
+        [head, ...body, foot].join("\n");
+      return [
+        {
+          name: "literal CODE: prefix",
+          content: `${wrap(segments.map((s, i) => `${String(i + 1).padStart(2, "0")}|CODE: ${s.code}`))}\n`,
+          failing: ["r1-line-shape"],
+        },
+        {
+          name: "lowercase codes",
+          content: `${wrap(bodyLines.map((l) => l.toLowerCase()))}\n`,
+          failing: ["r1-line-shape"],
+        },
+        {
+          name: "missing header",
+          content: `${wrap(bodyLines, "")}\n`.slice(1),
+          failing: ["r2-header"],
+        },
+        {
+          name: "missing footer",
+          content: `${[RULES_HEADER, ...bodyLines].join("\n")}\n`,
+          failing: ["r3-footer"],
+        },
+        { name: "missing trailing newline", content: report.slice(0, -1), failing: ["r3-footer"] },
+      ];
+    };
+
+    it.each([0, 1, 2, 3, 4])(
+      "wrong output %i fails exactly the verifier of the rule it breaks",
+      async (n) => {
+        const wrong = variants()[n];
+        if (!wrong) throw new Error("no such case");
+        const record = await runScripted({
+          suiteId: STRESS_SUITE_ID,
+          taskId: "chain-walk-rules-01",
+          turns: [write(wrong.content), { text: "done" }],
+          tmpRoot: root,
+        });
+        expect(record.error, wrong.name).toBeUndefined();
+        expect(record.verifiers.filter((v) => v.status === "error")).toEqual([]);
+        const failed = record.verifiers.filter((v) => v.status === "fail").map((v) => v.id);
+        expect(failed.sort(), wrong.name).toEqual([...wrong.failing, "report-exact"].sort());
+      },
+    );
+  });
+
+  describe("plausible runs that lose an early rule are rejected, not errored", () => {
+    const cases = () => {
+      const { chain, config, frozen, orders } = stress().expected;
+      const legacy = frozen.tickets.find((t) => t.frozen);
+      return [
+        {
+          id: "chain-walk-format-rule",
+          name: "drops the NN|CODE format",
+          turns: [
+            read("START.md"),
+            ...chain.segments.map((s) => read(s.path)),
+            step("write_file", {
+              path: "report.txt",
+              content: chain.segments.map((s, i) => `${i + 1}: ${s.code}`).join("\n"),
+              expectedHash: null,
+            }),
+            { text: "done" },
+          ],
+          failing: ["report-exact", "first-line"],
+        },
+        {
+          id: "sequential-config-edits",
+          name: "rewrites the file with write_file",
+          turns: [
+            read(config.path),
+            step("write_file", {
+              path: config.path,
+              content: config.final,
+              expectedHash: sha(config.original),
+            }),
+            { text: "done" },
+          ],
+          failing: ["no-rewrite"],
+        },
+        {
+          id: "frozen-area-tickets",
+          name: "edits the frozen legacy file",
+          turns: [
+            read(legacy?.file ?? ""),
+            step("edit_file", {
+              path: legacy?.file,
+              oldText: `${legacy?.key} = ${legacy?.old}`,
+              newText: `${legacy?.key} = ${legacy?.next}`,
+              expectedHash: sha(frozen.originals[legacy?.file ?? ""] ?? ""),
+            }),
+            { text: "done" },
+          ],
+          failing: ["scope", "skipped-exact"],
+        },
+        {
+          id: "order-ledger-reconcile",
+          name: "keeps the wrong total",
+          turns: [
+            read(orders.catalog),
+            step("write_file", {
+              path: "report.txt",
+              content: orders.report.replace("TOTAL|", "TOTAL|9"),
+              expectedHash: null,
+            }),
+            { text: "done" },
+          ],
+          failing: ["report-exact", "total-line"],
+        },
+      ];
+    };
+
+    it.each([0, 1, 2, 3])(
+      "wrong solution %i fails the verifiers that guard its rule",
+      async (n) => {
+        const wrong = cases()[n];
+        if (!wrong) throw new Error("no such case");
+        const record = await runScripted({
+          suiteId: STRESS_SUITE_ID,
+          taskId: wrong.id,
+          turns: wrong.turns,
+          tmpRoot: root,
+        });
+        expect(record.error, wrong.name).toBeUndefined();
+        expect(record.verifiers.filter((v) => v.status === "error")).toEqual([]);
+        expect(record.status, wrong.name).toBe("fail");
+        const failed = record.verifiers.filter((v) => v.status === "fail").map((v) => v.id);
+        for (const id of wrong.failing) expect(failed, `${wrong.name}: ${id}`).toContain(id);
+      },
+    );
   });
 });

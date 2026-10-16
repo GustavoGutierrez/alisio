@@ -352,6 +352,19 @@ invalidates the cassettes, including your reasoning effort or enabling native se
 | `smoke-coding` 1.2.0 | 7 small TypeScript tasks (three easy, four harder; three of them hardened after they saturated) | live; 4 cassettes |
 | `tool-sequences` | 6 stateful tool-use tasks, one with a deliberate invalid transition | replay; 6 cassettes |
 | `long-context` | 3 tasks with facts buried in long files and truncated command output | live; no cassettes |
+| `long-context-stress` 1.1.0 | 4 long tasks (a chain walk, repeated edits of one file, a frozen directory, running totals across logs) plus 5 instances of `chain-walk-rules` that state a rule early and only discriminate when `limits.maxContextChars` is lowered so context compaction runs | live; no cassettes |
+
+`long-context-stress` 1.1.0 adds `chain-walk-rules` (instances `chain-walk-rules-01` to `-05`, each a
+different seeded chain of 16 segments). The older `chain-walk-format-rule` turned out to be ambiguous:
+its rule says every line has the form `NN|CODE:`, and after compaction the model read the trailing
+`CODE:` as literal text and wrote `01|CODE: amber-meadow-21`, although the checkpoint kept the rule
+verbatim. That measures a misread spec, not information loss, so the task is kept unchanged (its
+baseline stays comparable) and `chain-walk-rules` states three unambiguous, arbitrary rules once,
+each with its own verifier: `r1-line-shape` (`NN~CODE` with the code in uppercase), `r2-header`
+(first line `# walk-report`) and `r3-footer` (last line `-- end of walk --` and a single trailing
+newline). The results show which rule a run dropped. Pick it with `--tasks`, for example
+`--tasks long-context-stress/chain-walk-rules-01`. `pnpm eval:gen-stress -- --instances 12` writes
+more instances locally (the first five stay identical; use `--out DIR` to keep the committed suite).
 
 They exist **only in the repository checkout** (`tests/fixtures/eval`), not in the npm package or the
 binary; there `list` is empty and says so. The bundled cassettes were recorded with a scripted
@@ -448,8 +461,11 @@ call. After an intended harness change, re-record with `pnpm eval:record-bundled
   and its scrubbing is pattern-based, not a guarantee. The suites never run against your real working
   tree.
 - **Bundled cassettes pin the harness only**, and a legitimate harness change invalidates them.
-- **Unverified with a real model**: `long-context` has not been measured with a real model yet; do not
-  use it to decide until you have run it live with `k = 5`. See [Measured results](#measured).
+- **Unverified with a real model**: `long-context` and `long-context-stress` have not been measured with a real model yet; do not
+  use them to decide until you have run them live with `k = 5`. `long-context-stress` compacts nothing
+  with the default `limits.maxContextChars`: compare it with
+  `alisio eval variants long-context-stress --variants tests/fixtures/eval/long-context-stress/compare.json`
+  and read the `compaction` incident count of each variant. See [Measured results](#measured).
 - **Only the OpenAI-compatible provider from a config file is verified**; the provider is resolved once
   per command, so a provider plugin that reads credentials lazily on every request may not work.
 

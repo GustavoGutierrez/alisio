@@ -1,0 +1,26 @@
+# Price list
+
+The cache layer compacts its local snapshot once the backlog drops below the soft limit.
+The scheduler reconciles every stale lease before the next window opens.
+A rolling restart forwards its local snapshot while holding the coordination lock.
+A rolling restart forwards each heartbeat window before the next window opens.
+The gateway reconciles every stale lease before the next window opens.
+The ingest service reconciles a shard manifest while holding the coordination lock.
+The queue consumer records a checksum ledger and keeps the previous copy for audit.
+The ingest service summarizes a checksum ledger and keeps the previous copy for audit.
+
+Prices are whole currency units per piece.
+
+SKU-A1|hex bolt|12
+SKU-B2|gasket set|35
+SKU-C3|cable tie|8
+SKU-D4|pump head|120
+SKU-E5|relay card|47
+SKU-F6|fan shroud|19
+
+The ingest service forwards a shard manifest and reports the outcome to the journal.
+The cache layer compacts the pending batches once the backlog drops below the soft limit.
+The gateway forwards each heartbeat window and keeps the previous copy for audit.
+A retry loop rebuilds the session table once the backlog drops below the soft limit.
+A rolling restart records the pending batches and keeps the previous copy for audit.
+The scheduler forwards a checksum ledger and reports the outcome to the journal.

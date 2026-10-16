@@ -1,0 +1,15 @@
+{
+  "suite": "long-context-stress",
+  "variants": [
+    {
+      "id": "default-limit",
+      "overrides": {}
+    },
+    {
+      "id": "small-context",
+      "overrides": {
+        "limits.maxContextChars": 40000
+      }
+    }
+  ]
+}

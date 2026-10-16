@@ -813,7 +813,9 @@ try {
   };
   assert.deepEqual(
     listed.suites.map((suite) => suite.id).sort(),
-    mode === "binary" ? [] : ["long-context", "smoke-coding", "tool-sequences"],
+    mode === "binary"
+      ? []
+      : ["long-context", "long-context-stress", "smoke-coding", "tool-sequences"],
   );
   assert.ok(listed.suites.every((suite) => suite.origin === "bundled"));
   assert.match(
