@@ -365,6 +365,10 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 - Compactación de contexto en el núcleo (manual y automática por umbral), con resumen del
   proveedor actual, emparejamiento de llamadas/resultados preservado y persistencia
   transaccional (migración 2: columna `messages.compacted`).
+- Context Governor, Fase 1 (`specs/012-context-governor-v1.md`): existe el inventario interno de
+  segmentos (`packages/core/src/context/`) y una prueba de propiedad de que la compactación nunca separa
+  una llamada de su resultado. **No está conectado al runner, a la configuración ni a ninguna superficie:
+  el Governor no está disponible para los usuarios.**
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del
