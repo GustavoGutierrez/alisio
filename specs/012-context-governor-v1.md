@@ -7,7 +7,7 @@
 | Proyecto | Alisio |
 | Estado | **Aprobada por el propietario (2026-10-15). NO implementada.** Decisiones O1..O8 confirmadas; sin preguntas abiertas. |
 | Fecha | 2026-10-13 (aprobada 2026-10-15; base verificada re-auditada contra 0.8.0) |
-| Paquetes afectados | `@alisio/sdk` (tipos aditivos: Fase 4 `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts`, `ContextGovernedData`; Fase 5 `ContextSegment`, `ContextReport`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`; sin `CompactionCheckpoint.invariants?`, D27), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
+| Paquetes afectados | `@alisio/sdk` (tipos aditivos: Fase 4 `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts`, `ContextGovernedData`; Fase 5 `ContextCriticality`, `ContextSegment`, `ContextReport`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`; sin `CompactionCheckpoint.invariants?`, D27), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context/report`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
 | Relación con otras especificaciones | Mide su efecto con `specs/archive/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/archive/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
 | Superficies | Web, TUI y headless con paridad funcional; API HTTP de `alisio serve` |
@@ -171,16 +171,16 @@ export interface ContextReport {
   segments: ContextSegment[];
   tokensBefore: number;
   tokensAfter: number;
-  invariants: string[];
+  invariants: { count: number; omitted: number; byKind: Partial<Record<"instruction" | "goal" | "plan" | "criterion" | "grant", number>> }; // solo recuentos (D43); sustituye a `string[]`
   usedRatioByKind: Partial<Record<ContextSegmentKind, number>>;
 }
 ```
 
 - Sin `CompactionCheckpoint.invariants?` (D27): el campo se retira de esta spec.
-- Fase 4 (SDK, solo tipos de evento): `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts` y `ContextGovernedData` (`{policyVersion, mode, request, messages, segments, elided, byReason, tokensBefore, tokensAfter, tokensSaved, elidedCallIds?, elidedCallIdsOmitted?, invariants?, usage?}`). `ContextSegment` y `ContextReport` llegan en la Fase 5. `schemaVersion` sigue en 1.
+- Fase 4 (SDK, solo tipos de evento): `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts` y `ContextGovernedData` (`{policyVersion, mode, request, messages, segments, elided, byReason, tokensBefore, tokensAfter, tokensSaved, elidedCallIds?, elidedCallIdsOmitted?, invariants?, usage?}`). `ContextSegment`, `ContextCriticality` y `ContextReport` llegan en la Fase 5 (D41). `schemaVersion` sigue en 1.
 - `RunEventDataMap.context_reduced`: `{ messages: number; reason?: "budget"; tokensSaved?: number }`.
 - `RunEventDataMap.context_governed`: `ContextGovernedData` (ver §3.6).
-- Ruta `GET /api/sessions/:sid/context` → `ContextReport` (solo lectura).
+- Ruta `GET /api/sessions/:sid/context/report` → `ContextReport` (solo lectura). La ruta `GET /api/sessions/:sid/context` ya existía (estimación y presupuesto de la barra de contexto, `SessionContextUsage`) y no cambia (D40).
 - Config: `context.governor`, `context.elide.minAgeTurns` (default 2), `context.invariants.maxChars` (default 4000).
 
 ## 5. Fases
@@ -284,9 +284,11 @@ Registro de implementación (2026-10-16): implementada en la rama `feat/eval-lon
 
 ### Fase 5 — Superficies
 
-Trabajo: ruta `GET /api/sessions/:sid/context`; panel web; `/context` en TUI; salida en headless (`--json` emite `context_governed`); i18n EN/ES; captura `context_governor_web_ui.webp`.
+Trabajo: ruta `GET /api/sessions/:sid/context`; panel web; `/context` en TUI; salida en headless (`--json` emite `context_governed`; ya es cierto desde la Fase 4); i18n EN/ES; captura `context_governor_web_ui.webp`.
 Aceptación: TUI, Web y JSONL muestran los mismos segmentos y razones desde el mismo `ContextReport`.
 Pruebas: `tests/context-routes.test.ts`, pruebas de componente web del panel.
+
+Registro de implementación (2026-10-17): implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto) con las decisiones D40 a D47. Ficheros: `context/report.ts` (`buildContextReport`), `context/format.ts` (`formatContextReport`, `notableSegments`), `context/inventory.ts` (`callId` en los segmentos), `context/usage.ts` (`UsageLedger.decided`), `core/runner.ts` (`contextInputs`, `invariantList`), `application.ts` (`app.contextReport`), `commands/{builtins,catalog}.ts` (`/context`), `packages/server/src/routes/session-views.ts` (ruta), `packages/sdk/src/index.ts` (tipos), TUI (`/context` por el catálogo), web (`store/context-report.ts`, `store/context-frame.ts`, `components/context/*`, pestaña del dock, `dock.context` en `i18n/{en,es}.ts`), `fixtures/cli-e2e.ts` (comprobación de `--json`) y la captura `docs/assets/web-ui/context_governor_web_ui.webp`. Pruebas: `tests/context-report.test.ts`, `tests/context-command.test.ts`, `tests/context-routes.test.ts`, `tests/web-context.test.ts`; se amplió la lista histórica de `tests/command-catalog-tui-parity.test.ts` con `/context` sin cambiar ninguna expectativa existente.
 
 ### Fase 6 — Puerta de medición y promoción
 
@@ -305,7 +307,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 - El Governor no decide permisos ni modifica grants; solo lee su estado para el bloque de invariantes.
 - Los stubs incluyen `path` y `sha8`; los eventos no incluyen contenido ni paths: solo enteros, claves de enumeración, nombres de herramienta e IDs de llamada.
-- Los invariantes pueden contener instrucciones del usuario: no se envían a ningún sitio distinto del proveedor ya configurado; el reporte web respeta el mismo control de acceso de sesión.
+- Los invariantes pueden contener instrucciones del usuario: no se envían a ningún sitio distinto del proveedor ya configurado. El `ContextReport` (ruta, web y `/context`) nunca lleva su texto, solo recuentos totales y por tipo (D43, decisión del propietario del 2026-10-17, que sustituye al `invariants: string[]` original de esta spec).
 - Una proyección con elisión se rige por la política de la sesión; un resultado de herramienta no puede pedir que se desactive la elisión.
 
 ## 7. Riesgos
@@ -373,6 +375,14 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D37** (Fase 4) **Changeset:** `@alisio/sdk` y `@alisio/core` minor dentro de la 0.9.0 prevista.
 - **D38** (Fase 4) **El resumen de trayectoria web** muestra una fila breve para `context_governed` para que `shadow` no deje filas vacías.
 - **D39** (Fase 4) **El ledger no se borra al compactar ni al cambiar de modelo** (es acumulativo); solo `clearInvariants` lo borra.
+- **D40** (Fase 5, 2026-10-17) **La ruta es `GET /api/sessions/:sid/context/report`,** no `.../context` como decía la spec: esa ruta ya existe y alimenta la barra de contexto de la web (`SessionContextUsage`); cambiarla rompería el contrato público. Es solo lectura, abre la aplicación del workspace como `/models`, y respeta la autenticación y las reglas de Host/Origin de las demás rutas.
+- **D41** (Fase 5) **Un único `ContextReport`:** `buildContextReport` (puro) usa `projectContext`, `governanceSnapshot` y `buildInventory`, las mismas funciones que el runner usa para `context_governed`, así que recuentos, razones y ids coinciden con el JSONL del mismo historial. El SDK gana de forma aditiva `ContextCriticality`, `ContextSegment` y `ContextReport` (levanta D35). Campos añadidos a la forma de la spec: `request?`, `messages`, `tokensSaved`, `elided`, `byReason`, `segmentsOmitted?`, `usage?` (y `invariants` pasa a recuentos, D43); `ContextSegment` gana `reason?` y `elided.tokensSaved`.
+- **D42** (Fase 5) **Con el governor en `off` el informe está vacío** (`mode: "off"`, sin segmentos): respeta D15 (`off` no calcula nada). Las superficies lo dicen y señalan `context.governor`.
+- **D43** (Fase 5; **decisión del propietario del 2026-10-17, opción B, que sustituye a `ContextReport.invariants: string[]` de la spec original y a la excepción de §6**) **El informe lleva solo recuentos e IDs, nunca texto:** `invariants` es `{count, omitted, byKind}` (`byKind` con `instruction`, `goal`, `plan`, `criterion`, `grant`); no hay IDs de invariante porque su `origin` deriva del texto o de nombres del usuario. Los segmentos son ids, recuentos, estimaciones y metadatos (rutas y nombres de herramienta como `origin`, `callId`), nunca el texto de un mensaje, archivo, stub o invariante; los invariantes fijados aparecen como segmentos `invariant` solo con id y tokens. Tope de 400 segmentos: se conservan los fijados, de criticidad baja y elididos y se recorta lo más antiguo, con `segmentsOmitted`. En `shadow`, `elided` significa «se elidiría».
+- **D44** (Fase 5) **`/context` es un comando `core` de todas las superficies** (como `/decisions`): la TUI lo ejecuta por el catálogo y `formatContextReport` imprime los totales, los invariantes y una tabla con los segmentos fijados, de criticidad baja y elididos; el resto se cuenta. La web abre su panel.
+- **D45** (Fase 5) **Pestaña «Contexto» del dock, carga diferida** (como Proof): aparece tras el primer evento `context_governed` de la sesión abierta (`contextSeen`) o con `/context`, se relee con cada evento y tiene un botón de actualizar; solo la señal, el filtro de frames y la cadena `dock.context` están en el bundle inicial.
+- **D46** (Fase 5) **Headless sin cambios:** `--json` ya emite `context_governed` (Fase 4); se verifica con una comprobación de extremo a extremo (`fixtures/cli-e2e.ts`: un evento por petición en `shadow`, ninguno en `off`) y se documenta. No hay `/context` en `alisio run` (no tiene comandos de barra).
+- **D47** (Fase 5) **Cambios internos mínimos:** los segmentos del inventario llevan `callId`; `UsageLedger.decided(callId)` da `used` por segmento; el runner solo expone la lectura `contextInputs` (y extrae `invariantList` de `invariantBlock` sin cambiar su resultado), de modo que `tests/context-boundaries.test.ts` (importaciones de `context/*` en el runner) sigue igual.
 
 ## 10. Criterios de aceptación globales
 
@@ -391,7 +401,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 ## 12. Estado de implementación
 
-Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. **Fase 4 implementada en la misma rama (sin commit al escribir esto):** `UsageLedger`, evento duradero `context_governed`, campos opcionales de `context_reduced` y sección de `/stats`; ver D25 a D39 y las correcciones de 3.4 y 3.6. Medición con modelo pendiente de la puerta de la Fase 6.
+Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. **Fase 4 implementada en la misma rama (sin commit al escribir esto):** `UsageLedger`, evento duradero `context_governed`, campos opcionales de `context_reduced` y sección de `/stats`; ver D25 a D39 y las correcciones de 3.4 y 3.6. **Fase 5 implementada en la misma rama (sin commit al escribir esto):** `ContextReport`, ruta `GET /api/sessions/:sid/context/report`, `/context` en la TUI, pestaña Contexto en la web y comprobación de `--json`; ver D40 a D47. Medición con modelo pendiente de la puerta de la Fase 6.
 
 ## 13. Asignación de modelos
 

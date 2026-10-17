@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type {
   AvailableProviderModel,
+  ContextReport,
   JsonValue,
   ModelInfo,
   ModelProvider,
@@ -40,6 +41,7 @@ import {
   stateHome,
 } from "./config.ts";
 import { CONTEXT_POLICY_VERSION } from "./context/elide.ts";
+import { buildContextReport } from "./context/report.ts";
 import { createInvariantSources } from "./context/sources.ts";
 import { completeText } from "./core/compaction.ts";
 import type { ApprovalHandler } from "./core/contracts.ts";
@@ -1872,6 +1874,26 @@ export async function createApplication(options: AppOptions = {}) {
       contextWindow,
       /** Effective context budget + compaction point shared by the runner and the TUI bar. */
       contextBudget: (model: string) => runner.contextBudget(model),
+      /**
+       * The Context Governor's explanation of a session (spec 012 phase 5): the one `ContextReport`
+       * that `/context`, the web panel and the HTTP route render. Read only.
+       */
+      contextReport: (sessionId: string): ContextReport => {
+        const inputs = runner.contextInputs(sessionId);
+        return buildContextReport({
+          sessionId,
+          governor: inputs?.governor ?? {
+            mode: "off",
+            minAgeTurns: 0,
+            epochMessages: 0,
+            policyVersion: CONTEXT_POLICY_VERSION,
+          },
+          messages: inputs?.messages ?? [],
+          ...(inputs ? { invariants: inputs.invariants } : {}),
+          ...(inputs?.ledger ? { ledger: inputs.ledger } : {}),
+          ...(inputs?.governance ? { governance: inputs.governance } : {}),
+        });
+      },
       loadModels,
       /** Creates a provider for validation/model discovery without changing the active provider. */
       async probeProvider(

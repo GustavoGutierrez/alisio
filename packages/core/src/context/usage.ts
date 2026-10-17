@@ -280,6 +280,17 @@ export class UsageLedger {
     if (counted) this.reread++;
   }
 
+  /**
+   * Whether a later call acted on the result of `callId`: `true` or `false` once the result is
+   * decidable, `undefined` when it cannot be (unknown, not attributable, only seen as a stub, or
+   * seen only in the latest request).
+   */
+  decided(callId: string): boolean | undefined {
+    const e = this.entries.get(callId);
+    if (!e || e.stubOnly || e.keys.length === 0 || e.observedAt >= this.latest) return undefined;
+    return e.used;
+  }
+
   summary(): UsageSummary {
     const byTool = new Map<string, UsageCounts>();
     let observed = 0;

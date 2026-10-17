@@ -239,7 +239,12 @@ export {
   settableSettings,
   stateHome,
 } from "./config.ts";
-export { formatContextGovernorStatsSection } from "./context/format.ts";
+export {
+  formatContextGovernorStatsSection,
+  formatContextReport,
+  notableSegments,
+} from "./context/format.ts";
+export { buildContextReport, MAX_REPORT_SEGMENTS } from "./context/report.ts";
 export {
   type ContextBudget,
   checkpointInstructions,

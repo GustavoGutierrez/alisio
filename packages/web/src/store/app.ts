@@ -35,8 +35,9 @@ import {
 } from "./btw.ts";
 import { LAST_SEEN_KEY, newsAction } from "./changelog.ts";
 import { parseSlash, pushHistory } from "./composer.ts";
+import { isContextGoverned } from "./context-frame.ts";
 import { pushDatasetNotice } from "./datasets.ts";
-import { liveTasks, openProof, openTasks } from "./dock.ts";
+import { liveTasks, openContext, openProof, openTasks } from "./dock.ts";
 import { errorText } from "./errors.ts";
 import { goalFromFrame } from "./goal-frame.ts";
 import { nextAgentId } from "./modes.ts";
@@ -167,6 +168,13 @@ export const goalInfo = signal<GoalInfo | null>(null);
  */
 export const proofCount = signal(0);
 export const proofTick = signal(0);
+/**
+ * The Context Governor of the open session: `contextTick` moves with every `context_governed`
+ * event (the Context tab reads the report again) and `contextSeen` says the stream has shown one,
+ * which is what makes the tab appear. The report itself is its own chunk (`store/context-report.ts`).
+ */
+export const contextTick = signal(0);
+export const contextSeen = signal(false);
 /** Bumped by `capabilities_changed` for the open session (permissions are refetched). */
 export const capabilitiesTick = signal(0);
 /** `/artifacts [filter]` from the composer: the panel opens with its switcher. */
@@ -390,6 +398,10 @@ function applyServerFrames(frames: ServerFrame[]): void {
           if (!proofCount.value) proofCount.value = 1;
         }
       }
+      if (isContextGoverned(frame, currentId.value)) {
+        contextTick.value++;
+        contextSeen.value = true;
+      }
       if (frame.t === "catalog_changed") {
         scopes.add(frame.scope);
         if (frame.scope === "commands") catalog = true;
@@ -458,6 +470,8 @@ export async function openSession(id: string | undefined): Promise<void> {
     btw.value = undefined;
     goalInfo.value = null;
     proofCount.value = 0;
+    contextSeen.value = false;
+    contextTick.value = 0;
   });
   const hash = id ? `#/s/${encodeURIComponent(id)}` : "#/";
   if (location.hash !== hash) history_replace(hash);
@@ -849,6 +863,10 @@ export async function submit(
   }
   if (slash?.name === "proof" && commands.value.some((c) => c.name === "proof")) {
     openProof();
+    return;
+  }
+  if (slash?.name === "context" && commands.value.some((c) => c.name === "context")) {
+    openContext();
     return;
   }
   if (slash?.name === "goal" && commands.value.some((c) => c.name === "goal")) {

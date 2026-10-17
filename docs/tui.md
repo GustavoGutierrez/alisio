@@ -93,6 +93,7 @@ description, and `/resume` suggests matching session IDs.
 | `/model`, `/models` | Open the global provider/model selector. Entries are grouped and prefixed by provider title, the active pair is marked, and unavailable catalogs remain visible without hiding healthy profiles. A different pair is persisted and starts a fresh session; the active pair is a no-op. Legacy root provider configuration is not listed |
 | `/compact [focus]` | Summarize older history with the current model, with optional focus instructions |
 | `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context, plugin details and, when decisions happened, a [Decision Intelligence](/decision-intelligence#stats-section) section |
+| `/context` | The [context report](/context#context-report): what the next request carries, the segments the Context Governor pins or elides and why, and the invariant counts; with the governor `off` it says nothing is measured |
 | `/decisions` | [Decision Intelligence](/decision-intelligence#decisions-command) status: provider and health, circuit, timeout, and metrics of the session and the process |
 | `/clear` (`/new`) | Start a new session with the current model |
 | `/sessions` | Recent sessions of the workspace |

@@ -167,6 +167,12 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "surface",
   },
   {
+    name: "context",
+    description: "Show what the next request carries and what the Context Governor elides",
+    surfaces: ALL,
+    execution: "core",
+  },
+  {
     name: "decisions",
     description: "Show Decision Intelligence status, provider health and session metrics",
     surfaces: ALL,

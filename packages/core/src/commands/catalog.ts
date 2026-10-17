@@ -6,6 +6,7 @@
  */
 import {
   type CommandDescriptor,
+  type ContextReport,
   type RunEvent,
   summarizeDecisionEvents,
   type ToolDefinition,
@@ -16,7 +17,7 @@ import {
   resolveActiveAgent,
 } from "../agents/active.ts";
 import type { PluginCatalogEntry } from "../application.ts";
-import { formatContextGovernorStatsSection } from "../context/format.ts";
+import { formatContextGovernorStatsSection, formatContextReport } from "../context/format.ts";
 import { governedEventData } from "../context/governance.ts";
 import type { SessionStore } from "../core/contracts.ts";
 import type { AgentRunner } from "../core/runner.ts";
@@ -50,6 +51,8 @@ export interface CommandHost {
   store: SessionStore;
   runner: Pick<AgentRunner, "policy" | "approvals" | "compact" | "setModel"> &
     Partial<Pick<AgentRunner, "governance" | "contextUsage">>;
+  /** The Context Governor's report of a session (`/context`); `createApplication` provides it. */
+  contextReport?(sessionId: string): ContextReport;
   registry: { list(): ToolDefinition[] };
   provider: { id: string };
   plugins?: {
@@ -294,6 +297,12 @@ const HANDLERS: Record<string, Handler> = {
           : {}),
       },
     };
+  },
+  async context(_args, ctx, host) {
+    if (!host.contextReport)
+      return { text: "The context report is not available in this host.", tone: "notice" };
+    const report = host.contextReport(ctx.sessionId);
+    return { text: formatContextReport(report), data: report };
   },
   async skills(_args, _ctx, host) {
     const skills = host.skillCatalog?.() ?? [];

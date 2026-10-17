@@ -434,6 +434,29 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (`tests/context-governed-runner.test.ts`), de `/stats` (`tests/context-governor-stats.test.ts`),
   contrato de eventos y SSE; sin medición con un modelo real. El formateador compartido se prueba por
   identidad de exportación: la ruta de la TUI no tiene prueba de extremo a extremo propia.
+- Context Governor, Fase 5 (`specs/012-context-governor-v1.md`): superficies del informe de contexto.
+  Un único `ContextReport` (`context/report.ts`, tipos aditivos `ContextCriticality`,
+  `ContextSegment` y `ContextReport` en el SDK) que explica qué lleva la siguiente petición y qué
+  elide el governor; `/context` (comando `core` de todas las superficies; en la TUI y la API sale del
+  catálogo), pestaña «Contexto» del panel derecho de la web (carga diferida) y
+  `GET /api/sessions/:sid/context/report`. La ruta no es `.../context` como decía la spec porque esa
+  ya sirve la barra de contexto y no cambia (D40). `alisio run --json` ya emitía `context_governed`
+  (Fase 4) y ahora se comprueba de extremo a extremo. **Experimental.** **Límites:** con el governor
+  en `off` el informe está vacío (no se calcula nada); el informe se calcula al pedirlo desde el
+  historial guardado, así que puede diferir del último `context_governed` si el historial creció; las
+  cifras de «usado» siguen siendo una heurística de este proceso; el informe no lleva texto de
+  mensajes, archivos ni invariantes (estos solo como recuentos totales y por tipo, D43), pero sí rutas
+  y nombres de herramienta; tope de 400 segmentos
+  (se conservan los fijados, de criticidad baja y elididos); la pestaña web aparece tras el primer
+  evento `context_governed` de la sesión abierta o con `/context`; no hay `/context` en `alisio run` ni
+  retirada de invariantes individuales. **Alcance de la verificación:** pruebas del constructor y del
+  formateador (`tests/context-report.test.ts`), del comando (`tests/context-command.test.ts`), de la
+  ruta con servidor real y proveedor scripted, incluida la coincidencia con los eventos
+  `context_governed` y con lo que recibió el proveedor (`tests/context-routes.test.ts`), del modelo y
+  la vista del panel con paridad con `/context` (`tests/web-context.test.ts`, sin DOM) y la
+  comprobación de `--json` en `pnpm test:cli`; la TUI interactiva no tiene prueba de extremo a
+  extremo propia (reutiliza el catálogo), y la captura de la web es de un servidor real con un
+  proveedor falso; sin medición con un modelo real.
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del

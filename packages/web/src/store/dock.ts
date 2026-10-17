@@ -14,7 +14,7 @@ import {
 import { api, currentId, detail } from "./app.ts";
 import { readPref, writePref } from "./storage.ts";
 
-export type DockTab = "files" | "changes" | "preview" | "tasks" | "scratch" | "proof";
+export type DockTab = "files" | "changes" | "preview" | "tasks" | "scratch" | "proof" | "context";
 
 export interface DirState {
   entries: FileEntry[];
@@ -82,6 +82,16 @@ export function openProof(): void {
   batch(() => {
     dockOpen.value = true;
     dockTab.value = "proof";
+  });
+  writePref("alisio.dock", "open");
+  ensureWorkspace();
+}
+
+/** `/context`: opens the dock on its Context tab. */
+export function openContext(): void {
+  batch(() => {
+    dockOpen.value = true;
+    dockTab.value = "context";
   });
   writePref("alisio.dock", "open");
   ensureWorkspace();

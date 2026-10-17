@@ -491,6 +491,67 @@ try {
     bgRun.stdout,
   );
   assert.match(bgRun.stderr, /1 background task was still running and was stopped/);
+  // Context Governor (specs/012 phase 5): `--json` prints one `context_governed` event per model
+  // request when `context.governor` is `shadow` (counts and ids only), and none when it is `off`.
+  const governorServer = await serve(
+    () =>
+      new Response(
+        `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, delta: { content: "ok" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+  );
+  await writeFile(
+    join(directory, "governor-config.json"),
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${governorServer.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+      context: { governor: "shadow" },
+    }),
+  );
+  await writeFile(
+    join(directory, "governor-off-config.json"),
+    JSON.stringify({
+      provider: {
+        baseURL: `http://127.0.0.1:${governorServer.port}/v1`,
+        model: "test",
+        auth: "none",
+        apiMode: "chat",
+      },
+    }),
+  );
+  const governedRun = async (config: string) =>
+    (
+      await execute([
+        "run",
+        "hello",
+        "--cwd",
+        directory,
+        "--config",
+        join(directory, config),
+        "--json",
+      ])
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
+  const governed = (await governedRun("governor-config.json")).filter(
+    (e) => e.type === "context_governed",
+  );
+  assert.deepEqual(
+    governed.map((e) => e.data.request),
+    [1],
+    "one context_governed event per model request",
+  );
+  assert.equal(governed[0]?.data.mode, "shadow");
+  assert.deepEqual(
+    (await governedRun("governor-off-config.json")).filter((e) => e.type === "context_governed"),
+    [],
+  );
+  await governorServer.close();
   // Proof (specs/011): `run --proof` judges the run against its criteria and exits 0, 10 or 11.
   await writeFile(
     join(directory, "proof-config.json"),
@@ -1170,7 +1231,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   );
   assert.match(diverged, /DIVERGED .*messages\[0\]\.user\.text/s);
   const sessions = JSON.parse(await execute(["sessions", "list"]));
-  assert.equal(sessions.length, 11 + forgeSessions); // includes the two plugin-command runs, the two Proof runs and the Forja runs
+  assert.equal(sessions.length, 13 + forgeSessions); // includes the two plugin-command runs, the two Proof runs, the two Context Governor runs and the Forja runs
   // v4 run journal written by this runtime (Node or the Bun binary): one terminal row per run,
   // and the partial unique index on (session, request_id) exists.
   {
@@ -1279,6 +1340,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio serve: --help, --allow-remote refusal, health/token/cookie smoke, SIGTERM exit",
         "headless doctor never prompts/persists trust; --trust-project still loads project config",
         "alisio eval list/compare/run: a live run against the fake server writes its report files; exit 0 and 3 (incompatible suites); eval record + replay without calling the model, exit 2 on divergence",
+        "alisio run --json: one context_governed event per request with context.governor shadow, none with off",
         "alisio run --proof: criteria from --criterion/--verify, the proof/v1 ledger as the final --json event, exit 0 (verified) and 11 (unchecked), a --verify without --criterion refused",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
       ],

@@ -91,6 +91,11 @@ const LEGACY_COMMANDS = [
     description: "Show the acceptance criteria of this session and the evidence behind each one",
     argumentHint: "[add | edit | required | optional | na | export | help]",
   },
+  // Added with the Context Governor (specs/012 phase 5).
+  {
+    name: "context",
+    description: "Show what the next request carries and what the Context Governor elides",
+  },
   // Added with Decision Intelligence.
   {
     name: "decisions",

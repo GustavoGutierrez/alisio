@@ -767,6 +767,85 @@ export interface ContextGovernedData {
     byTool?: Record<string, ContextUsageCounts>;
   };
 }
+/** Where an invariant comes from. Consumers must accept values they do not know. */
+export type ContextInvariantKind = "instruction" | "goal" | "plan" | "criterion" | "grant";
+/** How protected a context segment is. Consumers must accept values they do not know. */
+export type ContextCriticality = "pinned" | "high" | "normal" | "low";
+/**
+ * One piece of the history a model request carries, as `GET /api/sessions/:sid/context/report`
+ * and `/context` explain it. Ids and counts only: never the text of the segment.
+ */
+export interface ContextSegment {
+  /** Stable id (the id the Governor uses for the same segment). */
+  id: string;
+  kind: ContextSegmentKind;
+  /** File path, tool name or message role. */
+  origin?: string;
+  /** Provider call id of a `tool_call` / `tool_result` segment. */
+  callId?: string;
+  /** Token ESTIMATE, never provider usage. */
+  tokens: number;
+  criticality: ContextCriticality;
+  /** Why the segment has that criticality. */
+  reason?: string;
+  /** Present when the Governor replaced (`on`) or would replace (`shadow`) the result by a stub. */
+  elided?: {
+    reason: ContextElisionReason;
+    /** Call id of the later result that made this one redundant. */
+    replacedBy?: string;
+    tokensSaved: number;
+  };
+  /** Heuristic: a later call acted on the same path. Absent when it cannot be decided. */
+  used?: boolean;
+}
+/**
+ * `GET /api/sessions/:sid/context/report`: what the next model request of a session carries and
+ * what the Context Governor does with it. The one report that the web panel, `/context` in the TUI
+ * and the `context_governed` events agree on. Token figures are ESTIMATES. With `mode: "off"` the
+ * Governor measures nothing, so `segments` is empty.
+ */
+export interface ContextReport {
+  sessionId: string;
+  policyVersion: number;
+  mode: "off" | "shadow" | "on";
+  /** 1-based request number of the latest `context_governed` event of this process, if any. */
+  request?: number;
+  /** Messages in the history. */
+  messages: number;
+  /** Segments of the history that count for `ContextGovernedData.segments` plus the pinned ones, in order. */
+  segments: ContextSegment[];
+  /** Segments dropped from `segments` to bound the report (elided, pinned and low ones stay first). */
+  segmentsOmitted?: number;
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved: number;
+  /** Tool results replaced (`on`) or that would be (`shadow`). */
+  elided: number;
+  byReason: Record<ContextElisionReason, number>;
+  /**
+   * The standing context the next request carries after a compaction, as counts only: never the
+   * text of an instruction, goal, plan or criterion. All zero before the first compaction.
+   */
+  invariants: {
+    /** Invariants collected for the next request. */
+    count: number;
+    /** How many of them did not fit `context.invariants.maxChars` and are left out of the request. */
+    omitted: number;
+    byKind: Partial<Record<ContextInvariantKind, number>>;
+  };
+  /** Share of the tool results the agent acted on later; only kinds with decided results. */
+  usedRatioByKind: Partial<Record<ContextSegmentKind, number>>;
+  /** Heuristic usage counts of this process (advisory, lost on restart). */
+  usage?: {
+    observed: number;
+    used: number;
+    pending: number;
+    unattributed: number;
+    stubOnly: number;
+    rereads: number;
+    byTool?: Record<string, ContextUsageCounts>;
+  };
+}
 /** Every `RunEvent.type` the core emits today. `RunEvent.type` itself stays `string`. */
 export type RunEventType = keyof RunEventDataMap;
 /** Event types never persisted to the session store (and therefore without `eventId`). */

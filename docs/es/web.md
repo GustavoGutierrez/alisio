@@ -465,6 +465,33 @@ Las rutas (misma autenticación y reglas de Origin que las demás rutas de sesi�
 Flujo: `proof_updated` y `proof_divergence` llegan como frames `event` normales, y el snapshot lleva
 `proof: {criteria: n}` cuando la sesión tiene criterios.
 
+### Panel de contexto {#context-panel}
+
+Con el [Context Governor](/es/context#context-governor) en `shadow` o `on`, el panel derecho gana una
+pestaña **Contexto** en cuanto la sesión abierta emite su primer evento `context_governed` (`/context`
+la abre en cualquier momento). Carga bajo demanda y lee el mismo
+[informe de contexto](/es/context#context-report) que `/context` imprime en la terminal, así que ambos
+muestran los mismos segmentos y razones. La pestaña muestra el modo y la política, los tokens
+estimados antes y después de la política, cuántos resultados de herramientas se elidieron (o se
+elidirían, en `shadow`) y por qué, la proporción de resultados que el agente usó después, los
+recuentos de invariantes por tipo (nunca su texto) y los segmentos que conviene explicar: los
+fijados, de criticidad baja y elididos, cada uno con su tipo, origen, tokens, criticidad y razón. Una
+casilla lista todos los segmentos. Nada de la pestaña cambia la sesión; solo lee.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/context_governor_web_ui.webp" alt="La pestaña Contexto del panel derecho en modo on: el resumen de la política, dos resultados de herramientas elididos con su razón, el recuento de invariantes por tipo y la lista de segmentos." width="1360" height="820" loading="lazy" decoding="async" />
+  <figcaption>La pestaña Contexto con datos sintéticos (interfaz en inglés).</figcaption>
+</figure>
+
+La ruta (misma autenticación y reglas de Origin que las demás rutas de sesión; la anterior
+`GET /api/sessions/:sid/context`, la estimación de la barra de contexto, no cambia):
+
+| Ruta | Propósito |
+| --- | --- |
+| `GET /api/sessions/:sid/context/report` | El `ContextReport`: segmentos con sus razones, los totales de elisión por razón, los invariantes y el uso heurístico |
+
+Flujo: `context_governed` llega como un frame `event` duradero normal, uno por petición al modelo.
+
 ### `/reload` y `/changelog` {#reload-and-changelog}
 
 `/reload` vuelve a leer la configuración, los agentes, las skills, las plantillas de prompt y los
@@ -648,6 +675,7 @@ GET  /api/sessions                     POST /api/sessions            GET|PATCH /
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/sessions/:sid/context/report   the Context Governor's ContextReport (segments, reasons, invariants)
 GET  /api/sessions/:sid/views/:plugin/:view?<params>   read-only data view of an enabled plugin
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel

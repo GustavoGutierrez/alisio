@@ -232,6 +232,36 @@ facts reused in another file and symbols. Results without a path (background out
 process output, writes, errors) are listed as not attributable. The numbers cover this process and
 this session only and are lost on restart; they never decide what is elided.
 
+### The context report: `/context`, the web panel and the route {#context-report}
+
+The report explains the history the **next** request of a session would carry and what the
+governor does with it: every segment with its kind, origin (file path, tool name or message role),
+estimated tokens, criticality (`pinned`, `high`, `normal`, `low`) and the reason for that
+criticality; which tool results are elided (`on`) or would be (`shadow`), with the reason
+(`superseded_read`, `stale_bg_output`, `duplicate_search`), the call id of the later result that
+replaced them and the tokens saved; how many invariants the request carries after a compaction, in total and by kind (instruction, goal, plan, criterion, grant); and, when
+this process has a usage ledger, which results the agent acted on later. With the governor `off` the
+report only says so: nothing is measured.
+
+It is one value, a `ContextReport`, and every surface renders that same value:
+
+| Surface | How to get it |
+| --- | --- |
+| Terminal (TUI) | `/context`: the totals, the invariant counts and a table of the pinned, low and elided segments with their reasons |
+| Web UI | The **Context** tab of the right panel (it appears after the first `context_governed` event of the open session, or with `/context`); a checkbox lists every segment |
+| HTTP | `GET /api/sessions/:sid/context/report`, read only, behind the same authentication as every session route |
+| Headless | `alisio run --json` prints one `context_governed` event per request: the same counts, reasons and elided call ids, without the per-segment detail |
+
+The route is `.../context/report` because `GET /api/sessions/:sid/context` already exists: it returns
+the estimate and budget behind the context bar and its body does not change.
+
+The report holds ids, counts, token estimates and metadata (paths, tool names). It never holds the
+text of a message, a file, a stub or an invariant: the invariants appear only as counts, in total and
+by kind. A report lists at most 400 segments: the
+pinned, low and elided ones always stay and the rest is cut from the oldest, with a count of what was
+left out. The report is computed when asked, from the stored history; the usage figures come from
+this process and are lost on restart.
+
 ### Limits of the guarantees
 
 The projection is stable when messages are appended, with these exceptions, each of which rewrites
@@ -242,8 +272,8 @@ or reinterprets the history on purpose:
   that justified an elision can make the earlier one visible again.
 - Changing the mode or the `elide` settings changes the policy.
 
-The invariants block has its own limits: there is no way to remove a single instruction until the
-Context Governor surfaces arrive (the whole list is forgotten with the session); `/btw` and the
+The invariants block has its own limits: there is no way to remove a single instruction (the whole
+list is forgotten with the session); `/btw` and the
 context bar do not count the block; the approved effects and the external-directory count are held
 in memory and shrink after a restart; and `shadow` cannot measure which quotes `on` would keep. How
 a trailing `user` message affects each model is measured by the promotion gate, not assumed.
@@ -251,5 +281,5 @@ a trailing `user` message affects each model is measured by the promotion gate, 
 Paths are compared as written: `./a.ts` and `a.ts` are different files to the governor, which only
 costs a missed saving. A `read_file` result without a `sha256` (files over 1 MiB) can only be
 elided by a later write or edit. The token figures are estimates (about four characters per
-token), not provider usage. The decisions are reported by the `context_governed` event and
-`/stats`.
+token), not provider usage. The decisions are reported by the `context_governed` event, `/stats` and
+the [context report](#context-report).

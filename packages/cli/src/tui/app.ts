@@ -3411,6 +3411,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         case "stats":
           return info(statsReport());
         case "tools":
+        case "context":
         case "decisions":
         case "sessions": {
           // Text-identical core handlers (parity-tested): output comes from the CommandCatalog.

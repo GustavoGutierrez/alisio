@@ -61,6 +61,7 @@ export function buildInventory(messages: Message[], ctx: InventoryContext = {}):
     origin: string,
     content: string,
     extra?: Draft["result"],
+    callId?: string,
   ) => {
     drafts.push({
       index,
@@ -69,6 +70,7 @@ export function buildInventory(messages: Message[], ctx: InventoryContext = {}):
         id: segmentId(kind, key, content),
         kind,
         origin,
+        ...(callId ? { callId } : {}),
         tokens: estimateTokens(content),
         criticality: "normal",
       },
@@ -107,17 +109,28 @@ export function buildInventory(messages: Message[], ctx: InventoryContext = {}):
       for (const c of m.calls) {
         const info = describeCall(c.name, c.arguments);
         calls.set(c.id, info);
-        add(index, "tool_call", c.id, info.path ?? c.name, `${c.name} ${c.arguments}`);
+        add(
+          index,
+          "tool_call",
+          c.id,
+          info.path ?? c.name,
+          `${c.name} ${c.arguments}`,
+          undefined,
+          c.id,
+        );
       }
     } else {
       const text = resultText(m);
       const call = calls.get(m.callId);
-      add(index, "tool_result", m.callId, call?.path ?? call?.name ?? "tool", text, {
-        callId: m.callId,
-        call,
-        isError: m.result.isError === true,
+      add(
+        index,
+        "tool_result",
+        m.callId,
+        call?.path ?? call?.name ?? "tool",
         text,
-      });
+        { callId: m.callId, call, isError: m.result.isError === true, text },
+        m.callId,
+      );
     }
   });
 

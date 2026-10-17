@@ -242,6 +242,36 @@ texto, hechos reutilizados en otro archivo ni símbolos. Los resultados sin ruta
 plano, resultados web, salida de procesos, escrituras, errores) se listan como no atribuibles. Las
 cifras cubren solo este proceso y esta sesión y se pierden al reiniciar; nunca deciden qué se elide.
 
+### El informe de contexto: `/context`, el panel web y la ruta {#context-report}
+
+El informe explica el historial que llevaría la **siguiente** petición de una sesión y qué hace el
+governor con él: cada segmento con su tipo, origen (ruta de archivo, nombre de herramienta o rol del
+mensaje), tokens estimados, criticidad (`pinned`, `high`, `normal`, `low`) y el motivo de esa
+criticidad; qué resultados de herramientas se elidieron (`on`) o se elidirían (`shadow`), con la razón
+(`superseded_read`, `stale_bg_output`, `duplicate_search`), el id de llamada del resultado posterior
+que los sustituyó y los tokens ahorrados; cuántos invariantes lleva la petición tras una compactación, en total y por tipo (instruction, goal, plan, criterion, grant)
+y, cuando este proceso tiene un ledger de uso, qué resultados usó el agente después. Con el governor
+en `off` el informe solo lo dice: no se mide nada.
+
+Es un único valor, un `ContextReport`, y todas las superficies muestran ese mismo valor:
+
+| Superficie | Cómo obtenerlo |
+| --- | --- |
+| Terminal (TUI) | `/context`: los totales, los recuentos de invariantes y una tabla de los segmentos fijados, de criticidad baja y elididos con sus razones |
+| Interfaz web | La pestaña **Contexto** del panel derecho (aparece tras el primer evento `context_governed` de la sesión abierta, o con `/context`); una casilla lista todos los segmentos |
+| HTTP | `GET /api/sessions/:sid/context/report`, solo lectura, con la misma autenticación que cualquier ruta de sesión |
+| Headless | `alisio run --json` imprime un evento `context_governed` por petición: los mismos recuentos, razones e ids de llamada elididos, sin el detalle por segmento |
+
+La ruta es `.../context/report` porque `GET /api/sessions/:sid/context` ya existe: devuelve la
+estimación y el presupuesto de la barra de contexto y su cuerpo no cambia.
+
+El informe contiene ids, recuentos, estimaciones de tokens y metadatos (rutas, nombres de
+herramienta). Nunca contiene el texto de un mensaje, de un archivo, de un stub ni de un invariante: los
+invariantes aparecen solo como recuentos, en total y por tipo. Un informe lista como máximo 400 segmentos: los fijados, de criticidad baja y elididos
+siempre se conservan y el resto se recorta desde el más antiguo, con un recuento de lo que quedó fuera.
+El informe se calcula al pedirlo, a partir del historial guardado; las cifras de uso vienen de este
+proceso y se pierden al reiniciar.
+
 ### Límites de las garantías
 
 La proyección es estable al añadir mensajes, con estas excepciones, cada una de las cuales reescribe o
@@ -253,8 +283,8 @@ reinterpreta el historial a propósito:
   anterior.
 - Cambiar el modo o los ajustes de `elide` cambia la política.
 
-El bloque de invariantes tiene sus propios límites: no hay forma de quitar una sola instrucción hasta
-que lleguen las superficies del Context Governor (toda la lista se olvida con la sesión); `/btw` y la
+El bloque de invariantes tiene sus propios límites: no hay forma de quitar una sola instrucción (toda la
+lista se olvida con la sesión); `/btw` y la
 barra de contexto no cuentan el bloque; los efectos aprobados y el recuento de directorios externos
 viven en memoria y se reducen tras un reinicio; y `shadow` no puede medir qué citas conservaría `on`.
 Cómo afecta a cada modelo un mensaje `user` final lo mide la puerta de promoción; no se da por
@@ -264,4 +294,4 @@ Las rutas se comparan tal como están escritas: `./a.ts` y `a.ts` son archivos d
 governor, lo que solo supone perder un ahorro. Un resultado de `read_file` sin `sha256` (archivos de
 más de 1 MiB) solo puede elidirse por una escritura o edición posterior. Las cifras de tokens son
 estimaciones (unos cuatro caracteres por token), no el uso real del proveedor. Las decisiones se
-informan en el evento `context_governed` y en `/stats`.
+informan en el evento `context_governed`, en `/stats` y en el [informe de contexto](#context-report).

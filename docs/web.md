@@ -436,6 +436,32 @@ The routes (same authentication and Origin rules as the other session routes):
 Stream: `proof_updated` and `proof_divergence` arrive as ordinary `event` frames, and the snapshot
 carries `proof: {criteria: n}` when the session has criteria.
 
+### Context panel {#context-panel}
+
+With the [Context Governor](/context#context-governor) in `shadow` or `on`, the right panel gains a
+**Context** tab as soon as the open session emits its first `context_governed` event (`/context`
+opens it at any time). It loads on demand and reads the same
+[context report](/context#context-report) that `/context` prints in the terminal, so both show the
+same segments and reasons. The tab shows the mode and policy, the estimated tokens before and after
+the policy, how many tool results are elided (or would be, in `shadow`) and why, the share of results
+the agent acted on later, the invariant counts by kind (never their text) and the segments that need
+explaining: pinned, low criticality and elided ones, each with its kind, origin, tokens, criticality
+and reason. A checkbox lists every segment. Nothing in the tab changes the session; it only reads.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/context_governor_web_ui.webp" alt="The Context tab of the right panel in on mode: the policy summary, two elided tool results with their reason, the invariant counts by kind and the list of segments." width="1360" height="820" loading="lazy" decoding="async" />
+  <figcaption>The Context tab with synthetic data.</figcaption>
+</figure>
+
+The route (same authentication and Origin rules as the other session routes; the older
+`GET /api/sessions/:sid/context`, the estimate behind the context bar, is unchanged):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/sessions/:sid/context/report` | The `ContextReport`: segments with their reasons, the elision totals by reason, the invariants and the heuristic usage |
+
+Stream: `context_governed` arrives as an ordinary durable `event` frame, one per model request.
+
 ### `/reload` and `/changelog` {#reload-and-changelog}
 
 `/reload` re-reads the configuration, agents, skills, prompt templates and MCP servers of the
@@ -609,6 +635,7 @@ GET  /api/sessions                     POST /api/sessions            GET|PATCH /
 GET  /api/sessions/:sid/messages       GET /api/sessions/:sid/events GET /api/sessions/:sid/runs
 POST /api/sessions/:sid/prompts        POST /api/sessions/:sid/cancel  POST /api/sessions/:sid/compact
 GET  /api/sessions/:sid/models         GET /api/sessions/:sid/context GET /api/sessions/:sid/export
+GET  /api/sessions/:sid/context/report   the Context Governor's ContextReport (segments, reasons, invariants)
 GET  /api/sessions/:sid/views/:plugin/:view?<params>   read-only data view of an enabled plugin
 GET  /api/commands?session=<sid>       POST /api/sessions/:sid/commands {requestId, name, args?}
 GET  /api/sessions/:sid/btw            POST /api/sessions/:sid/btw {question}  POST /api/sessions/:sid/btw/cancel

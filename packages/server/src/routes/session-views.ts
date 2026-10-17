@@ -1,5 +1,5 @@
 import type { SQLiteStore } from "@alisio/core";
-import type { SessionContextUsage, SessionModels } from "@alisio/sdk";
+import type { ContextReport, SessionContextUsage, SessionModels } from "@alisio/sdk";
 import type { SessionService } from "../host/sessions.ts";
 import type { Router } from "../http/router.ts";
 import { storedToRunEvent } from "./sessions.ts";
@@ -50,6 +50,15 @@ export function registerSessionViewRoutes(
         compactionAt: budget.compactionAt,
       } satisfies SessionContextUsage,
     };
+  });
+
+  // The Context Governor's explanation (spec 012 phase 5): the one `ContextReport` that `/context`
+  // in the TUI and the web panel render. Read only; ids, counts and metadata, never content. It
+  // lives beside the older `/context` (the ring's estimate), whose body stays as it was.
+  router.get("/api/sessions/:sid/context/report", async ({ params }) => {
+    const session = sessions.get(params.sid ?? "");
+    const { app } = await sessions.app(session);
+    return { body: app.contextReport(session.id) satisfies ContextReport };
   });
 
   // Session log: one `RunEvent` line per durable event (events.seq order, `alisio run --json`

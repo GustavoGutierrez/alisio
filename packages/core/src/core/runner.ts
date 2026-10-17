@@ -24,6 +24,7 @@ import {
 } from "../context/governance.ts";
 import {
   collectInvariants,
+  type Invariant,
   type InvariantSources,
   type InvariantState,
   promoteInstructions,
@@ -634,12 +635,17 @@ export class AgentRunner {
    * stored instructions and the live sources, never saved.
    */
   private invariantBlock(sessionId: string, messages: Message[], maxChars: number) {
+    const list = this.invariantList(sessionId, messages);
+    return list ? renderInvariants(list, maxChars) : { text: "", included: 0, omitted: 0 };
+  }
+  /** The collected invariants, or undefined before the first compaction (see `invariantBlock`). */
+  private invariantList(sessionId: string, messages: Message[]) {
     const state = this.invariantState(sessionId);
     const first = messages[0];
     const compacted =
       (state?.compactions ?? 0) > 0 ||
       (first?.role === "user" && !!first.summary && first.text.startsWith("[Checkpoint of"));
-    if (!compacted) return { text: "", included: 0, omitted: 0 };
+    if (!compacted) return undefined;
     const sources = this.options.invariantSources;
     // A broken source never stops a request: its section is simply left out.
     const read = <T>(source: (() => T) | undefined): T | undefined => {
@@ -651,24 +657,57 @@ export class AgentRunner {
     };
     const grants = read(sources?.grants?.bind(sources, sessionId));
     const effects = [...(this.sessionEffects.get(sessionId) ?? [])];
-    return renderInvariants(
-      collectInvariants({
-        instructions: state?.instructions ?? [],
-        ...optional("goal", read(sources?.goal?.bind(sources, sessionId))),
-        ...optional("plan", read(sources?.plan?.bind(sources, sessionId))),
-        ...optional("criteria", read(sources?.criteria?.bind(sources, sessionId))),
-        ...(grants || effects.length
-          ? {
-              grants: {
-                effects,
-                capabilities: grants?.capabilities ?? [],
-                externalDirectories: grants?.externalDirectories ?? 0,
-              },
-            }
-          : {}),
-      }),
-      maxChars,
-    );
+    return collectInvariants({
+      instructions: state?.instructions ?? [],
+      ...optional("goal", read(sources?.goal?.bind(sources, sessionId))),
+      ...optional("plan", read(sources?.plan?.bind(sources, sessionId))),
+      ...optional("criteria", read(sources?.criteria?.bind(sources, sessionId))),
+      ...(grants || effects.length
+        ? {
+            grants: {
+              effects,
+              capabilities: grants?.capabilities ?? [],
+              externalDirectories: grants?.externalDirectories ?? 0,
+            },
+          }
+        : {}),
+    });
+  }
+  /**
+   * What the `ContextReport` of a session is built from (spec 012 phase 5): the governor settings,
+   * the active history, the invariants of the next request and the in-memory usage ledger. Read
+   * only. `off` and runners without a governor return no history, because `off` measures nothing.
+   */
+  contextInputs(sessionId: string):
+    | {
+        governor: ContextGovernorOptions;
+        messages: Message[];
+        invariants: {
+          items: Array<{ kind: Invariant["kind"]; text: string }>;
+          omitted: number;
+        };
+        ledger?: UsageLedger;
+        governance?: GovernanceSnapshot;
+      }
+    | undefined {
+    const governor = this.options.contextGovernor;
+    if (!governor) return undefined;
+    if (governor.mode === "off")
+      return { governor, messages: [], invariants: { items: [], omitted: 0 } };
+    const messages = this.options.store.messages(sessionId);
+    const list = this.invariantList(sessionId, messages) ?? [];
+    const omitted = list.length
+      ? renderInvariants(list, governor.invariantMaxChars ?? 4000).omitted
+      : 0;
+    const ledger = this.usage.get(sessionId);
+    const governance = this.governed.get(sessionId);
+    return {
+      governor,
+      messages,
+      invariants: { items: list.map((i) => ({ kind: i.kind, text: i.text })), omitted },
+      ...(ledger ? { ledger } : {}),
+      ...(governance ? { governance } : {}),
+    };
   }
   /** Keeps the user's verbatim quotes the summarizer proposed (see `promoteInstructions`). */
   private promoteInvariants(sessionId: string, proposed: unknown, summarized: Message[]): void {

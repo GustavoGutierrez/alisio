@@ -16,6 +16,8 @@ export interface ContextSegment {
   kind: ContextSegmentKind;
   /** File path, tool name, or the message role when neither applies. */
   origin: string;
+  /** Provider call id of a `tool_call` / `tool_result` segment. */
+  callId?: string;
   /** Token ESTIMATE (the shared `estimateTokens` heuristic), never provider-reported usage. */
   tokens: number;
   criticality: Criticality;
