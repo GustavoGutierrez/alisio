@@ -142,6 +142,19 @@ export function buildInventory(messages: Message[], ctx: InventoryContext = {}):
   return { segments, totalTokens, byKind, byCriticality };
 }
 
+/**
+ * Number of segments `buildInventory` would produce for `messages` without any pinned context,
+ * counted by the same rule but without hashing or estimating (cheap enough for every request).
+ */
+export function countSegments(messages: Message[]): number {
+  let n = 0;
+  for (const m of messages) {
+    if (m.role === "assistant") n += (m.text || m.calls.length === 0 ? 1 : 0) + m.calls.length;
+    else n++;
+  }
+  return n;
+}
+
 function lastTurnStart(messages: Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i]?.role === "assistant") return i;
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i]?.role === "user") return i;

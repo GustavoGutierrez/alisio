@@ -80,7 +80,9 @@ memoria. Node.js 22.16 es el mínimo porque las compilaciones 22.x anteriores ca
 
 El runner informa del progreso como `RunEvent`: a los integradores mediante `onEvent`, a los plugins
 (`events.on`) y como JSONL con `alisio run --json`. `schemaVersion` sigue en `1` mientras los cambios
-sean aditivos, por lo que los consumidores deben ignorar campos y tipos de evento desconocidos.
+sean aditivos, por lo que los consumidores deben ignorar campos y tipos de evento desconocidos. Con el
+Context Governor en `shadow` o `on`, cada petición al modelo emite además un evento duradero
+`context_governed` (solo recuentos e ids; ver [Context Governor](/es/context#context-events)).
 
 | Campo | Significado |
 | --- | --- |

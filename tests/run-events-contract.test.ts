@@ -170,7 +170,29 @@ const contract: { [K in RunEventType]: Check } = {
     opt(d.partial, (v) => v === true),
   compaction_skipped: (d) => oneOf("manual", "auto")(d.reason) && num(d.before) && str(d.detail),
   compaction_failed: (d) => oneOf("manual", "auto")(d.reason) && str(d.error),
-  context_reduced: (d) => num(d.messages),
+  context_reduced: (d) =>
+    num(d.messages) && opt(d.reason, (v) => v === "budget") && opt(d.tokensSaved, num),
+  context_governed: (d) =>
+    num(d.policyVersion) &&
+    oneOf("shadow", "on")(d.mode) &&
+    num(d.request) &&
+    num(d.messages) &&
+    num(d.segments) &&
+    num(d.elided) &&
+    record(d.byReason) &&
+    num(d.tokensBefore) &&
+    num(d.tokensAfter) &&
+    num(d.tokensSaved) &&
+    opt(d.elidedCallIds, (v) => Array.isArray(v) && v.length <= 32 && v.every(str)) &&
+    opt(d.elidedCallIdsOmitted, num) &&
+    opt(d.invariants, (v) => {
+      const i = v as Record<string, unknown>;
+      return record(v) && num(i.count) && num(i.chars) && num(i.omitted);
+    }) &&
+    opt(d.usage, (v) => {
+      const u = v as Record<string, unknown>;
+      return record(v) && num(u.observed) && num(u.used) && num(u.pending) && num(u.unattributed);
+    }),
   session_context_injected: (d) =>
     num(d.tokens) && Array.isArray(d.sources) && (d.sources as unknown[]).every(str),
   plugin_hook_failed: hookFailure,

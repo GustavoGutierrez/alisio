@@ -661,8 +661,23 @@ export interface RunEventDataMap {
   };
   compaction_skipped: { reason: "manual" | "auto" | "budget"; before: number; detail: string };
   compaction_failed: { reason: "manual" | "auto" | "budget"; error: string };
-  /** Tool results clipped in place to fit the context budget. */
-  context_reduced: { messages: number };
+  /**
+   * Tool results clipped in place to fit the context budget. Elision by the Context Governor is
+   * never reported here: it lives only in `context_governed`.
+   */
+  context_reduced: {
+    messages: number;
+    /** Why the results were clipped; absent on events from older cores. */
+    reason?: "budget";
+    /** Estimate of the tokens the clip saved (characters divided by the shared heuristic). */
+    tokensSaved?: number;
+  };
+  /**
+   * What the Context Governor decided for one model request (modes `shadow` and `on`; never
+   * emitted when it is `off`). Counts, enum keys, tool names and provider call ids only: no paths,
+   * patterns, stub text or file content.
+   */
+  context_governed: ContextGovernedData;
   session_context_injected: { tokens: number; sources: string[] };
   plugin_hook_failed: { source: string; hook: string; error: string; continued: true };
   /** A Decision Intelligence call that produced usable answers. Metadata only, never the state. */
@@ -694,6 +709,63 @@ export interface RunEventDataMap {
   };
   /** The final text claims something the Proof ledger does not back (display only). */
   proof_divergence: { claim: string; criterionId?: string; actual: ProofStatus };
+}
+/**
+ * Kind of a context segment. Consumers must accept values they do not know: the list can grow.
+ */
+export type ContextSegmentKind =
+  | "system"
+  | "instructions"
+  | "user"
+  | "assistant"
+  | "tool_call"
+  | "tool_result"
+  | "checkpoint"
+  | "invariant"
+  | "memory"
+  | "other";
+/** Why the Context Governor replaced a tool result with a stub. Consumers must accept new values. */
+export type ContextElisionReason = "superseded_read" | "stale_bg_output" | "duplicate_search";
+/** Tool results the model saw (`observed`) and later acted on (`used`). */
+export interface ContextUsageCounts {
+  observed: number;
+  used: number;
+}
+/**
+ * Payload of `context_governed`. Token figures are ESTIMATES (about 4 characters per token), never
+ * provider usage. Consumers must ignore fields they do not know.
+ */
+export interface ContextGovernedData {
+  policyVersion: number;
+  mode: "shadow" | "on";
+  /** 1-based number of the model request inside the run. */
+  request: number;
+  /** Messages in the history of this request. */
+  messages: number;
+  /** Inventory segments of that history (without pinned ones). */
+  segments: number;
+  /** Tool results that would be (`shadow`) or were (`on`) replaced by a stub. */
+  elided: number;
+  byReason: Record<ContextElisionReason, number>;
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved: number;
+  /** Call ids elided for the first time at this request (at most 32). */
+  elidedCallIds?: string[];
+  /** How many newly elided call ids did not fit in `elidedCallIds`. */
+  elidedCallIdsOmitted?: number;
+  /** Counts of the invariants block of this request; never its text. */
+  invariants?: { count: number; chars: number; omitted: number };
+  /** Heuristic usage of the tool results seen by this process in this session (advisory). */
+  usage?: {
+    observed: number;
+    used: number;
+    pending: number;
+    unattributed: number;
+    byKind?: Partial<Record<ContextSegmentKind, ContextUsageCounts>>;
+    /** At most 16 tools; the rest are folded into `other`. */
+    byTool?: Record<string, ContextUsageCounts>;
+  };
 }
 /** Every `RunEvent.type` the core emits today. `RunEvent.type` itself stays `string`. */
 export type RunEventType = keyof RunEventDataMap;

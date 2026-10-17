@@ -546,7 +546,12 @@ describe("context-budget reduction after compaction", () => {
       expect(result.status).toBe("completed");
       const reduced = events.find((e) => e.type === "context_reduced");
       expect(reduced).toBeDefined();
-      expect(reduced?.data).toEqual({ messages: 1 });
+      expect(reduced?.data).toEqual({
+        messages: 1,
+        reason: "budget",
+        tokensSaved: expect.any(Number),
+      });
+      expect((reduced?.data as { tokensSaved: number }).tokensSaved).toBeGreaterThan(0);
       expect(events.some((e) => e.type === "run_failed")).toBe(false);
       // Transcript: roles and call IDs intact; the kept tool result was cut with the marker.
       const stored = fx.store.messages(session.id);
@@ -625,7 +630,12 @@ describe("context-budget reduction after compaction", () => {
       expect(result.status).toBe("completed");
       const reduced = events.find((e) => e.type === "context_reduced");
       expect(reduced).toBeDefined();
-      expect(reduced?.data).toEqual({ messages: 5 });
+      expect(reduced?.data).toEqual({
+        messages: 5,
+        reason: "budget",
+        tokensSaved: expect.any(Number),
+      });
+      expect((reduced?.data as { tokensSaved: number }).tokensSaved).toBeGreaterThan(0);
       expect(events.some((e) => e.type === "run_failed")).toBe(false);
       const stored = fx.store.messages(session.id);
       const tools = stored.filter((m) => m.role === "tool");

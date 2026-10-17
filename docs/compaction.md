@@ -154,7 +154,8 @@ explores in repos with several MCP servers.
 | `compaction_started` | Compaction begins |
 | `compaction_completed` | Done; includes `before`/`after` estimates, the size of the summarized span and of the checkpoint, plugin reports, and `partial: true` when the summary was cut but kept |
 | `compaction_skipped` | Not enough history to compact |
-| `context_reduced` | After compaction, retained messages still exceeded `maxContextChars` and were clipped to a total character target (`messages` = how many) |
+| `context_reduced` | After compaction, retained messages still exceeded `maxContextChars` and were clipped to a total character target (`messages` = how many, `reason: "budget"`, `tokensSaved` = estimate). The Context Governor never reports elision here |
+| `context_governed` | Context Governor in `shadow` or `on`: one per model request, with counts, token estimates and the call ids newly elided (see [Context Governor](/context#context-events)) |
 | `compaction_failed` | The summarizer call failed (including a cut summary with nothing usable) |
 | `plugin_hook_failed` | A plugin hook failed or timed out; compaction continues without it |
 

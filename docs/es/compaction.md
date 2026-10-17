@@ -164,7 +164,8 @@ MCP.
 | `compaction_started` | Comienza la compactación |
 | `compaction_completed` | Terminó; incluye estimaciones `before`/`after`, el tamaño del tramo resumido y del checkpoint, informes de plugins y `partial: true` cuando el resumen se cortó pero se conservó |
 | `compaction_skipped` | No hay historia suficiente para compactar |
-| `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se recortaron hasta un objetivo total de caracteres (`messages` = cuántos) |
+| `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se recortaron hasta un objetivo total de caracteres (`messages` = cuántos, `reason: "budget"`, `tokensSaved` = estimación). El Context Governor nunca informa aquí de la elisión |
+| `context_governed` | Context Governor en `shadow` o `on`: uno por petición al modelo, con recuentos, estimaciones de tokens y los ids de llamada recién elididos (ver [Context Governor](/es/context#context-events)) |
 | `compaction_failed` | Falló la llamada al resumidor (incluido un resumen cortado sin nada aprovechable) |
 | `plugin_hook_failed` | Un hook de plugin falló o agotó su tiempo; la compactación continúa sin él |
 

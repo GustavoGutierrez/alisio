@@ -70,6 +70,10 @@ function summarize(event: RunEvent): Pick<TrajectoryRow, "summary" | "durationMs
       };
     case "session_context_injected":
       return { summary: clip((d.sources as string[] | undefined)?.join(", ") ?? "") };
+    case "context_governed":
+      return {
+        summary: `${str(d.mode)} · ${d.elided ?? 0} elided · ~${d.tokensSaved ?? 0} tokens saved`,
+      };
     case "plugin_hook_failed":
       return { summary: clip(`${str(d.source)} · ${str(d.hook)} · ${str(d.error)}`), error: true };
     default:

@@ -16,6 +16,8 @@ import {
   resolveActiveAgent,
 } from "../agents/active.ts";
 import type { PluginCatalogEntry } from "../application.ts";
+import { formatContextGovernorStatsSection } from "../context/format.ts";
+import { governedEventData } from "../context/governance.ts";
 import type { SessionStore } from "../core/contracts.ts";
 import type { AgentRunner } from "../core/runner.ts";
 import {
@@ -46,7 +48,8 @@ type PluginCommandHandler = (args: string, context?: { sessionId?: string }) => 
 export interface CommandHost {
   workspace: string;
   store: SessionStore;
-  runner: Pick<AgentRunner, "policy" | "approvals" | "compact" | "setModel">;
+  runner: Pick<AgentRunner, "policy" | "approvals" | "compact" | "setModel"> &
+    Partial<Pick<AgentRunner, "governance" | "contextUsage">>;
   registry: { list(): ToolDefinition[] };
   provider: { id: string };
   plugins?: {
@@ -264,6 +267,12 @@ const HANDLERS: Record<string, Handler> = {
     const decisionSection = formatDecisionStatsSection(
       summarizeDecisionEvents(decisionEvents(host, ctx.sessionId)),
     );
+    const governance = host.runner?.governance?.(session.id);
+    const usage = host.runner?.contextUsage?.(session.id);
+    const governorSection = formatContextGovernorStatsSection({
+      ...(governance ? { governance } : {}),
+      ...(usage ? { usage } : {}),
+    });
     return {
       text: [
         "**Session statistics**",
@@ -274,8 +283,16 @@ const HANDLERS: Record<string, Handler> = {
         `- Runs: ${runs.length}`,
         `- Tokens: in ${tokens.input} · out ${tokens.output}`,
         ...(decisionSection ? ["", decisionSection] : []),
+        ...(governorSection ? ["", governorSection] : []),
       ].join("\n"),
-      data: { session, runs: runs.length, tokens },
+      data: {
+        session,
+        runs: runs.length,
+        tokens,
+        ...(governorSection
+          ? { contextGovernor: governance ? governedEventData(governance, usage) : { usage } }
+          : {}),
+      },
     };
   },
   async skills(_args, _ctx, host) {

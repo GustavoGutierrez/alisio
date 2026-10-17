@@ -76,7 +76,9 @@ minimum because earlier 22.x builds lack FTS5.
 
 The runner reports progress as `RunEvent`s: to `onEvent` embedders, to plugins (`events.on`) and as
 JSONL with `alisio run --json`. `schemaVersion` stays `1` while changes are additive, so consumers
-must ignore unknown fields and event types.
+must ignore unknown fields and event types. With the Context Governor in `shadow` or `on`, each model
+request also emits a durable `context_governed` event (counts and ids only; see
+[Context Governor](/context#context-events)).
 
 | Field | Meaning |
 | --- | --- |

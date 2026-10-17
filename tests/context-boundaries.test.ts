@@ -167,7 +167,7 @@ describe("call/result boundaries survive compaction projections", () => {
 });
 
 describe("Context Governor wiring stays minimal", () => {
-  it("runner.ts imports only the elision, governance and invariants modules of context/*", () => {
+  it("runner.ts imports only the elision, governance, invariants and usage modules of context/*", () => {
     const source = readFileSync(
       new URL("../packages/core/src/core/runner.ts", import.meta.url),
       "utf8",
@@ -179,8 +179,10 @@ describe("Context Governor wiring stays minimal", () => {
       "../context/elide.ts",
       "../context/governance.ts",
       "../context/invariants.ts",
+      "../context/usage.ts",
     ]);
-    // The inventory is still not wired: only `elide.ts`/`governance.ts` (phase 2) and `invariants.ts` (phase 3) are wired.
+    // The inventory is still not wired: only `elide.ts`/`governance.ts` (phase 2), `invariants.ts`
+    // (phase 3) and `usage.ts` (phase 4) are wired.
     expect(source).not.toMatch(/context\/inventory/);
   });
 });

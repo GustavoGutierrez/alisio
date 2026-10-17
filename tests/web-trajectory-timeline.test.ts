@@ -4,7 +4,7 @@
  */
 import type { RunEvent } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
-import { executionTimeline } from "../packages/web/src/store/trajectory.ts";
+import { executionTimeline, trajectory } from "../packages/web/src/store/trajectory.ts";
 
 const T0 = Date.parse("2026-01-01T00:00:00.000Z");
 let seq = 0;
@@ -122,5 +122,23 @@ describe("execution timeline (trace waterfall)", () => {
       { name: "grep", durationMs: 4000, count: 2, error: true },
       { name: "read_file", durationMs: 500, count: 1, error: false },
     ]);
+  });
+});
+
+describe("trajectory rows for context_governed", () => {
+  it("summarizes the governor decision instead of showing an empty row", () => {
+    const [run] = trajectory([
+      ev("run_started", 0, { model: "m" }),
+      ev("context_governed", 1, {
+        mode: "shadow",
+        request: 1,
+        messages: 40,
+        elided: 3,
+        tokensSaved: 1240,
+      }),
+    ]);
+    const row = run?.rows.find((r) => r.type === "context_governed");
+    expect(row?.summary).toBe("shadow · 3 elided · ~1240 tokens saved");
+    expect(row?.error).toBeUndefined();
   });
 });

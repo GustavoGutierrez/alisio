@@ -7,7 +7,7 @@
 | Proyecto | Alisio |
 | Estado | **Aprobada por el propietario (2026-10-15). NO implementada.** Decisiones O1..O8 confirmadas; sin preguntas abiertas. |
 | Fecha | 2026-10-13 (aprobada 2026-10-15; base verificada re-auditada contra 0.8.0) |
-| Paquetes afectados | `@alisio/sdk` (tipos aditivos: `ContextSegment`, `ContextReport`, `CompactionCheckpoint.invariants?` (Fase 4); `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
+| Paquetes afectados | `@alisio/sdk` (tipos aditivos: Fase 4 `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts`, `ContextGovernedData`; Fase 5 `ContextSegment`, `ContextReport`; `RunEventDataMap.context_reduced` gana campos opcionales; evento `context_governed`; sin `CompactionCheckpoint.invariants?`, D27), `@alisio/core` (nuevo `packages/core/src/context/*`; integración en `core/src/core/compaction.ts` y `core/src/core/runner.ts`; `resources/context.ts`; tool `context_explain`; `config.ts`; `commands/builtins.ts`), `@alisio/server` (ruta `GET /api/sessions/:sid/context`), `@alisio/web` (privado: panel de contexto, `src/i18n/{en,es}.ts`), `@alisio/alisio-code` (TUI: `/context`) |
 | Paquetes nuevos | Ninguno. Sin dependencias nuevas de producción. |
 | Relación con otras especificaciones | Mide su efecto con `specs/archive/010-reliability-lab-v1.md` (suite `long-context`; puerta de promoción). Recibe invariantes de `specs/archive/011-proof-v1.md` (criterios vigentes) y de goal/plan. Los recuerdos de `specs/015-project-memory-v1.md` y las salidas de `specs/016-code-intelligence-v1.md` entran como segmentos con procedencia y criticidad. Se apoya en Forja (`js_run`, `forge_guide`, implementada en 0.6.0) como vía de exploración programática de contexto grande. Independiente de `specs/backlog/019-capability-routing-v1.md` (que reduce esquemas de herramientas, fuera de aquí) y de `specs/backlog/020-model-tier-router-v1.md`. |
 | Superficies | Web, TUI y headless con paridad funcional; API HTTP de `alisio serve` |
@@ -60,7 +60,7 @@ Reglas derivadas:
 
 ### 1.5 Alcance
 
-Inventario de segmentos; elisión por sustitución (lecturas superadas, `bg_output` antiguo, búsquedas duplicadas); bloque de invariantes y campo `invariants` del checkpoint; ledger observado/usado; política versionada `off|shadow|on`; `/context` en TUI y panel web; ampliación aditiva de `context_reduced`; pruebas de regresión de límites llamada/resultado; documentación.
+Inventario de segmentos; elisión por sustitución (lecturas superadas, `bg_output` antiguo, búsquedas duplicadas); bloque de invariantes (sin campo `invariants` en el checkpoint, D27); ledger observado/usado; política versionada `off|shadow|on`; `/context` en TUI y panel web; ampliación aditiva de `context_reduced`; pruebas de regresión de límites llamada/resultado; documentación.
 
 ### 1.6 Fuera de alcance
 
@@ -78,9 +78,9 @@ Inventario de segmentos; elisión por sustitución (lecturas superadas, `bg_outp
 | Hecho (verificado) | Ubicación | Implicación |
 | --- | --- | --- |
 | `planCompaction()`, `boundaries()`, `reduceMessagesToBudget()`, `renderCheckpoint()`, `checkpointInstructions()` | `packages/core/src/core/compaction.ts` (l.~95, ~242, ~363, ~376) | Puntos de extensión; la regla llamada/resultado ya existe y solo requiere prueba de regresión. |
-| `CompactionCheckpoint {goal, instructions, discoveries, accomplished, currentState, nextSteps, relevantFiles}` | `packages/sdk/src/index.ts` l.~710 | Gana `invariants?: string[]` aditivo **en la Fase 4** (la Fase 3 no toca el SDK: usa un tipo interno del núcleo, `GovernedCheckpoint`). |
+| `CompactionCheckpoint {goal, instructions, discoveries, accomplished, currentState, nextSteps, relevantFiles}` | `packages/sdk/src/index.ts` l.~710 | No cambia: los invariantes viven en `sessions.options.contextInvariants`, no en el checkpoint (D27). |
 | `CompactionStart {sessionId, reason: manual\|auto\|budget, messages, focus?, signal}` y `CompactionHooks` | `sdk/src/index.ts` l.~720+ | Los hooks de plugins siguen invocándose; el Governor aporta invariantes por el mismo camino. |
-| `context_reduced: { messages: number }` | `sdk/src/index.ts` l.665 | Se amplía con campos opcionales (`reason`, `elided`, `tokensSaved`). |
+| `context_reduced: { messages: number }` | `sdk/src/index.ts` l.665 | Gana solo `reason?: "budget"` y `tokensSaved?` (Fase 4); la elisión nunca se informa aquí (D25). |
 | Presupuesto y reducción en el bucle (`contextBudget`, `estimateContext`) | `core/src/core/runner.ts` (l.~1290–1365) | Punto de proyección y medición. |
 | `ProjectContext` (AGENTS.md jerárquico + `beforePaths`); tool `context_explain` | `core/src/resources/context.ts` | Fuente de segmentos de instrucciones; `/context` se coordina con `context_explain`. |
 | `read_file` devuelve `sha256`; `startLine`/`limit` | `tools/standard.ts` | Permite reconocer lecturas superadas por `(path, sha256)`. |
@@ -124,15 +124,22 @@ Se renderizan en un bloque `<invariants policy="1">` (cabecera fija, secciones e
 
 ### 3.4 Ledger observado/usado
 
-`usageLedger` registra, por segmento, `observed` (estuvo en el prompt) y `used` (su path o símbolo reaparece después en `tool_started` o en una edición). Métrica `usedRatio = used / observed` por tipo de segmento, sin anotación manual. Solo se calcula en `shadow|on` y se acumula en memoria de sesión + evento (D9: sin tabla propia).
+`UsageLedger` (`context/usage.ts`, puro y determinista) mide, por **resultado de herramienta** (unidad = un `tool_result` con su `callId`), si el agente actuó después sobre el mismo **path**. Solo se calcula en `shadow|on`, vive en memoria del runner por sesión (D9, O5, D37) y nunca decide elisión: es una métrica orientativa y la puerta de la Fase 6 no la usa.
+
+- **Atribuible:** resultados de efecto `read` con paths: `read_file` (su `path`), `list_files` (los archivos listados), `search_text` (los paths de las líneas `match` de ripgrep; el argumento `path`, casi siempre `.`, se ignora) y herramientas que declaran `ToolDefinition.paths`. Todo lo demás (`bg_output`, web, salida de `run_process`/`shell`, resultados de escritura, errores, texto de usuario/asistente) es `unattributed` y nunca entra en un cociente. El cociente se muestra por herramienta (`byTool`); `byKind` solo tiene `tool_result` en v1.
+- **Normalización:** ruta POSIX, sin `./`, relativa al workspace si está dentro (ripgrep devuelve rutas absolutas), sin `/` final, sin plegar mayúsculas; fuera del workspace queda absoluta.
+- **Observado:** la primera vez que su resultado está en el historial enviado. En `on`, un resultado visto por primera vez como stub es `stubOnly` y no cuenta como observado; uno visto completo y elidido después sigue observado (D31). En `shadow` el modelo vio todo, así que `stubOnly` es 0.
+- **Decidible:** solo entra en el denominador cuando existe una petición posterior; lo observado únicamente en la última petición es `pending`.
+- **Usado:** una llamada del asistente que aparece por primera vez en una petición posterior a la que contenía el resultado, que nombra un path de sus claves (argumento `path`, `paths(args)` declarado o, para `run_process`/`shell`, el path como palabra completa del comando con delimitadores de espacio, comillas o `=:(),;`, heurística documentada). No cuentan la llamada propia del resultado ni **releer** el mismo path con `read_file`, que se registra en `rereads` (D30).
+- **Límites honestos:** «usado» significa que el agente actuó sobre ese sujeto después, no que ese contenido exacto hiciera falta. Falsos positivos (lectura superada seguida de edición del mismo archivo, un path ajeno dentro de un comando, una llamada iniciada por la UI que parece del modelo) y falsos negativos (respuesta en texto, hechos usados en otro archivo, símbolos (spec 016), rutas renombradas, herramientas sin paths, la respuesta final sin petición posterior). Las cifras cubren este proceso y esta sesión; topes: 4096 entradas por sesión, 32 claves por entrada, 64 sesiones por runner (D36).
 
 ### 3.5 Política versionada
 
-`context.governor: "off" | "shadow" | "on"` (config global/proyecto; default `off`). `context.policyVersion` entero que se emite en cada evento. `off`: sin cambios. `shadow`: calcula inventario, elisiones y métricas, **no** cambia lo enviado (byte-idéntico a 0.6.x). `on`: aplica la proyección. El paso a default `shadow` y luego `on` requiere la puerta de la Fase 6.
+`context.governor: "off" | "shadow" | "on"` (config global/proyecto; default `off`). `context.policyVersion` entero que se emite en cada evento. `off`: sin cambios. `shadow`: calcula inventario, elisiones y métricas, **no** cambia lo enviado (byte-idéntico a la base 0.8.0). `on`: aplica la proyección. El paso a default `shadow` y luego `on` requiere la puerta de la Fase 6.
 
 ### 3.6 Explicación y superficies
 
-`context_explain` (tool existente) se mantiene; `/context` (TUI/web) muestra segmentos, tamaños, criticidad, qué se elidió y la razón, `usedRatio` y los invariantes. `context_reduced` gana `reason: "elided"` y conteos; nuevo evento `context_governed {policyVersion, mode, segments, elided, tokensBefore, tokensAfter}` por vuelta (acotado, sin contenido).
+`context_explain` (tool existente) se mantiene; `/context` (TUI/web) muestra segmentos, tamaños, criticidad, qué se elidió y la razón, `usedRatio` y los invariantes. `context_reduced` conserva su único punto de emisión (recorte en sitio por presupuesto) y gana `reason?: "budget"` y `tokensSaved?`; la elisión **solo** se informa en el evento `context_governed` (forma de `ContextGovernedData`, §4), uno por **petición al modelo** en `shadow|on` (no por reintento silencioso; una recuperación por truncamiento es una petición nueva), duradero y acotado (enteros, claves de enumeración, nombres de herramienta e IDs de llamada; los IDs son solo los recién elididos, máximo 32, más `elidedCallIdsOmitted`).
 
 ### 3.7 Exploración de contexto grande
 
@@ -169,9 +176,10 @@ export interface ContextReport {
 }
 ```
 
-- `CompactionCheckpoint.invariants?: string[]` (opcional; ausente en checkpoints antiguos). **Fase 4:** la Fase 3 no modifica `@alisio/sdk`.
-- `RunEventDataMap.context_reduced`: `{ messages: number; reason?: "elided" | "budget"; elided?: number; tokensSaved?: number }`.
-- `RunEventDataMap.context_governed`: ver §3.6.
+- Sin `CompactionCheckpoint.invariants?` (D27): el campo se retira de esta spec.
+- Fase 4 (SDK, solo tipos de evento): `ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts` y `ContextGovernedData` (`{policyVersion, mode, request, messages, segments, elided, byReason, tokensBefore, tokensAfter, tokensSaved, elidedCallIds?, elidedCallIdsOmitted?, invariants?, usage?}`). `ContextSegment` y `ContextReport` llegan en la Fase 5. `schemaVersion` sigue en 1.
+- `RunEventDataMap.context_reduced`: `{ messages: number; reason?: "budget"; tokensSaved?: number }`.
+- `RunEventDataMap.context_governed`: `ContextGovernedData` (ver §3.6).
 - Ruta `GET /api/sessions/:sid/context` → `ContextReport` (solo lectura).
 - Config: `context.governor`, `context.elide.minAgeTurns` (default 2), `context.invariants.maxChars` (default 4000).
 
@@ -260,17 +268,19 @@ Pruebas: `tests/context-elide.test.ts` (tabla de casos, estabilidad al añadir m
 
 ### Fase 3 — Invariantes y checkpoint
 
-Trabajo: `collectInvariants`, bloque `<invariants>`, campo `invariants` en el checkpoint, reinyección tras compactar; feature-detect de criterios de Proof.
+Trabajo: `collectInvariants`, bloque `<invariants>` (sin campo `invariants` en el checkpoint, D27), reinyección tras compactar; feature-detect de criterios de Proof.
 Aceptación: los invariantes sobreviven a N compactaciones consecutivas (N≥5) sin duplicarse ni resumirse; un checkpoint sin `invariants` (sesión antigua) se lee sin error.
 Pruebas: `tests/context-invariants.test.ts` (N compactaciones, límite `maxChars`, checkpoints antiguos), ampliación de las pruebas de compactación sin cambiar sus expectativas.
 
-Registro de implementación (2026-10-16): implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto) con las decisiones D15 a D24. Ficheros: `context/invariants.ts`, `context/sources.ts`, `core/compaction.ts` (`INVARIANTS_FIELD` y tercer parámetro de `checkpointInstructions`), `core/runner.ts` (`invariantSources`, bloque transitorio, promoción en `compactLocked`, `clearInvariants`), `core/contracts.ts` (`mutateSessionOptions?` opcional), `config.ts`, `eval/engine.ts` y `application.ts`. Pruebas: `tests/context-invariants.test.ts`, `tests/context-invariants-runner.test.ts` (6 compactaciones consecutivas con SQLite real), `tests/context-sources.test.ts` y ampliaciones de `compaction`, `config-layers`, `eval-engine` y `context-shadow-identity` sin cambiar ninguna expectativa existente. `@alisio/sdk` no cambia: el campo `CompactionCheckpoint.invariants?` queda para la Fase 4.
+Registro de implementación (2026-10-16): implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto) con las decisiones D15 a D24. Ficheros: `context/invariants.ts`, `context/sources.ts`, `core/compaction.ts` (`INVARIANTS_FIELD` y tercer parámetro de `checkpointInstructions`), `core/runner.ts` (`invariantSources`, bloque transitorio, promoción en `compactLocked`, `clearInvariants`), `core/contracts.ts` (`mutateSessionOptions?` opcional), `config.ts`, `eval/engine.ts` y `application.ts`. Pruebas: `tests/context-invariants.test.ts`, `tests/context-invariants-runner.test.ts` (6 compactaciones consecutivas con SQLite real), `tests/context-sources.test.ts` y ampliaciones de `compaction`, `config-layers`, `eval-engine` y `context-shadow-identity` sin cambiar ninguna expectativa existente. `@alisio/sdk` no cambia; el campo `CompactionCheckpoint.invariants?` se retiró en la Fase 4 (D27).
 
 ### Fase 4 — Ledger observado/usado y eventos
 
 Trabajo: `usageLedger`; eventos `context_governed` y ampliación de `context_reduced`; resumen en `/stats`.
 Aceptación: `usedRatio` se calcula sin anotación manual; los eventos no incluyen contenido, solo conteos e IDs.
-Pruebas: `tests/context-usage.test.ts`, prueba de esquema de eventos.
+Pruebas: `tests/context-usage.test.ts`, `tests/context-governed-event.test.ts`, `tests/context-governed-runner.test.ts`, `tests/context-governor-stats.test.ts`, prueba de esquema de eventos (`tests/run-events-contract.test.ts`).
+
+Registro de implementación (2026-10-16): implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto) con las decisiones D25 a D39. Ficheros: `context/usage.ts`, `context/format.ts`, `context/governance.ts` (`segments`, `newlyElided`, `governedEventData`), `context/inventory.ts` (`countSegments`), `core/runner.ts` (alimentación del ledger y emisión en el punto del governor, `contextUsage()`), `commands/catalog.ts` y TUI (`/stats`), `packages/sdk/src/index.ts` (solo tipos de evento), `packages/web/src/store/trajectory.ts` (resumen de fila) y la retirada de `GovernedCheckpoint`. Se cambió una expectativa existente por exigencia del diseño: `tests/runner-truncation.test.ts` (dos aserciones de `context_reduced`, que ahora lleva `reason: "budget"` y `tokensSaved`).
 
 ### Fase 5 — Superficies
 
@@ -294,7 +304,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 ## 6. Seguridad y privacidad
 
 - El Governor no decide permisos ni modifica grants; solo lee su estado para el bloque de invariantes.
-- Los stubs y eventos no incluyen contenido de archivos; solo `path`, `sha8` y conteos.
+- Los stubs incluyen `path` y `sha8`; los eventos no incluyen contenido ni paths: solo enteros, claves de enumeración, nombres de herramienta e IDs de llamada.
 - Los invariantes pueden contener instrucciones del usuario: no se envían a ningún sitio distinto del proveedor ya configurado; el reporte web respeta el mismo control de acceso de sesión.
 - Una proyección con elisión se rige por la política de la sesión; un resultado de herramienta no puede pedir que se desactive la elisión.
 
@@ -329,7 +339,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D3** Nunca se elide el último resultado de un `path`, la última vuelta ni los mensajes del usuario.
 - **D4** Los invariantes se reinyectan literales y no se resumen.
 - **D5** La proyección es determinista, estable y monótona.
-- **D6** `shadow` es byte-idéntico a 0.6.x en lo enviado.
+- **D6** `shadow` es byte-idéntico a la base 0.8.0 en lo enviado.
 - **D7** Todo evento es acotado y sin contenido de archivos.
 - **D8** Ningún cambio de default sin pasar la puerta de medición de la Fase 6.
 - **D9** Sin migración de base de datos en esta versión.
@@ -338,7 +348,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D12** (Fase 2) **Los `configHash` de la Fase 0 siguen siendo válidos:** `computeConfigHash` omite `governor`, `elide` y `policyVersion` cuando el governor es `off` y el resto son los valores por defecto. Una prueba fija el hash de la configuración por defecto. Fase 3: `context.invariants.maxChars` se une a esa exclusión (se omite con el governor en `off` y `maxChars` = 4000).
 - **D13** (Fase 2; enmendada en la Fase 3) **El Governor solo proyecta lo que se envía al proveedor, y solo en `on`:** los disparadores de compactación, el límite duro, `estimateContext`/`contextBudget` y la entrada del resumidor siguen usando el historial **crudo**. Enmienda (D21): en `on`, la longitud del bloque `<invariants>` se suma al término de instrucciones de `chars()`, `charsConversation()` y del objetivo de `reduceInPlace`.
 - **D14** (Fase 2) **La capa de proyecto sigue reemplazando la sección `context` completa** (precedencia existente); no se fusiona clave a clave.
-- **D15** (Fase 3, 2026-10-16) **Solo `on` envía o guarda algo:** `shadow` solo calcula recuentos (en `governance()`), no envía bloque, no cambia las instrucciones del resumidor, no promueve nada y no escribe en `sessions.options`; `off` no lee ni calcula nada. Las peticiones al modelo y al resumidor y las filas guardadas son byte-idénticas en `off`, `shadow` y sin governor.
+- **D15** (Fase 3, 2026-10-16; acotada en la Fase 4) **Solo `on` envía o guarda mensajes u opciones de sesión:** `shadow` solo calcula recuentos (en `governance()`), no envía bloque, no cambia las instrucciones del resumidor, no promueve nada y no escribe en `sessions.options`; `off` no lee ni calcula nada. Las peticiones al modelo y al resumidor, los mensajes y las opciones de sesión son byte-idénticos en `off`, `shadow` y sin governor. Excepción de la Fase 4 (§3.4): `shadow` y `on` añaden filas duraderas `context_governed` al registro de eventos.
 - **D16** (Fase 3) **El bloque se inyecta solo tras la primera compactación** (historial que empieza por un checkpoint, o `compactions > 0`).
 - **D17** (Fase 3) **Tope de instrucciones: 20 elementos de 500 caracteres;** con la lista llena se conservan las más antiguas, se rechazan las nuevas y se cuentan los rechazos.
 - **D18** (Fase 3) **El bloque es el último mensaje `user` transitorio,** construido en cada petición, nunca guardado, añadido tras la proyección y `textProjection` y antes del aviso de recuperación; no pasa por `projectContext`.
@@ -348,25 +358,40 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D22** (Fase 3) **`clearInvariants(sessionId)` es solo del núcleo** (borra `contextInvariants` y las entradas en memoria); sin retirada por elemento hasta la Fase 5.
 - **D23** (Fase 3) **Permisos:** solo efectos aprobados para la sesión (mapa nuevo del runner), capacidades de sesión y un recuento de directorios externos; nunca rutas, scripts ni argumentos; sin modo de permisos.
 - **D24** (Fase 3) **Criterios:** texto y marca `required`, sin estado en vivo; se excluyen los que tienen `notApplicableReason`.
+- **D25** (Fase 4, 2026-10-16) **La elisión nunca se informa con `context_reduced`:** vive solo en `context_governed`. `context_reduced` conserva su único punto de emisión (recorte en sitio por presupuesto) y gana `reason?: "budget"` y `tokensSaved?` (estimación de la diferencia de caracteres) en todos los modos.
+- **D26** (Fase 4) **`context_governed` es duradero:** se persiste por el emisor normal y el SSE lo reenvía como cualquier evento duradero; no está en las fronteras de mensajes del hub porque la elisión no cambia los mensajes guardados.
+- **D27** (Fase 4) **Se retira `CompactionCheckpoint.invariants?`** (y el tipo interno `GovernedCheckpoint`): los invariantes viven en `sessions.options.contextInvariants`. El SDK de la Fase 4 solo recibe tipos de evento.
+- **D28** (Fase 4) **Un evento por petición al modelo en `shadow|on`,** desde el punto del governor y antes de `provider.stream`; nunca en `off`/sin governor, no por reintento silencioso; una recuperación por truncamiento es una petición nueva. `request` es el contador por ejecución.
+- **D29** (Fase 4) **IDs del evento:** solo los `callId` recién elididos en esa petición (delta), máximo 32, más `elidedCallIdsOmitted`.
+- **D30** (Fase 4) **«Usado» compara solo paths en v1** (los símbolos esperan a la spec 016); releer el mismo path con `read_file` no es uso y se cuenta en `rereads`; los paths nombrados en comandos de `run_process`/`shell` cuentan como uso con coincidencia por límite de palabra (heurística documentada).
+- **D31** (Fase 4) **Atribuibles:** resultados de efecto `read` con paths (`read_file`, `list_files`, `search_text` y herramientas con `ToolDefinition.paths`); el resto es `unattributed`. En `on`, un resultado visto por primera vez como stub es `stubOnly` y no cuenta como observado; uno visto completo y elidido después sigue observado.
+- **D32** (Fase 4) **El cociente se muestra por herramienta;** `byKind` solo contiene `tool_result` en v1.
+- **D33** (Fase 4) **`/stats` lee la memoria del runner** (O5: sin persistencia); se pierde al reiniciar. La sección solo aparece en `shadow|on` con datos.
+- **D34** (Fase 4) **El ledger es asesor:** no impulsa la elisión ni la puerta G1-G3 de la Fase 6, y un fallo suyo nunca falla una petición.
+- **D35** (Fase 4) **Solo tipos de evento en el SDK** (`ContextSegmentKind`, `ContextElisionReason`, `ContextUsageCounts`, `ContextGovernedData` y los dos campos opcionales de `context_reduced`); `ContextSegment` y `ContextReport` esperan a la Fase 5.
+- **D36** (Fase 4) **Topes del ledger:** 4096 entradas por sesión, 32 claves por entrada y LRU de 64 sesiones por runner; las entradas expulsadas se cuentan en `evicted`.
+- **D37** (Fase 4) **Changeset:** `@alisio/sdk` y `@alisio/core` minor dentro de la 0.9.0 prevista.
+- **D38** (Fase 4) **El resumen de trayectoria web** muestra una fila breve para `context_governed` para que `shadow` no deje filas vacías.
+- **D39** (Fase 4) **El ledger no se borra al compactar ni al cambiar de modelo** (es acumulativo); solo `clearInvariants` lo borra.
 
 ## 10. Criterios de aceptación globales
 
 1. Llamada y resultado nunca se separan (prueba de regresión).
 2. La política explica qué segmentos seleccionó o elidió y por qué.
 3. Los invariantes sobreviven a N compactaciones.
-4. En `shadow`, lo enviado es byte-idéntico a 0.6.x.
+4. En `shadow`, lo enviado es byte-idéntico a la base 0.8.0.
 5. Se supera el protocolo de la puerta de la Fase 6 (G1 a G3; reduce tokens y el éxito no cae más de M, medido en todos los modelos del protocolo). Aprobado el 2026-10-16.
 
 ## 11. Pruebas transversales
 
 - Propiedad: para cualquier historial generado, la proyección conserva el emparejamiento `tool_call`/`tool_result`.
-- Identidad `off` y `shadow` contra el payload de 0.6.x (proveedor scripted).
+- Identidad `off` y `shadow` contra el payload de la base 0.8.0 (proveedor scripted).
 - Compatibilidad de sesiones persistidas anteriores (opciones de sesión sin `contextInvariants`, o malformadas, y checkpoints de texto antiguos).
 - Cada plugin con `CompactionHooks` sigue funcionando sin cambios.
 
 ## 12. Estado de implementación
 
-Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. Medición con modelo pendiente de la puerta de la Fase 6.
+Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. **Fase 4 implementada en la misma rama (sin commit al escribir esto):** `UsageLedger`, evento duradero `context_governed`, campos opcionales de `context_reduced` y sección de `/stats`; ver D25 a D39 y las correcciones de 3.4 y 3.6. Medición con modelo pendiente de la puerta de la Fase 6.
 
 ## 13. Asignación de modelos
 

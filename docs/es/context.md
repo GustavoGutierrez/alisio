@@ -216,6 +216,32 @@ Con `epochMessages` mayor que 0, solo son elegibles los primeros
 añadiendo al final, así que la caché de prompt del proveedor sigue acertando; en el límite de una
 época los resultados que se han vuelto redundantes se elidirán de golpe.
 
+### Eventos y uso {#context-events}
+
+Con el governor en `shadow` o `on`, cada petición al modelo emite un evento duradero
+`context_governed` (también con `alisio run --json`): el modo, la versión de la política, el número
+de petición dentro de la ejecución, los recuentos de mensajes y segmentos, cuántos resultados se
+elidieron y por qué, estimaciones de tokens antes y después, y los ids de llamada elididos por
+primera vez en esa petición (máximo 32, más un recuento del resto). Nunca lleva rutas, patrones,
+texto de stubs ni contenido de archivos, y se emite de nuevo en la petición de recuperación tras un
+truncamiento. La elisión se informa solo aquí: `context_reduced` sigue significando «se recortaron
+resultados de herramientas en el sitio para caber en el presupuesto de contexto» y ahora indica
+`reason: "budget"` y una estimación en `tokensSaved`.
+
+El mismo evento lleva un resumen de uso: de los resultados de herramientas que el modelo vio
+completos, cuántos usó el agente después. Un resultado cuenta como usado cuando una llamada posterior
+nombra una de sus rutas (el archivo leído, los archivos listados, los archivos que coincidieron en una
+búsqueda) mediante un argumento `path`, las rutas declaradas de una herramienta o, en `run_process` y
+`shell`, una palabra completa del comando. Releer la misma ruta no es uso y se cuenta aparte. `/stats`
+muestra la última petición y los cocientes por herramienta, por ejemplo `read_file 20/45`, solo en
+`shadow` y `on`.
+
+Es una heurística, no una medida de lo que el modelo necesitó: puede contar una lectura superada
+seguida de una edición del mismo archivo, o una ruta en un comando ajeno, y no ve respuestas dadas en
+texto, hechos reutilizados en otro archivo ni símbolos. Los resultados sin ruta (salida en segundo
+plano, resultados web, salida de procesos, escrituras, errores) se listan como no atribuibles. Las
+cifras cubren solo este proceso y esta sesión y se pierden al reiniciar; nunca deciden qué se elide.
+
 ### Límites de las garantías
 
 La proyección es estable al añadir mensajes, con estas excepciones, cada una de las cuales reescribe o
@@ -237,5 +263,5 @@ supuesto.
 Las rutas se comparan tal como están escritas: `./a.ts` y `a.ts` son archivos distintos para el
 governor, lo que solo supone perder un ahorro. Un resultado de `read_file` sin `sha256` (archivos de
 más de 1 MiB) solo puede elidirse por una escritura o edición posterior. Las cifras de tokens son
-estimaciones (unos cuatro caracteres por token), no el uso real del proveedor. En esta versión las
-decisiones solo se guardan en memoria; ningún evento ni pantalla las muestra todavía.
+estimaciones (unos cuatro caracteres por token), no el uso real del proveedor. Las decisiones se
+informan en el evento `context_governed` y en `/stats`.

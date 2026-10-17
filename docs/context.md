@@ -208,6 +208,30 @@ With `epochMessages` greater than 0, only the first `floor(length / epochMessage
 messages are eligible. Between two epochs the request grows only by appending, so a provider prompt
 cache keeps hitting; at an epoch boundary the newly redundant results are elided at once.
 
+### Events and usage {#context-events}
+
+With the governor in `shadow` or `on`, every model request emits one durable `context_governed`
+event (also with `alisio run --json`): the mode, the policy version, the request number inside the
+run, message and segment counts, how many results are elided and why, token estimates before and
+after, and the call ids elided for the first time at that request (at most 32, plus a count of the
+rest). It never carries paths, patterns, stub text or file content, and it is emitted again for the
+recovery request after a truncation. Elision is reported only here: `context_reduced` keeps
+meaning "tool results were clipped in place to fit the context budget" and now says
+`reason: "budget"` and an estimate in `tokensSaved`.
+
+The same event carries a usage summary: of the tool results the model saw in full, how many the
+agent acted on later. A result counts as used when a later call names one of its file paths (the
+file read, the files listed, the files a search matched) through a `path` argument, a tool's declared
+paths, or, for `run_process` and `shell`, a whole word of the command. Re-reading the same path is
+not use and is counted separately. `/stats` shows the last request and the ratios per tool, for
+example `read_file 20/45`, in `shadow` and `on` only.
+
+This is a heuristic, not a measure of what the model needed: it can count a superseded read followed
+by an edit of the same file, or a path in an unrelated command, and it misses answers given in text,
+facts reused in another file and symbols. Results without a path (background output, web results,
+process output, writes, errors) are listed as not attributable. The numbers cover this process and
+this session only and are lost on restart; they never decide what is elided.
+
 ### Limits of the guarantees
 
 The projection is stable when messages are appended, with these exceptions, each of which rewrites
@@ -227,5 +251,5 @@ a trailing `user` message affects each model is measured by the promotion gate, 
 Paths are compared as written: `./a.ts` and `a.ts` are different files to the governor, which only
 costs a missed saving. A `read_file` result without a `sha256` (files over 1 MiB) can only be
 elided by a later write or edit. The token figures are estimates (about four characters per
-token), not provider usage. In this version the decisions are kept in memory only; no event or
-screen exposes them yet.
+token), not provider usage. The decisions are reported by the `context_governed` event and
+`/stats`.

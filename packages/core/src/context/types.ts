@@ -3,17 +3,9 @@
  * exported from `@alisio/sdk` or wired into the runner yet.
  */
 
-export type ContextSegmentKind =
-  | "system"
-  | "instructions"
-  | "user"
-  | "assistant"
-  | "tool_call"
-  | "tool_result"
-  | "checkpoint"
-  | "invariant"
-  | "memory"
-  | "other";
+import type { ContextSegmentKind } from "@alisio/sdk";
+
+export type { ContextSegmentKind };
 
 /** How protected a segment is: `pinned` is never dropped, `low` is the first elision candidate. */
 export type Criticality = "pinned" | "high" | "normal" | "low";

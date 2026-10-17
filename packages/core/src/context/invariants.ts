@@ -1,4 +1,4 @@
-import type { CompactionCheckpoint, Message } from "@alisio/sdk";
+import type { Message } from "@alisio/sdk";
 import { sha } from "./util.ts";
 
 /**
@@ -42,9 +42,6 @@ export interface InvariantSources {
     sessionId: string,
   ): { capabilities: readonly string[]; externalDirectories: number } | undefined;
 }
-
-/** Core-internal checkpoint shape; the SDK type gains `invariants` in phase 4. */
-export type GovernedCheckpoint = CompactionCheckpoint & { invariants?: string[] };
 
 /** `sessions.options.contextInvariants`: server-owned, written only by compaction. */
 export interface InvariantState {

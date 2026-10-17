@@ -20,6 +20,7 @@ import {
   type ContextGovernorOptions,
   type GovernanceSnapshot,
   governanceSnapshot,
+  governedEventData,
 } from "../context/governance.ts";
 import {
   collectInvariants,
@@ -29,6 +30,7 @@ import {
   readInvariantState,
   renderInvariants,
 } from "../context/invariants.ts";
+import { UsageLedger, type UsageSummary } from "../context/usage.ts";
 import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nested.ts";
 import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
 import { decideEffect, effectAskable } from "../permissions/decide.ts";
@@ -290,6 +292,8 @@ const MIN_MESSAGE_BUDGET_FLOOR = 4_000;
  * would pay for a summarizer call. The hard-limit last-chance compaction ignores it.
  */
 const RECOMPACT_GROWTH_MARGIN = 0.1;
+/** Sessions whose usage ledger one runner keeps in memory (least recently used go first). */
+const USAGE_LEDGER_SESSIONS = 64;
 /** First 40 lines of a script input, for capability approvals. */
 const scriptPreview = (input: Record<string, unknown>): string | undefined =>
   typeof input.code === "string" ? input.code.split(/\r?\n/).slice(0, 40).join("\n") : undefined;
@@ -343,6 +347,8 @@ export class AgentRunner {
   private compactedChars = new Map<string, number>();
   /** What the Context Governor decided for the latest request of each session (shadow and on). */
   private governed = new Map<string, GovernanceSnapshot>();
+  /** Usage ledger per session (shadow and on; process-local, LRU of `USAGE_LEDGER_SESSIONS`). */
+  private usage = new Map<string, UsageLedger>();
   /** Effects the user approved for the whole session, per session (`on` mode; process-local). */
   private sessionEffects = new Map<string, Set<"write" | "process" | "external">>();
   /** Instruction quotes of a session whose store cannot keep session options (process-local). */
@@ -564,11 +570,50 @@ export class AgentRunner {
     return this.governed.get(sessionId);
   }
   /**
+   * Heuristic usage of the tool results this process showed the model in a session (shadow and on
+   * only; undefined otherwise). Lost on restart; advisory, it never drives elision.
+   */
+  contextUsage(sessionId: string): UsageSummary | undefined {
+    return this.usage.get(sessionId)?.summary();
+  }
+  private usageLedger(sessionId: string, workspace: string): UsageLedger {
+    let ledger = this.usage.get(sessionId);
+    if (ledger) this.usage.delete(sessionId);
+    else {
+      const registry = this.options.registry;
+      ledger = new UsageLedger({
+        workspace,
+        pathsOf: (tool, args) => {
+          try {
+            return registry.get(tool).paths?.(args);
+          } catch {
+            return undefined;
+          }
+        },
+        isRead: (tool) => {
+          try {
+            return registry.get(tool).effect === "read";
+          } catch {
+            return false;
+          }
+        },
+      });
+    }
+    this.usage.set(sessionId, ledger);
+    while (this.usage.size > USAGE_LEDGER_SESSIONS) {
+      const oldest = this.usage.keys().next().value;
+      if (oldest === undefined) break;
+      this.usage.delete(oldest);
+    }
+    return ledger;
+  }
+  /**
    * Forgets the user instructions kept for a session: the stored `contextInvariants` and every
    * in-memory entry. Core-internal; there is no per-item removal before phase 5.
    */
   clearInvariants(sessionId: string): void {
     this.invariantMemory.delete(sessionId);
+    this.usage.delete(sessionId);
     this.sessionEffects.delete(sessionId);
     this.promotions.delete(sessionId);
     this.options.store.mutateSessionOptions?.(sessionId, (current) => ({
@@ -1546,8 +1591,16 @@ export class AgentRunner {
             const reduction = reduceMessagesToBudget(messages, targetChars);
             if (reduction.truncated > 0) {
               o.store.overwrite(sessionId, reduction.messages);
+              const tokensSaved = Math.max(
+                0,
+                estimateTokens(messages) - estimateTokens(reduction.messages),
+              );
               messages = reduction.messages;
-              emit("context_reduced", { messages: reduction.truncated });
+              emit("context_reduced", {
+                messages: reduction.truncated,
+                reason: "budget",
+                tokensSaved,
+              });
             }
           };
           reduceInPlace();
@@ -1595,7 +1648,12 @@ export class AgentRunner {
         const governor = o.contextGovernor;
         if (governor && governor.mode !== "off") {
           const projection = projectContext(messages, governor);
-          const snapshot = governanceSnapshot(projection, governor, requests + 1);
+          const snapshot = governanceSnapshot(
+            projection,
+            governor,
+            requests + 1,
+            this.governed.get(sessionId),
+          );
           const block = invariants();
           const done = this.promotions.get(sessionId);
           snapshot.invariants = {
@@ -1606,6 +1664,20 @@ export class AgentRunner {
             rejected: done?.rejected ?? 0,
           };
           this.governed.set(sessionId, snapshot);
+          // The ledger only measures: a fault in it never fails the request or changes `sent`.
+          let usageSummary: UsageSummary | undefined;
+          try {
+            const ledger = this.usageLedger(sessionId, workspace);
+            const stubbed =
+              governor.mode === "on"
+                ? new Set(projection.elisions.map((e) => e.callId))
+                : new Set<string>();
+            ledger.record(ledger.seams + 1, messages, stubbed);
+            usageSummary = ledger.summary();
+          } catch {
+            /* Advisory numbers only. */
+          }
+          emit("context_governed", governedEventData(snapshot, usageSummary));
           if (governor.mode === "on") {
             sent = projection.messages;
             invariantsText = block.text;

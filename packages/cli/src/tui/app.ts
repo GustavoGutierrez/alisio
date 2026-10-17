@@ -18,6 +18,7 @@ import {
   describePermissionStatus,
   type ExternalDirectoryRequest,
   formatChangelogMarkdown,
+  formatContextGovernorStatsSection,
   formatDecisionStatsSection,
   formatReloadReport,
   type GoalHostView,
@@ -3223,6 +3224,12 @@ export async function runTui(options: TuiOptions): Promise<void> {
       .map(([name, t]) => `| \`${name}\` | ${t.calls} | ${t.errors} |`)
       .join("\n");
     const decisionSection = formatDecisionStatsSection(summarizeDecisionEvents(s.decisions ?? []));
+    const governance = app.runner.governance(session);
+    const contextUsage = app.runner.contextUsage(session);
+    const governorSection = formatContextGovernorStatsSection({
+      ...(governance ? { governance } : {}),
+      ...(contextUsage ? { usage: contextUsage } : {}),
+    });
     return [
       "**Session statistics**",
       "",
@@ -3236,6 +3243,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       tools ? `| Tool | Calls | Errors |\n| --- | --- | --- |\n${tools}` : "No tool calls yet.",
       "",
       ...(decisionSection ? [decisionSection, ""] : []),
+      ...(governorSection ? [governorSection, ""] : []),
       "**Extensions**",
       "",
       `- mascot: ${app.plugins.extensions.resolve("mascot")?.provider.id ?? "alisio.default"} · startup screen: ${app.plugins.extensions.resolve("startup-screen")?.provider.id ?? "alisio.default"}`,

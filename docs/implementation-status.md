@@ -407,7 +407,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   individuales hasta la Fase 5; `/btw` y la barra de contexto no cuentan el bloque; los efectos
   aprobados y el recuento de directorios son de proceso y se reducen tras un reinicio; las sesiones
   con checkpoints antiguos solo reciben las fuentes en vivo (no se analiza su texto); `shadow` no
-  puede medir las promociones; el campo `CompactionCheckpoint.invariants` del SDK espera a la Fase 4;
+  puede medir las promociones; el campo `CompactionCheckpoint.invariants` se retiró de la spec (D27);
   el efecto de un mensaje `user` final en cada modelo lo medirá la puerta de la Fase 6.
   `clearInvariants` existe en el runner (probado) pero `/clear` crea una sesión nueva con opciones
   vacías, así que no hay nada que limpiar y no se conecta. **Alcance de la verificación:** pruebas
@@ -415,6 +415,25 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   proveedor scripted y SQLite real durante 6 compactaciones (`tests/context-invariants-runner.test.ts`),
   identidad de bytes `off`/`shadow` (`tests/context-shadow-identity.test.ts`); no se ha medido ningún
   efecto con un modelo real.
+- Context Governor, Fase 4 (`specs/012-context-governor-v1.md`): ledger observado/usado
+  (`context/usage.ts`) y evento duradero `context_governed` por petición al modelo en `shadow` y `on`
+  (nunca en `off`); `context_reduced` gana `reason: "budget"` y `tokensSaved` y la elisión no se
+  informa con él; sección «Context Governor» en `/stats` (núcleo y TUI, mismo formateador) y fila
+  breve en la trayectoria web. **Experimental.** El SDK solo gana tipos de evento aditivos
+  (`ContextGovernedData` y afines; `schemaVersion` sigue en 1). **Límites:** coste de almacenamiento
+  de unos 0,5 a 1 KB por petición en `shadow` y `on` (una fila `context_governed`); «usado» es una
+  heurística de rutas (un resultado cuenta si una llamada posterior nombra una de sus rutas; no hay
+  símbolos hasta la spec 016; releer la misma ruta no cuenta; las rutas dentro de comandos de
+  `run_process`/`shell` se buscan como palabra completa) con falsos positivos y negativos
+  documentados en `docs/context.md`; el ledger vive en memoria del proceso (64 sesiones, 4096
+  entradas por sesión) y se pierde al reiniciar, así que `/stats` solo cubre este proceso; es
+  asesor y nunca impulsa la elisión ni la puerta G1-G3 de la Fase 6; los resultados sin ruta
+  (`bg_output`, web, procesos, escrituras, errores) son «no atribuibles». **Alcance de la
+  verificación:** pruebas unitarias del ledger (`tests/context-usage.test.ts`), del evento
+  (`tests/context-governed-event.test.ts`), del runner con SQLite real
+  (`tests/context-governed-runner.test.ts`), de `/stats` (`tests/context-governor-stats.test.ts`),
+  contrato de eventos y SSE; sin medición con un modelo real. El formateador compartido se prueba por
+  identidad de exportación: la ruta de la TUI no tiene prueba de extremo a extremo propia.
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del

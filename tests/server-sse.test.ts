@@ -254,3 +254,69 @@ describe("SseHub backpressure", () => {
     h.closeAll();
   });
 });
+
+describe("SseHub context events (spec 012 phase 4)", () => {
+  const harness = () => {
+    const writes: string[] = [];
+    let reloads = 0;
+    const sink: SseSink = {
+      write(chunk) {
+        writes.push(chunk);
+        return true;
+      },
+      end() {},
+      once() {
+        return sink;
+      },
+    };
+    const hub = new SseHub({
+      snapshot: (sessionId) => ({
+        t: "snapshot",
+        sessionId,
+        cursor: 0,
+        session: {
+          id: sessionId,
+          workspaceId: "w",
+          workspace: "/w",
+          provider: "p",
+          model: "m",
+          status: "idle",
+        },
+        messages: { items: [], hasMore: false },
+        pending: { approvals: [], interactions: [] },
+      }),
+      messagesAfter: () => {
+        reloads++;
+        return { items: [], hasMore: false };
+      },
+      toolResult: () => undefined,
+      workspaceOf: () => "w",
+      heartbeatMs: 60_000,
+    });
+    hub.attach(sink, ["s"]);
+    const event = (type: string, eventId: string, data: Record<string, unknown>) => ({
+      schemaVersion: 1 as const,
+      runId: "r",
+      sessionId: "s",
+      seq: Number(eventId),
+      type,
+      timestamp: new Date().toISOString(),
+      data,
+      eventId,
+    });
+    return { hub, writes, event, reloads: () => reloads };
+  };
+
+  it("P9 forwards context_governed as a durable event frame without reloading messages", () => {
+    const h = harness();
+    const before = h.reloads();
+    h.hub.publish(h.event("context_governed", "7", { mode: "shadow", elided: 2, request: 1 }));
+    const frame = h.writes.find((w) => w.includes('"type":"context_governed"')) ?? "";
+    expect(frame).toContain("id: 7");
+    expect(frame).toContain('"t":"event"');
+    expect(h.reloads()).toBe(before);
+    h.hub.publish(h.event("context_reduced", "8", { messages: 1, reason: "budget" }));
+    expect(h.reloads()).toBeGreaterThan(before);
+    h.hub.closeAll();
+  });
+});
