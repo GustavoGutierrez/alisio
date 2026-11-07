@@ -1,0 +1,141 @@
+name: Desktop release
+
+# Builds the Alisio Desktop installers (apps/desktop) on each OS and attaches them to the GitHub
+# Release for the tag. Independent from the npm `vX.Y.Z` release: desktop releases use `desktop-vX.Y.Z`
+# tags and are never marked "Latest".
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, for example desktop-v0.9.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Check the tag against apps/desktop/package.json
+        id: meta
+        run: |
+          case "$TAG" in desktop-v*) ;; *) echo "Tag $TAG must look like desktop-vX.Y.Z"; exit 1 ;; esac
+          version="${TAG#desktop-v}"
+          actual="$(node -p "require('./apps/desktop/package.json').version")"
+          if [ "$version" != "$actual" ]; then
+            echo "Tag version $version does not match apps/desktop/package.json version $actual"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Create the release if it does not exist
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+          cat > notes.md <<NOTES
+          Alisio Desktop $VERSION: the desktop app for Windows, macOS and Linux.
+
+          Pick the file for your system under Assets: \`Alisio-Setup-$VERSION-x64.exe\` (Windows 10/11),
+          \`Alisio-$VERSION-arm64.dmg\` (Mac with Apple silicon), \`Alisio-$VERSION-x64.dmg\` (Intel Mac),
+          \`Alisio-$VERSION-x86_64.AppImage\` or \`Alisio-$VERSION-amd64.deb\` (Linux).
+
+          ## These builds are not code-signed
+
+          - **Windows (SmartScreen):** when "Windows protected your PC" appears, choose **More info**, then **Run anyway**.
+          - **macOS (Gatekeeper):** the app is ad-hoc signed, not notarized. If macOS refuses to open it, go to
+            **System Settings**, then **Privacy & Security**, and choose **Open Anyway**, or run
+            \`xattr -cr /Applications/Alisio.app\` in a terminal once.
+          - **Linux:** make the AppImage executable (\`chmod +x\`) and run it, or install the \`.deb\`.
+
+          Verify your download with \`SHA256SUMS-desktop.txt\`, attached to this release once every build has finished
+          (\`sha256sum -c SHA256SUMS-desktop.txt --ignore-missing\`).
+
+          Full guide: https://gustavogutierrez.github.io/alisio/desktop
+          NOTES
+          gh release create "$TAG" --verify-tag --title "Alisio Desktop $VERSION" \
+            --notes-file notes.md --latest=false
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            builder_args: "--linux"
+            assets: "apps/desktop/release/*.AppImage apps/desktop/release/*.deb"
+          - os: windows-latest
+            builder_args: "--win"
+            assets: "apps/desktop/release/*.exe"
+          - os: macos-latest
+            builder_args: "--mac --arm64 --x64"
+            assets: "apps/desktop/release/*.dmg"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # electron-builder downloads its own Electron zip, but pnpm may skip the electron package's
+      # postinstall; this makes the binary available either way (a no-op when it is present).
+      - name: Ensure the Electron binary is installed
+        shell: bash
+        run: node -e "const p=require('path'),f=require('fs');const d=p.dirname(require.resolve('electron/package.json',{paths:['apps/desktop']}));if(!f.existsSync(p.join(d,'path.txt')))require('child_process').execFileSync(process.execPath,[p.join(d,'install.js')],{stdio:'inherit'})"
+      # The whole repository build: the desktop runtime ships the dist trees and the web UI build.
+      - run: pnpm build
+      - run: pnpm --filter @alisio/desktop run build
+      - run: pnpm --filter @alisio/desktop run prepare:runtime
+      - name: Package the installers
+        run: pnpm --filter @alisio/desktop exec electron-builder --config electron-builder.config.mjs ${{ matrix.builder_args }} --publish never
+      - name: Upload the installers to the release
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(${{ matrix.assets }})
+          if [ "${#files[@]}" -eq 0 ]; then echo "No installers were produced"; exit 1; fi
+          ls -l "${files[@]}"
+          gh release upload "$TAG" "${files[@]}" --clobber
+
+  checksums:
+    name: Checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the installers and publish SHA256SUMS-desktop.txt
+        run: |
+          mkdir assets
+          cd assets
+          for pattern in '*.exe' '*.dmg' '*.AppImage' '*.deb'; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern"
+          done
+          sha256sum -- * | sort -k2 > ../SHA256SUMS-desktop.txt
+          cd ..
+          cat SHA256SUMS-desktop.txt
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" SHA256SUMS-desktop.txt --clobber
