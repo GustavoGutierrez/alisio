@@ -534,7 +534,7 @@ export const es: Record<MessageKey, string> = {
   "settings.readOnly": "alisio serve se ejecuta con --read-only: no se pueden cambiar los ajustes.",
   "plugins.lead": "Configura e inspecciona los plugins cargados en este workspace.",
   "plugins.tab.configuration": "Configuración de plugins",
-  "plugins.tab.list": "Lista de plugins",
+  "plugins.tab.list": "Plugins instalados",
   "plugins.search": "Buscar plugins",
   "plugins.none": "Ningún plugin coincide.",
   "plugins.status.enabled": "Habilitado",
@@ -554,7 +554,7 @@ export const es: Record<MessageKey, string> = {
   "plugins.notSandboxed":
     "Los plugins no están aislados: se ejecutan dentro del proceso de alisio serve con los permisos de tu usuario. Habilita solo plugins de confianza.",
   "plugins.howToInstall":
-    "Los plugins se instalan desde la terminal (alisio plugins o el archivo de configuración); la web solo habilita o deshabilita los ya configurados.",
+    "Instala plugins desde las pestañas Catálogo de plugins o Instalar desde archivo, o desde la terminal (alisio install). Aquí habilitas o deshabilitas los ya configurados.",
   "plugins.applyNote":
     "Habilitar o deshabilitar un plugin guarda un ajuste del proyecto y recarga el workspace en cuanto no tiene runs; las sesiones abiertas conservan su historial.",
   "plugins.projectFile": "Archivo de configuración del proyecto:",

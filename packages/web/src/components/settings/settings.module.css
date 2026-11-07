@@ -891,3 +891,780 @@
   font-size: 12.5px;
   overflow-wrap: anywhere;
 }
+
+/* ---- Plugin catalog, install from file, updates ---- */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: plugin-spin 0.8s linear infinite;
+}
+
+@keyframes plugin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes plugin-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.primaryButton,
+.ghostButton,
+.dangerButton,
+.dangerGhost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.ghostButton {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.dangerButton {
+  background: var(--danger);
+  color: #fff;
+}
+
+.dangerGhost {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: transparent;
+  color: var(--danger);
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled,
+.dangerButton:disabled,
+.dangerGhost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inlineLink {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.catalogPage {
+  display: grid;
+  gap: 10px;
+}
+
+.catalogBar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.catalogBar > label {
+  flex: 1;
+}
+
+.statusLine,
+.resultCount {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.selectLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.selectLabel select {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.checkLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tagChip {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tagChip span {
+  color: var(--faint);
+}
+
+.tagChip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.groupTitle {
+  margin: 14px 0 8px;
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.catalogGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogCard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--raised);
+}
+
+.cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.cover[data-state="loaded"] img {
+  opacity: 1;
+}
+
+.cover[data-state="loading"] {
+  animation: plugin-pulse 1.4s ease-in-out infinite;
+}
+
+.coverFallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  font-size: 40px;
+  font-weight: 600;
+}
+
+.catalogBody {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.catalogTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.catalogName {
+  margin: 0;
+  font-size: 15px;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.catalogText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chips,
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tagList {
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+.catalogMeta {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+.catalogFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.links,
+.rowActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.link {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.installedMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ok);
+  font-size: 14px;
+}
+
+.skeletonLine {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--raised);
+  animation: plugin-pulse 1.4s ease-in-out infinite;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pageButton {
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+
+.pageButton[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pagerGap {
+  color: var(--faint);
+}
+
+.errorPanel {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.updateBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.updateRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.restartBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: 14px;
+}
+
+.restartBanner span {
+  flex: 1;
+}
+
+.dialogScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.confirmDialog {
+  width: min(520px, 100%);
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.dialogTitle {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+
+.dialogBody {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dialogBody p {
+  margin: 0;
+}
+
+.dialogBody code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dropZone {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+}
+
+.dropZone[data-dragging="true"],
+.dropZone:focus-within {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dropZone strong {
+  color: var(--text);
+}
+
+.fileInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.validation {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.validationHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.validationHead h4 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: 13.5px;
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 13.5px;
+}
+
+.logTail {
+  max-height: 180px;
+  margin: 6px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stepper {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.stepper li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--faint);
+}
+
+.stepper li[data-status="running"],
+.stepper li[data-status="done"] {
+  color: var(--text);
+}
+
+.stepper li[data-status="failed"] {
+  color: var(--danger);
+}
+
+.stepIcon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.stepper li[data-status="done"] .stepIcon {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.stepper li[data-status="failed"] .stepIcon {
+  border-color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .skeletonLine,
+  .cover[data-state="loading"] {
+    animation: none;
+  }
+}
+
+/* Flip cards: cover with a short text on the front, details and the action on the back. */
+.flipCard {
+  position: relative;
+  aspect-ratio: 6 / 5;
+  perspective: 1100px;
+  list-style: none;
+}
+
+.flipCard[data-skeleton="true"] {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.flipInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+.flipCard[data-flipped="true"] .flipInner {
+  transform: rotateY(180deg);
+}
+
+.faceFront,
+.faceBack {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.faceFront {
+  background: var(--raised);
+}
+
+.faceBack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  transform: rotateY(180deg);
+}
+
+.faceFront .cover {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+}
+
+.frontShade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgb(5 10 14 / 88%) 0%,
+    rgb(5 10 14 / 55%) 38%,
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.frontText {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  color: #fff;
+  pointer-events: none;
+}
+
+.frontName {
+  margin: 0;
+  font-size: 15px;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 60%);
+}
+
+.frontDesc {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: rgb(255 255 255 / 86%);
+  font-size: 12.5px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.frontBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(10 16 20 / 78%);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.frontBadge[data-tone="ok"] {
+  color: #8fe0a3;
+}
+
+.frontBadge[data-tone="warn"] {
+  color: #f1c978;
+}
+
+.frontBadge[data-tone="danger"] {
+  color: #ff9a9f;
+}
+
+.flipHit {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.flipHit:hover {
+  background: rgb(255 255 255 / 4%);
+}
+
+.backHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.backScroll {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.backScroll .catalogText {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.backFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flipInner {
+    transition: none;
+  }
+
+  .flipCard[data-flipped="true"] .flipInner {
+    transform: none;
+  }
+
+  .flipCard .faceBack {
+    transform: none;
+    visibility: hidden;
+  }
+
+  .flipCard[data-flipped="true"] .faceBack {
+    visibility: visible;
+  }
+
+  .flipCard[data-flipped="true"] .faceFront {
+    visibility: hidden;
+  }
+}

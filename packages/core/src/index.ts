@@ -541,6 +541,7 @@ export {
   type PluginEnvironment,
   PluginHost,
   type PluginHostOptions,
+  pluginCodeImportedFrom,
   pluginPrefix,
   type ViewInfo,
   ViewRunError,
@@ -554,18 +555,51 @@ export {
   type InstallPluginResult,
   type InstallRunner,
   installedGlobalPluginPackages,
+  installedGlobalPlugins,
   installedNpmPlugins,
   installPlugin,
   isPeerConflict,
   npmInstallTarget,
   type PluginSpec,
   parsePluginSpec,
+  pluginDependencySpec,
   pluginTrustRemark,
   printInstallResult,
   registerPluginInstallTool,
   sanitizeNpmError,
+  type UninstallPluginInput,
+  type UninstallPluginResult,
+  uninstallPlugin,
   updateAllPlugins,
 } from "./plugins/install.ts";
+export {
+  type InstallLocalPluginInput,
+  type InstallLocalPluginResult,
+  installLocalPluginTarball,
+  LocalInstallError,
+  type LocalInstallPhase,
+  storedTarballName,
+} from "./plugins/local-install.ts";
+export {
+  NPM_NOT_FOUND_MESSAGE,
+  type NpmInvocation,
+  resolveNpmInvocation,
+  runNpm,
+} from "./plugins/npm-runner.ts";
+export {
+  inspectPluginTarball,
+  MAX_TARBALL_BYTES,
+  type PluginTarballInfo,
+  readTarballPackageJson,
+  type TarballLimits,
+} from "./plugins/tarball.ts";
+export {
+  type CatalogPluginState,
+  type CatalogPluginStateInput,
+  catalogPluginState,
+  comparePluginVersions,
+  satisfiesRange,
+} from "./plugins/version-compat.ts";
 export * from "./proof/index.ts";
 export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 export {

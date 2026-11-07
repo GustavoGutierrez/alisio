@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
   AskQuestionsRequest,
@@ -97,6 +97,19 @@ export interface ViewInfo {
   params: Record<string, unknown>;
 }
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** Entry files of plugins imported by this process (Node caches an ES module for its lifetime). */
+const importedPluginFiles = new Set<string>();
+
+/**
+ * Whether any plugin file under `dir` was already imported in this process. Such code stays cached
+ * after the package is updated on disk, so the new version only loads after a restart.
+ */
+export function pluginCodeImportedFrom(dir: string): boolean {
+  const prefix = dir.endsWith(sep) ? dir : `${dir}${sep}`;
+  for (const file of importedPluginFiles) if (file.startsWith(prefix)) return true;
+  return false;
+}
+
 export class PluginHost implements RunnerExtensions {
   commands = new Map<string, (args: string, context?: CommandContext) => Promise<string>>();
   commandInfo = new Map<string, CommandOptions & { plugin: string; builtin: boolean }>();
@@ -299,6 +312,7 @@ export class PluginHost implements RunnerExtensions {
     let module: { default?: unknown };
     try {
       module = await import(pathToFileURL(path).href);
+      importedPluginFiles.add(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ERR_UNKNOWN_FILE_EXTENSION")
         throw new Error(

@@ -527,7 +527,7 @@ export const en = {
   "settings.readOnly": "alisio serve runs with --read-only: settings cannot be changed.",
   "plugins.lead": "Configure and inspect the plugins loaded in this workspace.",
   "plugins.tab.configuration": "Plugin configuration",
-  "plugins.tab.list": "Plugin list",
+  "plugins.tab.list": "Installed plugins",
   "plugins.search": "Search plugins",
   "plugins.none": "No plugin matches.",
   "plugins.status.enabled": "Enabled",
@@ -547,7 +547,7 @@ export const en = {
   "plugins.notSandboxed":
     "Plugins are not sandboxed: they run inside the alisio serve process with your user's permissions. Enable only plugins you trust.",
   "plugins.howToInstall":
-    "Plugins are installed from the terminal (alisio plugins or the configuration file); the web only enables or disables the ones already configured.",
+    "Install plugins from the Plugin catalog or Install from file tabs, or from the terminal (alisio install). Here you enable or disable the ones already configured.",
   "plugins.applyNote":
     "Enabling or disabling a plugin saves a project override and reloads the workspace as soon as it has no runs; open sessions keep their history.",
   "plugins.projectFile": "Project configuration file:",

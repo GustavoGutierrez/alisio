@@ -217,6 +217,11 @@ export interface PluginCatalogEntry {
   enabled: boolean;
   manageable: boolean;
   diagnostic?: string;
+  /**
+   * The npm package name an external plugin was loaded from. Never a path: the catalog stays
+   * path-safe, so file and directory plugins carry no `spec`.
+   */
+  spec?: string;
 }
 export interface ConfiguredProviderCatalog {
   profile: string;
@@ -539,6 +544,7 @@ export async function createApplication(options: AppOptions = {}) {
             status: enabled ? "active" : "inactive",
             enabled,
             manageable: entry.manageable,
+            ...(isPathSpec(entry.spec) ? {} : { spec: entry.spec }),
           });
           runtimePluginEnabled.set(candidate.plugin.id, enabled);
         } catch {
@@ -555,6 +561,7 @@ export async function createApplication(options: AppOptions = {}) {
               enabled: true,
               manageable: entry.manageable,
               diagnostic: "Activation failed; registrations were rolled back",
+              ...(isPathSpec(entry.spec) ? {} : { spec: entry.spec }),
             });
             continue;
           }
@@ -570,6 +577,7 @@ export async function createApplication(options: AppOptions = {}) {
             enabled: true,
             manageable: false,
             diagnostic: "Load failed; no path or credential details are shown here",
+            ...(isPathSpec(entry.spec) ? {} : { spec: entry.spec }),
           });
         }
       }

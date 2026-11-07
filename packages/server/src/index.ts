@@ -35,6 +35,8 @@ import { HttpError, toApiError } from "./http/errors.ts";
 import { type RouteContext, Router } from "./http/router.ts";
 import { StaticAssets } from "./http/static.ts";
 import { createLogger, type Logger } from "./log.ts";
+import { CatalogService, type CatalogServiceOptions } from "./plugins/catalog-service.ts";
+import { installedSdkVersion } from "./plugins/sdk-version.ts";
 import { registerAgentDefinitionRoutes } from "./routes/agent-definitions.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
 import {
@@ -55,11 +57,13 @@ import { registerGoalRoutes } from "./routes/goal.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
+import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProofRoutes } from "./routes/proof.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerScratchRoutes } from "./routes/scratch.ts";
+import { registerRestartRoutes } from "./routes/server-restart.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerSideQuestionRoutes } from "./routes/side-questions.ts";
@@ -88,6 +92,12 @@ export { HttpError } from "./http/errors.ts";
 export { contentSecurityPolicy, PLACEHOLDER_HTML } from "./http/static.ts";
 export { createLogger, type Logger, type LogLevel, logLevel } from "./log.ts";
 export { PROTOCOL_VERSION } from "./routes/health.ts";
+
+/**
+ * Exit code of a host that restarts on request (`POST /api/server/restart`): its supervisor (the
+ * desktop app) takes it as "start me again", not as a crash. 75 is `EX_TEMPFAIL`.
+ */
+export const RESTART_EXIT_CODE = 75;
 
 export interface ServerOptions {
   /** Bind address (default `127.0.0.1`). Anything but loopback requires `allowRemote`. */
@@ -138,6 +148,22 @@ export interface ServerOptions {
   folderPicker?: FolderPicker;
   /** Limits of plugin data views (`GET /api/sessions/:sid/views/…`): 5 s and 1 MiB by default. */
   views?: { timeoutMs?: number; maxBytes?: number };
+  /**
+   * Restart on request. `supervised` (default: env `ALISIO_SUPERVISED=1`, set by the desktop app)
+   * says a supervisor respawns this process when it exits with `RESTART_EXIT_CODE`. `exit`
+   * replaces the default (close the server, then `process.exit`) for tests.
+   */
+  restart?: { supervised?: boolean; exit?: (code: number) => void };
+  /**
+   * Plugin catalog knobs (the CLI leaves them alone; tests inject a fake catalog, npm and fetch):
+   * catalog URL (else `ALISIO_PLUGIN_CATALOG_URL`), cache TTL, fetch, clock and SDK version.
+   */
+  pluginCatalog?: CatalogServiceOptions & {
+    installRunner?: import("@alisio/core").InstallRunner;
+    sdkVersion?: string;
+    maxUploadBytes?: number;
+    jobTtlMs?: number;
+  };
   /** Background-task runtime knobs (notification timing, kill grace, limits): tests tune them. */
   tasks?: Pick<
     NonNullable<AppOptions["tasks"]>,
@@ -212,6 +238,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   // itself, the user decides.
   new GoalStore(catalog.db).pauseOrphans(Date.now());
   let shutdown: Promise<void> | undefined;
+  let runningServer: RunningServer | undefined;
   let sessions: SessionService | undefined;
   const inflight = new InflightTracker();
   let recycler: WorkspaceRecycler | undefined;
@@ -543,6 +570,34 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerTaskRoutes(router, { sessions });
   registerApprovalRoutes(router, { approvals, interactions });
   registerManagementRoutes(router, management, recycler);
+  const supervised = options.restart?.supervised ?? process.env.ALISIO_SUPERVISED === "1";
+  registerRestartRoutes(router, {
+    ...(base.readOnly ? { readOnly: true } : {}),
+    ...(supervised
+      ? {
+          restart: () => {
+            if (options.restart?.exit) return options.restart.exit(RESTART_EXIT_CODE);
+            // After the response is out: stop cleanly, then leave for the supervisor to respawn.
+            setTimeout(
+              () => void runningServer?.close().finally(() => process.exit(RESTART_EXIT_CODE)),
+              100,
+            );
+          },
+        }
+      : {}),
+  });
+  {
+    const { installRunner, sdkVersion, maxUploadBytes, jobTtlMs, ...catalogOptions } =
+      options.pluginCatalog ?? {};
+    const resolvedSdk = sdkVersion ?? installedSdkVersion();
+    registerPluginCatalogRoutes(router, management, recycler, {
+      service: new CatalogService(catalogOptions),
+      ...(resolvedSdk ? { sdkVersion: resolvedSdk } : {}),
+      ...(installRunner ? { installRunner } : {}),
+      ...(maxUploadBytes ? { maxUploadBytes } : {}),
+      ...(jobTtlMs ? { jobTtlMs } : {}),
+    });
+  }
   registerAgentDefinitionRoutes(router, management, recycler);
   registerProviderRoutes(router, management, recycler);
   registerEventRoutes(router, {
@@ -603,7 +658,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       // checks its own image content types (also non-safelisted, so also preflighted).
       const upload =
         method === "POST" &&
-        (url.pathname === "/api/blobs" || /^\/api\/sessions\/[^/]+\/datasets$/.test(url.pathname));
+        (url.pathname === "/api/blobs" ||
+          url.pathname === "/api/plugins/local/inspect" ||
+          /^\/api\/sessions\/[^/]+\/datasets$/.test(url.pathname));
       if (!["GET", "HEAD", "OPTIONS"].includes(method) && !upload) {
         const type = String(req.headers["content-type"] ?? "")
           .split(";")[0]
@@ -653,7 +710,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   guard = new AuthGuard({ host, port, ...(options.token ? { token: options.token } : {}) });
   const displayHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
   const url = `http://${displayHost.includes(":") ? `[${displayHost}]` : displayHost}:${port}`;
-  return {
+  runningServer = {
     host,
     port,
     url,
@@ -685,6 +742,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       return shutdown;
     },
   };
+  return runningServer;
 }
 
 /** Writes a JSON response. */

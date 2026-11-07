@@ -9,14 +9,15 @@
  * still follows the existing executable-plugin policy: it runs in-process wherever it is loaded and
  * is disabled entirely under `--read-only`.
  */
-import { chmod, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
+import { chmod, mkdir, open, readdir, rename, rm, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { type ToolDefinition, textResult } from "@alisio/sdk";
 import { configHome } from "../config.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { readJson } from "../runtime/fs.ts";
 import { PLUGIN_KEYWORD } from "../runtime/modules.ts";
-import { type ProcessResult, runProcess } from "../runtime/process.ts";
+import type { ProcessResult } from "../runtime/process.ts";
+import { runNpm } from "./npm-runner.ts";
 
 /** npm package name: scope (optional) followed by the name; both start with an alphanumeric. */
 const PACKAGE_PART = "[A-Za-z0-9][A-Za-z0-9._-]*";
@@ -92,8 +93,8 @@ export type InstallRunner = (
 ) => Promise<ProcessResult>;
 
 export const INSTALL_TIMEOUT_MS = 300_000;
-const defaultRunner: InstallRunner = (command, args, options) =>
-  runProcess(command, args, { ...options, timeoutMs: INSTALL_TIMEOUT_MS, maxBytes: 64_000 });
+export const defaultInstallRunner: InstallRunner = (command, args, options) =>
+  runNpm(command, args, options, { timeoutMs: INSTALL_TIMEOUT_MS, maxBytes: 64_000 });
 
 export interface InstallPluginInput {
   /** `npm:<package>[@<version>]` or a bare package name. */
@@ -102,6 +103,11 @@ export interface InstallPluginInput {
   configHome?: string;
   /** Refresh an already-installed package to `@latest`, keeping the npm name in the config. */
   update?: boolean;
+  /**
+   * Run npm even when the package is already installed, at exactly `spec`'s version (an explicit
+   * reinstall or downgrade from the catalog). `update` instead takes `@latest`.
+   */
+  force?: boolean;
   /** Refuse immediately; loading and installing executable plugins is disabled under --read-only. */
   readOnly?: boolean;
   signal?: AbortSignal;
@@ -122,7 +128,9 @@ export interface InstallPluginResult {
   pluginsDir: string;
   /** Already present in the global plugins directory before this call (no npm run performed). */
   alreadyInstalled: boolean;
-  /** Refreshed to `@latest` by this call. */
+  /** Version that was installed before this call, when there was one. */
+  previousVersion?: string;
+  /** Refreshed (to `@latest`, or reinstalled at the requested version) by this call. */
   updated: boolean;
   /** Plain-text remark about where the plugin loads and how project trust applies. */
   trustRemark: string;
@@ -199,20 +207,29 @@ function npmInstallError(
   );
 }
 
-/** Atomically adds `packageName` to the global configuration `plugins` array, preserving all other fields. */
-async function persistGlobalPluginEntry(
+/**
+ * Atomically rewrites the global configuration `plugins` array through `update`, preserving every
+ * other field. Returns the file path and whether the array changed (no write when it did not).
+ */
+async function updateGlobalPluginEntries(
   configHomeDir: string,
-  packageName: string,
-): Promise<string> {
+  update: (current: unknown[]) => unknown[],
+  options: { createIfMissing: boolean },
+): Promise<{ file: string; changed: boolean }> {
   const file = join(configHomeDir, "config.json");
   const existing = await readJson(file);
   let raw: Record<string, unknown>;
-  if (existing === undefined) raw = {};
-  else if (typeof existing === "object" && !Array.isArray(existing))
+  if (existing === undefined) {
+    if (!options.createIfMissing) return { file, changed: false };
+    raw = {};
+  } else if (typeof existing === "object" && !Array.isArray(existing))
     raw = existing as Record<string, unknown>;
   else throw new Error(`Global Alisio configuration must be a JSON object: ${file}`);
   const current = Array.isArray(raw.plugins) ? (raw.plugins as unknown[]) : [];
-  if (!current.includes(packageName)) raw.plugins = [...current, packageName];
+  const next = update(current);
+  const changed = next.length !== current.length || next.some((entry, i) => entry !== current[i]);
+  if (!changed && existing !== undefined) return { file, changed: false };
+  raw.plugins = next;
   raw.schemaVersion ??= 1;
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
@@ -230,7 +247,59 @@ async function persistGlobalPluginEntry(
     await unlink(temporary).catch(() => {});
     throw error;
   }
+  return { file, changed: true };
+}
+
+/** Atomically adds `packageName` to the global configuration `plugins` array, preserving all other fields. */
+export async function persistGlobalPluginEntry(
+  configHomeDir: string,
+  packageName: string,
+): Promise<string> {
+  const { file } = await updateGlobalPluginEntries(
+    configHomeDir,
+    (current) => (current.includes(packageName) ? current : [...current, packageName]),
+    { createIfMissing: true },
+  );
   return file;
+}
+
+/** Atomically removes `packageName` from the global configuration `plugins` array. */
+export async function removeGlobalPluginEntry(
+  configHomeDir: string,
+  packageName: string,
+): Promise<boolean> {
+  const { changed } = await updateGlobalPluginEntries(
+    configHomeDir,
+    (current) => current.filter((entry) => entry !== packageName),
+    { createIfMissing: false },
+  );
+  return changed;
+}
+
+/** The dependency spec npm recorded for `name` in `<pluginsDir>/package.json`, if any. */
+export async function pluginDependencySpec(
+  pluginsDir: string,
+  name: string,
+): Promise<string | undefined> {
+  const manifest = (await readJson(join(pluginsDir, "package.json")).catch(() => undefined)) as
+    | { dependencies?: Record<string, unknown> }
+    | undefined;
+  const spec = manifest?.dependencies?.[name];
+  return typeof spec === "string" ? spec : undefined;
+}
+
+export const LOCAL_PACKAGES_DIR = "local-packages";
+
+/**
+ * The stored tarball a `file:` dependency spec points at, only when it lives inside
+ * `<pluginsDir>/local-packages` (anything else, including `..` escapes, is never deleted by us).
+ */
+export function storedTarballOf(pluginsDir: string, spec: string | undefined): string | undefined {
+  if (!spec?.startsWith("file:")) return undefined;
+  const target = resolve(pluginsDir, spec.slice(5));
+  const root = join(pluginsDir, LOCAL_PACKAGES_DIR);
+  if (dirname(target) !== root || !/\.(tgz|tar\.gz)$/.test(target)) return undefined;
+  return target;
 }
 
 /** The shared install routine used by both the CLI command and the `plugin_install` tool. */
@@ -250,9 +319,9 @@ export async function installPlugin(input: InstallPluginInput): Promise<InstallP
     | undefined;
   const alreadyInstalled = !!installedManifest?.version;
   let updated = false;
-  if (!alreadyInstalled || input.update) {
+  if (!alreadyInstalled || input.update || input.force) {
     const signal = input.signal ?? AbortSignal.timeout(INSTALL_TIMEOUT_MS);
-    const run = input.runner ?? defaultRunner;
+    const run = input.runner ?? defaultInstallRunner;
     const npmResult = await run(
       "npm",
       [
@@ -272,7 +341,7 @@ export async function installPlugin(input: InstallPluginInput): Promise<InstallP
         await installedGlobalPluginPackages(home),
         npmInstallTarget(parsed.name, parsed.version),
       );
-    updated = !!input.update && alreadyInstalled;
+    updated = (!!input.update || !!input.force) && alreadyInstalled;
   }
   const manifest = (await readJson(join(packageDir, "package.json"))) as
     | { version?: string }
@@ -287,8 +356,95 @@ export async function installPlugin(input: InstallPluginInput): Promise<InstallP
     configFile,
     pluginsDir,
     alreadyInstalled,
+    ...(installedManifest?.version ? { previousVersion: installedManifest.version } : {}),
     updated,
     trustRemark: pluginTrustRemark(parsed.name),
+  };
+}
+
+/** Globally installed plugin packages (configured and present on disk) with their versions. */
+export async function installedGlobalPlugins(
+  home: string,
+): Promise<Array<{ name: string; version: string }>> {
+  const result: Array<{ name: string; version: string }> = [];
+  for (const name of await installedGlobalPluginPackages(home)) {
+    const manifest = (await readJson(
+      join(home, "plugins", "node_modules", name, "package.json"),
+    )) as { version?: string } | undefined;
+    result.push({ name, version: manifest?.version ?? "unknown" });
+  }
+  return result;
+}
+
+export interface UninstallPluginInput {
+  /** The npm package name (no `npm:` prefix, no version). */
+  packageName: string;
+  /** Defaults to `configHome()` (ALISIO_CONFIG_HOME, else ~/.config/alisio). */
+  configHome?: string;
+  readOnly?: boolean;
+  signal?: AbortSignal;
+  /** Injected npm for tests; defaults to the real (or bundled) npm. */
+  runner?: InstallRunner;
+}
+
+export interface UninstallPluginResult {
+  packageName: string;
+  /** The package was installed or configured before this call (false = nothing to do). */
+  removed: boolean;
+  pluginsDir: string;
+  configFile: string;
+}
+
+/**
+ * Removes a package from the global plugins directory (`npm uninstall --prefix`) and its name from
+ * the global configuration `plugins` array. Idempotent: an absent package only cleans a stale
+ * config entry. The config is untouched when npm fails.
+ */
+export async function uninstallPlugin(input: UninstallPluginInput): Promise<UninstallPluginResult> {
+  const parsed = parsePluginSpec(input.packageName);
+  if (parsed.version !== undefined || input.packageName.trim().startsWith("npm:"))
+    throw new Error(
+      `Invalid package name "${input.packageName}": pass the bare npm package name, without "npm:" or a version`,
+    );
+  if (input.readOnly)
+    throw new Error(
+      `Uninstalling npm plugin "${parsed.name}" is unavailable under --read-only: it runs npm and writes your global configuration. Run without --read-only.`,
+    );
+  const home = resolve(input.configHome ?? configHome());
+  const pluginsDir = join(home, "plugins");
+  const packageDir = join(pluginsDir, "node_modules", parsed.name);
+  const manifest = (await readJson(join(packageDir, "package.json"))) as
+    | { version?: string }
+    | undefined;
+  const present = manifest !== undefined;
+  const dependency = await pluginDependencySpec(pluginsDir, parsed.name);
+  const stored = storedTarballOf(pluginsDir, dependency);
+  if (present || dependency !== undefined) {
+    const signal = input.signal ?? AbortSignal.timeout(INSTALL_TIMEOUT_MS);
+    const run = input.runner ?? defaultInstallRunner;
+    const result = await run("npm", ["uninstall", "--prefix", pluginsDir, parsed.name], {
+      cwd: pluginsDir,
+      signal,
+    });
+    if (result.exitCode !== 0) {
+      const detail = sanitizeNpmError([result.stdout, result.stderr].filter(Boolean).join("\n"));
+      throw new Error(
+        `npm uninstall failed for plugin "${parsed.name}" (exit ${result.exitCode}).\n${detail || "no output"}`,
+      );
+    }
+  }
+  const { file, changed } = await updateGlobalPluginEntries(
+    home,
+    (current) => current.filter((entry) => entry !== parsed.name),
+    { createIfMissing: false },
+  );
+  // The copy kept for a local-file install goes with the package.
+  if (stored) await rm(stored, { force: true });
+  return {
+    packageName: parsed.name,
+    removed: present || changed || stored !== undefined,
+    pluginsDir,
+    configFile: file,
   };
 }
 
@@ -322,7 +478,7 @@ export async function updateAllPlugins(
   const names = await installedGlobalPluginPackages(home);
   if (names.length === 0) return { packages: [], pluginsDir };
   const signal = input.signal ?? AbortSignal.timeout(INSTALL_TIMEOUT_MS);
-  const run = input.runner ?? defaultRunner;
+  const run = input.runner ?? defaultInstallRunner;
   const targets = names.map((name) => npmInstallTarget(name, undefined, true));
   const npmResult = await run("npm", ["install", "--prefix", pluginsDir, ...targets], {
     cwd: pluginsDir,
