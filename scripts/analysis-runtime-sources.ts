@@ -7,9 +7,9 @@
  * `tests/analysis-runtime-sources.test.ts` fails when the two drift apart.
  * Usage: node --experimental-strip-types scripts/analysis-runtime-sources.ts
  */
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { biomeFormat } from "./biome-format.ts";
 
 const dir = resolve("packages/core/src/analysis/python");
 const sourceDir = join(dir, "alisio_runtime");
@@ -33,6 +33,4 @@ ${entries}
 };
 `,
 );
-execFileSync(resolve("node_modules/.bin/biome"), ["format", "--write", target], {
-  stdio: "inherit",
-});
+biomeFormat([target]);

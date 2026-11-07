@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ENGINE_DIR, engineInputsHash } from "./analysis-data-engine-inputs.ts";
+import { biomeFormat } from "./biome-format.ts";
 
 const root = resolve(import.meta.dirname ?? ".", "..");
 const target = join(root, ENGINE_DIR, "engine-source.ts");
@@ -42,9 +43,7 @@ export const ENGINE_INPUT_SHA256 = ${JSON.stringify(engineInputsHash(root))};
 export const ENGINE_SOURCE: string = ${JSON.stringify(code)};
 `,
   );
-  execFileSync(resolve(root, "node_modules/.bin/biome"), ["format", "--write", target], {
-    stdio: "inherit",
-  });
+  biomeFormat([target], root);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

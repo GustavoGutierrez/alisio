@@ -7,10 +7,10 @@
  *
  * Usage: node --experimental-strip-types scripts/changelog-data.ts
  */
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseChangelog } from "../packages/core/src/changelog/parse.ts";
+import { biomeFormat } from "./biome-format.ts";
 
 const source = resolve("CHANGELOG.md");
 const target = resolve("packages/core/src/changelog/data.ts");
@@ -28,6 +28,4 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = ${JSON.s
 `;
 
 writeFileSync(target, content);
-execFileSync(resolve("node_modules/.bin/biome"), ["format", "--write", target], {
-  stdio: "inherit",
-});
+biomeFormat([target]);

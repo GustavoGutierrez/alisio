@@ -6,9 +6,9 @@
  * `tests/forge-python-pyodide-runner-source.test.ts` fails when the two drift apart.
  * Usage: node --experimental-strip-types scripts/pyodide-runner-source.ts
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { biomeFormat } from "./biome-format.ts";
 
 const dir = resolve("packages/core/src/forge/python");
 const target = join(dir, "pyodide-runner-source.ts");
@@ -19,6 +19,4 @@ writeFileSync(
 export const PYODIDE_RUNNER_SOURCE: string = ${JSON.stringify(readFileSync(join(dir, "pyodide-runner.mjs"), "utf8"))};
 `,
 );
-execFileSync(resolve("node_modules/.bin/biome"), ["format", "--write", target], {
-  stdio: "inherit",
-});
+biomeFormat([target]);
