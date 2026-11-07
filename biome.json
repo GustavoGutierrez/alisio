@@ -4,6 +4,8 @@
     "includes": [
       "**",
       "!**/dist",
+      "!apps/desktop/build",
+      "!apps/desktop/release",
       "!**/node_modules",
       "!pnpm-lock.yaml",
       "!docs/.vitepress/cache",

@@ -1,0 +1,35 @@
+{
+  "name": "@alisio/desktop",
+  "desktopName": "Alisio.desktop",
+  "productName": "Alisio",
+  "version": "0.9.0",
+  "private": true,
+  "description": "Alisio desktop app: an Electron shell around the local Alisio web UI server. Not published to npm.",
+  "author": "Gustavo Gutiérrez",
+  "license": "MIT",
+  "homepage": "https://gustavogutierrez.github.io/alisio/",
+  "type": "module",
+  "main": "dist/main.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "pnpm run build && electron .",
+    "prepare:runtime": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/prepare-runtime.ts",
+    "package": "pnpm run build && pnpm run prepare:runtime && electron-builder --config electron-builder.config.mjs",
+    "package:dir": "pnpm run build && pnpm run prepare:runtime && electron-builder --config electron-builder.config.mjs --dir"
+  },
+  "dependencies": {
+    "@alisio/alisio-code": "workspace:*",
+    "@alisio/core": "workspace:*",
+    "@alisio/server": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  }
+}

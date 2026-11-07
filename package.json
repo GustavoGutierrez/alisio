@@ -6,6 +6,9 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev": "bun --conditions=alisio-source packages/cli/src/main.ts",
+    "desktop:dev": "pnpm build && pnpm --filter @alisio/desktop run dev",
+    "desktop:package": "pnpm build && pnpm --filter @alisio/desktop run package",
+    "desktop:package:dir": "pnpm build && pnpm --filter @alisio/desktop run package:dir",
     "typecheck": "tsc --noEmit && tsc -p packages/web --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",

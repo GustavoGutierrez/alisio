@@ -35,8 +35,11 @@ const EXIT_CONFIRM_MS = 2_000;
 export function isolateEnv(
   platform: NodeJS.Platform = process.platform,
   parent: NodeJS.ProcessEnv = process.env,
+  electron: boolean = !!process.versions.electron,
 ): Record<string, string> {
   const env: Record<string, string> = { ALISIO_FORGE_ISOLATE: "1" };
+  // The Electron binary only behaves as Node with this flag; it carries no parent data.
+  if (electron) env.ELECTRON_RUN_AS_NODE = "1";
   if (platform === "win32" && parent.SystemRoot) env.SystemRoot = parent.SystemRoot;
   return env;
 }

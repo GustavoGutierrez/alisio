@@ -1,0 +1,61 @@
+/**
+ * The Alisio host: runs inside a child process of the Electron binary (`ELECTRON_RUN_AS_NODE=1`),
+ * i.e. plain Node, and starts the same HTTP + SSE server as `alisio serve`. It reports the launch
+ * URL to its parent over IPC (or as one JSON stdout line when started without a channel).
+ */
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { parseHostArgs } from "./spawn-plan.ts";
+
+type HostReport = { type: "ready"; launchUrl: string } | { type: "error"; message: string };
+
+function report(message: HostReport): void {
+  if (process.send) process.send(message);
+  else process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+function desktopVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version?: string };
+  return manifest.version ?? "0.0.0";
+}
+
+async function main(): Promise<void> {
+  const [{ startServer }, { cliDefaults }] = await Promise.all([
+    import("@alisio/server"),
+    import("@alisio/alisio-code/defaults"),
+  ]);
+  const { webRoot } = parseHostArgs(process.argv.slice(2));
+  const server = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    version: desktopVersion(),
+    defaultWorkspace: homedir(),
+    app: await cliDefaults(),
+    ...(webRoot ? { webRoot } : {}),
+  });
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    // Shutdown is bounded internally; this is a last-resort guard against a hung close.
+    setTimeout(() => process.exit(1), 8_000).unref();
+    void server.close().then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
+  };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
+  // The parent is gone (crash or quit): nobody can reach this server any more.
+  process.on("disconnect", stop);
+  report({ type: "ready", launchUrl: server.launchUrl });
+}
+
+main().catch((error: unknown) => {
+  report({ type: "error", message: error instanceof Error ? error.message : String(error) });
+  process.exitCode = 1;
+  // Give the IPC message time to flush, then leave even if handles keep the loop alive.
+  setTimeout(() => process.exit(1), 200).unref();
+});

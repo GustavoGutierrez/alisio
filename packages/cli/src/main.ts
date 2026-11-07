@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { cliDefaults } from "./defaults.ts";
 import { loadVersion } from "./version.ts";
 
 const VERSION = loadVersion(import.meta.url);
@@ -11,25 +12,12 @@ function parseAgents(json: string): Record<string, unknown> {
     );
   return value as Record<string, unknown>;
 }
-/** Built-in plugins and prompt templates, and the slash names templates may not take. */
-async function cliDefaults() {
-  const [{ BUILTIN_PLUGINS }, { BUILTIN_PROMPTS }, { reservedCommandNames }] = await Promise.all([
-    import("./builtin.ts"),
-    import("./prompts/index.ts"),
-    import("./tui/state.ts"),
-  ]);
-  return {
-    builtins: BUILTIN_PLUGINS,
-    builtinPrompts: BUILTIN_PROMPTS,
-    reservedPromptNames: reservedCommandNames(),
-  };
-}
 /** Commander collector of a repeatable option. */
 const collect = (value: string, previous: string[]): string[] => [...previous, value];
 const program = new Command();
 program
   .name("alisio")
-  .description("Velocidad y eficiencia para construir — extensible coding harness")
+  .description("Alisio: your assistant for everyday work, on the model you choose")
   .version(VERSION)
   .option("--cwd <path>", "Working directory")
   .option("--config <path>", "Explicit trusted configuration file")

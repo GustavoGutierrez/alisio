@@ -154,9 +154,12 @@ export function permissionArgs(paths: {
 export function childEnv(
   vars: Record<string, string>,
   platform: NodeJS.Platform = process.platform,
+  electron: boolean = !!process.versions.electron,
 ): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(vars)) if (key.startsWith("ALISIO_")) env[key] = value;
+  // The Electron binary only behaves as Node with this flag; it carries no parent data.
+  if (electron) env.ELECTRON_RUN_AS_NODE = "1";
   // Windows cannot start a process without these.
   if (platform === "win32" && process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
   return env;

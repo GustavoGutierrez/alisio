@@ -82,7 +82,18 @@ const ENV_KEYS = [
   "SYSTEMROOT",
   "WINDIR",
   "LANG",
+  // Set by hosts that run on the Electron binary (the desktop app): without it the worker, which is
+  // spawned from `process.execPath`, would start another GUI instance instead of plain Node.
+  "ELECTRON_RUN_AS_NODE",
 ];
+
+/** The whitelisted environment of an engine child, from `parent`. */
+export function engineChildEnv(parent: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  return {
+    ...Object.fromEntries(ENV_KEYS.flatMap((k) => (parent[k] ? [[k, parent[k] as string]] : []))),
+    BUN_BE_BUN: "1",
+  };
+}
 
 interface Waiting {
   resolve: (value: unknown) => void;
@@ -110,12 +121,7 @@ class EngineProcess {
         script,
       ],
       {
-        env: {
-          ...Object.fromEntries(
-            ENV_KEYS.flatMap((k) => (process.env[k] ? [[k, process.env[k] as string]] : [])),
-          ),
-          BUN_BE_BUN: "1",
-        },
+        env: engineChildEnv(),
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       },

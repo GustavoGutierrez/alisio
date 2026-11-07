@@ -10,3 +10,8 @@ packages/core/probe.mjs
 # Mutation testing (Stryker, lite)
 .stryker-tmp/
 .vitest/
+
+# Desktop app (apps/desktop)
+apps/desktop/build/
+apps/desktop/release/
+apps/desktop/dist/
