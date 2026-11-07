@@ -457,6 +457,42 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   comprobación de `--json` en `pnpm test:cli`; la TUI interactiva no tiene prueba de extremo a
   extremo propia (reutiliza el catálogo), y la captura de la web es de un servidor real con un
   proveedor falso; sin medición con un modelo real.
+- Context Governor, Fase 6, parte sin coste (`specs/012-context-governor-v1.md`, D48 a D58): herramientas
+  internas de la puerta de promoción, **sin ningún cambio de comportamiento para el usuario y sin
+  cambiar el default de `context.governor`** (sigue `off`). `scripts/governor-gate.ts`
+  (`pnpm governor:gate`) calcula el tamaño de muestra por brazo, el intervalo de Newcombe, el
+  veredicto por modelo y la decisión global desde los `runs.jsonl` del Lab; con T sin fijar se niega a
+  emitir un veredicto final de G1. `scripts/governor-g1.ts` (`pnpm governor:g1`) mide G1 sin modelo
+  (sesiones scripted de `long-context-stress` con `off` y `on`); datos crudos en
+  `specs/012-context-governor-v1-fase6-g1.json`. **Protocolo de la puerta v2 (2026-10-18, decisión
+  del propietario):** G3 es un guardarraíl con el governor `on` frente a `off` en el límite por
+  defecto (800 000), sin bajar `epochMessages`; el valor del governor se demuestra solo en G1; el
+  brazo `off` es también el control negativo (éxito > 85%); la comparación de 40 000 de la v1 queda
+  sustituida. Plan en vivo recalculado con dos brazos (estimado: unas 9 500 peticiones y de 74M a
+  122M tokens de entrada con dos modelos y n = 120, frente a unas 14 400 a 15 300 y de 98M a 193M
+  del plan anterior). **Límites:** **la medición en vivo (G3) no se ha
+  ejecutado y la puerta no está superada**; T, el tamaño final de la muestra y la caída
+  permitida D de `cachedInput` los fija el propietario. Todas las cifras de G1 son **estimadas** (no hay `usage` real:
+  el proveedor scripted informa uno constante) y de **sesiones sintéticas**; no hay ninguna sesión
+  larga grabada de un modelo. Medido en ellas: con `limits.maxContextChars` 40 000 el governor `on`
+  enviado por defecto no reduce nada (0,0%) porque la compactación llega antes que la primera época de
+  elisión (32 mensajes), y con el límite por defecto la reducción agrupada es 4,1%, concentrada en
+  `sequential-config-edits` (28,5%). **El Lab ahora registra el `cachedInput` del proveedor (D58):**
+  `measured.cachedInputTokens` por run (ausente, nunca 0, si el proveedor no lo informa; `cachedPartial`
+  si solo algunos turnos), `summary.cachedInput` y `cachedInputRatio` por tarea en el reporte y el
+  delta en `eval compare`; campos aditivos, `schemaVersion` sigue en 1 y los casetes existentes se
+  reproducen igual. `governor-gate` implementa un criterio **propuesto, pendiente de aprobación** (cota
+  inferior unilateral del 95% de la diferencia de medias de las razones por run, `on` menos `off`, mayor
+  que −D; pendiente sin D o con menos de 30 runs que lo informen por brazo). **Sin verificar con una
+  llamada real:** qué proveedores devuelven tokens en caché (el código lee las tres formas de
+  OpenAI-compatible y `prompt_cache_hit_tokens` de DeepSeek; el plugin externo `opencode-go` no se pudo
+  inspeccionar). El proxy determinista de prefijo sigue como señal complementaria, no equivalente.
+  Los valores de referencia del intervalo de Newcombe son una transcripción de la Tabla II de Newcombe
+  (1998) no recotejada contra el artículo en esta sesión. **Alcance de la verificación:**
+  `tests/governor-gate.test.ts` (tablas de casos de n, intervalo, validez y decisión) y
+  `tests/governor-g1.test.ts` (motor y runner reales con proveedor scripted, determinismo, `shadow`
+  idéntico a `off`), `tests/provider-cached-usage.test.ts` (análisis del uso del proveedor, con clientes
+  falsos) y `tests/eval-cached-input.test.ts` (uso a registro, agregación, comparación y casetes).
 - Plugins: puntos de extensión aditivos en `PluginAPI` (apiVersion 1): hooks de
   compactación (`beforeCompact` con campos JSON extra en la misma llamada, `afterCompact` con
   inyección de contexto e informe), `session.onStart/onEnd`, `model.complete` agnóstico del

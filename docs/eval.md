@@ -269,6 +269,16 @@ and time per success. Per-success figures are the total spend of the judged runs
 divided by the successes. Tokens are main-loop tokens and **exclude compaction calls**. If a provider
 does not report usage in every turn, the token figures are omitted, not guessed.
 
+**Cached input.** When the provider reports how many input tokens it served from its prompt cache
+(for example `prompt_tokens_details.cached_tokens`, or `prompt_cache_hit_tokens` on DeepSeek), each
+run record carries `measured.cachedInputTokens`, and the report adds `summary.cachedInput`
+(`tokens`, `inputTokens`, `ratio`, `runsReporting`, `runsJudged`) for the whole arm and
+`cachedInputRatio` / `cachedInputRuns` per task. The ratio is cached over input tokens pooled over the
+judged runs that reported it. **If the provider does not report it, the field is absent, never `0`**,
+and no ratio is computed (the Markdown says "not reported"). A run where only some turns reported it
+is marked `cachedPartial` and left out of the ratio, like a partial token total. `compare` adds the
+`cachedInputRatio` delta. Which providers report it is not verified here: it depends on the endpoint.
+
 `estimated` holds `costUsd`, and it exists only when you pass **both** `--input-rate` and
 `--output-rate`. Alisio does not guess prices, and the cost ignores cached and reasoning token prices.
 Comparisons only compare estimated costs when both reports used the same rates.

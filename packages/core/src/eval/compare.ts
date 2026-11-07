@@ -74,6 +74,7 @@ const MEASURED_KEYS = [
   "varianceTokens",
   "tokensPerSuccess",
   "wallMsPerSuccess",
+  "cachedInputRatio",
 ] as const;
 type MeasuredKey = (typeof MEASURED_KEYS)[number];
 
@@ -134,7 +135,11 @@ const delta = (baseline: number, candidate: number): MetricDelta => ({
   delta: candidate - baseline,
 });
 
-const TOKEN_KEYS: readonly MeasuredKey[] = ["varianceTokens", "tokensPerSuccess"];
+const TOKEN_KEYS: readonly MeasuredKey[] = [
+  "varianceTokens",
+  "tokensPerSuccess",
+  "cachedInputRatio",
+];
 
 interface TaskContext {
   sameRates: boolean;
@@ -406,6 +411,8 @@ const reportSchema = z.object({
         varianceTokens: z.number().optional(),
         tokensPerSuccess: z.number().optional(),
         wallMsPerSuccess: z.number().optional(),
+        cachedInputRatio: z.number().optional(),
+        cachedInputRuns: z.number().optional(),
       }),
       estimated: z.object({ costUsdPerSuccess: z.number().optional() }).optional(),
     }),
@@ -418,6 +425,15 @@ const reportSchema = z.object({
     budgetExceeded: z.number(),
     runs: z.number().optional(),
     failed: z.number().optional(),
+    cachedInput: z
+      .object({
+        tokens: z.number(),
+        inputTokens: z.number(),
+        ratio: z.number(),
+        runsReporting: z.number(),
+        runsJudged: z.number(),
+      })
+      .optional(),
   }),
   rates: z.object({ inputPerMTokUsd: z.number(), outputPerMTokUsd: z.number() }).optional(),
 });
@@ -466,6 +482,7 @@ const METRIC_LABEL: Record<MeasuredKey, string> = {
   varianceTokens: "Token variance (main-loop tokens)",
   tokensPerSuccess: "Tokens per success (main-loop tokens, excludes compaction calls)",
   wallMsPerSuccess: "Wall per success (ms)",
+  cachedInputRatio: "Cached input ratio (provider-reported cached / input tokens)",
 };
 const number = (value: number) => String(Math.round(value * 1000) / 1000);
 

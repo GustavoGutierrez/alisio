@@ -277,6 +277,17 @@ ejecuciones juzgadas, fallos incluidos, dividido por los éxitos. Los tokens son
 y **excluyen las llamadas de compactación**. Si un proveedor no informa el uso en todos los turnos, las
 cifras de tokens se omiten, no se adivinan.
 
+**Entrada en caché.** Cuando el proveedor informa cuántos tokens de entrada sirvió desde su caché de
+prompt (por ejemplo `prompt_tokens_details.cached_tokens`, o `prompt_cache_hit_tokens` en DeepSeek),
+cada registro de ejecución lleva `measured.cachedInputTokens`, y el reporte añade
+`summary.cachedInput` (`tokens`, `inputTokens`, `ratio`, `runsReporting`, `runsJudged`) para todo el
+brazo y `cachedInputRatio` / `cachedInputRuns` por tarea. La razón es tokens en caché sobre tokens de
+entrada, agrupados sobre las ejecuciones juzgadas que lo informaron. **Si el proveedor no lo informa,
+el campo está ausente, nunca es `0`**, y no se calcula ninguna razón (el Markdown dice «not
+reported»). Una ejecución donde solo algunos turnos lo informaron se marca `cachedPartial` y queda
+fuera de la razón, como un total parcial de tokens. `compare` añade el delta de `cachedInputRatio`.
+Qué proveedores lo informan no está verificado aquí: depende del endpoint.
+
 `estimated` contiene `costUsd` y solo existe si pasas **ambas** `--input-rate` y `--output-rate`.
 Alisio no adivina precios, y el costo ignora el precio de los tokens en caché y de razonamiento. Las
 comparaciones solo comparan costos estimados cuando ambos reportes usaron las mismas tarifas.

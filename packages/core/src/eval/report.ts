@@ -82,6 +82,25 @@ function assertUniform(records: EvalRunRecord[], field: keyof EvalRunRecord, hin
     );
 }
 
+/** Runs that reported cached input completely: judged, no partial usage, no partial cached sum. */
+function cachedReporters(judged: EvalRunRecord[]): EvalRunRecord[] {
+  return judged.filter(
+    (r) =>
+      r.measured.cachedInputTokens !== undefined &&
+      !r.measured.cachedPartial &&
+      r.measured.inputTokens !== undefined &&
+      !r.measured.usagePartial,
+  );
+}
+
+function cachedTotals(judged: EvalRunRecord[]) {
+  const reporters = cachedReporters(judged);
+  if (reporters.length === 0) return undefined;
+  const tokens = sum(reporters.map((r) => r.measured.cachedInputTokens as number));
+  const inputTokens = sum(reporters.map((r) => r.measured.inputTokens as number));
+  return { tokens, inputTokens, runsReporting: reporters.length };
+}
+
 function taskMetrics(
   taskId: string,
   runs: EvalRunRecord[],
@@ -102,6 +121,7 @@ function taskMetrics(
   const varianceWallMs = sampleVariance(wallTimes);
   // Same rule as tokensPerSuccess: a spread over the runs that happened to report would mislead.
   const varianceTokens = allReportedUsage ? sampleVariance(tokenSamples) : null;
+  const cached = cachedTotals(judged);
   const measured: EvalTaskMetrics["measured"] = {
     ...(medianWallMs === null ? {} : { medianWallMs }),
     ...(varianceWallMs === null ? {} : { varianceWallMs }),
@@ -110,6 +130,13 @@ function taskMetrics(
       ? { tokensPerSuccess: sum(tokenSamples) / successes }
       : {}),
     ...(successes > 0 ? { wallMsPerSuccess: sum(wallTimes) / successes } : {}),
+    // A ratio over zero input tokens means nothing: leave it out rather than divide by zero.
+    ...(cached && cached.inputTokens > 0
+      ? {
+          cachedInputRatio: cached.tokens / cached.inputTokens,
+          cachedInputRuns: cached.runsReporting,
+        }
+      : {}),
   };
 
   const costs = rates ? judged.map((r) => estimateRunCost(r, rates)) : [];
@@ -192,6 +219,8 @@ export function buildReport(
 
   const count = (status: EvalRunRecord["status"]) =>
     records.filter((r) => r.status === status).length;
+  const judgedRuns = records.filter((r) => r.status !== "error");
+  const armCached = cachedTotals(judgedRuns);
   return {
     schemaVersion: 1,
     suiteId: first.suiteId,
@@ -219,6 +248,17 @@ export function buildReport(
       budgetExceeded: count("budget_exceeded"),
       runs: records.length,
       failed: count("fail"),
+      ...(armCached && armCached.inputTokens > 0
+        ? {
+            cachedInput: {
+              tokens: armCached.tokens,
+              inputTokens: armCached.inputTokens,
+              ratio: armCached.tokens / armCached.inputTokens,
+              runsReporting: armCached.runsReporting,
+              runsJudged: judgedRuns.length,
+            },
+          }
+        : {}),
     },
     ...(options.rates ? { rates: { ...options.rates } } : {}),
   };
@@ -248,6 +288,14 @@ function table(headers: string[], rows: string[][]): string {
 /** Tasks whose judged runs fall below the power threshold. */
 export function lowPowerTasks(report: EvalReport): EvalTaskMetrics[] {
   return report.tasks.filter((t) => t.k < MIN_POWER_K);
+}
+
+/** The arm's cached-input line: the provider's own figure, or an explicit "not reported". */
+function cachedLine(report: EvalReport): string {
+  const c = report.summary.cachedInput;
+  if (!c)
+    return "Cached input: not reported by the provider (no ratio is computed; absent is not zero).";
+  return `Cached input: ${percent(c.ratio)} of input tokens (${count(c.tokens)} of ${count(c.inputTokens)}), from ${c.runsReporting} of ${c.runsJudged} judged runs that reported it.`;
 }
 
 /** Markdown of a report: conditions, warnings, then Measured and Estimated as separate sections. */
@@ -283,6 +331,8 @@ export function renderReportMarkdown(report: EvalReport): string {
     `Runs: ${s.runs ?? report.runs.length} (passed ${s.passed}, failed ${s.failed ?? "-"}, budget exceeded ${s.budgetExceeded}, errored ${s.errored}). Errored runs are infrastructure failures: they are excluded from every rate and spread below.`,
     "",
     "## Measured",
+    "",
+    cachedLine(report),
     "",
     "Provider-reported usage and wall time. Success is passes over judged runs, with a 95% Wilson interval; sd is the square root of the sample variance. Token figures are main-loop tokens (excludes compaction calls).",
     "",

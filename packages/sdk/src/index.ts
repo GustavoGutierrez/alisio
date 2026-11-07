@@ -3020,6 +3020,14 @@ export interface EvalRunRecord {
      * treated as not reported by every aggregation.
      */
     usagePartial?: true;
+    /**
+     * Input tokens the provider served from its prompt cache, summed over the turns. ABSENT when
+     * the provider did not report it (never 0 for "unknown"); an explicit 0 from the provider is
+     * kept. Main-loop calls only, like `inputTokens`.
+     */
+    cachedInputTokens?: number;
+    /** True when only SOME turns that reported usage also reported cached tokens: the sum understates. */
+    cachedPartial?: true;
     wallMs: number;
     turns: number;
     toolCalls: number;
@@ -3086,6 +3094,10 @@ export interface EvalTaskMetrics {
     varianceTokens?: number;
     tokensPerSuccess?: number;
     wallMsPerSuccess?: number;
+    /** cachedInput / input tokens over the judged runs that reported it (see `cachedInputRuns`). */
+    cachedInputRatio?: number;
+    /** How many judged runs of this task reported cached input completely. */
+    cachedInputRuns?: number;
   };
   /** Present only when the caller supplied rates and every judged run reported usage. */
   estimated?: { costUsdPerSuccess?: number };
@@ -3124,6 +3136,18 @@ export interface EvalReport {
     budgetExceeded: number;
     runs?: number;
     failed?: number;
+    /**
+     * Provider cached input of this arm, over the judged runs that reported it completely (no
+     * partial sums, no partial usage). Absent when none did: no ratio is computed from nothing.
+     * `ratio` is tokens / inputTokens pooled over those runs, not a mean of run ratios.
+     */
+    cachedInput?: {
+      tokens: number;
+      inputTokens: number;
+      ratio: number;
+      runsReporting: number;
+      runsJudged: number;
+    };
   };
   /** The rates behind every `estimated` figure; absent when none was supplied. */
   rates?: EvalRates;

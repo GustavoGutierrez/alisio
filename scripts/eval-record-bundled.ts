@@ -653,6 +653,11 @@ export interface RunScriptedOptions {
    * scripted turn, so a scripted run can cross a compaction without its turns shifting.
    */
   answerCompactions?: boolean;
+  /**
+   * Called with every request the provider receives (main loop and compaction), before it is
+   * answered. Read-only: used by `scripts/governor-g1.ts` to measure what is sent.
+   */
+  observe?: (request: Request) => void;
 }
 
 /** The first user message of a compaction summarizer call (see `summarize()` in core). */
@@ -689,6 +694,18 @@ function withCompactionAnswers(inner: ModelProvider): ModelProvider {
   };
 }
 
+function observed(inner: ModelProvider, observe: ((request: Request) => void) | undefined) {
+  if (!observe) return inner;
+  return {
+    id: inner.id,
+    model: inner.model,
+    stream(request: Request) {
+      observe(request);
+      return inner.stream(request);
+    },
+  } satisfies ModelProvider;
+}
+
 /** Runs one bundled task through the real engine and returns its record. */
 export async function runScripted(options: RunScriptedOptions): Promise<EvalRunRecord> {
   const loaded = loadSuite(join(BUNDLED_DIR, options.suiteId));
@@ -702,9 +719,12 @@ export async function runScripted(options: RunScriptedOptions): Promise<EvalRunR
     ...(mode === "replay"
       ? {}
       : {
-          provider: options.answerCompactions
-            ? withCompactionAnswers(scriptProvider(options.turns ?? []))
-            : scriptProvider(options.turns ?? []),
+          provider: observed(
+            options.answerCompactions
+              ? withCompactionAnswers(scriptProvider(options.turns ?? []))
+              : scriptProvider(options.turns ?? []),
+            options.observe,
+          ),
         }),
     ...(options.cassette ? { cassette: options.cassette } : {}),
     config: options.configOverrides

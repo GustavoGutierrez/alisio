@@ -13,6 +13,7 @@
       "!packages/core/src/analysis/python/alisio_runtime/charts-boot.js",
       "!packages/core/src/analysis/python/alisio_runtime/*.css",
       "!docs/benchmark-*.json",
+      "!specs/012-context-governor-v1-fase6-g1.json",
       "!.stryker-tmp",
       "!.atl",
       "!.vitest",

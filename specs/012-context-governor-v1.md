@@ -229,9 +229,11 @@ Estado: **Fase 0 CERRADA (2026-10-16).** El propietario revisó el registro y ap
 
 **Riesgo conocido.** Un modelo que usa `search_text` para saltar entre archivos puede resolver tareas con menos turnos y compactar menos. Los reportes crudos de la línea base viven en el scratchpad de la sesión (temporal); lo relevante está resumido arriba.
 
-#### Protocolo de la puerta de la Fase 6 (**aprobado por el propietario el 2026-10-16**; T por fijar tras las Fases 1 y 2)
+#### Protocolo de la puerta de la Fase 6 — **versión 2 (decisión del propietario, 2026-10-18)** (v1 aprobada el 2026-10-16; T por fijar por el propietario)
 
 Sustituye el criterio «≤2 pp en `long-context`» de O2. Motivo (medido, ver el registro de la Fase 0): `long-context` está saturada, un umbral de 2 pp exigiría miles de runs por brazo, y la única tarea que parecía discriminar (`chain-walk-format-rule`) resultó medir la ambigüedad de su enunciado y no la pérdida de reglas. Los parámetros de abajo se fijan **antes** de medir; cambiarlos tras ver datos obliga a una nueva versión de este protocolo con la razón escrita.
+
+**Versión 2 (2026-10-18).** El propietario cambió la comparación primaria de G3 después de ver los datos de G1 de la parte sin coste (registro más abajo). **Razón:** G1 midió una reducción de **0,0%** con `limits.maxContextChars: 40000` (las nueve tareas, `epochMessages` por defecto; la compactación llega antes de la primera época de elisión), de modo que una comparación `on` frente a `off` en esa variante no ejercitaría el Governor y G3 pasaría de forma trivial. **Cambia:** (1) la comparación primaria de G3 pasa de `small-context` (40 000) a `default-limit` (800 000) con el governor `on` frente a `off`; (2) G3 queda como **guardarraíl** y el valor del Governor se demuestra **solo en G1**; (3) no se baja `epochMessages` (se mantiene el valor que se envía, 32); (4) el control negativo es el propio brazo `off` (ver abajo). **No cambia:** α, potencia, M = 10 pp, la fórmula de n y el mínimo de 30, los modelos, la regla de errores, la regla de decisión, G1 y G2. **La comparación de 40 000 de la v1 queda sustituida** y no se mide; sigue documentada abajo, tachada, para que se vea qué se cambió. Esta versión no usa datos de éxito de ningún modelo (no hay ninguno de G3): lo único que se vio es G1.
 
 **Tres afirmaciones, tres tipos de prueba.**
 
@@ -242,17 +244,27 @@ Sustituye el criterio «≤2 pp en `long-context`» de O2. Motivo (medido, ver e
 | G3 | El éxito no cae más de M | Estadística | Prueba de no inferioridad (abajo). Es un guardarraíl, no el objetivo. |
 
 **G3: prueba de no inferioridad.**
-- **Comparación primaria:** `context.governor=on` frente a `off`, ambos con `limits.maxContextChars: 40000` (la variante `small-context`), mismas tareas y semillas. `default-limit` es el techo de referencia, no el comparador.
+- **Comparación primaria (v2):** `context.governor=on` frente a `off`, ambos con el límite por defecto (`limits.maxContextChars` 800 000, la variante `default-limit`), mismas tareas y semillas. Es un guardarraíl: comprueba que el Governor no hace caer el éxito, no que lo mejore. ~~v1: ambos con `limits.maxContextChars: 40000` (la variante `small-context`); `default-limit` era el techo de referencia, no el comparador.~~ *(sustituida por la v2, 2026-10-18)*
 - **Hipótesis:** H0: `p_on − p_off ≤ −M`. Se rechaza H0 (la puerta pasa) si el límite inferior del intervalo de confianza unilateral del 95% de `p_on − p_off` es mayor que `−M`. Intervalo: Newcombe (Wilson híbrido) para dos proporciones independientes; es un cálculo propio de `scripts/`, porque el veredicto del Lab («intervalos de Wilson disjuntos») es mucho más conservador y no es una prueba de no inferioridad.
 - **Parámetros:** α = 0,05 unilateral; potencia 80%; **M = 10 pp** (confirmado por el propietario el 2026-10-16).
 - **Tamaño de muestra (fijo de antemano, sin parada anticipada):** `n = ceil((1,645 + 0,8416)² · 2·p·(1−p) / M²)` por brazo, con `p` = tasa de éxito de `off` observada en un piloto previo, redondeado hacia arriba. Valores por brazo (M = 10 pp / M = 15 pp): p = 0,85: 158 / 71; p = 0,90: 112 / 50; p = 0,95: 59 / 27; p = 0,98: 25 / 11 (cálculo propio, verificado el 2026-10-16). Cada brazo debe tener al menos 30 runs y estar repartido en partes iguales entre las instancias de `chain-walk-rules` (`--instances` ≥ 5) y las demás tareas de la suite.
 - **Modelos:** al menos dos de proveedores o familias distintos; el Governor debe pasar en **todos**. Primario: `deepseek-flash` (API directa). Segundo modelo: **`opencode-go/mimo-v2.6-flash`** (confirmado por el propietario el 2026-10-16; medido sin errores en la criba; `glm-5.3-flash` queda de reserva; `qwen3.*` y `minimax-*` descartados por `HTTP 401` en la ruta `messages` del plugin). Riesgo conocido: el plugin descarta el cuerpo de los errores, así que un `HTTP 400` no se podría diagnosticar sin el capturador de `fetch`.
-- **Control negativo (validez):** `default-limit` debe superar el 85% de éxito con cada modelo; si no, ese modelo no es válido para la puerta.
+- **Control negativo (validez, v2):** el brazo `off` (que ahora es `default-limit`) debe superar el 85% de éxito con cada modelo; si no, ese modelo no es válido para la puerta. No hace falta un brazo aparte: la v1 lo necesitaba porque el comparador era `small-context`, y ahora el control y el brazo `off` son la misma configuración (misma tarea, semillas y `configHash`).
 - **Runs con error:** se excluyen de las tasas (es la regla del Lab), pero si superan el 10% de un brazo la medición no es válida: se arregla la causa y se repite el brazo completo.
-- **Decisión:** puerta superada = G1 (≥ T) y G2 y G3 en todos los modelos, sin degradación relevante de `cachedInput` (sección Fase 6). En cualquier otro caso el default queda `off` y se documenta el resultado. No hay estado «inconcluso»: con n fijado de antemano, un intervalo ambiguo se informa como no superada.
+- **Decisión:** puerta superada = G1 (≥ T) y G2 y G3 en todos los modelos, sin degradación relevante de `cachedInput` (criterio propuesto abajo, pendiente de aprobación del propietario). En cualquier otro caso el default queda `off` y se documenta el resultado. No hay estado «inconcluso»: con n fijado de antemano, un intervalo ambiguo se informa como no superada.
+- **Criterio de `cachedInput` (v2; PROPUESTA pendiente de aprobación del propietario, D58):** el Lab registra desde el 2026-10-18 el `cachedInput` que informa el proveedor (D58). «Sin degradación relevante» se define por modelo así: sea `r_i = cached_i / input_i` de cada run juzgado que informó `cachedInput` completo (sin sumas parciales ni `usagePartial`); la puerta de `cachedInput` pasa si la cota inferior unilateral del 95% de `media(r, on) − media(r, off)` (Welch, aproximación normal, z = 1,645) es **estrictamente mayor que −D**. **D, la caída permitida, la fija el propietario** (entrada del script, como T; sin D la comprobación queda *pendiente*). Es pendiente también si un brazo tiene menos de 30 runs juzgados que informaron `cachedInput`, o ninguno (el Lab deja el campo ausente, nunca 0, cuando el proveedor no lo informa). Un aumento de la parte en caché nunca cuenta como degradación. Se usan razones por run (no tokens agrupados) porque el run es la unidad independiente; los tokens de un mismo run están correlacionados y tratarlos como ensayos subestimaría la varianza. Opciones para D y para la forma de la comparación, **a decidir por el propietario** (no se elige aquí):
+
+| Opción | Criterio | Ventaja | Coste / riesgo |
+| --- | --- | --- | --- |
+| A | Absoluta, D = 5 pp (cota inferior > −5 pp) | Más estricta que M; la caché es lo que el Governor podría romper al reescribir el prefijo | Con ruido entre runs puede dejar la puerta pendiente o «degradada» aunque la media caiga poco |
+| B | Absoluta, D = M = 10 pp | Misma tolerancia que G3, una sola cifra que explicar | Tolera una caída grande de la parte en caché |
+| C | Relativa: `media(on) / media(off) ≥ 1 − d` (por ejemplo d = 10%) con el método delta | Escala con el nivel base de caché (un 10% sobre 90% o sobre 30% no pesa igual en pp) | Más complejo de explicar; inestable con una base de caché cercana a 0 |
+| D | Solo informar (la parte en caché sale en el reporte, la puerta no la usa) | Sin riesgo de bloqueo por proveedores que no la informan | Rebaja el criterio que la sección Fase 6 exige; requiere que el propietario lo apruebe explícitamente |
+
+  Si un modelo no informa `cachedInput`, la comprobación de ese modelo queda *pendiente* y la puerta no se supera: el propietario decidiría entonces cambiar de modelo o elegir la opción D para ese caso.
 - **Entregable de la Fase 6:** `scripts/governor-gate.ts` (calcula n, el intervalo de Newcombe y el veredicto a partir de los `runs.jsonl` del Lab), con pruebas unitarias sobre tablas de casos conocidos.
 
-**Límite conocido (no se oculta).** No existe hoy una tarea donde la compactación actual degrade el éxito de forma demostrada (no hay control positivo): con las suites medidas, la puerta puede probar que el Governor **no empeora** el éxito, no que lo **mejore**. El valor del Governor se demuestra en G1. Si más adelante se encuentra una tarea sin ambigüedad donde `small-context` pierda éxito de forma reproducible, se añadiría un contraste de superioridad (con 18 a 33 runs por brazo si el efecto es de 40% a 70–80%; cálculo propio), sin cambiar G1 a G3.
+**Límite conocido (no se oculta).** No existe hoy una tarea donde la compactación actual degrade el éxito de forma demostrada (no hay control positivo): con las suites medidas, la puerta puede probar que el Governor **no empeora** el éxito, no que lo **mejore**. El valor del Governor se demuestra en G1, y G1 se midió sobre sesiones sintéticas (estimado). Con el límite por defecto casi no hay compactación, así que G3 v2 compara dos configuraciones que, en las sesiones de referencia, difieren poco (reducción agrupada de 4,1% en G1): un «no inferior» no es una prueba de utilidad. Si más adelante se encuentra una tarea sin ambigüedad donde la compactación o el Governor cambien el éxito de forma reproducible, se añadiría un contraste de superioridad (con 18 a 33 runs por brazo si el efecto es de 40% a 70–80%; cálculo propio), sin cambiar G1 a G3.
 
 ### Fase 1 — Inventario y regresión de límites
 
@@ -294,9 +306,131 @@ Registro de implementación (2026-10-17): implementada en la rama `feat/eval-lon
 
 Trabajo: ejecutar la suite `long-context` del Lab con `off` vs `on` (y `shadow`); medir tokens por tarea, éxito, `cachedInput` del proveedor y latencia; decidir default.
 Aceptación: reducción de tokens medida **sin caída de éxito mayor al umbral de la Fase 0** y sin degradación de `cachedInput` relevante; si no se cumple, el default queda `off` y se documenta el resultado. Resultados reportados como medidos (no estimados).
-Pruebas: el propio Lab; sin pruebas unitarias nuevas.
+Pruebas: el propio Lab para la medición en vivo; pruebas unitarias de la parte sin coste en `tests/governor-gate.test.ts` y `tests/governor-g1.test.ts`.
 
-Ver el **Protocolo de la puerta de la Fase 6** (G1 a G3), aprobado por el propietario el 2026-10-16 bajo el registro de la Fase 0; es lo que cuenta como «umbral de la Fase 0» en esta fase y en la sección 10.
+Ver el **Protocolo de la puerta de la Fase 6** (G1 a G3), versión 2 del 2026-10-18 (la v1 fue aprobada el 2026-10-16 bajo el registro de la Fase 0); es lo que cuenta como «umbral de la Fase 0» en esta fase y en la sección 10.
+
+#### Registro de la parte sin coste de la Fase 6 (2026-10-17; sin llamadas a modelos)
+
+Estado: **implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto); la medición en vivo (G3) NO se ha ejecutado.** No se hizo ninguna llamada a un proveedor ni se gastó dinero. Decisiones D48 a D58 (sección 9).
+
+**Qué hay.**
+
+| Pieza | Fichero | Qué hace |
+| --- | --- | --- |
+| Puerta | `scripts/governor-gate.ts` (`pnpm governor:gate --config FILE [--threshold T] [--margin M]`) | Calcula n por brazo, el intervalo de Newcombe, el veredicto por modelo y la decisión global desde los `runs.jsonl` del Lab. Pruebas: `tests/governor-gate.test.ts` (tablas de casos) |
+| Medición G1 | `scripts/governor-g1.ts` (`pnpm governor:g1 --out FILE`) | Reproduce con el proveedor scripted las sesiones de referencia de `long-context-stress` con `off` y `on` y compara tokens de entrada por petición y acumulados. Pruebas: `tests/governor-g1.test.ts` |
+| Datos crudos | `specs/012-context-governor-v1-fase6-g1.json` | Salida íntegra de `pnpm governor:g1` (serie por petición de cada celda). Es determinista: regenerarla da el mismo fichero byte a byte (comprobado el 2026-10-17) |
+| Variantes en vivo | `specs/012-context-governor-v1-fase6-compare.json` | `compare.json` de los dos brazos de la v2 (`default-off`, `default-on`, ambos con el límite por defecto) para `alisio eval variants`; una prueba comprueba que sus overrides son configuración válida y que `epochMessages` sigue en 32 |
+
+La única modificación a código existente es un parámetro opcional `observe` en `runScripted` (`scripts/eval-record-bundled.ts`) que solo lee las peticiones; no cambia ninguna salida ni expectativa.
+
+**Puerta: verificación del cálculo.** `requiredSampleSize` reproduce los ocho valores de la tabla del protocolo (p = 0,85 / 0,90 / 0,95 / 0,98 con M = 10 pp y 15 pp: 158/71, 112/50, 59/27, 25/11). El intervalo de Newcombe (método 10) se contrasta con los valores publicados por Newcombe (1998, *Statistics in Medicine* 17:873-890, Tabla II): 56/70 frente a 48/80 da (0,0524; 0,3339) y 9/10 frente a 3/10 da (0,1705; 0,8090), con z = 1,96 bilateral. **Alcance:** esas cifras son una transcripción de la tabla hecha al escribir la prueba; el artículo no se pudo descargar en esa sesión (error de red), así que **no se recotejaron contra el texto original**. Se complementan con propiedades (antisimetría, límites en [-1, 1], igualdad con el extremo inferior del intervalo bilateral del 90% para el límite unilateral del 95%). Con T sin fijar, el script **se niega a emitir un veredicto final de G1**, imprime la decisión con `final: false` y `pending: ["T"]` y sale con código 2; la puerta se informa como no superada (el default sigue `off`).
+
+**G1: qué se midió y qué no.** No existe en el repositorio ninguna sesión larga grabada de un modelo (los casetes de `long-context-stress` no existen; los informes crudos de la Fase 0 eran temporales). Se usaron las **sesiones de referencia scripted** de la suite `long-context-stress` (las mismas de `pnpm eval:record-bundled`), pasadas por el motor y el runner reales con `context.governor` `off` y `on` y `limits.maxContextChars` 800 000 (`default-limit`, sin compactación) y 40 000 (`small-context`, la comparación primaria de G3). Dos longitudes: `reference` (el guion tal cual, 9 a 28 peticiones) y `audit` (el mismo guion más un barrido en el que el modelo relee una vez cada archivo leído antes de contestar, unas 2 veces más largo; **escenario construido**). Nueve tareas (todas las de la suite 1.1.0; `chain-walk-format-rule` se mide pero no entraría en la puerta, D54). **Todas las cifras son estimadas** (`estimateTokens`, unos 4 caracteres por token, sobre el JSON de lo que recibe el proveedor) **y de sesiones sintéticas**: el proveedor scripted informa un `usage` constante, así que no hay ninguna cifra medida por un proveedor y no se mezclan. Las peticiones del resumidor de la compactación cuentan como peticiones de su tipo, de modo que los acumulados las incluyen. Las 36 celdas (`off`, `on` y `on` con `epochMessages` 0) terminaron en `pass`.
+
+Reducción acumulada de tokens de entrada, `on` frente a `off` (**estimada, sintética**). «Conversación» = mensajes enviados; «petición» = conversación más instrucciones y definiciones de herramientas (la parte fija que el Governor no toca). «Agrupada» pondera cada tarea por su tamaño; mín/mediana/máx son por tarea (9 tareas).
+
+| Longitud | Límite | Conversación agrupada | mín / mediana / máx por tarea | Petición agrupada | Sensibilidad `epochMessages` 0: conversación / petición |
+| --- | --- | --- | --- | --- | --- |
+| `reference` | `default-limit` | 4,1% | 0,0% / 0,0% / 28,5% | 2,6% | 8,2% / 5,2% |
+| `audit` | `default-limit` | 4,0% | 0,0% / 0,0% / 32,8% | 3,1% | 5,7% / 4,3% |
+| `reference` | `small-context` | **0,0%** | 0,0% / 0,0% / 0,0% | **-0,1%** | 5,4% / 2,3% |
+| `audit` | `small-context` | **0,0%** | 0,0% / 0,0% / 0,0% | **-0,1%** | 2,8% / 1,2% |
+
+Por tarea (`reference`, `default-limit`; entre paréntesis `epochMessages` 0): `sequential-config-edits` 28,5% (57,0%), `frozen-area-tickets` 3,7% (8,1%), las otras siete 0,0% (0,0%). Con `small-context` y `reference`: `sequential-config-edits` 0,0% (38,0%), `frozen-area-tickets` 0,0% (4,2%), el resto 0,0%.
+
+**Por vuelta.** En `sequential-config-edits` (`reference`, `default-limit`, 26 peticiones) la reducción por petición es 0% en las 16 primeras y 57%, 55%, 54%, 49%, 47%, 47%, 42%, 41%, 41%, 38% en las 10 últimas: el Governor no hace nada hasta el primer límite de época (32 mensajes) y después ahorra mucho. En `frozen-area-tickets` es de 8% a 5% en las 10 últimas. El resto de la serie por petición está en el fichero de datos.
+
+**Lectura honesta de los datos (hechos medidos y su causa; la causa es lectura del código y de las series, no una medición aparte).**
+1. **Con `small-context` el Governor enviado por defecto no reduce nada (0,0% en las nueve tareas) y la petición crece un 0,1% (el bloque `<invariants>` y el campo del resumidor).** La primera compactación llega en la petición 5 a 12 (historial de unos 8 a 22 mensajes) y vuelve a empezar con un checkpoint corto; la elisión por épocas (D10) solo mira el prefijo `floor(n/32)*32` y nunca llega a 32 mensajes entre compactaciones. Con `epochMessages: 0` (sensibilidad, **no** es el default) sí ahorra de 2,8% a 5,4% de la conversación. Por eso la v2 del protocolo (2026-10-18) retiró `small-context` como comparación primaria de G3: habría sido `off` frente a un `on` que se comporta como `off`, y habría pasado de forma trivial.
+2. **El ahorro se concentra en pocas tareas:** solo `sequential-config-edits` (archivo editado y releído tras cada ticket) y, poco, `frozen-area-tickets` tienen lecturas que un cambio posterior deja obsoletas. Las caminatas de `chain-walk-*` y `order-ledger-reconcile` leen archivos distintos o sin cambios y no tienen nada que elidir.
+3. **Releer un archivo sin cambios no se elide, ni con `epochMessages` 0** (`superseded_read` exige una lectura posterior de contenido distinto): el barrido `audit` solo ayuda donde hubo ediciones entre medias. Es una propiedad de la regla (verificada en el código y por una prueba), no un fallo.
+4. **El 28,5% / 32,8% de `sequential-config-edits` es el techo observado en un escenario favorable** (un archivo de configuración editado y releído muchas veces). La mediana por tarea es 0%.
+
+**Proxy de la caché de prompt (no es `cachedInput`).** Al medir G1 el Lab **no registraba `cachedInput`** (`EvalRunRecord.measured` solo traía `inputTokens`, `outputTokens`, `wallMs`, `turns`, `toolCalls`; el campo existe en `Usage` y el motor lo descartaba). **Desde el 2026-10-18 lo registra (D58, decisión del propietario) y el criterio se evalúa con los `runs.jsonl` de la medición en vivo;** el proxy de abajo queda solo como señal determinista complementaria de las sesiones sintéticas. Como señal determinista se mide cuánto de la conversación repite cada petición del bucle principal desde la anterior (prefijo común; es lo que una caché de prefijo perfecta podría servir). **Estimada, sintética, proxy:**
+
+| Longitud | Límite | `off` | `on` (por defecto) | `on` con `epochMessages` 0 |
+| --- | --- | --- | --- | --- |
+| `reference` | `default-limit` | 89,8% | 88,7% | 88,5% |
+| `audit` | `default-limit` | 94,2% | 93,4% | 93,7% |
+| `reference` | `small-context` | 68,6% | 68,6% | 65,7% |
+| `audit` | `small-context` | 68,1% | 68,1% | 66,6% |
+
+La elisión por épocas cuesta de 0,0 a 1,1 puntos de reutilización de prefijo en estas sesiones y la inmediata (`epochMessages` 0, lo que D10 evita) de 0,5 a 2,9. No sustituye la medición con `cachedInput` real de un proveedor: para eso el Lab tendría que registrarlo (ver «Pendiente del propietario»).
+
+**T no se fija aquí.** La distribución de arriba es la entrada para que el propietario fije T. Un T del orden de 4% (reducción agrupada de `default-limit`) se cumpliría solo por unas pocas tareas; un T alto (por ejemplo 20%) no lo cumple ninguna de las comparaciones agrupadas, y con `small-context` el valor medido es 0,0%. G1 en sesiones sintéticas no responde a «cuánto ahorra con un modelo real»; esa pregunta solo se contesta con sesiones largas reales grabadas (casetes), que hoy no existen.
+
+#### Plan de la medición en vivo (G3 v2, y G1 con `usage` real si se graba) — **no ejecutado**
+
+Lo ejecuta el propietario (consume tokens). Todo sale del protocolo v2; las líneas marcadas «propuesta» son decisiones de implementación pendientes de confirmar (D54, D55). Reescrito el 2026-10-18 para los brazos de la v2 (D57); la versión anterior del plan (tres brazos, con `small-context`) queda sustituida.
+
+**Brazos y composición.** Dos brazos por modelo, ambos con el límite por defecto: `default-off` (`context.governor` `off`; es también el control negativo) y `default-on` (`on`), definidos en `specs/012-context-governor-v1-fase6-compare.json`. Cada brazo debe ser mitad `chain-walk-rules-01..05` y mitad las demás tareas sin ambigüedad (`frozen-area-tickets`, `order-ledger-reconcile`, `sequential-config-edits`; propuesta: `chain-walk-format-rule` queda fuera porque la Fase 0 mostró que mide la ambigüedad de su enunciado). `eval variants` usa un único `--k` por invocación y 5 contra 3 tareas darían 62,5% de reglas, así que cada modelo se corre en **dos invocaciones por fase**, con `kR` y `kO` tales que 5·kR = 3·kO: `kR = 3m`, `kO = 5m`, y el brazo tiene **n = 30·m runs** (15m de cada mitad). `scripts/governor-gate.ts` acepta una lista de ficheros por brazo y comprueba la composición (40% a 60% de reglas y 5 instancias como mínimo).
+
+**Tamaño por brazo según la p del piloto** (n del protocolo, sin cambios; el mínimo de 30 se aplica; `m` es el menor entero con 30·m ≥ n). Cálculo propio de `scripts/governor-gate.ts`, no del Lab. **La p y el n final los fija el propietario tras el piloto; la tabla solo ayuda a estimar el coste.**
+
+| p de `off` en el piloto | n del protocolo (M = 10 pp) | m | `kR` / `kO` | n por brazo | Runs por modelo (2 brazos) | Runs con 2 modelos |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0,85 | 158 | 6 | 18 / 30 | 180 | 360 | 720 |
+| 0,90 | 112 | 4 | 12 / 20 | 120 | 240 | 480 |
+| 0,95 | 59 | 2 | 6 / 10 | 60 | 120 | 240 |
+| 0,98 | 25 (mínimo 30) | 1 | 3 / 5 | 30 | 60 | 120 |
+
+**Piloto (primero, y aparte de la medición).** `kR = 3`, `kO = 5` (m = 1): 30 runs por brazo, 60 por modelo, 120 con los dos modelos. Da la p de `default-off`, comprueba que supera el 85%, que los errores no pasan del 10% y que `default-on` no rompe nada. Sus runs no se reutilizan en la medición (n fijo, sin parada anticipada).
+
+**Comandos** (desde la raíz del repositorio tras `pnpm build`; `S` es un directorio temporal del propietario; el segundo modelo usa el perfil `opencode-go`, el primero la configuración aislada de la sección 5.2 del handoff; **ninguna clave se escribe en el chat ni en ficheros**):
+
+```bash
+# Piloto o medición: repetir por modelo y por grupo. KR/KO según la tabla; semillas distintas por fase.
+V=specs/012-context-governor-v1-fase6-compare.json
+RULES=chain-walk-rules-01,chain-walk-rules-02,chain-walk-rules-03,chain-walk-rules-04,chain-walk-rules-05
+OTHERS=frozen-area-tickets,order-ledger-reconcile,sequential-config-edits
+# Modelo A (deepseek-flash, API directa; ALISIO_CONFIG_HOME apunta a la config aislada)
+ALISIO_CONFIG_HOME=$C node packages/cli/dist/main.js --allow-write eval variants long-context-stress \
+  --variants $V --tasks $RULES  --k $KR --seed 1000 --out $S/deepseek-flash/rules
+ALISIO_CONFIG_HOME=$C node packages/cli/dist/main.js --allow-write eval variants long-context-stress \
+  --variants $V --tasks $OTHERS --k $KO --seed 2000 --out $S/deepseek-flash/others
+# Modelo B (opencode-go/mimo-v2.6-flash)
+node packages/cli/dist/main.js --model opencode-go/mimo-v2.6-flash --allow-write eval variants long-context-stress \
+  --variants $V --tasks $RULES  --k $KR --seed 1000 --out $S/mimo/rules
+node packages/cli/dist/main.js --model opencode-go/mimo-v2.6-flash --allow-write eval variants long-context-stress \
+  --variants $V --tasks $OTHERS --k $KO --seed 2000 --out $S/mimo/others
+```
+
+Cada invocación escribe `<out>/<variante>/runs.jsonl`. El fichero de configuración de la puerta (rutas relativas a él):
+
+```json
+{
+  "g1": { "reduction": 0.0, "basis": "estimated" },
+  "g2": "pass",
+  "cachedInputMaxDrop": 0.05,
+  "models": [
+    { "id": "deepseek-flash", "pilotP": 0.9,
+      "off": ["deepseek-flash/rules/default-off/runs.jsonl", "deepseek-flash/others/default-off/runs.jsonl"],
+      "on":  ["deepseek-flash/rules/default-on/runs.jsonl",  "deepseek-flash/others/default-on/runs.jsonl"] },
+    { "id": "mimo-v2.6-flash", "pilotP": 0.9, "off": ["..."], "on": ["..."] }
+  ]
+}
+```
+
+`pnpm governor:gate --config gate.json --threshold <T>` imprime la decisión en JSON y sale con 0 (superada), 1 (no superada), 2 (no final: falta T, G2, D o `cachedInput` de algún modelo) o 3 (error de uso). `g2`, `cachedInputMaxDrop` (D; o `--cached-drop D`) ausentes, o un modelo sin `cachedInput` informado, quedan pendientes, nunca como «superado». El valor 0,05 del ejemplo es solo un ejemplo de formato: **D lo fija el propietario**. `g1.reduction` se rellena a mano con la cifra de `pnpm governor:g1` (estimada) o con una medición con `usage` real. Una configuración con un brazo `control` ya no se usa.
+
+**Coste (estimaciones, no mediciones; no incluyen precio, que depende del proveedor).** Por run, el guion de referencia hace de 9 a 26 peticiones del bucle principal (media 19,7 sobre la mezcla mitad reglas, mitad resto; sesiones sintéticas: un modelo real puede necesitar más). Con el límite por defecto no hay peticiones del resumidor en la línea base (0 compactaciones en las 20 runs de `default-limit` de la Fase 0, **medido**). Tokens de entrada por run: de 155k a 254k de media (**medido** en la Fase 0, `deepseek-flash`, `default-limit`); tope duro por run `maxTokens` 450 000.
+
+| Escenario v2 (p = 0,90, n = 120 por brazo) | Runs | Peticiones al modelo (estim.) | Tokens de entrada (estim.) | Techo por `maxTokens` |
+| --- | --- | --- | --- | --- |
+| Un modelo, medición | 240 | unas 4 700 (240 × 19,7) | de 37M a 61M | 108M |
+| Dos modelos, medición | 480 | unas 9 500 | de 74M a 122M | 216M |
+| Dos modelos, piloto (n = 30) | 120 | unas 2 400 | de 19M a 31M | 54M |
+
+Para otro n por brazo, las peticiones y los tokens escalan linealmente con el número de runs (runs × 19,7 peticiones y runs × de 155k a 254k tokens).
+
+**Frente al plan anterior (v1, tres brazos con `small-context`; estimaciones):** con los mismos p y n, 720 runs con dos modelos pasan a 480 (un tercio menos), las peticiones de unas 14 400 a 15 300 a unas 9 500, los tokens de entrada de 98M a 193M a 74M a 122M, el techo de 324M a 216M y el piloto de 180 a 120 runs. Los tokens por run bajan de 136k a 268k a 155k a 254k porque se usa la base medida sin compactación; ese rango no es comparable run a run con el anterior (la Fase 0 lo declara).
+
+**Pendiente del propietario (no se decide aquí).**
+1. **T** (umbral de G1), con la distribución de arriba, y si G1 se mide además con `usage` real de sesiones largas grabadas.
+2. **`cachedInput`:** el Lab ya lo registra (D58). Falta que el propietario apruebe el criterio propuesto y fije **D** (opciones A a D en el protocolo v2). **Sin verificar con una llamada real:** qué proveedores devuelven tokens en caché en estos modelos (el código de `plugin-openai-compatible` lee `prompt_tokens_details.cached_tokens`, `prompt_cache_hit_tokens` de DeepSeek y `input_tokens_details.cached_tokens`; el plugin externo `opencode-go` no está en este repositorio y no se pudo inspeccionar). El piloto lo comprobará: si un modelo no informa nada, su comprobación queda pendiente.
+3. **El tamaño final de la muestra de G3** (p del piloto) y la confirmación de la propuesta de composición (D54).
 
 ### Fase 7 — Documentación y estado
 
@@ -383,6 +517,17 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 - **D45** (Fase 5) **Pestaña «Contexto» del dock, carga diferida** (como Proof): aparece tras el primer evento `context_governed` de la sesión abierta (`contextSeen`) o con `/context`, se relee con cada evento y tiene un botón de actualizar; solo la señal, el filtro de frames y la cadena `dock.context` están en el bundle inicial.
 - **D46** (Fase 5) **Headless sin cambios:** `--json` ya emite `context_governed` (Fase 4); se verifica con una comprobación de extremo a extremo (`fixtures/cli-e2e.ts`: un evento por petición en `shadow`, ninguno en `off`) y se documenta. No hay `/context` en `alisio run` (no tiene comandos de barra).
 - **D47** (Fase 5) **Cambios internos mínimos:** los segmentos del inventario llevan `callId`; `UsageLedger.decided(callId)` da `used` por segmento; el runner solo expone la lectura `contextInputs` (y extrae `invariantList` de `invariantBlock` sin cambiar su resultado), de modo que `tests/context-boundaries.test.ts` (importaciones de `context/*` en el runner) sigue igual.
+- **D48** (Fase 6, 2026-10-17) **G1 se mide con sesiones scripted, y todo lo que sale es «estimado» y «sintético»:** no existe ninguna sesión larga grabada de un modelo en el repositorio, y el `usage` del proveedor scripted es constante (no es una medición). Las cifras usan `estimateTokens` sobre el JSON de lo que recibe el proveedor; no se mezclan con cifras medidas. Una medición con `usage` real requiere casetes de sesiones largas de un modelo, que hoy no hay.
+- **D49** (Fase 6) **Métrica de G1:** reducción acumulada y por petición de los tokens de la conversación enviada y de la petición completa (con la parte fija), `on` frente a `off`; las peticiones del resumidor cuentan como peticiones de su tipo; se informa la reducción agrupada (ponderada por tamaño) y mín/mediana/máx por tarea. `scripts/governor-g1.ts` se niega a comparar sesiones con distinto número o tipo de peticiones.
+- **D50** (Fase 6) **Matriz medida:** nueve tareas de `long-context-stress` × {`reference`, `audit`} × {`default-limit` 800 000, `small-context` 40 000}. `audit` es un escenario construido (releer una vez cada archivo leído, antes de contestar), no una grabación. La comparación primaria de G3 era `small-context` en la v1; en la v2 es `default-limit` (D57). `small-context` se mide aquí solo para G1 y como hallazgo.
+- **D51** (Fase 6) **`on` se mide con los valores que se envían (`minAgeTurns` 2, `epochMessages` 32) y, como sensibilidad que no es el default, con `epochMessages` 0.** No cambia ningún default ni ninguna configuración del Governor.
+- **D52** (Fase 6) **Hallazgo medido:** con `small-context` el `on` por defecto reduce 0,0% en las nueve tareas y la petición crece 0,1% (bloque `<invariants>`); con `default-limit` la reducción agrupada es 4,1% (`reference`) y 4,0% (`audit`), concentrada en `sequential-config-edits` (28,5% y 32,8%). Releer un archivo sin cambios no se elide (la regla `superseded_read` exige contenido distinto), también con `epochMessages` 0. No se pone T.
+- **D53** (Fase 6; superada por D58 para el criterio) **`cachedInput` no se podía evaluar con los `runs.jsonl` de entonces** (el Lab lo descartaba). `scripts/governor-g1.ts` calcula un proxy determinista (reutilización del prefijo de la conversación entre peticiones consecutivas), etiquetado como estimado y sin sustituir al criterio de la sección Fase 6. `scripts/governor-gate.ts` trata `cachedInput` ausente como pendiente (la puerta no puede superarse).
+- **D54** (Fase 6; **propuesta, pendiente del propietario**) **Composición de los brazos de la medición en vivo:** mitad `chain-walk-rules-01..05` y mitad `frozen-area-tickets`, `order-ledger-reconcile` y `sequential-config-edits`, sin `chain-walk-format-rule` (ambigua, Fase 0); dos invocaciones por modelo con `kR = 3m` y `kO = 5m`, n por brazo = 30·m. `governor-gate` exige 5 instancias de reglas como mínimo y entre 40% y 60% de reglas en cada brazo.
+- **D55** (Fase 6; propuesta; el control negativo cambió en la v2, D57) **Reglas de validez añadidas por `governor-gate` al protocolo, sin cambiar sus parámetros:** un brazo con menos runs juzgados que el n planificado a partir de la p del piloto (con suelo de 30) no es válido (n fijado de antemano, sin parada anticipada); menos de dos modelos, G2 o `cachedInput` ausentes, o T sin fijar hacen que la decisión no sea final (`final: false`, código de salida 2) y la puerta se informa como no superada.
+- **D56** (Fase 6; enmendada por D58) **Contrato de la puerta:** `passed` solo si G1 ≥ T, G2 «pass», la comprobación de `cachedInput` de todos los modelos «pass» (D58), al menos dos modelos y todos válidos con cota inferior unilateral del 95% de `p_on − p_off` estrictamente mayor que −M. No hay estado «inconcluso»: un intervalo ambiguo se informa como `not_passed`. Una cota inferior igual a −M no supera la puerta.
+- **D57** (Fase 6, 2026-10-18; **decisión del propietario**) **Protocolo de la puerta v2:** la comparación primaria de G3 pasa a `default-limit` (800 000) con el governor `on` frente a `off`, como guardarraíl; el valor del Governor se demuestra solo en G1; no se baja `epochMessages`. Razón: G1 midió 0,0% con `small-context`, así que `on` frente a `off` allí no ejercitaría el Governor. Se mantienen α, potencia, M = 10 pp, la fórmula de n, el mínimo de 30 por brazo, los modelos, la regla de errores y la regla de decisión. El control negativo es el propio brazo `off` (su éxito debe superar el 85%): no hay brazo `control` aparte. `scripts/governor-gate.ts` espera ahora `off` y `on`, y `compare.json` define `default-off` y `default-on`.
+- **D58** (Fase 6, 2026-10-18; **registro: decisión del propietario; criterio: propuesta pendiente de aprobación**) **El Lab registra el `cachedInput` del proveedor (opción 1 del propietario, en lugar del proxy de prefijo).** Cambio aditivo, sin subir `schemaVersion` ni la versión de ninguna suite: `EvalRunRecord.measured.cachedInputTokens` (suma de los turnos que lo informaron; **ausente, nunca 0, si el proveedor no lo informa**; un 0 explícito del proveedor se conserva) y `cachedPartial` (solo algunos turnos lo informaron; la suma se subestima); `EvalReport.summary.cachedInput` (`tokens`, `inputTokens`, `ratio` agrupado, `runsReporting`, `runsJudged`) por brazo y `cachedInputRatio`/`cachedInputRuns` por tarea, sobre las ejecuciones juzgadas que lo informaron completo (sin errores, `usagePartial` ni `cachedPartial`); `eval compare` añade el delta de `cachedInputRatio` (solo si ambos lados lo informaron y la compactación es comparable); el Markdown dice «not reported» cuando falta. El análisis del uso ya existía (`plugin-openai-compatible`: `prompt_tokens_details.cached_tokens`, `prompt_cache_hit_tokens`, `input_tokens_details.cached_tokens`, caracterizado ahora por `tests/provider-cached-usage.test.ts`); lo que faltaba era que el motor lo acumulara. Los casetes existentes se reproducen sin cambios (su `usage` no lleva el campo) y uno nuevo con el campo se reproduce idéntico. `scripts/governor-gate.ts` implementa el criterio propuesto (arriba, protocolo v2): `--cached-drop D` o `cachedInputMaxDrop` en la configuración, pendiente sin D o sin al menos 30 runs que lo informaron por brazo. **No se fija D ni se aprueba el criterio.**
 
 ## 10. Criterios de aceptación globales
 
@@ -390,7 +535,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 2. La política explica qué segmentos seleccionó o elidió y por qué.
 3. Los invariantes sobreviven a N compactaciones.
 4. En `shadow`, lo enviado es byte-idéntico a la base 0.8.0.
-5. Se supera el protocolo de la puerta de la Fase 6 (G1 a G3; reduce tokens y el éxito no cae más de M, medido en todos los modelos del protocolo). Aprobado el 2026-10-16.
+5. Se supera el protocolo de la puerta de la Fase 6, v2 (G1 a G3; reduce tokens y el éxito no cae más de M, medido en todos los modelos del protocolo). Aprobado el 2026-10-16.
 
 ## 11. Pruebas transversales
 
@@ -401,7 +546,7 @@ Aceptación: `pnpm docs:check` y `pnpm docs:build` en verde.
 
 ## 12. Estado de implementación
 
-Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. **Fase 4 implementada en la misma rama (sin commit al escribir esto):** `UsageLedger`, evento duradero `context_governed`, campos opcionales de `context_reduced` y sección de `/stats`; ver D25 a D39 y las correcciones de 3.4 y 3.6. **Fase 5 implementada en la misma rama (sin commit al escribir esto):** `ContextReport`, ruta `GET /api/sessions/:sid/context/report`, `/context` en la TUI, pestaña Contexto en la web y comprobación de `--json`; ver D40 a D47. Medición con modelo pendiente de la puerta de la Fase 6.
+Estado: **Aprobada (2026-10-15).** El 2026-10-15 el código del Governor no existía (verificado sobre 0.8.0). **Fase 0 cerrada el 2026-10-16 (protocolo de la puerta aprobado, sustituto de O2; T por fijar tras las Fases 1 y 2):** suite `long-context-stress` creada (sin commit) y línea base k=5 medida; ver el registro bajo la Fase 0 (§5). Actualizar `docs/implementation-status.md` al cerrar cada fase. **Fase 1 implementada (commit `bd247e9`) y Fase 2 implementada en la rama `feat/eval-long-context-stress-phase0` (sin commit al escribir esto):** la Fase 2 añade `context/elide.ts`, `context/governance.ts`, la configuración `context.governor|elide|policyVersion` y la conexión al runner (solo `on` cambia lo enviado); ver D10 a D14 y las correcciones de 3.2. **Fase 3 implementada en la misma rama (sin commit al escribir esto):** invariantes del contexto (`context/invariants.ts`, `context/sources.ts`), campo `alisio_invariants` del resumidor solo en `on`, bloque `<invariants>` transitorio y `context.invariants.maxChars`; ver D15 a D24 y la corrección de 3.3. **Fase 4 implementada en la misma rama (sin commit al escribir esto):** `UsageLedger`, evento duradero `context_governed`, campos opcionales de `context_reduced` y sección de `/stats`; ver D25 a D39 y las correcciones de 3.4 y 3.6. **Fase 5 implementada en la misma rama (sin commit al escribir esto):** `ContextReport`, ruta `GET /api/sessions/:sid/context/report`, `/context` en la TUI, pestaña Contexto en la web y comprobación de `--json`; ver D40 a D47. Medición con modelo pendiente de la puerta de la Fase 6. **Parte sin coste de la Fase 6 implementada en la misma rama (sin commit al escribir esto):** `scripts/governor-gate.ts` (n, Newcombe, veredicto y decisión; con T sin fijar no emite veredicto final), `scripts/governor-g1.ts` (G1 determinista sobre sesiones scripted, cifras estimadas y sintéticas), datos en `specs/012-context-governor-v1-fase6-g1.json` y plan de la medición en vivo (no ejecutada); ver D48 a D58 (el protocolo de la puerta pasó a la v2 el 2026-10-18; el Lab registra `cachedInput`). T, `cachedInput` y el tamaño de muestra de G3 siguen pendientes del propietario.
 
 ## 13. Asignación de modelos
 

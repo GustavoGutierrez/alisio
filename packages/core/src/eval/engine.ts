@@ -449,6 +449,10 @@ class RunObserver {
   /** Cumulative tokens reported by the last `turn_completed`. */
   tokens = 0;
   usage: { input: number; output: number } | undefined;
+  /** Sum of the cached input tokens reported; undefined until a turn reports any. */
+  cachedInput: number | undefined;
+  /** Turns whose usage carried `cachedInput`. */
+  turnsWithCached = 0;
   model: string | undefined;
   timedOut = false;
   turnsExceeded = false;
@@ -467,12 +471,18 @@ class RunObserver {
       case "turn_completed": {
         this.turns += 1;
         this.tokens = Number(data.tokens) || this.tokens;
-        const usage = data.usage as { input: number; output: number } | undefined;
+        const usage = data.usage as
+          | { input: number; output: number; cachedInput?: number }
+          | undefined;
         if (usage) {
           this.turnsWithUsage += 1;
           this.usage ??= { input: 0, output: 0 };
           this.usage.input += usage.input;
           this.usage.output += usage.output;
+          if (typeof usage.cachedInput === "number") {
+            this.turnsWithCached += 1;
+            this.cachedInput = (this.cachedInput ?? 0) + usage.cachedInput;
+          }
         }
         break;
       }
@@ -544,6 +554,11 @@ class RunObserver {
   /** Only SOME turns reported usage: the summed totals understate the run. */
   get usagePartial(): boolean {
     return this.turnsWithUsage > 0 && this.turnsWithUsage < this.turns;
+  }
+
+  /** Some turns that reported usage did not report cached tokens: the cached sum understates. */
+  get cachedPartial(): boolean {
+    return this.turnsWithCached > 0 && this.turnsWithCached < this.turnsWithUsage;
   }
 
   markAborted(): void {
@@ -891,6 +906,11 @@ async function execute(
     measured: {
       ...(usage ? { inputTokens: usage.input, outputTokens: usage.output } : {}),
       ...(usage && observer.usagePartial ? { usagePartial: true as const } : {}),
+      // Only the observer sees `cachedInput`; absent stays absent (unknown is not 0).
+      ...(observer.cachedInput !== undefined ? { cachedInputTokens: observer.cachedInput } : {}),
+      ...(observer.cachedInput !== undefined && observer.cachedPartial
+        ? { cachedPartial: true as const }
+        : {}),
       wallMs,
       turns: observer.turns,
       toolCalls: observer.startedCalls,

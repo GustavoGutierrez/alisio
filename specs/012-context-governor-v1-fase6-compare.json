@@ -1,0 +1,13 @@
+{
+  "suite": "long-context-stress",
+  "variants": [
+    {
+      "id": "default-off",
+      "overrides": { "context.governor": "off" }
+    },
+    {
+      "id": "default-on",
+      "overrides": { "context.governor": "on" }
+    }
+  ]
+}
