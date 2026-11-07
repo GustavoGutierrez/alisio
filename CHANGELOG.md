@@ -4,6 +4,27 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.10.0] - 2026-11-07
+
+Install, update and remove plugins from the web UI.
+
+### Added
+
+- Settings → Plugins → **Plugin catalog**: browse the published plugins with search, category and tag
+  filters and pages of 10, and install one with a click. The catalog is cached for 24 hours and only
+  downloaded again when it changed; **Check for updates** checks now.
+- **Install from file**: install a private plugin from a `.tgz` made with `npm pack` or `pnpm pack`.
+  The file is validated first (an Alisio plugin, its SDK range, install scripts), the install shows
+  its progress step by step, and temporary files are removed. The package is kept under
+  `~/.config/alisio/plugins/local-packages`, so the original file can be moved or deleted.
+- **Installed plugins**: uninstall a plugin, see when a catalog plugin has a newer version, and
+  update one or all of them. Installing a plugin that is already there updates it in place.
+
+### Improved
+
+- When `npm` is missing, installing a plugin says so clearly instead of failing with a spawn error.
+  Alisio Desktop bundles its own `npm`, so plugins install without Node.js on the system.
+
 ## [0.9.0] - 2026-11-07
 
 Alisio Desktop, and Alisio as an assistant for everyday work.
