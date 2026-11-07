@@ -371,6 +371,19 @@ or button yet, and a plugin verification outside a run emits no `proof_updated`.
 HTTP are optional by default, those from the command line required. The counter of refused `complete`
 attempts that pauses a goal as `no_progress` lives in memory. User guide: [Proof](/proof#limits).
 
+### Plugin catalog, install from file and updates
+
+The Web UI and the desktop app install, update and remove plugins (see
+[Plugin catalog, install and updates](/web#plugin-catalog)). Plugins are still not sandboxed: an
+install runs npm with your privileges and may run the package's install scripts, so the UI asks for
+confirmation first. Limits: the catalog is remote data (validated and cached 24 hours, a catalog can
+list a version npm does not serve yet, so the registry's latest is installed instead); update
+information exists only for catalog plugins (no registry lookup for other npm plugins, no source for
+local files); Node keeps the code of a plugin it already loaded, so an update of a loaded plugin
+needs a restart (the desktop app restarts itself, `alisio serve` does not); installs and uninstalls
+run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
+ranges make npm fail and roll back; update the older plugin first.
+
 ## Verification scope
 
 The source file records a dedicated verification-scope section for each area below; the summary
@@ -559,7 +572,7 @@ published to npm. Verified on Linux x64 only: unit and integration tests (the re
 and under the Electron binary with `ELECTRON_RUN_AS_NODE=1`), the real GUI launched from the
 development tree and from the unpacked build, and `AppImage` and `deb` builds. Not verified:
 Windows and macOS builds, running the `AppImage` or installing the `deb`, and Python or Forja
-workers inside Electron beyond the inherited environment. Known limits: installing npm plugins
-needs `npm` on `PATH`, Git features need `git`, global plugin discovery derives its prefix from
+workers inside Electron beyond the inherited environment. Known limits: the app bundles npm for
+plugin installs (about 17 MB more in the runtime), Git features need `git`, global plugin discovery derives its prefix from
 `process.execPath` (meaningless inside Electron), there is no auto-update, and the installers are
 unsigned, so SmartScreen and Gatekeeper warn. User guide: [Desktop app](/desktop).

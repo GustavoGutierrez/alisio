@@ -197,7 +197,7 @@ ninguna):
 | --- | --- |
 | **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de plugins y proveedor de búsqueda web, guardados en su `config.json` de usuario |
 | **Modelos** | Perfiles de proveedor con sus valores no secretos, credenciales y **Activar en este workspace** con un modelo del perfil; **Añadir un perfil** crea uno |
-| **Plugins** | **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto) y **Lista de plugins**: búsqueda, contador y tarjetas con una píldora **Habilitado**, **Deshabilitado**, **Con fallo** o **Requiere reinicio**; el chevron muestra versión, categorías, origen, tools, comandos, diagnósticos y el interruptor |
+| **Plugins** | Cuatro pestañas: **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Plugins instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de plugins** (explorar e instalar) e **Instalar desde archivo** (plugins privados `.tgz`); vea [Catálogo de plugins, instalación y actualizaciones](#plugin-catalog) |
 | **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/` |
 | **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita |
 | **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
@@ -218,7 +218,110 @@ que el workspace sea de confianza. Los plugins se cargan al arrancar la aplicaci
 así que el servidor recarga esa aplicación en cuanto no tiene runs: de inmediato si está inactiva o,
 si no, cuando termina su último run (mientras tanto la tarjeta muestra **Requiere reinicio**). Las
 sesiones conservan su historial y todas las paletas de comandos abiertas se actualizan. Los
-interruptores de skills se aplican al momento. Los plugins no se instalan desde la web.
+interruptores de skills se aplican al momento.
+
+### Catálogo de plugins, instalación y actualizaciones {#plugin-catalog}
+
+**Ajustes → Plugins** instala, actualiza y elimina plugins sin usar la terminal. Tiene cuatro
+pestañas: **Configuración de plugins**, **Plugins instalados**, **Catálogo de plugins** e **Instalar
+desde archivo**. Cada instalación muestra antes la misma advertencia que la CLI: npm se ejecuta con
+los permisos de su usuario y puede ejecutar los scripts de instalación del paquete, y los plugins no
+están aislados. **No volver a preguntar en esta sesión** la omite hasta que recargue la página (una
+versión anterior siempre pregunta). Instalar y desinstalar se rechazan con `--read-only`, y solo se
+ejecuta una operación a la vez.
+
+**Plugins instalados.** Cada tarjeta muestra la versión; **Desinstalar** (con confirmación) elimina
+los plugins de npm instalados en su directorio global de plugins. Los plugins integrados y los de
+proyecto o locales no se pueden desinstalar aquí y se indica el motivo. Cuando existe una versión
+más reciente, la tarjeta muestra **Actualización disponible: vX → vY** y un botón **Actualizar**, y
+el encabezado las cuenta (**2 actualizaciones disponibles**) con un botón **Actualizar todo** que las
+ejecuta una tras otra y termina con un resumen. **Buscar actualizaciones** refresca el catálogo para
+ambas pestañas. Las actualizaciones se conocen solo para los plugins del catálogo; no hay consulta
+al registro para otros plugins de npm, y un plugin instalado desde un archivo no tiene origen
+remoto, así que muestra **Paquete local vX** y **Actualizar desde archivo…**, que abre **Instalar
+desde archivo** para ese paquete. Una actualización que requiere un `@alisio/sdk` más reciente que el
+de Alisio queda deshabilitada con **La actualización requiere una versión más reciente de Alisio**.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugins_installed_web_ui.webp" alt="Ajustes, Plugins, Plugins instalados: una actualización disponible, la tarjeta de Context7 con la píldora Actualización disponible v0.4.0 a v0.5.0 y un botón Actualizar, y la tarjeta de Brave Search desplegada con su interruptor y el botón Desinstalar." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Plugins instalados: el contador de actualizaciones, Buscar actualizaciones, el botón Actualizar y Desinstalar con el nombre del paquete.</figcaption>
+</figure>
+
+**Catálogo de plugins.** Los plugins publicados como tarjetas: la portada con el nombre y una
+descripción corta, y una insignia de estado (**Instalado**, **Actualizar**, **Incompatible**). Haga
+clic en una tarjeta (o pulse `Enter` sobre ella) para voltearla: el reverso tiene la descripción
+completa, categorías, etiquetas, autor, licencia, enlaces a npm y al repositorio, y el botón
+**Instalar**, **Actualizar**, **Reinstalar** o **Instalar versión anterior** (`Esc` o el botón de
+cerrar la devuelve; con movimiento reducido la tarjeta cambia sin girar). La búsqueda cubre nombre,
+descripción, etiquetas y paquete; se filtra por categoría y etiquetas y, opcionalmente, se agrupa
+por categoría. Diez plugins por página, con imágenes diferidas, esqueletos de carga y un estado de
+error con **Reintentar**. **Incompatible** significa que el rango `sdk` del plugin no coincide con el
+`@alisio/sdk` instalado; su botón queda deshabilitado e indica el motivo.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugin_catalog_web_ui.webp" alt="Ajustes, Plugins, Catálogo de plugins: cuadro de búsqueda, Buscar actualizaciones, filtros de categoría y etiquetas, y una cuadrícula de tarjetas con portadas; la tarjeta de Atlassian está volteada y muestra su descripción y el botón Instalar." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>El Catálogo de plugins: tarjetas con portada que se voltean para mostrar el detalle y el botón Instalar.</figcaption>
+</figure>
+
+**Caché del catálogo.** El servidor descarga el catálogo (`ALISIO_PLUGIN_CATALOG_URL`, por defecto el
+catálogo publicado de `alisio-plugins`) y lo guarda en su directorio de estado. No vuelve a consultarlo
+durante 24 horas salvo que pulse **Buscar actualizaciones**; entonces envía una petición
+condicional, así que un catálogo sin cambios cuesta un `304`. La pestaña muestra cuándo se comprobó
+por última vez y si es una copia en caché o está sin conexión. Sin conexión se muestra la copia
+guardada con un aviso; sin conexión y sin copia se muestra un error con **Reintentar**. Las portadas
+pasan por el servidor (el navegador nunca contacta el origen del catálogo) y se guardan en disco. Cada
+campo del catálogo se valida: los enlaces deben ser `https:`, las portadas deben venir del origen del
+propio catálogo y un paquete con un nombre npm inválido se descarta.
+
+**Instalar desde el catálogo.** Un clic, un estado de carga y el plugin aparece de inmediato en
+**Plugins instalados**. Se instala la versión del catálogo; si npm aún no la publica, se instala la
+última del registro.
+
+**Instalar desde archivo.** Para plugins privados que nunca se publican: genere un tarball con
+`pnpm pack` o `npm pack` y elíjalo o suéltelo en la pestaña. El servidor lee solo
+`package/package.json` (no necesita el binario `tar`) y muestra una tarjeta de validación: nombre,
+versión, descripción, autor, licencia, tamaño, el rango de `@alisio/sdk` (una discrepancia es una
+advertencia, no un bloqueo), si es un plugin de Alisio válido (la keyword `alisio-plugin`, nombre y
+versión válidos, un punto de entrada), una advertencia destacada si declara scripts `preinstall`,
+`install` o `postinstall`, y si actualizará, reinstalará o instalará una versión anterior de la ya
+instalada. Límites: 50 MB para el archivo y 1 MB para `package.json`.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugin_install_file_web_ui.webp" alt="Ajustes, Plugins, Instalar desde archivo: la tarjeta de validación de un plugin privado con nombre, versión, autor, licencia, tamaño, el rango del SDK y una advertencia de que esta versión de Alisio tiene un SDK más reciente, y el botón Instalar." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Instalar desde archivo: la tarjeta de validación con la advertencia del SDK antes de instalar nada.</figcaption>
+</figure>
+
+Tras la confirmación, un indicador de pasos muestra las fases: **Subiendo**, **Validando**,
+**Copiando el paquete**, **Instalando dependencias (npm)**, **Registrando**, **Recargando el
+workspace** y **Limpiando**. Si falla, la instalación se revierte por completo y se muestran las
+últimas líneas de la salida de npm.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugin_install_progress_web_ui.webp" alt="Ajustes, Plugins, Instalar desde archivo: el progreso de una instalación, con las tres primeras fases marcadas, Instalando dependencias en curso y el resto en espera." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>El progreso de la instalación: las fases terminadas se marcan y la actual gira.</figcaption>
+</figure>
+
+El archivo se copia a `<config home>/plugins/local-packages/<nombre>-<versión>.tgz` y se instala desde
+esa copia, así que la dependencia `file:local-packages/...` que registra npm sigue siendo válida
+aunque el archivo original se mueva. La carga se guarda temporalmente en
+`<state home>/tmp/plugin-uploads/` y se borra tras la instalación, un fallo o una cancelación; lo que
+quede con más de una hora se limpia. Al desinstalar se elimina la copia guardada.
+
+**Actualizar en el sitio.** Instalar un paquete que ya está instalado lo reemplaza y nunca crea un
+duplicado: **Actualizar vX → vY**, **Reinstalar** o **Volver a vX (desde vY)** (con una
+advertencia). La entrada `plugins` de su configuración sigue siendo una sola y el tarball guardado
+anterior se elimina cuando el nuevo funciona. Un plugin instalado antes desde un archivo que aún
+apunta fuera de `local-packages` se migra al almacén estable en su siguiente actualización. Si la
+actualización falla, se restaura la versión anterior.
+
+**Reinicio tras una actualización.** Node conserva el código de un plugin que ya cargó, así que
+reemplazar un plugin cargado no puede surtir efecto en el proceso en ejecución. Entonces el resultado
+pide un reinicio: un aviso (**Plugin actualizado. Reinicia Alisio para usar la versión nueva.**) y
+una píldora **Reinicio pendiente** en la tarjeta. En la [aplicación de escritorio](/desktop) el aviso
+tiene **Reiniciar ahora**, que reinicia el proceso en segundo plano y recarga la ventana. Con
+`alisio serve` no hay botón: reinicie el comando usted mismo. La primera instalación de un plugin que
+nunca se cargó no necesita reinicio.
+
 
 ## Modelo de seguridad
 
@@ -704,6 +807,16 @@ GET  /api/datasets/:did/rows?sheet=&after=&offset=&limit=&sort=&dir=&filter=&col
 POST /api/artifacts/:aid/dataset       ingest a spreadsheet artifact on first preview
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
+GET  /api/plugin-catalog?refresh=0|1   catalog, cache metadata and installed versions
+GET  /api/plugin-catalog/covers/:slug  a cover through the server cache
+GET  /api/plugins/packages?workspace=<wid>   installed npm packages, update and restart flags
+POST /api/plugins/install {package, version?, confirmed: true}   a catalog package only
+DELETE /api/plugins/package/:name      uninstall a global npm plugin (URL-encoded name)
+POST /api/plugins/local/inspect        raw .tgz body (application/gzip) → validation card
+POST /api/plugins/local/install {stagingId, confirmed: true}   202 {jobId}
+GET  /api/plugins/jobs/:jobId          {phase, phases, done, error?, result?, logTail?}
+DELETE /api/plugins/local/staged/:stagingId   discard an upload
+GET|POST /api/server/restart           availability, restart (only when supervised)
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}

@@ -183,7 +183,7 @@ resources act on the workspace of the open session (or the first workspace when 
 | --- | --- |
 | **General** | UI language (this browser), then the agent settings: compaction, context, limits, plugin hook timeout and web search provider, saved to your user `config.json` |
 | **Models** | Provider profiles with their non-secret values, credentials and **Activate in this workspace** with a model of that profile; **Add a profile** creates one |
-| **Plugins** | **Plugin configuration** (not sandboxed, how plugins are installed, the project file) and **Plugin list**: search, count and cards with an **Enabled**, **Disabled**, **Failed** or **Restart required** pill; the chevron shows version, categories, source, tools, commands, diagnostics and the switch |
+| **Plugins** | Four tabs: **Plugin configuration** (not sandboxed, how plugins are installed, the project file), **Installed plugins** (search, update pills, switch and **Uninstall**), **Plugin catalog** (browse and install) and **Install from file** (private `.tgz` plugins); see [Plugin catalog, install and updates](#plugin-catalog) |
 | **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette |
 | **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first |
 | **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |
@@ -203,8 +203,103 @@ Enabling or disabling a plugin writes a project override (`.alisio/config.json`)
 workspace to be trusted. Plugins are loaded when the workspace application starts, so the server
 reloads that application as soon as it has no runs: immediately when it is idle, otherwise when its
 last run finishes (the card shows **Restart required** meanwhile). Sessions keep their history, and
-every open command palette refreshes. Skill switches apply at once. Plugins cannot be installed
-from the web.
+every open command palette refreshes. Skill switches apply at once.
+
+### Plugin catalog, install and updates {#plugin-catalog}
+
+**Settings → Plugins** installs, updates and removes plugins without a terminal. It has four tabs:
+**Plugin configuration**, **Installed plugins**, **Plugin catalog** and **Install from file**. Every
+install shows the same warning as the CLI first: npm runs with your user's permissions and may run
+the package's install scripts, and plugins are not sandboxed. **Don't ask again this session** skips
+it until you reload the page (a downgrade always asks). Installs and uninstalls are refused under
+`--read-only`, and only one runs at a time.
+
+**Installed plugins.** Each card shows the version; **Uninstall** (with a confirmation) removes npm
+plugins installed in your global plugins directory. Built-in plugins and project or local plugins
+cannot be uninstalled here and say why. When a newer version exists the card shows **Update
+available: vX → vY** and an **Update** button, and the header counts them (**2 updates available**)
+with an **Update all** button that runs them one after another and ends with a summary. **Check for
+updates** refreshes the catalog for both tabs. Updates are known only for plugins in the catalog;
+there is no registry lookup for other npm plugins, and a plugin installed from a file has no remote
+source, so it shows **Local package vX** and **Update from file…**, which opens **Install from file**
+for that package. An update that needs a newer `@alisio/sdk` than the one Alisio has is disabled
+with **Update requires a newer Alisio**.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugins_installed_web_ui.webp" alt="Settings, Plugins, Installed plugins: one update available, the Context7 card with the pill Update available v0.4.0 to v0.5.0 and an Update button, and the Brave Search card expanded with its switch and the Uninstall button." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Installed plugins: the update count, Check for updates, the Update button and Uninstall with its package name.</figcaption>
+</figure>
+
+**Plugin catalog.** The published plugins as cards: the cover with the name and a short description,
+and a status badge (**Installed**, **Update**, **Incompatible**). Click a card (or press `Enter` on
+it) to flip it: the back has the full description, categories, tags, author, license, links to npm
+and the repository, and the **Install**, **Update**, **Reinstall** or **Downgrade** button (`Esc` or
+the close button turns it back; with reduced motion the card swaps without rotating). Search covers
+name, description, tags and package; filter by category and tags, optionally **Group by category**.
+Ten plugins per page, with lazy images, loading skeletons and an error state with **Try again**.
+**Incompatible** means the plugin's `sdk` range does not match the installed `@alisio/sdk`; its
+button is disabled and says why.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugin_catalog_web_ui.webp" alt="Settings, Plugins, Plugin catalog: search box, Check for updates, category and tag filters, and a grid of plugin cards with covers; the Atlassian card is flipped and shows its description and the Install button." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>The Plugin catalog: cover cards that flip to show the details and the Install button.</figcaption>
+</figure>
+
+**Catalog cache.** The server downloads the catalog (`ALISIO_PLUGIN_CATALOG_URL`, by default the
+published `alisio-plugins` catalog) and keeps it under its state directory. It does not look again
+for 24 hours unless you press **Check for updates**; then it sends a conditional request, so an
+unchanged catalog costs a `304`. The tab shows when it was last checked and whether it is cached or
+offline. Offline, the saved copy is shown with a notice; offline with nothing saved shows an error
+with **Try again**. Covers go through the server (the browser never contacts the catalog origin) and
+are cached on disk. Every field of the catalog is validated: links must be `https:`, covers must come
+from the catalog's own origin, and a package with an invalid npm name is dropped.
+
+**Install from the catalog.** One click, a loading state, and the plugin appears in **Installed
+plugins** at once. The catalog version is installed; if npm does not serve it yet, the registry's
+latest is installed instead.
+
+**Install from file.** For private plugins that are never published: make a tarball with `pnpm pack`
+or `npm pack`, then choose it or drop it on the tab. The server reads only `package/package.json`
+(no `tar` binary is needed) and shows a validation card: name, version, description, author, license,
+size, the `@alisio/sdk` range (a mismatch is a warning, not a block), whether it is a valid Alisio
+plugin (the `alisio-plugin` keyword, a valid name and version, an entry point), a prominent warning
+when it declares `preinstall`, `install` or `postinstall` scripts, and whether it will update,
+reinstall or downgrade a version already installed. Limits: 50 MB for the file, 1 MB for
+`package.json`.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugin_install_file_web_ui.webp" alt="Settings, Plugins, Install from file: the validation card of a private plugin with name, version, author, license, size, the SDK range and a warning that this Alisio has a newer SDK, and the Install button." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Install from file: the validation card with the SDK warning before anything is installed.</figcaption>
+</figure>
+
+After the confirmation a stepper shows the phases: **Uploading**, **Validating**, **Copying package**,
+**Installing dependencies (npm)**, **Registering**, **Reloading workspace** and **Cleaning up**. On
+failure the install is rolled back completely and the last lines of npm's output are shown.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugin_install_progress_web_ui.webp" alt="Settings, Plugins, Install from file: the progress of an install, with the first three phases checked, Installing dependencies running and the rest waiting." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>The install progress: completed phases are checked and the current one spins.</figcaption>
+</figure>
+
+The file is copied to `<config home>/plugins/local-packages/<name>-<version>.tgz` and installed from
+that copy, so the `file:local-packages/...` dependency npm records stays valid even if the original
+file moves. The upload is staged in `<state home>/tmp/plugin-uploads/` and deleted after the install,
+a failure or a cancel; leftovers older than one hour are swept. Uninstalling removes the stored copy.
+
+**Updating in place.** Installing a package that is already installed replaces it and never creates a
+duplicate: **Update vX → vY**, **Reinstall** or **Downgrade vX → vY** (with a warning). The `plugins`
+entry of your configuration stays single, and the previous stored tarball is removed once the new
+one works. A plugin first installed from a file that still points outside `local-packages` is
+migrated to the stable store on its next update. If the update fails, the previous version is
+restored.
+
+**Restart after an update.** Node keeps the code of a plugin it has already loaded, so replacing a
+loaded plugin cannot take effect in the running process. The result then asks for a restart: a
+banner (**Plugin updated. Restart Alisio to use the new version.**) and a **Restart pending** pill on
+the card. In the [desktop app](/desktop) the banner has **Restart now**, which restarts the
+background process and reloads the window. With `alisio serve` there is no button: restart the
+command yourself. A first install of a plugin that was never loaded needs no restart.
+
 
 ## Security model
 
@@ -664,6 +759,16 @@ GET  /api/datasets/:did/rows?sheet=&after=&offset=&limit=&sort=&dir=&filter=&col
 POST /api/artifacts/:aid/dataset       ingest a spreadsheet artifact on first preview
 GET  /api/events?session=<sid>         the event stream (snapshot, then live frames)
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
+GET  /api/plugin-catalog?refresh=0|1   catalog, cache metadata and installed versions
+GET  /api/plugin-catalog/covers/:slug  a cover through the server cache
+GET  /api/plugins/packages?workspace=<wid>   installed npm packages, update and restart flags
+POST /api/plugins/install {package, version?, confirmed: true}   a catalog package only
+DELETE /api/plugins/package/:name      uninstall a global npm plugin (URL-encoded name)
+POST /api/plugins/local/inspect        raw .tgz body (application/gzip) → validation card
+POST /api/plugins/local/install {stagingId, confirmed: true}   202 {jobId}
+GET  /api/plugins/jobs/:jobId          {phase, phases, done, error?, result?, logTail?}
+DELETE /api/plugins/local/staged/:stagingId   discard an upload
+GET|POST /api/server/restart           availability, restart (only when supervised)
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}

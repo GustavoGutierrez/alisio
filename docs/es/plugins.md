@@ -670,8 +670,9 @@ alisio --plugin ./examples/plugins/custom-websearch/dist/index.js --allow-extern
 
 ## Cargar plugins {#loading-plugins}
 
-Los plugins solo se cargan desde orígenes de confianza explícita. Alisio nunca instala ni descarga
-plugins.
+Los plugins solo se cargan desde orígenes de confianza explícita. Alisio instala un plugin solo cuando
+se lo pide: el comando `alisio install`, los botones de instalación de la interfaz web y de la
+aplicación de escritorio, o la herramienta `plugin_install` tras su aprobación.
 
 | Origen | Confianza |
 | --- | --- |
@@ -795,6 +796,51 @@ Agente: Instalado el plugin "plugin-openrouter" v1.2.3 en
         personal de confianza; --read-only impide que cargue. Ejecuta `alisio plugins
         list` para inspeccionarlo.
 ```
+
+## Instalar desde la web y desde un archivo {#installing-from-the-web}
+
+La interfaz web y la [aplicación de escritorio](/es/desktop) instalan, actualizan y eliminan plugins
+en **Ajustes → Plugins**, con la misma advertencia de seguridad que la CLI. Las pantallas están en
+[Catálogo de plugins, instalación y actualizaciones](/es/web#plugin-catalog).
+
+- **Desde el catálogo.** Un plugin del catálogo se instala con un clic, en la versión del catálogo (la
+  última del registro cuando npm aún no sirve esa versión). Solo se pueden instalar así los paquetes
+  listados en el catálogo, y `--read-only` lo rechaza.
+- **Actualizar en el sitio.** Instalar un paquete que ya está instalado lo reemplaza (actualización,
+  reinstalación o versión anterior) y conserva una sola entrada en el array `plugins`. Una
+  actualización fallida restaura la versión anterior.
+- **Desde un archivo (plugins privados).** Un plugin que nunca se publica se distribuye como tarball.
+  Se genera desde la carpeta del plugin:
+
+```sh
+pnpm pack
+npm pack
+```
+
+  Después elija el `.tgz` en **Instalar desde archivo**. Alisio lee solo `package/package.json` (un
+  lector gzip y tar propio: no hace falta el binario `tar`) y comprueba que sea un plugin de Alisio: la
+  keyword `alisio-plugin`, un nombre npm válido y una versión semver, y un punto de entrada
+  (`exports` o `main`). El archivo puede pesar hasta 50 MB y `package.json` hasta 1 MB; una entrada
+  cuya ruta pudiera salir de la carpeta del paquete rechaza el archivo. Un rango del peer
+  `@alisio/sdk` que no coincide con el SDK instalado es una advertencia, y los scripts `preinstall`,
+  `install` o `postinstall` declarados se destacan.
+- **Dónde vive un plugin de archivo.** El tarball se copia a
+  `<config home>/plugins/local-packages/<nombre>-<versión>.tgz` y npm instala desde esa copia, así que
+  la dependencia `file:local-packages/...` de `<config home>/plugins/package.json` nunca apunta a un
+  archivo que pueda moverse. Actualizar reemplaza la copia guardada; desinstalar la elimina; un plugin
+  instalado desde una ruta fuera de `local-packages` se migra en su siguiente actualización. La carga
+  se guarda temporalmente en `<state home>/tmp/plugin-uploads/` y se borra tras la instalación, un
+  fallo o una cancelación; lo que quede con más de una hora se limpia. Una instalación fallida se
+  revierte: la copia guardada, un paquete parcial y la entrada de configuración se restauran.
+- **Reinicio tras una actualización.** Node conserva el código de un plugin que ya cargó, así que la
+  actualización de un plugin cargado solo se ejecuta tras un reinicio. El resultado lo indica; la
+  aplicación de escritorio puede reiniciarse sola y `alisio serve` debe reiniciarlo usted.
+- **npm.** La CLI usa el `npm` de su `PATH`. La aplicación de escritorio incluye npm (`ALISIO_NPM_CLI`
+  lo señala), así que instala plugins sin Node.js en el sistema. Sin ninguno de los dos, el error dice:
+  npm was not found: install Node.js, or use the desktop app, which bundles it.
+- **Desinstalar.** `DELETE /api/plugins/package/:name` (el botón **Desinstalar**) elimina un plugin
+  de npm del directorio global de plugins y su nombre de la configuración; los plugins integrados y
+  los de proyecto o locales no se pueden desinstalar desde la web.
 
 ## Plugins TypeScript
 

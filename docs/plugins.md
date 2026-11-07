@@ -648,7 +648,7 @@ alisio --plugin ./examples/plugins/custom-websearch/dist/index.js --allow-extern
 
 ## Loading plugins {#loading-plugins}
 
-Plugins are only loaded from explicitly trusted sources. Alisio never installs or downloads plugins.
+Plugins are only loaded from explicitly trusted sources. Alisio installs a plugin only when you ask: the `alisio install` command, the install buttons of the Web UI and the desktop app, or the `plugin_install` tool after you approve it.
 
 | Source | Trust |
 | --- | --- |
@@ -767,6 +767,50 @@ Agent: Installed plugin "plugin-openrouter" v1.2.3 at
        personal code; --read-only keeps it from loading. Run `alisio plugins list`
        to inspect.
 ```
+
+## Installing from the web and from a file {#installing-from-the-web}
+
+The Web UI and the [desktop app](/desktop) install, update and remove plugins in **Settings →
+Plugins**, with the same security warning as the CLI. See
+[Plugin catalog, install and updates](/web#plugin-catalog) for the screens.
+
+- **From the catalog.** A catalog plugin installs in one click, at the catalog's version (the
+  registry's latest when npm does not serve that version yet). Only packages listed in the catalog
+  can be installed this way, and `--read-only` refuses it.
+- **Update in place.** Installing a package that is already installed replaces it (update,
+  reinstall or downgrade) and keeps a single entry in the `plugins` array. A failed update restores
+  the previous version.
+- **From a file (private plugins).** A plugin that is never published is distributed as a tarball.
+  Make it from the plugin's folder:
+
+```sh
+pnpm pack
+npm pack
+```
+
+  Then choose the `.tgz` in **Install from file**. Alisio reads only `package/package.json` (a
+  built-in gzip and tar reader: no `tar` binary is needed) and checks that it is an Alisio plugin: the
+  `alisio-plugin` keyword, a valid npm name and a semver version, and an entry point (`exports` or
+  `main`). The file may be up to 50 MB and `package.json` up to 1 MB; an entry whose path could leave
+  the package folder rejects the file. An `@alisio/sdk` peer range that does not match the installed
+  SDK is a warning, and declared `preinstall`, `install` or `postinstall` scripts are called out.
+- **Where a file plugin lives.** The tarball is copied to
+  `<config home>/plugins/local-packages/<name>-<version>.tgz` and npm installs from that copy, so the
+  `file:local-packages/...` dependency in `<config home>/plugins/package.json` never points at a file
+  that can move. Updating replaces the stored copy; uninstalling removes it; a plugin that was
+  installed from a path outside `local-packages` is migrated on its next update. The upload itself is
+  staged in `<state home>/tmp/plugin-uploads/` and deleted after the install, a failure or a cancel,
+  and leftovers older than one hour are swept. A failed install is rolled back: the stored copy, a
+  partial package and the configuration entry are restored.
+- **Restart after an update.** Node keeps the code of a plugin it already loaded, so an update of a
+  loaded plugin only runs after a restart. The result says so; the desktop app can restart itself
+  and `alisio serve` must be restarted by you.
+- **npm.** The CLI uses the `npm` on your `PATH`. The desktop app bundles npm (`ALISIO_NPM_CLI` points
+  at it), so it installs plugins without a system Node.js. Without either, the error reads: npm was
+  not found: install Node.js, or use the desktop app, which bundles it.
+- **Uninstall.** `DELETE /api/plugins/package/:name` (the **Uninstall** button) removes an npm
+  plugin from the global plugins directory and its name from the configuration; built-in plugins and
+  project or local plugins cannot be uninstalled from the web.
 
 ## TypeScript plugins
 

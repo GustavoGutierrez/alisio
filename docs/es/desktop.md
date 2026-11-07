@@ -18,16 +18,16 @@ son los mismos que usa la CLI.
 
 ## Descargar e instalar
 
-Descargue el archivo de su sistema desde la [versión Alisio Desktop 0.9.0](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.9.0) (los mismos
+Descargue el archivo de su sistema desde la [versión Alisio Desktop 0.10.0](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.10.0) (los mismos
 enlaces están en la [página de inicio](/es/)):
 
 | Sistema | Descarga | Cómo instalar |
 | --- | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.9.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-Setup-0.9.0-x64.exe) | Ejecútelo y siga el asistente |
-| macOS Apple Silicon (arm64) | [`Alisio-0.9.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-arm64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
-| macOS Intel (x64) | [`Alisio-0.9.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
-| Linux, cualquier distribución | [`Alisio-0.9.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x86_64.AppImage) | Hágalo ejecutable (`chmod +x`) y ejecútelo |
-| Debian y Ubuntu | [`Alisio-0.9.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-amd64.deb) | Instálelo con su gestor de paquetes |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.10.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-Setup-0.10.0-x64.exe) | Ejecútelo y siga el asistente |
+| macOS Apple Silicon (arm64) | [`Alisio-0.10.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-arm64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
+| macOS Intel (x64) | [`Alisio-0.10.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-x64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
+| Linux, cualquier distribución | [`Alisio-0.10.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-x86_64.AppImage) | Hágalo ejecutable (`chmod +x`) y ejecútelo |
+| Debian y Ubuntu | [`Alisio-0.10.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-amd64.deb) | Instálelo con su gestor de paquetes |
 
 Cada versión incluye también `SHA256SUMS-desktop.txt`, para que pueda verificar una descarga. Para
 construir los instaladores usted mismo, consulte [Construir los instaladores](#construir-los-instaladores).
@@ -80,9 +80,14 @@ escribir, de modo que usted controla cada cambio. Consulte
 
 Los plugins dan a Alisio habilidades para una profesión. Se publican desde el repositorio público
 [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) y se instalan con
-`alisio install npm:<paquete>`; el asistente también puede instalar uno por usted mediante su
-herramienta con permisos `plugin_install`, una vez que usted lo apruebe. Después, actívelo en
-**Ajustes**, luego **Plugins**.
+`alisio install npm:<paquete>`; o abra **Ajustes → Plugins** y use la pestaña **Catálogo de plugins**:
+un clic instala un plugin y aparece de inmediato en **Plugins instalados**. **Instalar desde archivo**
+instala un plugin privado desde un `.tgz`. El asistente también puede instalar uno por usted mediante
+su herramienta con permisos `plugin_install`, una vez que usted lo apruebe. La aplicación incluye
+npm, así que instalar plugins no requiere Node.js en su sistema; al actualizar un plugin que ya está
+cargado, un aviso le pide reiniciar y **Reiniciar ahora** reinicia el proceso en segundo plano de la
+aplicación y recarga la ventana. Vea
+[Catálogo de plugins, instalación y actualizaciones](/es/web#plugin-catalog).
 
 | Plugin | Para |
 | --- | --- |
@@ -152,7 +157,6 @@ los instaladores no pueden depender de ellos.
 ## Limitaciones {#limitations}
 
 - Los plugins por profesión no vienen incluidos en la aplicación.
-- Instalar plugins de npm desde la aplicación requiere `npm` en el `PATH` del sistema.
 - Las funciones de Git requieren tener `git` instalado.
 - La selección de carpetas usa el mismo selector nativo que `alisio serve` (una herramienta del
   sistema), no un diálogo de Electron.
