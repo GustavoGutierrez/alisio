@@ -4,6 +4,31 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.9.0] - 2026-11-07
+
+Alisio Desktop, and Alisio as an assistant for everyday work.
+
+### Added
+
+- Alisio Desktop: install Alisio like any other program on Windows, macOS or Linux, with no
+  terminal and no Node.js. Download it from the documentation home page or the
+  `desktop-v0.9.0` GitHub release. The desktop app shares its sessions and settings with the CLI.
+- Context Governor (experimental, off by default): `context.governor` (`off`, `shadow`, `on`). In
+  `on` mode, tool results made redundant by a later one (superseded reads, repeated identical
+  `bg_output` polls, duplicate searches) are replaced by a one-line stub in the request, and your
+  instructions, the live goal, the approved plan, Proof criteria and session grants survive
+  compaction verbatim. `shadow` only measures and sends exactly what `off` sends.
+- `/context`, a **Context** tab in the web UI and `GET /api/sessions/:sid/context/report`: what the
+  next request carries and what the governor elides, with counts and token estimates only.
+- `/stats` shows a Context Governor section, and the web trajectory shows each governed request.
+- Reliability Lab: the `long-context-stress` suite, and runs record the provider's cached input
+  tokens (`cachedInputTokens`), with a cached-input ratio in reports and `eval compare`.
+
+### Improved
+
+- Alisio now presents itself as an assistant for everyday work (`alisio --help`, the web UI About
+  text and the documentation); programming remains fully supported as an advanced use.
+
 ## [0.8.0] - 2026-10-14
 
 Proof: acceptance criteria backed by evidence, not by what the model says.

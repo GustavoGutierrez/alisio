@@ -6,6 +6,28 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.9.0",
+      date: "2026-11-07",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Alisio Desktop: install Alisio like any other program on Windows, macOS or Linux, with no terminal and no Node.js. Download it from the documentation home page or the `desktop-v0.9.0` GitHub release. The desktop app shares its sessions and settings with the CLI.",
+            "Context Governor (experimental, off by default): `context.governor` (`off`, `shadow`, `on`). In `on` mode, tool results made redundant by a later one (superseded reads, repeated identical `bg_output` polls, duplicate searches) are replaced by a one-line stub in the request, and your instructions, the live goal, the approved plan, Proof criteria and session grants survive compaction verbatim. `shadow` only measures and sends exactly what `off` sends.",
+            "`/context`, a **Context** tab in the web UI and `GET /api/sessions/:sid/context/report`: what the next request carries and what the governor elides, with counts and token estimates only.",
+            "`/stats` shows a Context Governor section, and the web trajectory shows each governed request.",
+            "Reliability Lab: the `long-context-stress` suite, and runs record the provider's cached input tokens (`cachedInputTokens`), with a cached-input ratio in reports and `eval compare`.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "Alisio now presents itself as an assistant for everyday work (`alisio --help`, the web UI About text and the documentation); programming remains fully supported as an advanced use.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.8.0",
       date: "2026-10-14",
       sections: [
