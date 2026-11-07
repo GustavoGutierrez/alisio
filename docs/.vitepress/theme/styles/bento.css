@@ -5,6 +5,12 @@
  * default: the hidden start state exists only under `.is-ready`, which the
  * component sets after JS is running and only when motion is allowed.
  */
+.alisio-home-wrap {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
 .alisio-bento {
   --bento-gap: 16px;
   --bento-radius-lg: 22px;
@@ -313,7 +319,8 @@
 /* ---------- Breakpoints ---------- */
 
 @media (min-width: 640px) {
-  .alisio-bento {
+  .alisio-bento,
+  .alisio-home-wrap {
     padding-inline: 48px;
   }
 
@@ -346,7 +353,8 @@
 }
 
 @media (min-width: 960px) {
-  .alisio-bento {
+  .alisio-bento,
+  .alisio-home-wrap {
     padding-inline: 64px;
   }
 
