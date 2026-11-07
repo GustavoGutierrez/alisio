@@ -601,7 +601,32 @@ export {
   satisfiesRange,
 } from "./plugins/version-compat.ts";
 export * from "./proof/index.ts";
-export { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
+export {
+  type FileLockOptions,
+  FileLockTimeoutError,
+  isStaleLock,
+  withFileLock,
+} from "./providers/oauth/lock.ts";
+export {
+  needsRefresh,
+  OAuthError,
+  type OAuthErrorCode,
+  OAuthManager,
+  type OAuthManagerOptions,
+} from "./providers/oauth/manager.ts";
+export {
+  knownSecretValues,
+  redactCredentials,
+  redactEventData,
+  registerSecret,
+  SecretRegistry,
+} from "./providers/redaction.ts";
+export {
+  ActiveProvider,
+  ProviderAuthDeclarationError,
+  ProviderRegistry,
+  UnconfiguredProvider,
+} from "./providers/registry.ts";
 export {
   availableProviderModels,
   type ProviderModelCatalog,
@@ -612,6 +637,7 @@ export {
   type ProviderProfile,
   type ProviderSettings,
   ProviderSettingsStore,
+  type StoredOAuthCredential,
 } from "./providers/settings.ts";
 export {
   buildReloadReport,

@@ -13,6 +13,8 @@
 | Superficies | TUI (`/connect`, `/disconnect`), Web UI (Ajustes > Modelos), headless (`alisio connect`, `alisio run`; sin autodetección), API HTTP de `alisio serve` (incluye `GET /api/providers/local-detect`) |
 | Política de versión | Funcionalidad nueva: **la siguiente minor al ejecutar**. Aditiva: `RunEvent.schemaVersion`, `apiVersion` de plugins y el esquema de `providers.json` no cambian; `credentials.json` solo cambia en Fase 4 y con migración hacia adelante (D11) |
 
+> **Nota (2026-11-07):** la Fase 4 de esta spec (OAuth: D9-D12 y CON-AC-32..37) queda **reemplazada por `specs/025-provider-oauth-v1.md`** (Aprobada). Aquí permanece solo como diseño de referencia histórico; las Fases 1-3 no cambian.
+
 ## 0. Cómo usar este documento (para agentes de código)
 
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento. Carga los skills `alisio-architecture`, `alisio-coding-standards`, `alisio-plugins`, `alisio-pkg-sdk`, `alisio-pkg-core`, `alisio-pkg-server`, `alisio-pkg-web`, `alisio-pkg-cli-tui` y `alisio-docs-screenshots` según la fase.

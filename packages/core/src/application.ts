@@ -75,6 +75,7 @@ import { ProofVerifierRegistry } from "./proof/plugin-verifiers.ts";
 import { ProofRecorder } from "./proof/recorder.ts";
 import { ProofStore } from "./proof/store.ts";
 import { verifyCriterion } from "./proof/verify.ts";
+import { OAuthManager } from "./providers/oauth/manager.ts";
 import { ActiveProvider, ProviderRegistry, UnconfiguredProvider } from "./providers/registry.ts";
 import {
   availableProviderModels,
@@ -921,6 +922,9 @@ export async function createApplication(options: AppOptions = {}) {
     if ((options.allowMcp || mcpAllow) && !options.readOnly) mcp.register();
     if (options.allowAgents && !options.readOnly) herdr.registerTools(registry);
     const providerSettings = new ProviderSettingsStore();
+    // Sign-in custodian: the registry builds `request.oauth` from it at its single create() point (D19).
+    const oauth = new OAuthManager({ store: providerSettings, registry: providers });
+    providers.attachOAuth(oauth);
     const saved = options.provider ? undefined : await providerSettings.active();
     const defaultProvider = (options.builtins ?? []).find((item) => item.defaultProvider);
     const legacyEndpointOverride = overridesSavedProviderProfile(
@@ -967,16 +971,20 @@ export async function createApplication(options: AppOptions = {}) {
     if (options.provider) initial = options.provider;
     else if (selectedSaved) {
       try {
-        initial = await providers.create(selectedSaved.profile.provider, {
-          profile: {
-            ...selectedSaved.profile.values,
-            model:
-              nonBlank(options.model) ??
-              nonBlank(process.env.ALISIO_MODEL) ??
-              selectedSaved.profile.model,
+        initial = await providers.create(
+          selectedSaved.profile.provider,
+          {
+            profile: {
+              ...selectedSaved.profile.values,
+              model:
+                nonBlank(options.model) ??
+                nonBlank(process.env.ALISIO_MODEL) ??
+                selectedSaved.profile.model,
+            },
+            credentials: selectedSaved.credentials,
           },
-          credentials: selectedSaved.credentials,
-        });
+          selectedSaved.name,
+        );
       } catch (error) {
         providerError = error instanceof Error ? error.message : String(error);
       }
@@ -1058,10 +1066,14 @@ export async function createApplication(options: AppOptions = {}) {
           try {
             const resolved = await providerSettings.resolve(name);
             if (!resolved) return { ...base, models: [], unavailable: true };
-            const candidate = await providers.create(profile.provider, {
-              profile: { ...profile.values, model: profile.model },
-              credentials: resolved.credentials,
-            });
+            const candidate = await providers.create(
+              profile.provider,
+              {
+                profile: { ...profile.values, model: profile.model },
+                credentials: resolved.credentials,
+              },
+              name,
+            );
             try {
               return {
                 ...base,
@@ -1099,10 +1111,14 @@ export async function createApplication(options: AppOptions = {}) {
               `Configured provider "${target.provider}" is unavailable. Reconnect it with /connect.`,
             );
           try {
-            return await providers.create(target.provider, {
-              profile: { ...saved.profile.values, model: target.model.id },
-              credentials: saved.credentials,
-            });
+            return await providers.create(
+              target.provider,
+              {
+                profile: { ...saved.profile.values, model: target.model.id },
+                credentials: saved.credentials,
+              },
+              target.profile,
+            );
           } catch {
             throw new Error(
               `Configured provider "${target.provider}" could not be activated. Reconnect it with /connect.`,
@@ -1840,6 +1856,7 @@ export async function createApplication(options: AppOptions = {}) {
       provider,
       providers,
       providerSettings,
+      oauth,
       get providerError() {
         return providerError;
       },
@@ -1909,8 +1926,10 @@ export async function createApplication(options: AppOptions = {}) {
         profile: Record<string, import("@alisio/sdk").ProviderConfigurationValue>,
         credentials: Record<string, string>,
         signal: AbortSignal,
+        /** Profile whose sign-in session the candidate may use (`request.oauth`); none = no session. */
+        profileName?: string,
       ) {
-        const candidate = await providers.create(id, { profile, credentials });
+        const candidate = await providers.create(id, { profile, credentials }, profileName);
         try {
           return (await candidate.listModels?.(signal)) ?? [];
         } finally {
@@ -1974,10 +1993,11 @@ export async function createApplication(options: AppOptions = {}) {
         if (options.provider) throw new Error("A programmatic provider override is active");
         if (config.websearch.provider === "native" && !supportsNativeSearch(id, profile))
           throw new Error("The selected provider configuration does not support native web search");
-        const candidate = await providers.create(id, {
-          profile: { ...profile, model },
-          credentials,
-        });
+        const candidate = await providers.create(
+          id,
+          { profile: { ...profile, model }, credentials },
+          profileName,
+        );
         try {
           await providerSettings.saveActive(
             profileName,

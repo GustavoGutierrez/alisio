@@ -384,6 +384,15 @@ needs a restart (the desktop app restarts itself, `alisio serve` does not); inst
 run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
 ranges make npm fail and roll back; update the older plugin first.
 
+### Provider sign-in (contract and core, phase 1)
+
+Plugins can now declare sign-in methods and receive `request.oauth`; the host stores, renews, locks
+and redacts the session. Until the next phases land there is no flow runner, route, Web UI or `/connect`
+screen to sign in, so no provider offers it yet. Sessions are plaintext in `credentials.json` (`0600`),
+readable by any process of the same user and by any loaded plugin; this is session convenience, not
+encryption or isolation, and redaction is best effort. The file lock protects only between versions
+that take it: an older core writes without it and can overwrite a newer file with a stale copy.
+
 ## Verification scope
 
 The source file records a dedicated verification-scope section for each area below; the summary
@@ -564,6 +573,15 @@ web, JSONL, JSON and Markdown; plus the `run --proof` scenario of `pnpm test:cli
 browser behavior (components are tested as VNode trees and the screenshot is manual), mutation
 testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
 command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).
+
+**Provider sign-in (phase 1).** Verified with Vitest on a temporary configuration directory: the
+credentials store (unknown keys, `oauth` without `providers`, generation counter, provider binding,
+conditional writes), file locks (stale at 31 s, not at 29 s, owner-only release), the renewal manager
+(single flight, per-caller abort, conditional write after a delete or a new sign-in, permanent and
+transient failures, `invalidate`), redaction and its feed to cassette and export scans, and, with real
+child processes, no lost writes, a single holder of a stale lock and one shared renewal. Not verified:
+Windows, macOS and network file systems, a real provider plugin, and any behavior of a real sign-in
+service. Details live in `docs/implementation-status.md`.
 
 ### Desktop app (Electron)
 

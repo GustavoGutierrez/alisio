@@ -1,18 +1,57 @@
 import type {
   ModelInfo,
   ModelProvider,
+  ProviderAuthMethod,
   ProviderCreateRequest,
   ProviderRegistration,
 } from "@alisio/sdk";
+import type { OAuthManager } from "./oauth/manager.ts";
 
 export interface RegisteredProvider extends ProviderRegistration {
   plugin: string;
   builtin: boolean;
 }
 
+const AUTH_METHOD_ID = /^[a-z0-9_-]{1,40}$/;
+
+/** A registration declared an invalid `auth` block (D29). */
+export class ProviderAuthDeclarationError extends Error {
+  readonly code = "PROVIDER_AUTH_INVALID";
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderAuthDeclarationError";
+  }
+}
+
+/** Method ids must be non-empty, `^[a-z0-9_-]{1,40}$` and unique within the registration (D29b). */
+function validateAuth(providerId: string, auth: unknown): void {
+  if (auth === undefined) return;
+  if (!Array.isArray(auth))
+    throw new ProviderAuthDeclarationError(`Provider ${providerId}: auth must be an array`);
+  const seen = new Set<string>();
+  for (const method of auth as ProviderAuthMethod[]) {
+    const id = method?.id;
+    if (typeof id !== "string" || !AUTH_METHOD_ID.test(id))
+      throw new ProviderAuthDeclarationError(
+        `Provider ${providerId}: invalid auth method id (expected ^[a-z0-9_-]{1,40}$)`,
+      );
+    if (seen.has(id))
+      throw new ProviderAuthDeclarationError(
+        `Provider ${providerId}: duplicate auth method id "${id}"`,
+      );
+    seen.add(id);
+  }
+}
+
 /** Additive provider catalog. Registrations are unique by provider id and independently removable. */
 export class ProviderRegistry {
   private entries = new Map<string, RegisteredProvider>();
+  private oauth: OAuthManager | undefined;
+
+  /** Connects the sign-in custodian; handles are built here, in one place (D19). */
+  attachOAuth(manager: OAuthManager): void {
+    this.oauth = manager;
+  }
 
   register(
     registration: ProviderRegistration,
@@ -22,6 +61,7 @@ export class ProviderRegistry {
       throw new Error(`Invalid provider id: ${registration.id}`);
     if (this.entries.has(registration.id))
       throw new Error(`Duplicate provider: ${registration.id}`);
+    validateAuth(registration.id, registration.auth);
     const entry = { ...registration, ...owner };
     this.entries.set(entry.id, entry);
     return () => {
@@ -37,10 +77,24 @@ export class ProviderRegistry {
     return [...this.entries.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async create(id: string, request: ProviderCreateRequest): Promise<ModelProvider> {
+  /**
+   * Builds a provider. `request.oauth` is set here and only here: only when the registration
+   * declares `auth` and a `profile` name is given, bound to that profile and to this registration
+   * (least privilege, D19, D21). Whatever a caller passes in `request.oauth` is discarded.
+   */
+  async create(
+    id: string,
+    request: ProviderCreateRequest,
+    profile?: string,
+  ): Promise<ModelProvider> {
     const registration = this.entries.get(id);
     if (!registration) throw new Error(`Unknown provider: ${id}`);
-    return registration.create(request);
+    const { oauth: _ignored, ...rest } = request;
+    const handle =
+      registration.auth?.length && profile && this.oauth
+        ? this.oauth.handleFor(profile, id)
+        : undefined;
+    return registration.create(handle ? { ...rest, oauth: handle } : rest);
   }
 }
 

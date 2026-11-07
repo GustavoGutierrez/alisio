@@ -397,6 +397,13 @@ export interface ProviderCreateRequest {
   credentials: Record<string, string>;
   /** Legacy root provider configuration, supplied without rewriting it. */
   legacy?: Record<string, unknown>;
+  /**
+   * Sign-in handle, present only when the registration declares `auth` and the host builds the
+   * provider for a named profile. Bound to that profile: it never returns another profile's
+   * credential. A long-lived provider MUST call `get()` per request and never keep the token
+   * from `create()`. Older hosts do not set it: feature-detect with `request.oauth !== undefined`.
+   */
+  oauth?: ProviderOAuthHandle;
 }
 /** Additive model-provider contribution. Multiple registrations coexist in the host registry. */
 export interface ProviderRegistration {
@@ -405,7 +412,105 @@ export interface ProviderRegistration {
   description?: string;
   fields: ProviderConfigurationField[];
   capabilities?: ProviderCapabilities;
+  /**
+   * Sign-in methods the host can run for this provider. Method ids match `^[a-z0-9_-]{1,40}$`
+   * and are unique within the registration; the host rejects the registration otherwise.
+   * Consumers MUST ignore unknown fields.
+   */
+  auth?: ProviderAuthMethod[];
   create(request: ProviderCreateRequest): ModelProvider | Promise<ModelProvider>;
+}
+/** A provider-defined sign-in method. Registered under `ProviderRegistration.auth`. */
+export interface ProviderAuthMethod {
+  /** `^[a-z0-9_-]{1,40}$`, non-empty, unique within the registration (the host rejects it otherwise). */
+  id: string;
+  label: string;
+  kind: "oauth";
+  description?: string;
+  /** Not officially sanctioned by the provider: the host shows its own fixed risk notice. */
+  unofficial?: boolean;
+  /** Runs the whole sign-in; resolves with the credential, rejects on failure or abort. */
+  start(ctx: ProviderAuthContext): Promise<ProviderOAuthCredential>;
+  /**
+   * Renews a credential this method created. Absent = not renewable (expiry means the user must
+   * sign in again). Rejecting with an error whose `retryable` is `true` marks a transient failure
+   * (the stored session is kept and only that call fails); any other rejection is permanent and
+   * the session needs a new sign-in.
+   */
+  refresh?(
+    credential: ProviderOAuthCredential,
+    signal: AbortSignal,
+  ): Promise<ProviderOAuthCredential>;
+}
+export interface ProviderAuthContext {
+  signal: AbortSignal;
+  show(step: ProviderAuthStep): void;
+  /** Resolves `undefined` when the host has no way to ask (headless) or the user cancels. */
+  prompt(request: ProviderAuthPrompt): Promise<string | undefined>;
+  /** Defined only when the host can assume the browser is local. */
+  loopback?(options: ProviderAuthLoopbackOptions): Promise<ProviderAuthLoopback>;
+  /** Metadata (never tokens) of the existing credential of this profile, if any. */
+  previousMetadata?: Readonly<Record<string, string>>;
+}
+export type ProviderAuthStep =
+  | { type: "auth_url"; url: string; instructions?: string }
+  | {
+      type: "device_code";
+      verificationUri: string;
+      userCode: string;
+      expiresInSeconds: number;
+      verificationUriComplete?: string;
+      intervalSeconds?: number;
+    }
+  | { type: "progress"; message: string };
+export interface ProviderAuthPrompt {
+  message: string;
+  placeholder?: string;
+  secret?: boolean;
+}
+export interface ProviderAuthLoopbackOptions {
+  /** 0 = OS-assigned; `redirectUri` reports the real port. */
+  port: number;
+  path: string;
+  state: string;
+  timeoutMs?: number;
+  /** Default "127.0.0.1". */
+  redirectHost?: "localhost" | "127.0.0.1";
+}
+export interface ProviderAuthLoopback {
+  redirectUri: string;
+  /** Query parameters of the one matching request. */
+  wait(): Promise<Record<string, string>>;
+  close(): void;
+}
+export interface ProviderOAuthCredential {
+  type: "oauth";
+  access: string;
+  refresh?: string;
+  /** Epoch milliseconds. Absent = does not expire on its own. */
+  expires?: number;
+  metadata?: Record<string, string>;
+}
+/** What `create()` receives (as `request.oauth`) when the registration declares `auth`. */
+export interface ProviderOAuthHandle {
+  /** A currently valid credential; renews first when due. Rejects with code `OAUTH_SIGN_IN_REQUIRED`. */
+  get(signal?: AbortSignal): Promise<ProviderOAuthCredential>;
+  /**
+   * Records the access token the caller saw rejected (for example a 401): the next `get()`
+   * renews, unless another process already renewed. With reason "sign_in_required" (a 401
+   * `token_revoked`, or a second plain 401 after a forced refresh) the host marks the session as
+   * needing a new sign-in at once and does not call `refresh`. Unknown reason values are treated
+   * as "sign_in_required".
+   */
+  invalidate(reason?: "sign_in_required"): Promise<void>;
+}
+/** Web-facing, serializable form of a sign-in method (functions are never sent). */
+export interface ProviderAuthMethodInfo {
+  id: string;
+  label: string;
+  kind: "oauth";
+  description?: string;
+  unofficial?: boolean;
 }
 export interface ToolContext {
   signal: AbortSignal;
@@ -2610,6 +2715,11 @@ export interface CredentialStatus {
   source?: "file" | "env";
   /** Last characters behind an ellipsis (`…71B`), only for long stored secrets. */
   tail?: string;
+  /** Present for a sign-in session (the synthetic `oauth` credential): never carries a `tail`. */
+  kind?: "oauth";
+  /** Epoch milliseconds when the stored access token expires (sign-in sessions). */
+  expires?: number;
+  state?: "ok" | "needs_sign_in";
 }
 /** One stored provider profile (non-secret values only). */
 export interface ProviderProfileInfo {
@@ -2627,6 +2737,8 @@ export interface ProviderTypeInfo {
   name: string;
   description?: string;
   fields: ProviderConfigurationField[];
+  /** Sign-in methods of the provider type (serializable form). */
+  auth?: ProviderAuthMethodInfo[];
 }
 /** `GET /api/providers`. */
 export interface ProvidersOverview {

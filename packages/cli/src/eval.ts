@@ -778,7 +778,14 @@ export async function evalExport(env: EvalEnv, flags: EvalFlags, runId: string):
     ];
     const bundle = core.buildExportBundle(
       { report, runs, markdown },
-      { roots, secrets: envSecrets() },
+      {
+        roots,
+        // Stored sign-in sessions too: a token of a connected provider must never reach a bundle.
+        secrets: [
+          ...envSecrets(),
+          ...(await new core.ProviderSettingsStore().oauthSecretValues().catch(() => [])),
+        ],
+      },
     );
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, `${JSON.stringify(bundle, null, 2)}\n`, {
@@ -869,7 +876,11 @@ export async function realEvalEnv(
         provider: app.provider,
         config: config as Config,
         builtins: kept,
-        secrets: Object.values(profile?.credentials ?? {}),
+        secrets: [
+          ...Object.values(profile?.credentials ?? {}),
+          // Live and rotated sign-in tokens, so a cassette that holds one is refused (D26b).
+          ...(await app.oauth.exactSecrets()),
+        ],
         resolveAgent,
         close: () => app.close(),
       };

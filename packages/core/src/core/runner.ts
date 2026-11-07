@@ -36,6 +36,7 @@ import { createNestedDispatcher, type NestedCallDispatcher } from "../forge/nest
 import { hasScratchEstimator, scratchIncomingBytes } from "../forge/scratch-quota.ts";
 import { decideEffect, effectAskable } from "../permissions/decide.ts";
 import type { ProofRecorder, ProofUpdate } from "../proof/recorder.ts";
+import { redactCredentials, redactEventData } from "../providers/redaction.ts";
 import type { PathAccess } from "../runtime/access.ts";
 import { bindCallInternals } from "./call-internals.ts";
 import {
@@ -404,7 +405,9 @@ export class AgentRunner {
     const runId = run.runId ?? crypto.randomUUID();
     const correlationId = run.correlationId;
     let seq = 0;
-    return (type, data) => {
+    return (type, rawData) => {
+      // Exit point for provider and plugin error text: tokens never reach events or the journal (D26a).
+      const data = redactEventData(rawData);
       const event: RunEvent = {
         schemaVersion: 1,
         runId,
@@ -1314,7 +1317,7 @@ export class AgentRunner {
         o.store.endRun?.(runId, {
           status,
           usage: { input: 0, output: 0 },
-          ...(error ? { error } : {}),
+          ...(error ? { error: redactCredentials(error) } : {}),
         });
       } catch {
         /* A journal write failure cannot invalidate an executed run. */
@@ -1430,7 +1433,11 @@ export class AgentRunner {
     /** Run journal (v4 stores only): an auxiliary record that never changes the run outcome. */
     const finish = (status: TerminalRunStatus, error?: string) => {
       try {
-        o.store.endRun?.(runId, { status, usage: usageTotal, ...(error ? { error } : {}) });
+        o.store.endRun?.(runId, {
+          status,
+          usage: usageTotal,
+          ...(error ? { error: redactCredentials(error) } : {}),
+        });
       } catch {
         /* A journal write failure cannot invalidate an executed run. */
       }

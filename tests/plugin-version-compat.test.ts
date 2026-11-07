@@ -42,6 +42,12 @@ describe("satisfiesRange", () => {
     ["1.5.0", "1.x", true],
     ["2.5.0", "1.x", false],
     ["0.9.0-rc.1", "^0.9.0", true],
+    // Peer range of a provider plugin that supports the sign-in contract (OA-AC-18)
+    ["0.9.0", ">=0.9.0 <0.12.0", true],
+    ["0.10.0", ">=0.9.0 <0.12.0", true],
+    ["0.11.0", ">=0.9.0 <0.12.0", true],
+    ["0.12.0", ">=0.9.0 <0.12.0", false],
+    ["0.8.9", ">=0.9.0 <0.12.0", false],
   ])("%s in %s -> %s", (version, range, expected) => {
     expect(satisfiesRange(version, range)).toBe(expected);
   });

@@ -23,7 +23,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
   Intelligence (fases 1 a 5 de `specs/006-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
   de `specs/007-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
-  release).
+  release); inicio de sesión de proveedores (fase 1 de `specs/025-provider-oauth-v1.md`).
 - Validación.
 - Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -33,13 +33,13 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
   comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
   vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision Intelligence; Smart
-  Dashboard).
+  Dashboard; inicio de sesión de proveedores, fase 1).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
   Herdr; agente activo y effort; agentes del usuario; servidor web; modos, recarga y novedades;
   pestaña Memory y vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision
-  Intelligence; Smart Dashboard.
+  Intelligence; Smart Dashboard; inicio de sesión de proveedores.
 
 ## Implementado
 
@@ -81,6 +81,47 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   System One porque no satisfacen el contrato actual del agente de texto. El selector muestra el
   proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
   continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
+
+### Inicio de sesión de proveedores (Provider OAuth, fase 1 de `specs/025-provider-oauth-v1.md`)
+
+- **Fase 1 implementada (2026-11-07): contrato y núcleo, sin interfaz.** Quedan para las fases 2 a 4
+  el ejecutor de flujos, el listener de loopback, las rutas del servidor, la interfaz web y la TUI;
+  hoy un plugin puede declarar `auth` y recibir `request.oauth`, pero **ningún host sabe iniciar la
+  sesión todavía** (no hay flujo, ruta ni comando): una sesión solo existe si se escribe en
+  `credentials.json`.
+- Contrato aditivo de `@alisio/sdk` (todo opcional): `ProviderRegistration.auth`,
+  `ProviderAuthMethod` (con `refresh` opcional y fallo transitorio por `retryable === true`),
+  `ProviderAuthContext`, `ProviderAuthStep` (incluido `device_code` con `verificationUriComplete` e
+  `intervalSeconds`), `ProviderOAuthCredential`, `ProviderCreateRequest.oauth` con `get(signal?)` e
+  `invalidate(reason?: "sign_in_required")`, `ProviderAuthMethodInfo`, `ProviderTypeInfo.auth` y los
+  campos `kind`, `expires` y `state` de `CredentialStatus`. El registro rechaza ids de método que no
+  cumplan `^[a-z0-9_-]{1,40}$` o estén repetidos (`ProviderAuthDeclarationError`).
+- Almacenamiento: clave superior `oauth` en `credentials.json` (`schemaVersion` sigue en 1) con
+  `method`, `provider` (la registración que la creó: ninguna otra la lee), `generation` (contador
+  `oauthSeq` que no retrocede) y `state`. Se corrige el defecto de un archivo con `oauth` y sin
+  `providers`. Todas las escrituras de `credentials.json` toman `credentials.json.lock`; las
+  posteriores a una espera (renovación, `markOAuthState`) son condicionales por `generation`. Cambiar
+  el tipo de proveedor de un perfil (`saveProfile`, y también `saveActive`) borra su sesión.
+  `deleteCredentials` borra también la sesión.
+- Bloqueos de archivo (`oauth/lock.ts`): `open "wx"` con token de propietario, `release` solo del
+  propio token, robo de un bloqueo obsoleto (más de 30 s por `mtime`, sin latido) por `rename` a un
+  nombre único con verificación, esperas de 5 s (`CREDENTIAL_LOCK_TIMEOUT`) y de 20 s
+  (`OAUTH_REFRESH_BUSY`, `credentials.json.refresh.lock`).
+- `OAuthManager` (`oauth/manager.ts`): `get()` renueva a `expires - 5 min` con una sola renovación por
+  perfil en el proceso (tiempo límite propio de 10 s, sin la señal de ningún llamador; cada llamador
+  compite la suya) y doble comprobación entre procesos bajo `refresh.lock`; persiste el refresh token
+  rotado antes de devolverlo y fusiona la `metadata`; un fallo permanente fija `needs_sign_in`,
+  conserva la credencial y **no** cae a variables de entorno; `invalidate()` guarda el `access`
+  rechazado y `invalidate("sign_in_required")` (o un motivo desconocido) fija `needs_sign_in` al
+  instante. `earliestRefreshAt` es solo informativo. `ProviderRegistry.create(id, request, profile?)`
+  es el único punto que construye `request.oauth` (solo si la registración declara `auth`, ligado al
+  perfil); `createApplication` lo cablea y expone `app.oauth`.
+- Redacción (`providers/redaction.ts`): `redactCredentials` (reglas de `eval/secrets` sin cambios,
+  más la regla JWT y los valores exactos conocidos, también los rotados, durante la vida del
+  proceso). Salidas ya cubiertas en el núcleo: errores de eventos de ejecución, su persistencia en
+  SQLite y el error de cierre de ejecución. `OAuthManager.exactSecrets()` entrega los valores vivos y
+  rotados, y `ProviderSettingsStore.oauthSecretValues()` los guardados, al escaneo de cassettes y
+  exportaciones de `alisio eval`.
 
 ### Núcleo, límites y almacenamiento
 
@@ -2421,7 +2462,41 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   un terminal real; otros navegadores, Windows y macOS; lectores de pantalla; y datasets muy grandes
   en el navegador.
 
+## Inicio de sesión de proveedores (fase 1): alcance de la verificación
+
+- Verificado con Vitest (`tests/provider-oauth-*.test.ts`) sobre un directorio de configuración
+  temporal real: almacén (claves superiores desconocidas, `oauth` sin `providers`, `generation`
+  y `oauthSeq`, vínculo con `provider`, escrituras condicionales), bloqueos (obsolescencia a 29 s y 31 s,
+  espera con reloj simulado, `release` por token), gestor (agrupación de 10 llamadas, carrera por
+  llamador, renovación condicional frente a borrado y a un inicio de sesión nuevo, `needs_sign_in`,
+  `retryable`, `invalidate`, vínculo con la registración), redacción y su alimentación a cassettes y
+  exportaciones, y el barrido de límites del host (sin ID de cliente ni endpoint de proveedor).
+- Procesos reales: dos procesos hijos de Node (`--experimental-transform-types`) escriben a la vez 20
+  perfiles cada uno sin perder ninguna escritura, se disputan 20 bloqueos obsoletos sin dos titulares
+  y comparten una sola renovación con el refresh token rotado.
+- No verificado: Windows y macOS (`rename` y `open "wx"` sobre otros sistemas de archivos), sistemas de
+  archivos de red, un plugin real de proveedor (llega con la fase 5 en `alisio-plugins`), la
+  redacción en las salidas de servidor, CLI y Desktop (fase 2) y todo comportamiento de OpenAI.
+
 ## Límites conocidos
+
+### Inicio de sesión de proveedores (fase 1)
+
+- Convención de comodidad, no cifrado ni aislamiento: las sesiones quedan en texto plano en
+  `credentials.json` (`0600`), legibles por cualquier proceso del mismo usuario y por cualquier plugin
+  cargado, que además ve los tokens que recibe. La redacción es de mejor esfuerzo.
+- Los bloqueos protegen solo entre procesos de esta versión: un core anterior escribe sin tomarlos y
+  puede reescribir una copia obsoleta de `credentials.json` (que además conserva `oauth` sin
+  entenderlo). Tras un cierre brusco del titular, los esperadores fallan con
+  `CREDENTIAL_LOCK_TIMEOUT` u `OAUTH_REFRESH_BUSY` hasta que se cumplen 30 s. Una retención de más de
+  30 s permite que otro proceso robe el bloqueo.
+- Mientras no existan las fases 2 a 4 no hay forma de iniciar ni cerrar sesión desde la interfaz.
+  `alisio eval` entrega a los escaneos de cassettes y exportaciones los tokens vivos y rotados de su
+  propio proceso (`exactSecrets()`) y los guardados en disco (`oauthSecretValues()`); un token ya
+  rotado en otro proceso y no guardado no se conoce.
+- `ProviderRegistry.create` solo entrega `request.oauth` cuando el llamador pasa el nombre del perfil:
+  `probeProvider` lo admite como argumento opcional, pero `/connect` de la TUI todavía no lo pasa
+  (fase 4).
 
 ### Runtime y empaquetado
 
