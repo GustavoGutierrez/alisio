@@ -1,7 +1,7 @@
 # Alisio
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Alisio — coding agent for any OpenAI-compatible model" width="720">
+  <img src="docs/assets/banner.png" alt="Alisio — your assistant for everyday work, on the model you choose" width="720">
 </p>
 
 [![CI](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml)
@@ -9,20 +9,39 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-EN%20%7C%20ES-8A2BE2)](https://gustavogutierrez.github.io/alisio/)
 
-**Alisio is your coding agent, on the model you choose.** It connects any OpenAI-compatible model
-to your project and drives its own tool loop: it reads and edits code behind explicit permissions,
-and when code is the faster route it writes and runs it with **Forja**, isolated JavaScript to combine
-tools and Python for data analysis, AI and dashboards. It runs in your terminal (TUI or headless for
-scripts and CI) and in your browser with `alisio serve`. It also compacts long conversations into
-structured checkpoints, remembers decisions across sessions with persistent memory (a built-in plugin
-you can disable), and exposes a typed plugin SDK so you can extend it without touching the core.
+**Alisio — your assistant for everyday work, on the model you choose.** It is a desktop AI harness
+for the everyday work of non-technical people: teachers, students, secretaries and office staff,
+accountants and the home. It installs with one click, works on your own files and always asks
+permission. It specializes through plugins per profession and delivers ready-to-use results: PDFs,
+spreadsheets, charts, reports and dashboards. It connects to any OpenAI-compatible model (DeepSeek,
+OpenRouter and others). Programming is still possible, as an advanced, secondary use: a terminal UI,
+a headless mode for scripts and CI, subagents, code editing and **Forja** code mode.
 
 > **Status: stable, tested and documented, still pre-1.0.** Until 1.0.0 the usual 0.x semver rules
 > apply: fixes ship as patch releases and a new minor release may include breaking changes. The npm badge above always shows the latest published version; see the
 > [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
 > [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
 
-## Highlights
+## Everyday work
+
+Alisio is built around five ideas: it is **easy** (a desktop app, no terminal needed), it keeps
+**your files under your control** (local-first, with explicit permissions), it specializes through
+**plugins per profession**, it delivers **results you can use** (documents, spreadsheets, charts and
+dashboards) and it works with **any model**. This is what exists today, no more:
+
+| Who | What Alisio can do today | Backed by |
+| --- | --- | --- |
+| Students | Draft a thesis, research sources, study | `@alisio/plugin-thesis` (plans, researches, drafts and typesets university theses into PDF with Typst), `@alisio/plugin-literature-research` and the built-in persistent memory |
+| Teachers | Create printable exams (school **math** only for now) | `@alisio/plugin-evalua` |
+| Accountants | Working papers and spreadsheet analysis | Forja Python analysis |
+| Office and secretaries | Analyze Excel and CSV data, charts, certificates, reports | Forja and analysis, `@alisio/plugin-cardsmith` |
+| Home | Budgets, charts, organizing information | Forja (no dedicated plugin) |
+
+The profession plugins live in the public [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins)
+repository and install with `alisio install npm:<package>`. They are **not bundled in the desktop app
+yet**. See the [desktop app guide](docs/desktop.md).
+
+## Highlights for developers and advanced use
 
 - **Terminal UI**: streaming Markdown, tool blocks with spinners, durations and diffs, a context/token
   bar, slash commands with autocomplete, model switching, interactive approvals and copy-on-select.
@@ -76,6 +95,18 @@ you can disable), and exposes a typed plugin SDK so you can extend it without to
   (`wasm`) Python backend needs Node.js >= 22.22, >= 24.13 or >= 25.3.
 
 ## Install
+
+The main way to install Alisio is the **desktop app**. Download it from the
+[Alisio Desktop 0.9.0 release](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.9.0):
+
+- Windows 10/11 (x64): [`Alisio-Setup-0.9.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-Setup-0.9.0-x64.exe)
+- macOS Apple Silicon: [`Alisio-0.9.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-arm64.dmg) · Intel: [`Alisio-0.9.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x64.dmg)
+- Linux: [`Alisio-0.9.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.9.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-amd64.deb)
+
+The installers are not signed, so Windows SmartScreen and macOS Gatekeeper ask for one extra step the
+first time (see [docs/desktop.md](docs/desktop.md)).
+
+**For developers:** the command line below is the advanced path (Node.js >= 22.16).
 
 ```sh
 npm install -g @alisio/alisio-code   # or: pnpm add -g @alisio/alisio-code · bun add -g @alisio/alisio-code

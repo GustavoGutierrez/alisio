@@ -1,7 +1,8 @@
 # @alisio/alisio-code
 
-**Alisio is an extensible, provider-agnostic coding-agent harness for your terminal.** It pairs a fast
-TUI with any OpenAI-compatible model, runs local tools behind explicit permissions, compacts long
+**Alisio is your assistant for everyday work, on the model you choose.** This package is the
+command-line interface (the advanced path); the easiest way to use Alisio is the desktop app. It
+pairs a fast TUI with any OpenAI-compatible model, runs local tools behind explicit permissions, compacts long
 conversations into structured checkpoints, remembers decisions across sessions with an Engram-style
 memory plugin, and exposes a typed plugin SDK.
 

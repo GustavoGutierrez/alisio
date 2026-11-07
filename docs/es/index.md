@@ -3,20 +3,20 @@ layout: home
 
 hero:
   name: Alisio
-  text: Tu agente de programación, con el modelo que tú elijas
-  tagline: "Conecta cualquier modelo compatible con OpenAI a tu proyecto: lee y edita código con permisos explícitos, ejecuta JavaScript aislado y Python para análisis de datos, y publica dashboards. En tu terminal, en el navegador o en CI."
+  text: Tu asistente para el trabajo de todos los días, con el modelo que elijas
+  tagline: "Un asistente de IA de escritorio para docentes, estudiantes, personal de oficina, contadores y el hogar. Se instala con un clic, trabaja sobre tus propios archivos y siempre pide permiso. Los plugins añaden habilidades para cada profesión y el resultado llega listo para usar: PDF, hojas de cálculo, gráficos, informes y dashboards."
   image:
     src: /assets/logo.png
     alt: Mascota de Alisio
   actions:
     - theme: brand
+      text: Descargar Alisio Desktop
+      link: /es/#download
+    - theme: alt
       text: Inicio rápido
       link: /es/quick-start
     - theme: alt
-      text: Instalación
-      link: /es/installation
-    - theme: alt
-      text: Escribir un plugin
+      text: Plugins
       link: /es/plugins
 
 # Home features (rendered by BentoFeatures.vue). Keep EN and ES identical in order and keys.
@@ -25,43 +25,51 @@ hero:
 featuresHeading: "Qué incluye"
 moreHeading: "También incluye"
 featured:
-  - icon: terminal
-    title: "Interfaz de terminal y modo headless"
-    details: "Una TUI completa con Markdown en streaming, bloques de herramientas y aprobaciones, más modo headless con eventos JSONL."
-    link: "/es/tui"
   - icon: browser
-    title: "Interfaz web con alisio serve"
-    details: "Una interfaz de navegador local, con token, para varios workspaces y sesiones, sobre el mismo núcleo de agente."
-    link: "/es/web"
+    title: "Aplicación de escritorio, sin terminal"
+    details: "Descárgala, instálala y ábrela como cualquier otro programa. Funciona en Linux, Windows y macOS, guarda tus datos en tu equipo y pregunta antes de leer o modificar tus archivos."
+    link: "/es/desktop"
+  - icon: plugin
+    title: "Plugins para cada profesión"
+    details: "Añade habilidades para tu trabajo: redacción de tesis, investigación bibliográfica, exámenes de matemáticas imprimibles, certificados y tarjetas. Puedes instalar más plugins con un solo comando."
+    link: "/es/plugins"
   - icon: chart
-    title: "Modo código y dashboards"
-    details: "Forja deja que el agente resuelva con código: JavaScript aislado para combinar herramientas y Python para datos, IA y dashboards publicados como artefactos."
+    title: "Resultados listos para usar"
+    details: "Forja analiza datos de Excel y CSV y entrega PDF, hojas de cálculo, gráficos, informes y dashboards que puedes abrir, imprimir o compartir."
     link: "/es/forja"
 more:
   - icon: api
-    title: "Cualquier API compatible con OpenAI"
-    details: "Chat Completions o Responses"
+    title: "Cualquier modelo que elijas"
+    details: "Compatible con OpenAI, DeepSeek, OpenRouter y más"
     link: "/es/configuration"
   - icon: shield
     title: "Permisos explícitos"
     details: "Escribir requiere tu aprobación"
     link: "/es/tools#permission-flags"
-  - icon: layers
-    title: "Compactación de contexto"
-    details: "Historia antigua en checkpoints seguros"
-    link: "/es/compaction"
   - icon: memory
     title: "Memoria persistente"
     details: "SQLite y FTS5 entre proyectos"
     link: "/es/memory"
+  - icon: browser
+    title: "Interfaz web con alisio serve"
+    details: "La misma interfaz en tu navegador"
+    link: "/es/web"
+  - icon: terminal
+    title: "Interfaz de terminal y modo headless"
+    details: "Una TUI completa y eventos JSONL para scripts y CI"
+    link: "/es/tui"
+  - icon: agent
+    title: "Edición de código y agentes"
+    details: "Programar como uso avanzado; agentes en Markdown"
+    link: "/es/agents"
   - icon: plugin
     title: "SDK de plugins tipado"
     details: "Herramientas, comandos y eventos"
     link: "/es/plugins"
-  - icon: agent
-    title: "Agentes"
-    details: "Agentes en Markdown; usa /agents"
-    link: "/es/agents"
+  - icon: layers
+    title: "Compactación de contexto"
+    details: "Historia antigua en checkpoints seguros"
+    link: "/es/compaction"
   - icon: plan
     title: "Modo plan y visor del plan"
     details: "Plan de solo lectura que apruebas"
@@ -82,15 +90,16 @@ more:
 
 <div class="whatis-intro whatis-item" style="--i: 0">
 <div class="whatis-logo">
-<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — agente de programación para cualquier modelo compatible con OpenAI" width="1000" height="470" decoding="async" />
+<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — tu asistente para el trabajo de todos los días, con el modelo que elijas" width="1000" height="470" decoding="async" />
 </div>
 <div class="whatis-def">
 
-Alisio es un agente de programación con núcleo propio en TypeScript. Se conecta a cualquier
-endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en tu terminal,
-como TUI interactiva o en modo headless para scripts y CI, o en tu navegador con `alisio serve`.
-Cuando el código es el camino más rápido, lo escribe y lo ejecuta con [Forja](/es/forja): JavaScript
-aislado, y Python para análisis de datos.
+Alisio es un arnés de IA de escritorio para el trabajo de todos los días de personas no técnicas:
+docentes, estudiantes, secretarias y personal de oficina, contadores y el hogar. Se instala con un
+clic, trabaja sobre tus propios archivos y siempre pide permiso. Los [plugins](/es/plugins) lo
+especializan por profesión y [Forja](/es/forja) entrega resultados listos para usar: PDF, hojas de
+cálculo, gráficos, informes y dashboards. Se conecta a cualquier modelo compatible con OpenAI.
+Programar sigue siendo posible, como uso avanzado, desde la terminal, el navegador o CI.
 
 </div>
 </div>
@@ -138,7 +147,7 @@ aislado, y Python para análisis de datos.
 
 </div>
 
-<h3 class="whatis-sub whatis-item" style="--i: 4">Bajo el capó</h3>
+<h3 class="whatis-sub whatis-item" style="--i: 4">Para desarrolladores y uso avanzado</h3>
 
 <div class="whatis-facts">
 

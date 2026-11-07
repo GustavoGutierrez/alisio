@@ -86,6 +86,25 @@ git push origin v0.1.0
 Use la misma versión que los paquetes (`vX.Y.Z`). Las etiquetas se crean a mano después de publicar;
 el script nunca etiqueta, hace commit ni push.
 
+## Publicar Alisio Desktop
+
+La aplicación de escritorio (`apps/desktop`, privada) tiene un versionado independiente del de los
+paquetes de npm y se publica en su propia versión de GitHub, nunca con `pnpm publish`.
+
+1. Cambie `version` en `apps/desktop/package.json` (por ejemplo `0.9.1`).
+2. Cambie `DESKTOP_VERSION` en `docs/.vitepress/theme/desktop-release.ts`, el único lugar del que
+   leen los enlaces de descarga de la página de inicio. Actualice también la versión en los enlaces
+   de `docs/desktop.md` y `docs/es/desktop.md`.
+3. Haga commit y suba la etiqueta: `git tag -a desktop-v0.9.1 -m "Alisio Desktop 0.9.1"` y
+   `git push origin desktop-v0.9.1`.
+
+El workflow `Desktop release` (`.github/workflows/desktop-release.yml`) comprueba que la etiqueta
+coincida con `apps/desktop/package.json`, crea la versión (sin marcarla como Latest, que pertenece
+a las versiones `vX.Y.Z` de npm), construye Windows, macOS (arm64 y x64) y Linux, sube los
+instaladores y al final adjunta `SHA256SUMS-desktop.txt`. Puede ejecutarse de nuevo para una
+etiqueta existente con `workflow_dispatch`. Las compilaciones no están firmadas (macOS solo tiene
+firma ad hoc).
+
 ## Checklist
 
 - [ ] `pnpm publish -- --all --dry-run` lista exactamente los paquetes que quiere publicar
@@ -95,6 +114,7 @@ el script nunca etiqueta, hace commit ni push.
 - [ ] Tras publicar, `git tag -a vX.Y.Z` y `git push origin vX.Y.Z`
 - [ ] Introduce el OTP cuando npm lo pida; el script no imprime ningún secreto
 - [ ] `pnpm pack:check` y `pnpm test` pasan antes de publicar
+- [ ] Para una versión de escritorio, consulte [Publicar Alisio Desktop](#publicar-alisio-desktop)
 
 ## Siguiente paso
 

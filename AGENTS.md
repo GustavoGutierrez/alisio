@@ -2,9 +2,13 @@
 
 ## Who Alisio is
 
-Alisio is a coding-agent harness with its own TypeScript core. It connects to any OpenAI-compatible
-endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
-headless for scripts and CI.
+Alisio is a desktop AI harness for the everyday work of non-technical people (teachers, students,
+office staff, accountants and the home). It installs with one click, works on the user's own files
+behind explicit permissions, specializes through plugins per profession and delivers ready-to-use
+results (PDFs, spreadsheets, charts, reports, dashboards). Programming is still possible but is an
+advanced, secondary use. It has its own TypeScript core, connects to any OpenAI-compatible endpoint,
+drives its own tool loop and runs as the desktop app, an interactive TUI, a browser UI or headless
+for scripts and CI.
 
 - **Developed in Bogotá, Colombia** by **Ing. Gustavo Gutiérrez Mercado**.
 - **npm packages**: published under the alisio organization at

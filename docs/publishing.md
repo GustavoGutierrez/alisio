@@ -81,6 +81,24 @@ git push origin v0.1.0
 Use the same version as the packages (`vX.Y.Z`). Tags are created by hand after the publish; the
 script never tags, commits or pushes.
 
+## Releasing Alisio Desktop
+
+The desktop app (`apps/desktop`, private) is versioned independently of the npm packages and is
+released through its own GitHub Release, never through `pnpm publish`.
+
+1. Set `version` in `apps/desktop/package.json` (for example `0.9.1`).
+2. Set `DESKTOP_VERSION` in `docs/.vitepress/theme/desktop-release.ts`, the single place the home
+   page download links read. Update the version in the links of `docs/desktop.md` and
+   `docs/es/desktop.md` too.
+3. Commit, then push the tag: `git tag -a desktop-v0.9.1 -m "Alisio Desktop 0.9.1"` and
+   `git push origin desktop-v0.9.1`.
+
+The `Desktop release` workflow (`.github/workflows/desktop-release.yml`) checks that the tag matches
+`apps/desktop/package.json`, creates the release (not marked Latest, which belongs to the npm
+`vX.Y.Z` releases), builds Windows, macOS (arm64 and x64) and Linux, uploads the installers and
+finally attaches `SHA256SUMS-desktop.txt`. It can be re-run for an existing tag with
+`workflow_dispatch`. The builds are unsigned (macOS is only ad-hoc signed).
+
 ## Checklist
 
 - [ ] `pnpm publish -- --all --dry-run` lists exactly the packages you intend to publish
@@ -90,6 +108,7 @@ script never tags, commits or pushes.
 - [ ] After publishing, `git tag -a vX.Y.Z` and `git push origin vX.Y.Z`
 - [ ] The OTP is entered when npm prompts; nothing secret is printed by the script
 - [ ] `pnpm pack:check` and `pnpm test` pass before publishing
+- [ ] For a desktop release, see [Releasing Alisio Desktop](#releasing-alisio-desktop)
 
 ## Next step
 

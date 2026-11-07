@@ -1,5 +1,25 @@
 # Inicio rápido
 
+La forma más rápida de empezar es la [aplicación de escritorio](/es/desktop): instálela, ábrala,
+conecte un modelo y abra una carpeta. No hace falta terminal. El resto de esta página cubre la línea
+de comandos, que es la vía avanzada.
+
+## Aplicación de escritorio
+
+1. Instale Alisio Desktop para su sistema (instalador de Windows, `.dmg` de macOS, `AppImage` o
+   `.deb` de Linux); consulte [Descargar e instalar](/es/desktop#descargar-e-instalar). Los
+   instaladores no están firmados, así que Windows SmartScreen y macOS Gatekeeper muestran un aviso
+   la primera vez.
+2. Abra Alisio, vaya a **Ajustes**, luego a **Modelos**, añada un perfil para su proveedor y active
+   un modelo.
+3. Abra la carpeta en la que desea trabajar y describa la tarea. Alisio pregunta antes de cambiar
+   algo.
+4. Opcionalmente, instale un plugin por profesión desde
+   [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); consulte
+   [Instalar plugins por profesión](/es/desktop#instalar-plugins-por-profesion).
+
+## Línea de comandos (avanzado)
+
 Alisio incluye activado el plugin de proveedor compatible con OpenAI, pero no un modelo ni
 credenciales predeterminados. Inicie la TUI y ejecute `/connect`: elija el proveedor, introduzca sus
 ajustes y clave, y seleccione un modelo descubierto. La selección se aplica globalmente en inicios

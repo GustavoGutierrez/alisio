@@ -591,7 +591,7 @@ export const en = {
   "appearance.iconTheme.empty":
     "No icon theme plugin is installed. Install one (for example @alisio/plugin-material-icons) and reopen Settings.",
   "about.description":
-    "Alisio is a coding-agent harness that connects to OpenAI-compatible endpoints and runs in your terminal or browser, with its own TypeScript core and extensible tools, plugins and skills.",
+    "Alisio is a desktop AI harness for everyday work that connects to OpenAI-compatible endpoints and runs on your own files behind explicit permissions, with its own TypeScript core and extensible tools, plugins and skills.",
   "about.version": "Alisio {version}",
   "about.versionUnknown": "Version unavailable",
   "about.versionTitle": "Alisio version {version}",

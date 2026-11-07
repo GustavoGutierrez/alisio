@@ -1,9 +1,47 @@
 # Acerca de Alisio
 
-**Alisio es un arnés de agentes de programación con núcleo propio en TypeScript.** Se conecta a
-cualquier endpoint compatible con OpenAI, controla su propio ciclo de herramientas y se ejecuta en
+**Alisio es un arnés de IA de escritorio para el trabajo de todos los días de personas no
+técnicas:** docentes, estudiantes, secretarias y personal de oficina, contadores y el hogar. Se
+instala con un clic, trabaja sobre sus propios archivos y siempre pide permiso. Se especializa
+mediante plugins por profesión y entrega resultados listos para usar: PDF, hojas de cálculo,
+gráficos, informes y dashboards. Programar sigue siendo posible, pero es un uso avanzado y
+secundario.
+
+Por dentro es un arnés con núcleo propio en TypeScript. Se conecta a cualquier endpoint compatible
+con OpenAI y controla su propio ciclo de herramientas. Se ejecuta en la aplicación de escritorio, en
 su terminal (como TUI interactiva o en modo headless para scripts y CI) o en su navegador con
 `alisio serve`.
+
+## Pilares
+
+1. **Fácil.** Una aplicación de escritorio, sin terminal. Consulte
+   [Aplicación de escritorio](/es/desktop).
+2. **Sus archivos, su control.** Local primero, con permisos explícitos: lee por defecto y escribir
+   pide aprobación. Consulte [Herramientas y permisos](/es/tools#permission-flags).
+3. **Plugins por profesión.** Tesis, exámenes, contabilidad, certificados, investigación. Consulte
+   [Escribir plugins](/es/plugins).
+4. **Resultados entregables.** Documentos, hojas de cálculo, gráficos y dashboards. Consulte
+   [Forja](/es/forja) y [Análisis de datos](/es/analysis).
+5. **Cualquier modelo.** Endpoints compatibles con OpenAI, DeepSeek, OpenRouter y otros. Consulte
+   [Configuración](/es/configuration).
+
+## Para quién es
+
+Esta tabla recoge solo lo que existe hoy. Los plugins externos viven en el repositorio público
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) y se instalan con
+`alisio install npm:<paquete>`; **todavía no vienen incluidos en la aplicación de escritorio**
+(consulte [Aplicación de escritorio](/es/desktop#limitations)).
+
+| Quién | Qué puede hacer Alisio hoy | Respaldado por |
+| --- | --- | --- |
+| Estudiantes | Redactar una tesis, investigar fuentes y estudiar | `@alisio/plugin-thesis` (planifica, investiga, redacta y compone tesis universitarias en PDF con Typst), `@alisio/plugin-literature-research` (búsqueda de metadatos académicos) y la [memoria persistente](/es/memory) integrada |
+| Docentes | Crear exámenes imprimibles. Hoy el plugin cubre solo exámenes escolares de **matemáticas** | `@alisio/plugin-evalua` |
+| Contadores | Papeles de trabajo y análisis de hojas de cálculo | Análisis con Python de Forja ([Forja](/es/forja), [Análisis de datos](/es/analysis)) |
+| Oficina y secretarías | Analizar datos de Excel y CSV, gráficos, certificados e informes | Forja y análisis, más `@alisio/plugin-cardsmith` (certificados, tarjetas y gráficos) |
+| Hogar | Presupuestos, gráficos y organización de información | Forja; no hay un plugin dedicado |
+
+También pueden existir plugins privados específicos de una profesión. Por ejemplo, existe un plugin
+de papel de trabajo de ICA para contadores colombianos, pero no está disponible públicamente.
 
 ## Quién lo hizo
 

@@ -1,8 +1,44 @@
 # About Alisio
 
-**Alisio is a coding-agent harness with its own TypeScript core.** It connects to any
-OpenAI-compatible endpoint, drives its own tool loop and runs in your terminal (an interactive TUI,
-or headless for scripts and CI) or in your browser with `alisio serve`.
+**Alisio is a desktop AI harness for the everyday work of non-technical people:** teachers,
+students, secretaries and office staff, accountants and the home. It installs with one click, works
+on your own files and always asks permission. It specializes through plugins per profession and
+delivers ready-to-use results: PDFs, spreadsheets, charts, reports and dashboards. Programming is
+still possible, but it is an advanced, secondary use.
+
+Under the hood it is a harness with its own TypeScript core. It connects to any OpenAI-compatible
+endpoint and drives its own tool loop. It runs in the desktop app, in your terminal (an interactive
+TUI, or headless for scripts and CI) or in your browser with `alisio serve`.
+
+## Pillars
+
+1. **Easy.** A desktop app, no terminal needed. See [Desktop app](/desktop).
+2. **Your files, your control.** Local-first, with explicit permissions: reads by default, and
+   writes ask first. See [Tools & permissions](/tools#permission-flags).
+3. **Plugins per profession.** Thesis, exams, accounting, certificates, research. See
+   [Writing plugins](/plugins).
+4. **Deliverable results.** Documents, spreadsheets, charts and dashboards. See [Forja](/forja) and
+   [Data analysis](/analysis).
+5. **Any model.** OpenAI-compatible endpoints, DeepSeek, OpenRouter and others. See
+   [Configuration](/configuration).
+
+## Who it is for
+
+This table lists only what exists today. The external plugins live in the public
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository and install with
+`alisio install npm:<package>`; they are **not bundled in the desktop app yet** (see
+[Desktop app](/desktop#limitations)).
+
+| Who | What Alisio can do today | Backed by |
+| --- | --- | --- |
+| Students | Draft a thesis, research sources and study | `@alisio/plugin-thesis` (plans, researches, drafts and typesets university theses into PDF with Typst), `@alisio/plugin-literature-research` (scholarly metadata search) and the built-in [persistent memory](/memory) |
+| Teachers | Create printable exams. Today the plugin covers school **math** exams only | `@alisio/plugin-evalua` |
+| Accountants | Working papers and spreadsheet analysis | Forja Python analysis ([Forja](/forja), [Data analysis](/analysis)) |
+| Office and secretaries | Analyze Excel and CSV data, charts, certificates and reports | Forja and analysis, plus `@alisio/plugin-cardsmith` (certificates, cards and charts) |
+| Home | Budgets, charts and organizing information | Forja; there is no dedicated plugin |
+
+Profession-specific plugins can also be private. For example, an ICA working paper plugin for
+Colombian accountants exists, but it is not publicly available.
 
 ## Who made it
 

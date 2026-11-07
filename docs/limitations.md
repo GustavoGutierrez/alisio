@@ -551,3 +551,15 @@ web, JSONL, JSON and Markdown; plus the `run --proof` scenario of `pnpm test:cli
 browser behavior (components are tested as VNode trees and the screenshot is manual), mutation
 testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
 command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).
+
+### Desktop app (Electron)
+
+`apps/desktop` wraps the local `alisio serve` server in an Electron window; it is private and not
+published to npm. Verified on Linux x64 only: unit and integration tests (the real host under Node
+and under the Electron binary with `ELECTRON_RUN_AS_NODE=1`), the real GUI launched from the
+development tree and from the unpacked build, and `AppImage` and `deb` builds. Not verified:
+Windows and macOS builds, running the `AppImage` or installing the `deb`, and Python or Forja
+workers inside Electron beyond the inherited environment. Known limits: installing npm plugins
+needs `npm` on `PATH`, Git features need `git`, global plugin discovery derives its prefix from
+`process.execPath` (meaningless inside Electron), there is no auto-update, and the installers are
+unsigned, so SmartScreen and Gatekeeper warn. User guide: [Desktop app](/desktop).

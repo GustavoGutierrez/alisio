@@ -2,7 +2,7 @@ import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
 import BentoFeatures from "./components/BentoFeatures.vue";
-import HeroInstall from "./components/HeroInstall.vue";
+import DesktopDownloads from "./components/DesktopDownloads.vue";
 import { initHeroVideo } from "./hero-video";
 import { initWhatIs } from "./whatis";
 import "./styles/vars.css";
@@ -19,7 +19,7 @@ export default {
   extends: DefaultTheme,
   Layout: () =>
     h(DefaultTheme.Layout, null, {
-      "home-hero-info-after": () => h(HeroInstall),
+      "home-hero-after": () => h(DesktopDownloads),
       "home-features-before": () => h(BentoFeatures),
     }),
   enhanceApp({ router }) {

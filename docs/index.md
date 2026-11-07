@@ -3,20 +3,20 @@ layout: home
 
 hero:
   name: Alisio
-  text: Your coding agent, on the model you choose
-  tagline: "Connect any OpenAI-compatible model to your project: it reads and edits code behind explicit permissions, runs JavaScript in isolation and Python for data analysis, and publishes dashboards. In your terminal, your browser or CI."
+  text: Your assistant for everyday work, on the model you choose
+  tagline: "A desktop AI assistant for teachers, students, office staff, accountants and the home. It installs with one click, works on your own files and always asks permission. Plugins add skills for each profession, and the result is ready to use: PDFs, spreadsheets, charts, reports and dashboards."
   image:
     src: /assets/logo.png
     alt: Alisio mascot
   actions:
     - theme: brand
+      text: Download Alisio Desktop
+      link: /#download
+    - theme: alt
       text: Quick start
       link: /quick-start
     - theme: alt
-      text: Installation
-      link: /installation
-    - theme: alt
-      text: Write a plugin
+      text: Plugins
       link: /plugins
 
 # Home features (rendered by BentoFeatures.vue). Keep EN and ES identical in order and keys.
@@ -25,43 +25,51 @@ hero:
 featuresHeading: "What you get"
 moreHeading: "Also built in"
 featured:
-  - icon: terminal
-    title: "Terminal UI and headless mode"
-    details: "A full TUI with streaming Markdown, tool blocks and approvals, plus a headless mode with JSONL events."
-    link: "/tui"
   - icon: browser
-    title: "Web UI with alisio serve"
-    details: "A local, token-protected browser UI for several workspaces and sessions, on the same agent core."
-    link: "/web"
+    title: "A desktop app, no terminal needed"
+    details: "Download it, install it and open it like any other program. It runs on Linux, Windows and macOS, keeps your data on your computer and asks before it reads or changes your files."
+    link: "/desktop"
+  - icon: plugin
+    title: "Plugins for each profession"
+    details: "Add skills for the work you do: thesis writing, literature research, printable math exams, certificates and cards. More plugins can be installed with a single command."
+    link: "/plugins"
   - icon: chart
-    title: "Code mode and dashboards"
-    details: "Forja lets the agent solve with code: isolated JavaScript to combine tools, Python for data, AI and dashboards published as artifacts."
+    title: "Results you can use"
+    details: "Forja analyzes Excel and CSV data and delivers PDFs, spreadsheets, charts, reports and dashboards you can open, print or share."
     link: "/forja"
 more:
   - icon: api
-    title: "Any OpenAI-compatible API"
-    details: "Chat Completions or Responses"
+    title: "Any model you choose"
+    details: "OpenAI-compatible, DeepSeek, OpenRouter and others"
     link: "/configuration"
   - icon: shield
     title: "Explicit permissions"
     details: "Reads by default; writes ask first"
     link: "/tools#permission-flags"
-  - icon: layers
-    title: "Context compaction"
-    details: "Old history becomes safe checkpoints"
-    link: "/compaction"
   - icon: memory
     title: "Persistent memory"
     details: "SQLite and FTS5, across projects"
     link: "/memory"
+  - icon: browser
+    title: "Web UI with alisio serve"
+    details: "The same interface in your browser"
+    link: "/web"
+  - icon: terminal
+    title: "Terminal UI and headless mode"
+    details: "A full TUI, plus JSONL events for scripts and CI"
+    link: "/tui"
+  - icon: agent
+    title: "Code editing and agents"
+    details: "Programming as an advanced use; Markdown agents"
+    link: "/agents"
   - icon: plugin
     title: "Typed plugin SDK"
     details: "Tools, commands, events and hooks"
     link: "/plugins"
-  - icon: agent
-    title: "Agents"
-    details: "Markdown agents; switch with /agents"
-    link: "/agents"
+  - icon: layers
+    title: "Context compaction"
+    details: "Old history becomes safe checkpoints"
+    link: "/compaction"
   - icon: plan
     title: "Plan mode and plan viewer"
     details: "Read-only plan you approve first"
@@ -82,14 +90,16 @@ more:
 
 <div class="whatis-intro whatis-item" style="--i: 0">
 <div class="whatis-logo">
-<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — coding agent for any OpenAI-compatible model" width="1000" height="470" decoding="async" />
+<img data-component="brand-banner" src="/assets/banner.webp" alt="Alisio — your assistant for everyday work, on the model you choose" width="1000" height="470" decoding="async" />
 </div>
 <div class="whatis-def">
 
-Alisio is a coding agent with its own TypeScript core. It connects to any OpenAI-compatible
-endpoint, drives its own tool loop and runs in your terminal, either as an interactive TUI or
-headless for scripts and CI, or in your browser with `alisio serve`. When code is the faster route,
-it writes and runs it with [Forja](/forja): isolated JavaScript, and Python for data analysis.
+Alisio is a desktop AI harness for the everyday work of non-technical people: teachers, students,
+secretaries and office staff, accountants and the home. It installs with one click, works on your
+own files and always asks permission. [Plugins](/plugins) specialize it per profession, and
+[Forja](/forja) delivers ready-to-use results: PDFs, spreadsheets, charts, reports and dashboards.
+It connects to any OpenAI-compatible model. Programming is still possible, as an advanced use, from
+the terminal, the browser or CI.
 
 </div>
 </div>
@@ -137,7 +147,7 @@ it writes and runs it with [Forja](/forja): isolated JavaScript, and Python for 
 
 </div>
 
-<h3 class="whatis-sub whatis-item" style="--i: 4">Under the hood</h3>
+<h3 class="whatis-sub whatis-item" style="--i: 4">For developers and advanced use</h3>
 
 <div class="whatis-facts">
 

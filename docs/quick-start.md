@@ -1,5 +1,24 @@
 # Quick start
 
+The quickest way to start is the [desktop app](/desktop): install it, open it, connect a model and
+open a folder. No terminal is needed. The rest of this page covers the command line, which is the
+advanced path.
+
+## Desktop app
+
+1. Install Alisio Desktop for your system (Windows installer, macOS `.dmg`, Linux `AppImage` or
+   `.deb`); see [Download and install](/desktop#download-and-install). The installers are not
+   signed, so Windows SmartScreen and macOS Gatekeeper warn the first time.
+2. Open Alisio, then go to **Settings**, then **Models**, add a profile for your provider and
+   activate a model.
+3. Open the folder you want to work on and describe the task. Alisio asks before it changes
+   anything.
+4. Optionally install a profession plugin from
+   [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); see
+   [Install profession plugins](/desktop#install-profession-plugins).
+
+## Command line (advanced)
+
 Alisio ships with the OpenAI-compatible provider plugin enabled, but no default model or credentials.
 Start the TUI and run `/connect` for the quickest setup: choose the provider, enter its settings and
 key, then choose a discovered model. The selection applies globally on later launches.

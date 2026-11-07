@@ -1,5 +1,25 @@
 # Instalación
 
+## Aplicación de escritorio
+
+La aplicación de escritorio es la forma más sencilla de instalar Alisio y no necesita terminal ni
+Node.js. Elija el instalador de su sistema:
+
+| Sistema | Descarga |
+| --- | --- |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.9.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-Setup-0.9.0-x64.exe) (asistente NSIS, por usuario, sin derechos de administrador) |
+| macOS Apple Silicon (arm64) | [`Alisio-0.9.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-arm64.dmg) |
+| macOS Intel (x64) | [`Alisio-0.9.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x64.dmg) |
+| Linux, cualquier distribución | [`Alisio-0.9.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-x86_64.AppImage) |
+| Debian y Ubuntu | [`Alisio-0.9.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.9.0/Alisio-0.9.0-amd64.deb) |
+
+Todos los archivos están en la [página de la versión](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.9.0). Los instaladores no están firmados, así
+que Windows SmartScreen y macOS Gatekeeper muestran un aviso la primera vez.
+[Aplicación de escritorio](/es/desktop) explica cada paso y cómo continuar tras los avisos.
+
+El resto de esta página cubre el paquete de npm y el binario independiente, la vía avanzada para la
+terminal, los scripts y CI.
+
 ## Requisitos
 
 | Requisito | Detalles |
