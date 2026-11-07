@@ -2,12 +2,18 @@
  * Electron main process. It owns no Alisio logic: it starts the host (the Alisio server running on
  * the Electron binary as plain Node) and shows its web UI in a sandboxed window.
  */
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { launchHost, type RunningHost } from "./host-process.ts";
 import { classifyNavigation } from "./navigation.ts";
-import { buildHostSpawn, resolveRuntimePaths } from "./spawn-plan.ts";
+import {
+  buildHostSpawn,
+  hostExitAction,
+  resolveNpmCli,
+  resolveRuntimePaths,
+} from "./spawn-plan.ts";
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const READY_TIMEOUT_MS = 30_000;
@@ -27,6 +33,10 @@ async function startHost(): Promise<RunningHost> {
     execPath: process.execPath,
     hostEntry: paths.hostEntry,
     parentEnv: process.env,
+    // Packaged builds bundle npm: the app installs plugins without a system Node.js.
+    ...(existsSync(resolveNpmCli(paths.runtimeDir))
+      ? { npmCli: resolveNpmCli(paths.runtimeDir) }
+      : {}),
   });
   recentLog = [];
   const running = await launchHost({
@@ -38,8 +48,12 @@ async function startHost(): Promise<RunningHost> {
     },
   });
   // A host that dies later takes the UI with it: offer a restart instead of a dead window.
-  void running.exited.then(() => {
-    if (!quitting && host === running) void recover("The Alisio background process stopped.");
+  void running.exited.then((code) => {
+    const action = hostExitAction(code, { quitting, current: host === running });
+    // A requested restart (a plugin update that needs a fresh process) respawns silently and
+    // reloads the window onto the new launch URL: no error page.
+    if (action === "restart") void launch();
+    else if (action === "recover") void recover("The Alisio background process stopped.");
   });
   return running;
 }
