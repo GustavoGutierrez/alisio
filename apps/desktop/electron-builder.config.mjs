@@ -21,7 +21,9 @@ export default {
       { target: "deb", arch: ["x64"] },
     ],
     category: "Office",
-    icon: "icon.png",
+    // A set of standard sizes: the hicolor theme ignores a lone 1024x1024 icon, so launchers and
+    // docks would fall back to a generic one. macOS and Windows keep using icon.png.
+    icon: "icons",
     // Matches package.json desktopName, which Electron uses as WM_CLASS, so the dock links the window to this entry and its icon.
     syncDesktopName: true,
     maintainer: "Gustavo Gutiérrez <noreply@users.noreply.github.com>",
