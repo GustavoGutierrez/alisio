@@ -101,3 +101,105 @@
     display: none;
   }
 }
+
+/* ---------- Hero: trade-wind motion (driven by hero-motion.ts after hydration) ---------- */
+
+:root {
+  --alisio-streak: var(--alisio-300);
+  --alisio-wind-gradient: linear-gradient(
+    100deg,
+    #60e0f9 0%,
+    #07c4f9 25%,
+    #01a5f7 50%,
+    #07c4f9 75%,
+    #60e0f9 100%
+  );
+}
+
+.dark {
+  --alisio-streak: var(--alisio-400);
+}
+
+/* The hero never scrolls sideways because of the streaks that extend past the logo. */
+.VPHome .VPHero {
+  overflow-x: clip;
+}
+
+/* The name uses a two-tile repeating gradient so the breeze can loop seamlessly. */
+.VPHome .VPHero .name.clip {
+  background: var(--alisio-wind-gradient);
+  background-size: 200% 100%;
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* offsetParent for the per-letter gradient slices */
+  position: relative;
+}
+
+/* Slow breeze across the name, right to left; starts once the entrance is done. */
+.VPHome .VPHero .name[data-breeze] {
+  animation: alisio-breeze 18s linear infinite;
+}
+
+@keyframes alisio-breeze {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* While the name is split, each letter paints its own slice of the same gradient. */
+.VPHome .VPHero .name .alisio-part {
+  display: inline-block;
+  background: var(--alisio-wind-gradient);
+  background-size: var(--alisio-name-w, 200%) 100%;
+  background-position: var(--alisio-part-x, 0) 0;
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  will-change: transform, opacity, filter;
+}
+
+.VPHome .VPHero .text .alisio-part {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+
+.alisio-hero-art {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.alisio-sway {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.alisio-streaks {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 520px;
+  height: 300px;
+  max-width: none;
+  color: var(--alisio-streak);
+  transform: translate(-50%, -50%);
+  overflow: visible;
+}
+
+/* Invisible until the wind starts; under reduced motion they stay as a still, faint drawing. */
+.alisio-streak {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alisio-streak {
+    opacity: 0.28;
+  }
+
+  .VPHome .VPHero .name[data-breeze] {
+    animation: none;
+  }
+}

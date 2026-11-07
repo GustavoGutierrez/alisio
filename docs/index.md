@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Alisio
-  text: Your assistant for everyday work, on the model you choose
-  tagline: "A desktop AI assistant for teachers, students, office staff, accountants and the home. It installs with one click, works on your own files and always asks permission. Plugins add skills for each profession, and the result is ready to use: PDFs, spreadsheets, charts, reports and dashboards."
+  text: Your assistant for everyday work
+  tagline: "Install it in one click. It works on your files, asks before acting and hands you finished PDFs, spreadsheets and charts."
   image:
     src: /assets/logo.png
     alt: Alisio mascot
@@ -21,6 +21,7 @@ hero:
 
 # Home features (rendered by BentoFeatures.vue). Keep EN and ES identical in order and keys.
 # featured: exactly 3 large cards; the 1st is the tall one. more: any number of compact tiles.
+# A featured item takes either `link` (whole card) or `links` (+ optional `chips`, the plugin visual labels).
 # icon: terminal browser chart api shield layers memory plugin agent plan subagent mcp (see the component).
 featuresHeading: "What you get"
 moreHeading: "Also built in"
@@ -32,7 +33,13 @@ featured:
   - icon: plugin
     title: "Plugins for each profession"
     details: "Add skills for the work you do: thesis writing, literature research, printable math exams, certificates and cards. More plugins can be installed with a single command."
-    link: "/plugins"
+    chips: ["Thesis", "Exams", "Accounting", "Certificates", "Research", "Web search"]
+    links:
+      - text: "Build a plugin"
+        link: "/plugins"
+      - text: "Browse the plugin catalog"
+        link: "https://gustavogutierrez.github.io/alisio-plugins/"
+        external: true
   - icon: chart
     title: "Results you can use"
     details: "Forja analyzes Excel and CSV data and delivers PDFs, spreadsheets, charts, reports and dashboards you can open, print or share."

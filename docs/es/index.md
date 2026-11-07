@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Alisio
-  text: Tu asistente para el trabajo de todos los días, con el modelo que elijas
-  tagline: "Un asistente de IA de escritorio para docentes, estudiantes, personal de oficina, contadores y el hogar. Se instala con un clic, trabaja sobre tus propios archivos y siempre pide permiso. Los plugins añaden habilidades para cada profesión y el resultado llega listo para usar: PDF, hojas de cálculo, gráficos, informes y dashboards."
+  text: Tu asistente para el trabajo de todos los días
+  tagline: "Instálalo con un clic. Trabaja con tus archivos, pide permiso antes de actuar y te entrega PDF, hojas de cálculo y gráficos listos."
   image:
     src: /assets/logo.png
     alt: Mascota de Alisio
@@ -21,6 +21,7 @@ hero:
 
 # Home features (rendered by BentoFeatures.vue). Keep EN and ES identical in order and keys.
 # featured: exactly 3 large cards; the 1st is the tall one. more: any number of compact tiles.
+# A featured item takes either `link` (whole card) or `links` (+ optional `chips`, the plugin visual labels).
 # icon: terminal browser chart api shield layers memory plugin agent plan subagent mcp (see the component).
 featuresHeading: "Qué incluye"
 moreHeading: "También incluye"
@@ -32,7 +33,13 @@ featured:
   - icon: plugin
     title: "Plugins para cada profesión"
     details: "Añade habilidades para tu trabajo: redacción de tesis, investigación bibliográfica, exámenes de matemáticas imprimibles, certificados y tarjetas. Puedes instalar más plugins con un solo comando."
-    link: "/es/plugins"
+    chips: ["Tesis", "Exámenes", "Contabilidad", "Certificados", "Investigación", "Búsqueda web"]
+    links:
+      - text: "Crea un plugin"
+        link: "/es/plugins"
+      - text: "Explora el catálogo de plugins"
+        link: "https://gustavogutierrez.github.io/alisio-plugins/"
+        external: true
   - icon: chart
     title: "Resultados listos para usar"
     details: "Forja analiza datos de Excel y CSV y entrega PDF, hojas de cálculo, gráficos, informes y dashboards que puedes abrir, imprimir o compartir."

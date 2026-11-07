@@ -418,3 +418,152 @@
     transform: none;
   }
 }
+
+/* ---------- Plugins card: chips snapping into the Alisio core ---------- */
+
+.visual-plugins {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 50% 50%, var(--vp-c-brand-soft), transparent 62%),
+    radial-gradient(var(--vp-c-divider) 1px, transparent 1.2px) 0 0 / 18px 18px,
+    var(--vp-c-bg-alt);
+}
+
+.visual-plugins svg {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+}
+
+.visual-plugins [data-tile],
+.visual-plugins [data-core] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.plugin-lines path {
+  fill: none;
+  stroke: var(--vp-c-brand-1);
+  stroke-opacity: 0.45;
+  stroke-width: 1.4;
+  stroke-dasharray: 3 4;
+  stroke-linecap: round;
+}
+
+.plugin-tile rect {
+  fill: var(--vp-c-bg-elv);
+  stroke: var(--vp-c-divider);
+  stroke-width: 1.2;
+  transition: stroke 0.2s ease;
+}
+
+.plugin-knob {
+  fill: var(--vp-c-bg-elv);
+  stroke: var(--vp-c-brand-1);
+  stroke-width: 1.4;
+}
+
+.plugin-glyph {
+  stroke: var(--vp-c-brand-1);
+}
+
+.plugin-tile text {
+  fill: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-base);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.plugin-core-ring {
+  fill: var(--vp-c-brand-soft);
+  stroke: var(--vp-c-brand-1);
+  stroke-opacity: 0.35;
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 0.4s cubic-bezier(0.22, 0.8, 0.3, 1),
+    stroke-opacity 0.3s ease;
+}
+
+.feature-card:hover .plugin-core-ring {
+  transform: scale(1.14);
+  stroke-opacity: 0.8;
+}
+
+.feature-card:hover .plugin-tile rect {
+  stroke: var(--alisio-border-strong);
+}
+
+/* Separate, valid links inside a card that is not one big link. */
+.feature-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.alisio-bento a.feature-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  color: var(--vp-c-brand-1);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.alisio-bento a.feature-link.is-primary {
+  border-color: transparent;
+  background: var(--alisio-solid);
+  color: #fff;
+}
+
+.alisio-bento a.feature-link:hover {
+  border-color: var(--alisio-border-strong);
+  background: var(--alisio-surface-hover);
+}
+
+.alisio-bento a.feature-link.is-primary:hover {
+  border-color: transparent;
+  background: var(--alisio-solid-strong);
+}
+
+.dark .alisio-bento a.feature-link:hover {
+  background: var(--vp-c-brand-soft);
+}
+
+.dark .alisio-bento a.feature-link.is-primary:hover {
+  background: var(--alisio-solid-strong);
+}
+
+.alisio-bento a.feature-link:focus-visible {
+  outline: 3px solid var(--alisio-focus-ring);
+  outline-offset: 2px;
+}
+
+.alisio-bento .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-card:hover .plugin-core-ring {
+    transform: none;
+  }
+}

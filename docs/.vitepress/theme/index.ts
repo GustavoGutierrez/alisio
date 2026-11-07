@@ -3,6 +3,8 @@ import DefaultTheme from "vitepress/theme";
 import { defineComponent, h, onMounted } from "vue";
 import BentoFeatures from "./components/BentoFeatures.vue";
 import DesktopDownloads from "./components/DesktopDownloads.vue";
+import HeroArt from "./components/HeroArt.vue";
+import { initHeroMotion } from "./hero-motion";
 import { initHeroVideo } from "./hero-video";
 import { initWhatIs } from "./whatis";
 import "./styles/vars.css";
@@ -18,6 +20,7 @@ import "./styles/docs.css";
 const enhanceHome = () => {
   initWhatIs();
   initHeroVideo();
+  initHeroMotion();
 };
 
 const Layout = defineComponent({
@@ -29,6 +32,7 @@ const Layout = defineComponent({
     onMounted(() => requestAnimationFrame(enhanceHome));
     return () =>
       h(DefaultTheme.Layout, null, {
+        "home-hero-image": () => h(HeroArt),
         "home-hero-after": () => h(DesktopDownloads),
         "home-features-before": () => h(BentoFeatures),
       });
