@@ -307,6 +307,15 @@ admiten esto; consulte la documentación de su proveedor para conocer el tipo ex
 que espera antes de activarlo. Una herramienta no admitida/rechazada aparece como un error normal
 del proveedor, igual que cualquier otro fallo de la petición.
 
+## PDF diseñados: document_create y document_themes {#document-create}
+
+`document_create` convierte Markdown o un documento estructurado y un tema del catálogo en un PDF
+diseñado, publicado como artefacto; `document_themes` lista los temas, los bloques y el estado del
+motor, y el modelo la llama primero. Ambas se registran salvo que `documents.enabled` sea `false`.
+`document_create` declara el efecto `internal` (solo escribe en el almacén de artefactos y ejecuta
+un renderizador fijo), así que no pide aprobación; `document_themes` es `read`. Los requisitos,
+temas, comprobaciones, seguridad y límites están en [PDF diseñados](/es/documents).
+
 ## Guía bajo demanda: forge_guide {#forge-guide}
 
 Para ver el modo código completo (elección del lenguaje, niveles de aislamiento, scratchpad) consulta [Forja: modo código](/es/forja).

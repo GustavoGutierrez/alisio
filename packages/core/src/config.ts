@@ -131,6 +131,8 @@ const FORGE_DEFAULTS = {
 const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;
 /** Web UI keys only the user (global) layer decides: the server picks which theme it serves. */
 const GLOBAL_ONLY_WEB = ["iconTheme"] as const;
+/** Document engine keys only the user (global) layer decides: which browser binary runs (spec 026). */
+const GLOBAL_ONLY_DOCUMENTS = ["chromiumPath"] as const;
 /** JSON values a plugin may receive as options (`pluginOverrides[id].options`). */
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -721,6 +723,19 @@ const configObjectSchema = z
       })
       .strict()
       .default(() => ({ iconTheme: "none" })),
+    /**
+     * Document engine (spec 026): designed PDFs through `document_create`. `chromiumPath` is
+     * GLOBAL ONLY (a repository must not pick the binary that runs).
+     */
+    documents: z
+      .object({
+        enabled: z.boolean().default(true),
+        engine: z.enum(["auto", "chromium", "weasyprint"]).default("auto"),
+        chromiumPath: z.string().trim().min(1).max(1000).optional(),
+        defaultPageSize: z.enum(["A4", "Letter", "Legal", "A5"]).default("A4"),
+      })
+      .strict()
+      .default(() => ({ enabled: true, engine: "auto" as const, defaultPageSize: "A4" as const })),
   })
   .strict()
   .superRefine((config, context) => {
@@ -937,6 +952,10 @@ export async function loadConfigWithProvenance(
       object.web && typeof object.web === "object" && !Array.isArray(object.web)
         ? (object.web as Record<string, unknown>)
         : {};
+    const documentsRaw =
+      object.documents && typeof object.documents === "object" && !Array.isArray(object.documents)
+        ? (object.documents as Record<string, unknown>)
+        : {};
     const overridesRaw =
       object.pluginOverrides &&
       typeof object.pluginOverrides === "object" &&
@@ -952,6 +971,9 @@ export async function loadConfigWithProvenance(
         (key) => `decisions.${key}`,
       ),
       ...GLOBAL_ONLY_WEB.filter((key) => key in webRaw).map((key) => `web.${key}`),
+      ...GLOBAL_ONLY_DOCUMENTS.filter((key) => key in documentsRaw).map(
+        (key) => `documents.${key}`,
+      ),
       ...Object.entries(overridesRaw)
         .filter(
           ([, entry]) =>
@@ -1081,6 +1103,17 @@ export async function loadConfigWithProvenance(
       if (key === "web") {
         // `iconTheme` is global-only (the server decides which theme its files serve).
         overlaid.web = { ...selected.config.web, iconTheme: global.config.web.iconTheme };
+        continue;
+      }
+      if (key === "documents") {
+        // `chromiumPath` is global-only (a repository must not pick the browser binary).
+        const { chromiumPath: _ignored, ...rest } = selected.config.documents;
+        overlaid.documents = {
+          ...rest,
+          ...(global.config.documents.chromiumPath
+            ? { chromiumPath: global.config.documents.chromiumPath }
+            : {}),
+        };
         continue;
       }
       (overlaid as unknown as Record<string, unknown>)[key] = (

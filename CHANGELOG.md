@@ -8,6 +8,16 @@ out. `/changelog` (terminal and web) shows these entries offline.
 
 ### Added
 
+- **Designed PDFs**: ask for a PDF, a printable document or "convert this Markdown to PDF" and Alisio
+  builds it from content only (Markdown or structured blocks) with `document_create`: cover, table of
+  contents, page numbers, styled tables, callouts and code, in one of three themes (`executive-clean`,
+  `data-report`, `technical-spec`) with bundled fonts. It checks the layout, repairs wide tables by
+  itself and publishes the PDF as an artifact. It uses your installed Chrome, Edge or Chromium (nothing
+  is downloaded) and renders with the network off; `alisio documents status` shows whether it is ready.
+  Without front matter the first heading and the bold `Key: value` lines under it become a designed
+  cover; `cover: false` turns it off, `theme: {id, accent, ink}` applies a brand color to every
+  theme, headings that already carry numbers are never numbered twice, and an unusable image (SVG,
+  missing file) is replaced by a placeholder instead of failing the document.
 - **Skill Builder** (sidebar, above Settings, and **New skill** in Settings → Skills): describe a
   skill, let the active model draft it in the open Agent Skills format, then review, edit and save
   it to the project (`.agents/skills`) or globally (`~/.agents/skills`). It shows live errors and

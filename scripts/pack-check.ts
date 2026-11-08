@@ -45,10 +45,13 @@ try {
       execFileSync("tar", ["-xzOf", path, "package/package.json"]).toString(),
     );
     // The server also ships the web UI build under dist/web (copied there by the web build).
+    // The core also ships the document engine assets (bundled OFL fonts, themes, base CSS).
     const allowed =
       name === "server"
         ? /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts)|dist\/web\/.+)$/
-        : /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts))$/;
+        : name === "core"
+          ? /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts)|assets\/documents\/.+\.(woff2|css|json|txt))$/
+          : /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts))$/;
     for (const file of files) assert.match(file, allowed, `${name}: unexpected file ${file}`);
     for (const required of ["package/package.json", "package/README.md", "package/LICENSE"])
       assert.ok(files.includes(required), `${name}: missing ${required}`);
@@ -58,6 +61,17 @@ try {
     assert.equal(manifest.private, undefined, `${name}: must not be private`);
     assert.equal(manifest.license, "MIT");
     assert.ok(manifest.exports?.["."]?.import?.startsWith("./dist/"), `${name}: exports`);
+    if (name === "core") {
+      for (const required of [
+        "package/assets/documents/fonts/inter/OFL.txt",
+        "package/assets/documents/fonts/source-serif-4/OFL.txt",
+        "package/assets/documents/fonts/jetbrains-mono/OFL.txt",
+        "package/assets/documents/fonts/coverage.json",
+        "package/assets/documents/base/print-base.css",
+        "package/assets/documents/themes/executive-clean/manifest.json",
+      ])
+        assert.ok(files.includes(required), `core: missing ${required}`);
+    }
     if (name === "cli") assert.equal(manifest.bin?.alisio, "./dist/main.js");
     const size = statSync(path).size;
     const unpacked = execFileSync("tar", ["-tzvf", path])

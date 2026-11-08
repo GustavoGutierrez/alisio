@@ -331,6 +331,7 @@ export {
   validateAnswers,
   validateRequest,
 } from "./decisions/index.ts";
+export { type DocumentEngineStatus, documentEngineStatus } from "./documents/status.ts";
 export { canonicalJson, hashCanonical } from "./eval/canonical.ts";
 export {
   CASSETTE_SUFFIX,

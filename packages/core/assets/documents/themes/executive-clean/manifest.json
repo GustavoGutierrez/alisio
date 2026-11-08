@@ -1,0 +1,79 @@
+{
+  "id": "executive-clean",
+  "name": "Executive Clean",
+  "purpose": "Reports, proposals and memos: serif body, navy cover, restrained rules.",
+  "version": 1,
+  "pageSizes": ["A4", "Letter", "Legal", "A5"],
+  "fonts": ["Inter", "Source Serif 4", "JetBrains Mono"],
+  "tokens": {
+    "colors": {
+      "ink": "#1f2633",
+      "heading": "#0f2342",
+      "muted": "#586274",
+      "accent": "#1d4f91",
+      "rule": "#d6dbe4",
+      "paper": "#ffffff",
+      "surface": "#f3f5f9",
+      "codeBg": "#f3f5f9",
+      "coverBg": "#0f2342",
+      "coverInk": "#ffffff",
+      "coverMuted": "#b8c5db",
+      "tones": {
+        "info": {
+          "bg": "#e9f0fb",
+          "bar": "#1d4f91"
+        },
+        "success": {
+          "bg": "#e5f4ec",
+          "bar": "#16703f"
+        },
+        "warning": {
+          "bg": "#fdf2d9",
+          "bar": "#8a5a00"
+        },
+        "danger": {
+          "bg": "#fbe9e7",
+          "bar": "#a52a1d"
+        }
+      }
+    },
+    "type": {
+      "body": "\"Source Serif 4\", serif",
+      "display": "\"Inter\", sans-serif",
+      "mono": "\"JetBrains Mono\", monospace",
+      "bodySize": "10.5pt",
+      "lineHeight": "1.5",
+      "h1": "25pt",
+      "h2": "15.5pt",
+      "h3": "11.5pt",
+      "cover": "36pt",
+      "small": "8.8pt",
+      "caption": "8pt",
+      "table": "8.8pt",
+      "code": "8.2pt"
+    },
+    "grid": {
+      "margin": {
+        "top": "25mm",
+        "right": "23mm",
+        "bottom": "24mm",
+        "left": "23mm"
+      },
+      "baseline": "4pt",
+      "columns": 1,
+      "gutter": "8mm"
+    },
+    "chrome": {
+      "header": {
+        "left": "title",
+        "right": "none"
+      },
+      "footer": {
+        "left": "org",
+        "center": "none",
+        "right": "pageOfTotal"
+      }
+    }
+  },
+  "coverFromAccent": true
+}

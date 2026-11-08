@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type {
@@ -845,6 +845,48 @@ export async function createApplication(options: AppOptions = {}) {
         // Registered only with the tool: the `false` state keeps the system prompt byte for byte.
         context.extras.push(async () => DASHBOARD_PROMPT_RULE);
       }
+    }
+    // Document engine (spec 026): designed PDFs from Markdown or a DocumentSpec. Registered with
+    // the artifact store, independent of Forja and Python; `--read-only` has no artifact output.
+    let documentEngines: Array<{ dispose(): Promise<void> }> = [];
+    if (config.documents.enabled && !options.readOnly) {
+      const [
+        { registerDocumentTools },
+        { ChromiumEngine },
+        { buildDocumentRule },
+        { sweepDocumentTmp },
+      ] = await Promise.all([
+        import("./tools/documents.ts"),
+        import("./documents/engines/chromium/adapter.ts"),
+        import("./documents/rule.ts"),
+        import("./documents/janitor.ts"),
+      ]);
+      const tmpRoot = join(stateRoot, "documents", "tmp");
+      const chromium = new ChromiumEngine({
+        tmpRoot,
+        // Read live: the setting is global-only and may change.
+        get explicitPath() {
+          return config.documents.chromiumPath;
+        },
+      });
+      documentEngines = [chromium];
+      registerDocumentTools(registry, {
+        tmpRoot,
+        engines: () => [chromium],
+        settings: () => ({
+          engine: config.documents.engine,
+          defaultPageSize: config.documents.defaultPageSize,
+        }),
+        trusted: () => trustedProject,
+        readArtifact: async (session, id) => {
+          const record = artifacts.get(id);
+          if (!record || record.status !== "ready" || record.sessionId !== store.rootOf(session))
+            return undefined;
+          return new Uint8Array(await readFile(artifacts.localPath(record)));
+        },
+      });
+      context.extras.push(async () => buildDocumentRule({ documents: true }));
+      void sweepDocumentTmp(tmpRoot).catch(() => {});
     }
     // Layer 2 of the context (spec §8.3): `forge_guide`. Registered only with Forja on and a ready
     // engine for at least one language; the `python.*` topics need `python_run`.
@@ -2065,6 +2107,7 @@ export async function createApplication(options: AppOptions = {}) {
         try {
           janitor.stop();
           taskJanitor.stop();
+          for (const engine of documentEngines) await capped(engine.dispose());
           scratchJanitor.stop();
           datasets?.close();
           // Tasks first in the same stage: they end with Alisio (process groups killed).

@@ -43,6 +43,13 @@ it is not a statement that all of its release criteria are met.
 
 ## Known limits
 
+**Designed PDFs (`document_create`, phase 1).** The engine is a system Chromium-family browser
+(131 or newer); Alisio Desktop's own engine, charts, SVG images, chapter headers, footnotes,
+page numbers in the table of contents, WeasyPrint and visual checks are not implemented yet.
+Latin, Greek and Cyrillic text only (no bundled CJK, Arabic or emoji); output is RGB, never
+print-shop CMYK or PDF/X, with no PDF/A or PDF/UA claim. The standalone binary carries no theme or
+font files, so documents need the npm install. See [Designed PDFs](/documents#limits).
+
 **Permission modes, `/reload` and `/changelog` (modes spec, phase 1).** A permission mode only
 chooses which effects run without asking: it is not a sandbox, it does not change path confinement
 (directories outside the workspace still ask) or the `--allow-analysis` pre-grant, and `auto` uses

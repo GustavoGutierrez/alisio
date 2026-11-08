@@ -1,0 +1,54 @@
+{
+  "id": "data-report",
+  "name": "Data Report",
+  "purpose": "Data-heavy reports: sans type, strong tables, stat cards, teal accent.",
+  "version": 1,
+  "pageSizes": ["A4", "Letter", "Legal", "A5"],
+  "fonts": ["Inter", "JetBrains Mono"],
+  "tokens": {
+    "colors": {
+      "ink": "#1d2630",
+      "heading": "#0b2b33",
+      "muted": "#52606d",
+      "accent": "#0b6e6a",
+      "rule": "#d9e0e5",
+      "paper": "#ffffff",
+      "surface": "#eef5f5",
+      "codeBg": "#f2f5f7",
+      "coverBg": "#ffffff",
+      "coverInk": "#0b2b33",
+      "coverMuted": "#52606d",
+      "tones": {
+        "info": { "bg": "#e6f2f7", "bar": "#0b5f86" },
+        "success": { "bg": "#e4f4ea", "bar": "#157347" },
+        "warning": { "bg": "#fff1d6", "bar": "#8f5b00" },
+        "danger": { "bg": "#fde8e6", "bar": "#b3261e" }
+      }
+    },
+    "type": {
+      "body": "\"Inter\", sans-serif",
+      "display": "\"Inter\", sans-serif",
+      "mono": "\"JetBrains Mono\", monospace",
+      "bodySize": "9.6pt",
+      "lineHeight": "1.5",
+      "h1": "23pt",
+      "h2": "14.5pt",
+      "h3": "11pt",
+      "cover": "34pt",
+      "small": "8.6pt",
+      "caption": "7.8pt",
+      "table": "8.6pt",
+      "code": "7.9pt"
+    },
+    "grid": {
+      "margin": { "top": "24mm", "right": "19mm", "bottom": "22mm", "left": "19mm" },
+      "baseline": "4pt",
+      "columns": 1,
+      "gutter": "6mm"
+    },
+    "chrome": {
+      "header": { "left": "title", "right": "date" },
+      "footer": { "left": "org", "center": "none", "right": "pageOfTotal" }
+    }
+  }
+}

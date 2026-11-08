@@ -167,6 +167,7 @@ export const CONFIG_HASH_COVERAGE = {
   tui: "excluded",
   agents: "excluded",
   web: "excluded",
+  documents: "excluded",
 } as const satisfies Record<keyof Config, "hashed" | "excluded">;
 
 export interface ConfigHashExtras {
@@ -404,6 +405,8 @@ function isolatedConfig(config: Config): Config {
   copy.mcp = { ...copy.mcp, servers: {} };
   copy.additionalDirectories = [];
   copy.forge.scratch.root = null;
+  // Eval runs measure the harness without the PDF engine (it would add tools and a prompt rule).
+  copy.documents.enabled = false;
   for (const [id, options] of Object.entries(copy.builtinPlugins)) {
     const { dbPath: _dbPath, ...rest } = options as Record<string, unknown>;
     copy.builtinPlugins[id] = rest as (typeof copy.builtinPlugins)[string];

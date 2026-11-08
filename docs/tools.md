@@ -287,6 +287,15 @@ Most OpenAI-compatible providers — including the DeepSeek plugin configuration
 before opting in. An unsupported/rejected tool surfaces as a normal provider error, the same as any
 other request failure.
 
+## Designed PDFs: document_create and document_themes {#document-create}
+
+`document_create` turns Markdown or a structured document and a catalog theme into a designed PDF
+published as an artifact; `document_themes` lists the themes, the blocks and the engine state, and
+the model calls it first. Both are registered unless `documents.enabled` is `false`. `document_create`
+declares the `internal` effect (it only writes to the artifact store and runs a fixed renderer), so
+it needs no approval; `document_themes` is `read`. Requirements, themes, checks, security and limits
+are in [Designed PDFs](/documents).
+
 ## On-demand guidance: forge_guide {#forge-guide}
 
 For the whole picture of code mode (language choice, isolation levels, scratchpad) see [Forja: code mode](/forja).

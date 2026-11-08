@@ -39,6 +39,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "assets",
     "README.md",
     "LICENSE"
   ],
@@ -54,6 +55,7 @@
     "@mixmark-io/domino": "2.2.0",
     "@modelcontextprotocol/client": "2.1.0",
     "ajv": "8.20.0",
+    "marked": "18.0.14",
     "quickjs-wasi": "3.6.2",
     "turndown": "7.2.4",
     "yaml": "2.9.1",

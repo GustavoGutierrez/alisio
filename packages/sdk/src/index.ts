@@ -3326,3 +3326,27 @@ export interface EvalReport {
 }
 
 export * from "./skills.ts";
+
+/** Result contract of the `document_create` tool (spec 026 §5.1); additive wire type. */
+export interface DocumentResultInfo {
+  artifacts: Array<{
+    id: string;
+    title: string;
+    fileName: string;
+    mimeType: string;
+    bytes: number;
+  }>;
+  engine: { id: "electron" | "chromium" | "weasyprint"; version?: string };
+  theme: string;
+  qa: {
+    passed: boolean;
+    pageCount: number;
+    tagged: boolean;
+    warnings: Array<{ code: string; message: string; blockIndex?: number }>;
+    /** At most two attempts. */
+    repairs: Array<{ code: string; action: string }>;
+    visual?: { status: "passed" | "findings" | "skipped"; reason?: string; findings?: string[] };
+  };
+  degraded: Array<{ feature: string; reason: string }>;
+  durationMs: number;
+}

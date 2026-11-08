@@ -26,6 +26,7 @@ The model chooses; you do not configure it. The routing rule in the system promp
 | --- | --- |
 | Combine several tool calls, filter or aggregate their results, paginate, fan out in parallel | `js_run` |
 | Read a spreadsheet or CSV, statistics, charts, a report, a dashboard, scikit-learn or statsmodels | `python_run` |
+| A designed PDF from Markdown or structured content (reports, memos, printable documents) | `document_create` (see [Designed PDFs](/documents)); `python_run` keeps programmatic PDFs: forms, merging, reportlab |
 | One call to one tool | The tool itself, no script needed |
 
 Before writing non-trivial code the model can call [`forge_guide`](#forge-guide) for the current

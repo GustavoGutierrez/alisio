@@ -1,0 +1,79 @@
+{
+  "id": "technical-spec",
+  "name": "Technical Spec",
+  "purpose": "Specs, manuals and runbooks: numbered headings, prominent code, compact tables.",
+  "version": 1,
+  "pageSizes": ["A4", "Letter", "Legal", "A5"],
+  "fonts": ["Inter", "JetBrains Mono"],
+  "tokens": {
+    "colors": {
+      "ink": "#20242c",
+      "heading": "#141a2e",
+      "muted": "#566070",
+      "accent": "#3a4bb8",
+      "rule": "#d5d9e2",
+      "paper": "#ffffff",
+      "surface": "#f4f5f9",
+      "codeBg": "#f1f3f8",
+      "coverBg": "#f4f5f9",
+      "coverInk": "#141a2e",
+      "coverMuted": "#566070",
+      "tones": {
+        "info": {
+          "bg": "#eceffd",
+          "bar": "#3a4bb8"
+        },
+        "success": {
+          "bg": "#e6f4ec",
+          "bar": "#16703f"
+        },
+        "warning": {
+          "bg": "#fdf1d8",
+          "bar": "#8a5800"
+        },
+        "danger": {
+          "bg": "#fbe8e6",
+          "bar": "#a8271c"
+        }
+      }
+    },
+    "type": {
+      "body": "\"Inter\", sans-serif",
+      "display": "\"Inter\", sans-serif",
+      "mono": "\"JetBrains Mono\", monospace",
+      "bodySize": "9.8pt",
+      "lineHeight": "1.52",
+      "h1": "21pt",
+      "h2": "14pt",
+      "h3": "11pt",
+      "cover": "32pt",
+      "small": "8.6pt",
+      "caption": "7.8pt",
+      "table": "8.4pt",
+      "code": "8pt"
+    },
+    "grid": {
+      "margin": {
+        "top": "24mm",
+        "right": "20mm",
+        "bottom": "22mm",
+        "left": "20mm"
+      },
+      "baseline": "4pt",
+      "columns": 1,
+      "gutter": "6mm"
+    },
+    "chrome": {
+      "header": {
+        "left": "title",
+        "right": "org"
+      },
+      "footer": {
+        "left": "date",
+        "center": "none",
+        "right": "pageOfTotal"
+      }
+    }
+  },
+  "numberedHeadings": true
+}

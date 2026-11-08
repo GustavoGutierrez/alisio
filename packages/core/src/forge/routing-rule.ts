@@ -29,7 +29,7 @@ export function buildRoutingRule(input: RoutingRuleInput): string {
     );
   if (input.python)
     lines.push(
-      "- Data analysis, statistics, ML, charts, XLSX/DOCX/PDF, special dashboards: `python_run`.",
+      "- Data analysis, statistics, ML, charts, XLSX/DOCX, programmatic PDF (forms, merge, reportlab), special dashboards: `python_run`.",
     );
   if (input.guide) lines.push("- Call `forge_guide` before writing non-trivial code.");
   if (input.scratchpad) {

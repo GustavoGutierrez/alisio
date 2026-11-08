@@ -1,0 +1,110 @@
+/* executive-clean: serif reading text, authority navy, hairline rules, accent blocks. */
+h1,
+.no-h1 h2 {
+  padding-bottom: 7pt;
+  border-bottom: 0.75pt solid var(--rule);
+  font-weight: 700;
+}
+h1::before,
+.no-h1 h2::before {
+  content: "";
+  display: block;
+  width: 34pt;
+  height: 4.5pt;
+  background: var(--accent);
+  margin-bottom: 10pt;
+}
+h2 {
+  font-weight: 700;
+  color: var(--heading);
+}
+h2::after {
+  content: "";
+  display: block;
+  width: 22pt;
+  height: 1.5pt;
+  background: var(--accent);
+  margin-top: 4pt;
+}
+h3 {
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+main > p:first-of-type {
+  font-size: 1.06em;
+}
+th {
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  border-bottom: 1.5pt solid var(--accent);
+  font-size: calc(var(--fs-table) - 0.4pt);
+  letter-spacing: 0.03em;
+}
+td {
+  border-bottom: 0.5pt solid var(--rule);
+}
+tbody tr:last-child td {
+  border-bottom: 1pt solid var(--accent);
+}
+.stat {
+  background: var(--surface);
+}
+
+.cover {
+  --cover-pad-top: 66mm;
+  --cover-pad-x: 26mm;
+  --cover-pad-bottom: 24mm;
+}
+.cover::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 58mm;
+  height: 96mm;
+  background: var(--accent);
+}
+.cover::after {
+  content: "";
+  position: absolute;
+  top: 96mm;
+  right: 0;
+  width: 58mm;
+  height: 12mm;
+  background: var(--accent-soft);
+}
+.cover .cover-kicker {
+  color: var(--accent-soft);
+}
+.cover .cover-rule {
+  width: 34mm;
+  height: 3pt;
+  background: var(--accent-soft);
+  margin: 0 0 20pt;
+}
+.cover .cover-title {
+  font-weight: 700;
+  font-size: 40pt;
+  letter-spacing: -0.02em;
+  max-width: 128mm;
+}
+.cover .cover-sub {
+  max-width: 120mm;
+  font-size: 15pt;
+}
+.cover .cover-spacer {
+  flex: 1 1 auto;
+}
+.cover .cover-meta {
+  border-top: 0.5pt solid rgba(255, 255, 255, 0.35);
+  padding-top: 10pt;
+  max-width: 120mm;
+}
+.cover .cover-meta li:first-child {
+  color: var(--cover-ink);
+  font-weight: 600;
+}
+.no-h1 h2::after {
+  display: none;
+}

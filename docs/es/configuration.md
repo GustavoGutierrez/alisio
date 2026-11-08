@@ -418,6 +418,17 @@ tiempo máximo y la retención se aplican desde la siguiente llamada o barrido; 
 se aplican al reiniciar Alisio (la web recarga las herramientas del workspace cuando terminan sus
 ejecuciones). `runtime`, `isolation`, `wasm.*` y `oci.*` no se editan desde la interfaz ni en vivo: edita el archivo.
 
+## `documents` {#documents}
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | Registra `document_create` y `document_themes`; se aplica al siguiente arranque |
+| `engine` | `"auto"` | `auto`, `chromium` o `weasyprint` (WeasyPrint aún no está disponible) |
+| `chromiumPath` | sin definir | Ruta explícita de un navegador de la familia Chromium. Solo global; si no se define se usan las variables `ALISIO_CHROME_PATH`, `CHROME_PATH` y `PUPPETEER_EXECUTABLE_PATH` |
+| `defaultPageSize` | `"A4"` | `A4`, `Letter`, `Legal` o `A5` |
+
+Consulta [PDF diseñados](/es/documents).
+
 ## `forge` {#forge}
 
 Forja (`js_run`, el scratchpad y `forge_guide`) está activa por defecto. Los límites, la cuota y la

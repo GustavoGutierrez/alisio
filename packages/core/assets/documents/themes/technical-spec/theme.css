@@ -1,0 +1,154 @@
+/* technical-spec: optional numbered headings, mono accents, grid tables. */
+.auto-number h1 {
+  counter-increment: n1;
+  counter-reset: n2 n3;
+}
+.auto-number h2 {
+  counter-increment: n2;
+  counter-reset: n3;
+}
+.auto-number h3 {
+  counter-increment: n3;
+}
+.auto-number h1::before {
+  content: counter(n1) "\2002";
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.82em;
+}
+.auto-number h2::before {
+  content: counter(n1) "." counter(n2) "\2002";
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.82em;
+}
+.auto-number h3::before {
+  content: counter(n1) "." counter(n2) "." counter(n3) "\2002";
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+h1,
+.no-h1 h2 {
+  font-weight: 700;
+  padding-bottom: 6pt;
+  padding-left: 0;
+  border-left: 0;
+  border-bottom: 2pt solid var(--accent);
+}
+h2 {
+  font-weight: 700;
+  padding-left: 8pt;
+  border-left: 3pt solid var(--accent-soft);
+}
+h3 {
+  font-weight: 600;
+}
+/* No level-1 heading: h2 is numbered 1, 2... and h3 1.1, 1.2... */
+.auto-number.no-h1 h2 {
+  counter-increment: n1;
+  counter-reset: n2 n3;
+}
+.auto-number.no-h1 h2::before {
+  content: counter(n1) "\\2002";
+  font-size: 0.82em;
+}
+.auto-number.no-h1 h3 {
+  counter-increment: n2;
+  counter-reset: n3;
+}
+.auto-number.no-h1 h3::before {
+  content: counter(n1) "." counter(n2) "\\2002";
+}
+th {
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  border: 0.5pt solid var(--rule);
+  border-bottom: 1.5pt solid var(--accent);
+  font-size: calc(var(--fs-table) - 0.2pt);
+}
+td {
+  border: 0.5pt solid var(--rule);
+}
+pre {
+  border-left-width: 3.5pt;
+  font-size: var(--fs-code);
+  padding: 7pt 10pt;
+}
+code {
+  color: var(--accent-dark);
+}
+.callout {
+  border-radius: 2pt;
+  border: 0.5pt solid var(--tone-bar);
+  border-left-width: 3.5pt;
+  background: #ffffff;
+}
+.stat {
+  border-radius: 0;
+  background: #ffffff;
+  border: 0.5pt solid var(--rule);
+  border-top: 2pt solid var(--accent);
+}
+.stat .v {
+  font-family: var(--font-mono);
+  font-size: 16pt;
+}
+
+.cover {
+  --cover-pad-top: 24mm;
+  --cover-pad-x: 24mm;
+  --cover-pad-bottom: 22mm;
+  border-top: 8pt solid var(--accent);
+}
+.cover::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 15mm;
+  background: var(--accent);
+}
+.cover::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 15mm;
+  bottom: 0;
+  width: 4mm;
+  background: var(--accent-soft);
+}
+.cover .cover-kicker {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  margin-top: 48mm;
+}
+.cover .cover-rule {
+  display: none;
+}
+.cover .cover-title {
+  font-weight: 700;
+  font-size: 36pt;
+  letter-spacing: -0.02em;
+  max-width: 130mm;
+}
+.cover .cover-sub {
+  max-width: 120mm;
+}
+.cover .cover-spacer {
+  flex: 1 1 auto;
+}
+.cover .cover-meta {
+  font-family: var(--font-mono);
+  font-size: 8.6pt;
+  border-left: 3pt solid var(--accent);
+  padding-left: 10pt;
+}
+.cover .cover-meta li {
+  margin-bottom: 4pt;
+}

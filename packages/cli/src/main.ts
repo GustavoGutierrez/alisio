@@ -620,6 +620,18 @@ forge
     const { printForgeStatus } = await import("./forge.ts");
     await printForgeStatus(options(cmd), !!flags.probe);
   });
+const documents = program
+  .command("documents")
+  .description(
+    "Designed PDFs (document_create): shows which engines are ready and how to fix the rest",
+  );
+documents
+  .command("status")
+  .description("Show each document engine: ready with its version, or why not and how to fix it")
+  .action(async (_flags: unknown, cmd) => {
+    const { printDocumentsStatus } = await import("./documents.ts");
+    await printDocumentsStatus(options(cmd));
+  });
 const evalCommand = program
   .command("eval")
   .description(

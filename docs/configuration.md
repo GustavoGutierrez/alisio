@@ -407,6 +407,17 @@ The timeout and the retention apply from the next call or sweep; `analysis.enabl
 Alisio restarts (the web reloads the workspace's tools once its runs finish). `runtime`, `isolation`,
 `wasm.*` and `oci.*` are not editable from the UI or live: edit the file.
 
+## `documents` {#documents}
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | Registers `document_create` and `document_themes`; applies at the next start |
+| `engine` | `"auto"` | `auto`, `chromium` or `weasyprint` (WeasyPrint is not available yet) |
+| `chromiumPath` | unset | Explicit path of a Chromium-family browser. Global only; the `ALISIO_CHROME_PATH`, `CHROME_PATH` and `PUPPETEER_EXECUTABLE_PATH` variables are used when it is unset |
+| `defaultPageSize` | `"A4"` | `A4`, `Letter`, `Legal` or `A5` |
+
+See [Designed PDFs](/documents).
+
 ## `forge` {#forge}
 
 Forja (`js_run`, the scratchpad and `forge_guide`) is on by default. The limits, the scratchpad

@@ -28,6 +28,7 @@ Lo elige el modelo; tú no lo configuras. La regla de enrutado del prompt del si
 | --- | --- |
 | Combinar varias llamadas a herramientas, filtrar o agregar sus resultados, paginar, repartir en paralelo | `js_run` |
 | Leer una hoja de cálculo o un CSV, estadística, gráficos, un informe, un dashboard, scikit-learn o statsmodels | `python_run` |
+| Un PDF diseñado a partir de Markdown o contenido estructurado (informes, memorandos, documentos para imprimir) | `document_create` (consulta [PDF diseñados](/es/documents)); `python_run` conserva los PDF programáticos: formularios, fusión, reportlab |
 | Una llamada a una herramienta | La propia herramienta, sin script |
 
 Antes de escribir código no trivial el modelo puede llamar a [`forge_guide`](#forge-guide) para
