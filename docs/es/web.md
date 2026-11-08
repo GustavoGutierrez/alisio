@@ -313,21 +313,46 @@ de Alisio queda deshabilitada con **La actualización requiere una versión más
   <figcaption>Plugins instalados: el contador de actualizaciones, Buscar actualizaciones, el botón Actualizar y Desinstalar con el nombre del paquete.</figcaption>
 </figure>
 
-**Catálogo de plugins.** Los plugins publicados como tarjetas: la portada con el nombre y una
-descripción corta, y una insignia de estado (**Instalado**, **Actualizar**, **Incompatible**). Haga
-clic en una tarjeta (o pulse `Enter` sobre ella) para voltearla: el reverso tiene la descripción
-completa, categorías, etiquetas, autor, licencia, enlaces a npm y al repositorio, y el botón
-**Instalar**, **Actualizar**, **Reinstalar** o **Instalar versión anterior** (`Esc` o el botón de
-cerrar la devuelve; con movimiento reducido la tarjeta cambia sin girar). La búsqueda cubre nombre,
-descripción, etiquetas y paquete; se filtra por categoría y etiquetas y, opcionalmente, se agrupa
-por categoría. Diez plugins por página, con imágenes diferidas, esqueletos de carga y un estado de
-error con **Reintentar**. **Incompatible** significa que el rango `sdk` del plugin no coincide con el
-`@alisio/sdk` instalado; su botón queda deshabilitado e indica el motivo.
+**Catálogo de plugins.** Los complementos publicados como una lista compacta, una fila por
+complemento: su icono, su nombre, una descripción corta (cortada con la misma longitud en todas las
+filas; el texto completo es el tooltip y la descripción accesible) y un botón con icono para la
+acción: **Instalar** (+), **Actualizar**, **Reinstalar** cuando ya está instalada la misma versión, o
+**Instalar versión anterior**. Un complemento incompatible tiene el botón deshabilitado con un tooltip
+que explica el motivo, y las filas llevan una insignia **Instalado**, **Actualizar** o
+**Incompatible**. La lista tiene una columna si es estrecha, dos con el ancho predeterminado del
+diálogo y tres con el diálogo maximizado. La búsqueda cubre nombre, descripción, etiquetas y paquete;
+se filtra por categoría y etiquetas y, opcionalmente, se agrupa por categoría. Diez complementos por
+página, con esqueletos de carga y un estado de error con **Reintentar**. La acción nunca abre el
+detalle; haga clic en la fila (o pulse `Enter` o `Espacio` sobre ella) para abrirlo.
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/plugin_catalog_web_ui.webp" alt="Ajustes, Plugins, Catálogo de plugins: cuadro de búsqueda, Buscar actualizaciones, filtros de categoría y etiquetas, y una cuadrícula de tarjetas con portadas; la tarjeta de Atlassian está volteada y muestra su descripción y el botón Instalar." width="1060" height="780" loading="lazy" decoding="async" />
-  <figcaption>El Catálogo de plugins: tarjetas con portada que se voltean para mostrar el detalle y el botón Instalar.</figcaption>
+  <img src="../assets/web-ui/plugin_catalog_web_ui.webp" alt="Ajustes, Complementos, Catálogo de complementos: cuadro de búsqueda, Buscar actualizaciones, filtros de categoría y etiquetas, y una lista de dos columnas de complementos, cada uno con su icono, nombre, descripción corta y un botón con icono de Instalar o Reinstalar." width="1040" height="760" loading="lazy" decoding="async" />
+  <figcaption>El Catálogo de complementos: una lista compacta con icono, nombre, descripción corta y el botón de acción.</figcaption>
 </figure>
+
+**Detalle del complemento.** Al abrir una fila, el complemento se muestra dentro de la misma
+pestaña: el icono, el nombre, el autor y un resumen de una línea, la acción principal (**Instalar**,
+**Actualizar**, **Reinstalar** o **Instalar versión anterior**), **Desinstalar** si está instalado y
+enlaces a npm y al sitio web. Debajo van la portada, la descripción completa, una lista de
+**Información** (última versión e instalada, desarrollador, licencia, categoría, etiquetas, el rango
+de `@alisio/sdk` que necesita y si esta versión de Alisio lo cumple, el paquete de npm, la fecha de
+publicación y los enlaces a npm, repositorio y sitio web; solo lo que el catálogo ofrece) y un aviso
+de que los complementos no están aislados. **Volver al catálogo** (o `Esc`) regresa a la lista con la
+misma búsqueda, filtros y página, y con el foco en la fila que abrió.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugin_catalog_detail_web_ui.webp" alt="Ajustes, Complementos, Detalle de OpenAI: icono, nombre, autor, los botones Actualizar, Desinstalar, npm y Sitio web, la portada grande, la descripción, la lista de Información y el aviso de que no está aislado." width="1068" height="1468" loading="lazy" decoding="async" />
+  <figcaption>El detalle del complemento: acciones, portada, descripción completa y la lista de Información.</figcaption>
+</figure>
+
+**Iconos de complementos.** Junto a cada complemento aparece un icono en el catálogo, en
+**Plugins instalados**, en las confirmaciones de instalar, actualizar y desinstalar y en la vista
+previa de **Instalar desde archivo**. Es el icono del catálogo si el paquete está en el catálogo; si
+no, el icono que incluye el paquete instalado (vea [Icono del
+complemento](/es/plugins)); si no, un icono predeterminado (una pieza de rompecabezas),
+que también se usa cuando un icono no carga y para los complementos integrados, de proyecto y de
+archivo aún sin instalar. Los iconos pasan por el servidor como las portadas, así que el navegador
+nunca contacta el origen del catálogo.
 
 **Caché del catálogo.** El servidor descarga el catálogo (`ALISIO_PLUGIN_CATALOG_URL`, por defecto el
 catálogo publicado de `alisio-plugins`) y lo guarda en su directorio de estado. No vuelve a consultarlo
@@ -875,6 +900,8 @@ GET  /api/events?session=<sid>         the event stream (snapshot, then live fra
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
 GET  /api/plugin-catalog?refresh=0|1   catalog, cache metadata and installed versions
 GET  /api/plugin-catalog/covers/:slug  a cover through the server cache
+GET  /api/plugin-catalog/icons/:slug   an icon through the server cache
+GET  /api/plugins/package-icon?package=  the icon an installed package ships (alisio.icon)
 GET  /api/plugins/packages?workspace=<wid>   installed npm packages, update and restart flags
 POST /api/plugins/install {package, version?, confirmed: true}   a catalog package only
 POST /api/plugins/update-all {confirmed: true}   every outdated plugin in one npm install

@@ -1080,15 +1080,6 @@
   list-style: none;
 }
 
-.catalogCard {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-}
-
 .cover {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -1122,72 +1113,6 @@
   font-weight: 600;
 }
 
-.catalogBody {
-  display: grid;
-  flex: 1;
-  align-content: start;
-  gap: 8px;
-  padding: 12px 14px 14px;
-}
-
-.catalogTitle {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.catalogName {
-  margin: 0;
-  font-size: 15px;
-}
-
-.version {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.catalogText {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13.5px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.chips,
-.tagList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tagList {
-  color: var(--faint);
-  font-size: 12.5px;
-}
-
-.catalogMeta {
-  margin: 0;
-  color: var(--faint);
-  font-size: 12.5px;
-}
-
-.catalogFoot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-}
-
 .links,
 .rowActions {
   display: inline-flex;
@@ -1197,16 +1122,11 @@
 }
 
 .link {
-  color: var(--accent);
-  font-size: 13px;
-}
-
-.installedMark {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--ok);
-  font-size: 14px;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .skeletonLine {
@@ -1307,8 +1227,15 @@
   box-shadow: var(--shadow);
 }
 
-.dialogTitle {
+.dialogHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin: 0 0 10px;
+}
+
+.dialogTitle {
+  margin: 0;
   font-size: 17px;
 }
 
@@ -1475,206 +1402,358 @@
   }
 }
 
-/* Flip cards: cover with a short text on the front, details and the action on the back. */
-.flipCard {
+/* ---- Compact catalog rows ---- */
+.row {
   position: relative;
-  /* The catalog covers are 16:9: the same ratio keeps them from being cropped. */
-  aspect-ratio: 16 / 9;
-  perspective: 1100px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
   list-style: none;
 }
 
-.flipCard[data-skeleton="true"] {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+.row:hover {
+  border-color: var(--border-strong);
 }
 
-.flipInner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1);
-}
-
-.flipCard[data-flipped="true"] .flipInner {
-  transform: rotateY(180deg);
-}
-
-.faceFront,
-.faceBack {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.faceFront {
-  background: var(--raised);
-}
-
-.faceBack {
+.rowMain {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--panel);
-  transform: rotateY(180deg);
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.faceFront .cover {
-  position: absolute;
-  inset: 0;
-  aspect-ratio: auto;
-}
-
-.frontShade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgb(5 10 14 / 88%) 0%,
-    rgb(5 10 14 / 55%) 38%,
-    transparent 70%
-  );
-  pointer-events: none;
-}
-
-.frontText {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+.rowText {
   display: grid;
-  gap: 3px;
-  padding: 12px 14px;
-  color: #fff;
-  pointer-events: none;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
 }
 
-.frontName {
-  margin: 0;
-  font-size: 15px;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 60%);
+.rowName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
 }
 
-.frontDesc {
-  display: -webkit-box;
-  margin: 0;
+.rowNameText {
+  min-width: 0;
   overflow: hidden;
-  color: rgb(255 255 255 / 86%);
-  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowDesc {
+  /* The text is already cut at DESCRIPTION_LIMIT characters; two lines hold that at the narrowest
+     column, and the clamp is only a safety net so every row has the same height. */
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
   line-height: 1.35;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
-.frontBadge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 9px;
+.rowBadge {
+  flex: none;
+  padding: 0 7px;
   border-radius: 999px;
-  background: rgb(10 16 20 / 78%);
-  color: #fff;
-  font-size: 12px;
-  pointer-events: none;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
 }
 
-.frontBadge[data-tone="ok"] {
-  color: #8fe0a3;
+.rowBadge[data-tone="ok"] {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
 }
 
-.frontBadge[data-tone="warn"] {
-  color: #f1c978;
+.rowBadge[data-tone="warn"] {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
 }
 
-.frontBadge[data-tone="danger"] {
-  color: #ff9a9f;
+.rowBadge[data-tone="danger"] {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
-.flipHit {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  border-radius: 14px;
+.rowAction {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
   background: transparent;
+  color: var(--text);
   cursor: pointer;
 }
 
-.flipHit:hover {
-  background: rgb(255 255 255 / 4%);
+.rowAction:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
-.backHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+.rowAction[data-kind="install"],
+.rowAction[data-kind="update"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
-.iconButton {
-  display: inline-grid;
-  place-items: center;
+.rowAction[data-kind="install"]:hover:not(:disabled),
+.rowAction[data-kind="update"]:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.rowAction:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rowMain:focus-visible,
+.rowAction:focus-visible,
+.backLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.row[data-skeleton="true"] {
+  padding: 10px;
+  gap: 12px;
+}
+
+.skeletonIcon {
   flex: none;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--raised);
+  animation: plugin-pulse 1.4s ease-in-out infinite;
 }
 
-.backScroll {
+.skeletonLines {
   display: grid;
   flex: 1;
-  align-content: start;
   gap: 8px;
-  min-height: 0;
-  overflow-y: auto;
 }
 
-.backScroll .catalogText {
+.pluginIcon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.pluginIcon img {
   display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.backFoot {
+.pluginIcon[data-size="small"] {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.pluginIcon[data-size="hero"] {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+}
+
+/* ---- Plugin detail ---- */
+.detail {
+  display: grid;
+  gap: 14px;
+  /* The dialog's own header bar floats over the top of the scrolled content. */
+  scroll-margin-top: 64px;
+  outline: none;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.detailHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.detailTitle {
+  display: grid;
+  flex: 1 1 240px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detailName {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.detailSummary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detailBadges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detailActions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .flipInner {
-    transition: none;
-  }
+.detailActions a {
+  text-decoration: none;
+}
 
-  .flipCard[data-flipped="true"] .flipInner {
-    transform: none;
-  }
+.detailCover {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
 
-  .flipCard .faceBack {
-    transform: none;
-    visibility: hidden;
-  }
+.detailHeading {
+  margin: 6px 0 0;
+  font-size: 16px;
+}
 
-  .flipCard[data-flipped="true"] .faceBack {
-    visibility: visible;
-  }
+.detailText {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
 
-  .flipCard[data-flipped="true"] .faceFront {
-    visibility: hidden;
+.infoList {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.infoRow {
+  display: grid;
+  grid-template-columns: minmax(110px, 200px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.infoRow + .infoRow {
+  border-top: 1px solid var(--border);
+}
+
+.infoRow dt {
+  color: var(--muted);
+}
+
+.infoRow dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.infoRow code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.infoNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.infoNote[data-tone="danger"] {
+  color: var(--danger);
+}
+
+.securityNote {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: 13.5px;
+}
+
+.securityNote p {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.securityNote > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+@media (max-width: 520px) {
+  .infoRow {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
 
@@ -1722,4 +1801,22 @@
 .signInStep {
   display: grid;
   gap: 6px;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.iconItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }

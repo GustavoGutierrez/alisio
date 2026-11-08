@@ -1,297 +1,123 @@
 /**
  * Settings → Plugins → Plugin catalog: search, category and tag filters, optional grouping by
- * category, ten cards per page with lazy cover images, and one-click install/update.
+ * category, ten compact rows per page (icon, name, one-line description, action button), and a
+ * detail panel in the same tab. The list state lives in a reducer next to the open detail, so Back
+ * returns to the same search, filters and page.
  */
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useReducer, useRef, useState } from "preact/hooks";
 import { locale } from "../../i18n/index.ts";
 import { Icon } from "../icons.tsx";
+import { CatalogDetail } from "./CatalogDetail.tsx";
 import {
-  actionState,
   ageLabel,
   type CatalogPluginView,
+  catalogNav,
   filterCatalog,
   groupByCategory,
+  INITIAL_NAV,
   type InstallTarget,
   orderByCategory,
   type PluginCatalogView,
   pageNumbers,
   paginate,
+  rowAction,
   sortCatalog,
   tagCounts,
+  truncateDescription,
 } from "./catalog-model.ts";
+import { ActionIcon, actionText, PluginIcon } from "./catalog-parts.tsx";
 import { cs } from "./catalog-strings.ts";
-import { useInstallFlow } from "./InstallFlow.tsx";
+import { useInstallFlow, useUninstallFlow } from "./InstallFlow.tsx";
 import { working } from "./plugin-ops.ts";
 import styles from "./settings.module.css";
 import { type Loaded, Pill, SearchBox } from "./shared.tsx";
 
 const TOP_TAGS = 8;
 
-function Cover(props: { plugin: CatalogPluginView }) {
-  const [state, setState] = useState<"loading" | "loaded" | "failed">(
-    props.plugin.cover ? "loading" : "failed",
-  );
-  return (
-    <div class={styles.cover} data-state={state}>
-      {props.plugin.cover && state !== "failed" ? (
-        <img
-          src={props.plugin.cover}
-          alt=""
-          width={320}
-          height={180}
-          loading="lazy"
-          decoding="async"
-          onLoad={() => setState("loaded")}
-          onError={() => setState("failed")}
-        />
-      ) : null}
-      {state === "failed" ? (
-        <span class={styles.coverFallback} aria-hidden="true">
-          {props.plugin.name.slice(0, 1).toUpperCase()}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function ExternalLink(props: { href: string; children: string }) {
-  return (
-    <a href={props.href} target="_blank" rel="noopener noreferrer" class={styles.link}>
-      {props.children}
-      <span class={styles.srOnly}> ({cs("card.external")})</span>
-    </a>
-  );
-}
-
-/** `inert` keeps the hidden face out of the tab order and away from assistive tech. */
-const inert = (on: boolean) => (on ? { inert: true } : {});
-
-/**
- * A card that flips: the front is the cover with the name and a short description over it, the
- * back has the full text, links and the install/update action. The flip is a button (Enter, Space,
- * Escape to return); with reduced motion the faces swap without rotating.
- */
-function CatalogCard(props: {
+/** One compact row: icon, name, one-line description and the action as an icon button. */
+function CatalogRow(props: {
   plugin: CatalogPluginView;
   sdkVersion?: string;
+  onOpen: (slug: string) => void;
   onAsk: (target: InstallTarget) => void;
 }) {
   const { plugin } = props;
-  const [flipped, setFlipped] = useState(false);
-  const state = actionState(plugin, working.value);
-  const target = (mode: InstallTarget["mode"]): InstallTarget => ({
-    package: plugin.package,
-    name: plugin.name,
-    version: plugin.version,
-    ...(plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
-    mode,
-  });
-  const reason =
-    state.kind === "incompatible"
-      ? cs("action.incompatibleReason", { range: plugin.sdk ?? "?", sdk: props.sdkVersion ?? "?" })
-      : state.busy && !state.reinstall
-        ? cs("action.busy")
-        : undefined;
-  const reasonId = `reason-${plugin.slug}`;
-  const backId = `back-${plugin.slug}`;
-  const installed = plugin.installedVersion ?? "";
+  const action = rowAction(plugin, working.value);
+  const text = actionText(plugin, action, props.sdkVersion);
+  const descId = `row-desc-${plugin.slug}`;
   const badge =
-    state.kind === "installed"
-      ? { tone: "ok" as const, text: cs("action.installed"), icon: true }
-      : state.kind === "update"
-        ? { tone: "warn" as const, text: cs("update.button"), icon: false }
-        : state.kind === "incompatible"
-          ? { tone: "danger" as const, text: cs("action.incompatible"), icon: false }
-          : state.kind === "installing"
-            ? { tone: "off" as const, text: cs("action.installing"), icon: false }
-            : undefined;
+    action.kind === "installing"
+      ? undefined
+      : action.kind === "incompatible"
+        ? { tone: "danger" as const, text: cs("action.incompatible") }
+        : plugin.installedVersion
+          ? plugin.updateAvailable
+            ? { tone: "warn" as const, text: cs("update.button") }
+            : { tone: "ok" as const, text: cs("action.installed") }
+          : undefined;
   return (
-    <li
-      class={styles.flipCard}
-      data-flipped={flipped}
-      aria-busy={state.kind === "installing" || undefined}
-    >
-      <div class={styles.flipInner}>
-        <div class={styles.faceFront} {...inert(flipped)} aria-hidden={flipped || undefined}>
-          <Cover plugin={plugin} />
-          <div class={styles.frontShade} />
-          {badge ? (
-            <span class={styles.frontBadge} data-tone={badge.tone}>
-              {badge.icon ? <Icon name="check" size={13} /> : null}
-              {badge.text}
-            </span>
-          ) : null}
-          <div class={styles.frontText}>
-            <h5 class={styles.frontName}>{plugin.name}</h5>
-            <p class={styles.frontDesc}>{plugin.description}</p>
-          </div>
-          <button
-            type="button"
-            class={styles.flipHit}
-            aria-expanded={flipped}
-            aria-controls={backId}
-            aria-label={cs("card.details", { name: plugin.name })}
-            onClick={() => setFlipped(true)}
-          />
-        </div>
-        <div
-          id={backId}
-          class={styles.faceBack}
-          {...inert(!flipped)}
-          aria-hidden={!flipped || undefined}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && flipped) {
-              event.stopPropagation();
-              setFlipped(false);
-            }
-          }}
-        >
-          <div class={styles.backHead}>
-            <div>
-              <h5 class={styles.catalogName}>{plugin.name}</h5>
-              <span class={styles.version}>{cs("card.version", { version: plugin.version })}</span>
-            </div>
-            <button
-              type="button"
-              class={styles.iconButton}
-              aria-label={cs("card.back")}
-              title={cs("card.back")}
-              onClick={() => setFlipped(false)}
-            >
-              <Icon name="x" size={16} />
-            </button>
-          </div>
-          <div class={styles.backScroll}>
-            <p class={styles.catalogText}>{plugin.description}</p>
-            <ul class={styles.chips} aria-label={cs("card.categories")}>
-              {plugin.categories.map((category) => (
-                <li key={category}>
-                  <Pill tone="off">{category}</Pill>
-                </li>
-              ))}
-            </ul>
-            <ul class={styles.tagList} aria-label={cs("card.tagsLabel")}>
-              {plugin.tags.slice(0, 5).map((tag) => (
-                <li key={tag}>#{tag}</li>
-              ))}
-            </ul>
-            <p class={styles.catalogMeta}>
-              {[
-                plugin.author ? cs("card.by", { author: plugin.author }) : "",
-                plugin.license ?? "",
-                plugin.sdk ? `sdk ${plugin.sdk}` : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            <span class={styles.links}>
-              {plugin.npmUrl ? (
-                <ExternalLink href={plugin.npmUrl}>{cs("card.npm")}</ExternalLink>
-              ) : null}
-              {plugin.repository ? (
-                <ExternalLink href={plugin.repository}>{cs("card.repository")}</ExternalLink>
-              ) : null}
-              {plugin.homepage && plugin.homepage !== plugin.repository ? (
-                <ExternalLink href={plugin.homepage}>{cs("card.homepage")}</ExternalLink>
-              ) : null}
-            </span>
-            {reason ? (
-              <p id={reasonId} class={styles.diagnostic}>
-                {reason}
-              </p>
-            ) : null}
-          </div>
-          <div class={styles.backFoot}>
-            {state.kind === "installed" ? (
-              <span
-                class={styles.installedMark}
-                title={cs("action.installedNamed", { name: plugin.name, version: installed })}
-              >
-                <Icon name="check" size={15} />
-                {cs("action.installed")}
+    <li class={styles.row} aria-busy={action.kind === "installing" || undefined}>
+      <button
+        type="button"
+        class={styles.rowMain}
+        data-slug={plugin.slug}
+        title={plugin.description}
+        aria-label={cs("row.open", { name: plugin.name })}
+        aria-describedby={descId}
+        onClick={() => props.onOpen(plugin.slug)}
+      >
+        <PluginIcon icon={plugin.icon} />
+        <span class={styles.rowText}>
+          <span class={styles.rowName}>
+            <span class={styles.rowNameText}>{plugin.name}</span>
+            {badge ? (
+              <span class={styles.rowBadge} data-tone={badge.tone}>
+                {badge.text}
               </span>
             ) : null}
-            {state.reinstall ? (
-              <button
-                type="button"
-                class={styles.ghostButton}
-                disabled={state.busy}
-                aria-label={cs("action.reinstallNamed", { name: plugin.name })}
-                onClick={() => props.onAsk(target("reinstall"))}
-              >
-                {cs("action.reinstall")}
-              </button>
-            ) : null}
-            {state.kind !== "installed" ? (
-              <button
-                type="button"
-                class={state.kind === "downgrade" ? styles.ghostButton : styles.primaryButton}
-                disabled={state.disabled}
-                aria-describedby={reason ? reasonId : undefined}
-                aria-label={
-                  state.kind === "installing"
-                    ? cs("action.installingNamed", { name: plugin.name })
-                    : state.kind === "update"
-                      ? cs("action.updateFromNamed", {
-                          name: plugin.name,
-                          from: installed,
-                          to: plugin.version,
-                        })
-                      : state.kind === "downgrade"
-                        ? cs("action.downgradeNamed", {
-                            name: plugin.name,
-                            from: installed,
-                            to: plugin.version,
-                          })
-                        : state.kind === "incompatible"
-                          ? cs("action.incompatible")
-                          : cs("action.installNamed", { name: plugin.name })
-                }
-                onClick={() =>
-                  props.onAsk(
-                    target(
-                      state.kind === "update"
-                        ? "update"
-                        : state.kind === "downgrade"
-                          ? "downgrade"
-                          : "install",
-                    ),
-                  )
-                }
-              >
-                {state.kind === "installing" ? (
-                  <>
-                    <span class={styles.spinner} aria-hidden="true" />
-                    {cs("action.installing")}
-                  </>
-                ) : state.kind === "update" ? (
-                  cs("action.updateFrom", { from: installed, to: plugin.version })
-                ) : state.kind === "downgrade" ? (
-                  cs("action.downgrade", { from: installed, to: plugin.version })
-                ) : state.kind === "incompatible" ? (
-                  cs("action.incompatible")
-                ) : (
-                  cs("action.install")
-                )}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
+          </span>
+          <span class={styles.rowDesc} aria-hidden="true">
+            {truncateDescription(plugin.description)}
+          </span>
+          <span id={descId} class={styles.srOnly}>
+            {plugin.description}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class={styles.rowAction}
+        data-kind={action.kind}
+        disabled={action.disabled}
+        title={text.reason ? `${text.label}: ${text.reason}` : text.label}
+        aria-label={text.aria}
+        onClick={() => action.mode && props.onAsk(rowTarget(plugin, action.mode))}
+      >
+        <ActionIcon kind={action.kind} />
+      </button>
     </li>
   );
 }
 
+const rowTarget = (plugin: CatalogPluginView, mode: InstallTarget["mode"]): InstallTarget => ({
+  package: plugin.package,
+  name: plugin.name,
+  version: plugin.version,
+  ...(plugin.icon ? { icon: plugin.icon } : {}),
+  ...(plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
+  mode,
+});
+
 function Skeletons() {
   return (
     <ul class={styles.catalogGrid} aria-hidden="true">
-      {Array.from({ length: 4 }, (_, index) => (
-        <li key={index} class={styles.flipCard} data-skeleton="true">
-          <div
-            class={styles.cover}
-            data-state="loading"
-            style={{ position: "absolute", inset: 0 }}
-          />
+      {Array.from({ length: 6 }, (_, index) => (
+        <li key={index} class={styles.row} data-skeleton="true">
+          <span class={styles.skeletonIcon} />
+          <span class={styles.skeletonLines}>
+            <span class={styles.skeletonLine} />
+            <span class={styles.skeletonLine} />
+          </span>
         </li>
       ))}
     </ul>
@@ -305,20 +131,28 @@ export function PluginCatalog(props: {
   onChanged: () => void;
 }) {
   const { data } = props;
-  const [text, setText] = useState("");
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string | undefined>();
-  const [tags, setTags] = useState<string[]>([]);
+  const [nav, dispatch] = useReducer(catalogNav, INITIAL_NAV);
+  const { query, category, tags, group, page } = nav.list;
+  const [text, setText] = useState(query);
   const [moreTags, setMoreTags] = useState(false);
-  const [group, setGroup] = useState(false);
-  const [page, setPage] = useState(1);
   const flow = useInstallFlow(props.onChanged);
+  const removal = useUninstallFlow(props.onChanged);
+  const listRef = useRef<HTMLDivElement>(null);
+  const returnTo = useRef<string | undefined>();
 
   useEffect(() => {
-    const timer = setTimeout(() => setQuery(text), 200);
+    if (text === query) return;
+    const timer = setTimeout(() => dispatch({ type: "filter", patch: { query: text } }), 200);
     return () => clearTimeout(timer);
-  }, [text]);
-  useEffect(() => setPage(1), [query, category, tags.join("|"), group]);
+  }, [text, query]);
+  // Back from the detail: put the focus on the row that was opened.
+  useEffect(() => {
+    if (nav.detail !== undefined || !returnTo.current) return;
+    const slug = returnTo.current;
+    returnTo.current = undefined;
+    for (const button of listRef.current?.querySelectorAll<HTMLElement>("[data-slug]") ?? [])
+      if (button.dataset.slug === slug) button.focus();
+  }, [nav.detail]);
 
   const catalog = data.data?.catalog;
   const filtered = useMemo(() => {
@@ -336,8 +170,27 @@ export function PluginCatalog(props: {
   const filtering = !!query || !!category || tags.length > 0;
   const meta = data.data?.meta;
   const toggleTag = (tag: string) =>
-    setTags((current) =>
-      current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag],
+    dispatch({
+      type: "filter",
+      patch: { tags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag] },
+    });
+
+  const detailPlugin = nav.detail
+    ? catalog?.plugins.find((plugin) => plugin.slug === nav.detail)
+    : undefined;
+  if (detailPlugin)
+    return (
+      <div class={styles.catalogPage}>
+        <CatalogDetail
+          plugin={detailPlugin}
+          {...(data.data?.sdkVersion ? { sdkVersion: data.data.sdkVersion } : {})}
+          onBack={() => dispatch({ type: "back" })}
+          onAsk={flow.ask}
+          onUninstall={removal.ask}
+        />
+        {flow.dialog}
+        {removal.dialog}
+      </div>
     );
 
   if (data.error && !data.data)
@@ -351,7 +204,7 @@ export function PluginCatalog(props: {
     );
 
   return (
-    <div class={styles.catalogPage}>
+    <div class={styles.catalogPage} ref={listRef}>
       <p class={styles.note}>{cs("catalog.lead")}</p>
       <div class={styles.catalogBar}>
         <SearchBox value={text} label={cs("catalog.search")} onInput={setText} />
@@ -392,7 +245,10 @@ export function PluginCatalog(props: {
           <select
             value={category ?? ""}
             onChange={(event) =>
-              setCategory((event.target as HTMLSelectElement).value || undefined)
+              dispatch({
+                type: "filter",
+                patch: { category: (event.target as HTMLSelectElement).value || undefined },
+              })
             }
           >
             <option value="">
@@ -409,7 +265,12 @@ export function PluginCatalog(props: {
           <input
             type="checkbox"
             checked={group}
-            onChange={(event) => setGroup((event.target as HTMLInputElement).checked)}
+            onChange={(event) =>
+              dispatch({
+                type: "filter",
+                patch: { group: (event.target as HTMLInputElement).checked },
+              })
+            }
           />
           <span>{cs("catalog.group")}</span>
         </label>
@@ -419,9 +280,7 @@ export function PluginCatalog(props: {
             class={styles.inlineLink}
             onClick={() => {
               setText("");
-              setQuery("");
-              setCategory(undefined);
-              setTags([]);
+              dispatch({ type: "clear" });
             }}
           >
             {cs("catalog.clearFilters")}
@@ -467,12 +326,16 @@ export function PluginCatalog(props: {
         (section) => (
           <section key={section.category} aria-label={section.category || undefined}>
             {group ? <h4 class={styles.groupTitle}>{section.category}</h4> : null}
-            <ul class={styles.catalogGrid}>
+            <ul class={styles.catalogGrid} aria-label={cs("row.list")}>
               {section.plugins.map((plugin) => (
-                <CatalogCard
+                <CatalogRow
                   key={plugin.slug}
                   plugin={plugin}
                   {...(data.data?.sdkVersion ? { sdkVersion: data.data.sdkVersion } : {})}
+                  onOpen={(slug) => {
+                    returnTo.current = slug;
+                    dispatch({ type: "open", slug });
+                  }}
                   onAsk={flow.ask}
                 />
               ))}
@@ -486,7 +349,7 @@ export function PluginCatalog(props: {
             type="button"
             class={styles.ghostButton}
             disabled={view.page <= 1}
-            onClick={() => setPage(view.page - 1)}
+            onClick={() => dispatch({ type: "page", page: view.page - 1 })}
           >
             {cs("catalog.prev")}
           </button>
@@ -504,7 +367,7 @@ export function PluginCatalog(props: {
                 aria-label={
                   n === view.page ? cs("catalog.pageCurrent", { n }) : cs("catalog.page", { n })
                 }
-                onClick={() => setPage(n)}
+                onClick={() => dispatch({ type: "page", page: n })}
               >
                 {n}
               </button>
@@ -514,13 +377,14 @@ export function PluginCatalog(props: {
             type="button"
             class={styles.ghostButton}
             disabled={view.page >= view.pages}
-            onClick={() => setPage(view.page + 1)}
+            onClick={() => dispatch({ type: "page", page: view.page + 1 })}
           >
             {cs("catalog.next")}
           </button>
         </nav>
       ) : null}
       {flow.dialog}
+      {removal.dialog}
     </div>
   );
 }

@@ -26,6 +26,8 @@ export interface CatalogPluginView {
   featured: boolean;
   /** Same-origin cover URL; absent when the catalog has none. */
   cover?: string;
+  /** Same-origin icon URL; absent when the catalog has none. */
+  icon?: string;
   installedVersion?: string;
   updateAvailable: boolean;
   compatible: boolean;
@@ -66,6 +68,8 @@ export interface InstalledPackageView {
   updateAvailable: boolean;
   /** False when the newer version needs a newer SDK than this Alisio has. */
   updateCompatible: boolean;
+  /** Same-origin icon URL (the catalog's, else the one the package ships); absent when none. */
+  icon?: string;
 }
 
 /** `POST /api/plugins/install` (and the result of a local install job). */
@@ -252,6 +256,53 @@ export function actionState(plugin: CatalogPluginView, working?: string): Action
   if (installed === undefined) return { kind: "install", disabled: busy, busy };
   // A different version is installed: a higher catalog version updates, a lower one downgrades.
   return { kind: plugin.updateAvailable ? "update" : "downgrade", disabled: busy, busy };
+}
+
+export type RowActionKind =
+  | "install"
+  | "update"
+  | "reinstall"
+  | "downgrade"
+  | "installing"
+  | "incompatible";
+
+export interface RowAction {
+  kind: RowActionKind;
+  /** What a click installs; absent when the action cannot run. */
+  mode?: InstallMode;
+  disabled: boolean;
+  /** Why it is disabled (shown as a tooltip), when it is not simply "in progress". */
+  reason?: "incompatible" | "busy";
+}
+
+/**
+ * The single action of a compact row and of the detail header: Install, Update, Reinstall (the
+ * same version is installed) or Downgrade, disabled with a reason when it cannot run.
+ */
+export function rowAction(plugin: CatalogPluginView, working?: string): RowAction {
+  const state = actionState(plugin, working);
+  switch (state.kind) {
+    case "installing":
+      return { kind: "installing", disabled: true };
+    case "incompatible":
+      return { kind: "incompatible", disabled: true, reason: "incompatible" };
+    case "installed":
+      return state.reinstall
+        ? {
+            kind: "reinstall",
+            mode: "reinstall" as const,
+            disabled: state.busy,
+            ...(state.busy ? { reason: "busy" as const } : {}),
+          }
+        : { kind: "reinstall", disabled: true, reason: "incompatible" };
+    default:
+      return {
+        kind: state.kind,
+        mode: state.kind,
+        disabled: state.disabled,
+        ...(state.disabled ? { reason: "busy" as const } : {}),
+      };
+  }
 }
 
 export type UninstallReason = "builtin" | "notGlobal" | "readOnly";
@@ -453,4 +504,143 @@ export interface InstallTarget {
   version: string;
   installedVersion?: string;
   mode: InstallMode;
+  /** Icon URL shown in the confirmation dialog. */
+  icon?: string;
+}
+
+// ---- Compact rows ----------------------------------------------------------------------------------
+
+/** Every row shows at most this many characters of the description (the full text is a tooltip). */
+export const DESCRIPTION_LIMIT = 60;
+
+/**
+ * The description shortened to `limit` characters INCLUDING the "…", cut at a word boundary when a
+ * space falls in the second half of the window, otherwise mid-word. Text that fits is returned
+ * (whitespace collapsed) with no ellipsis.
+ */
+export function truncateDescription(text: string, limit = DESCRIPTION_LIMIT): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= limit) return clean;
+  let cut = clean.slice(0, limit - 1);
+  // Unless the cut already lands on a word end, fall back to the last space in the window.
+  if (!/\s/.test(clean.charAt(limit - 1))) {
+    const space = cut.lastIndexOf(" ");
+    if (space >= (limit - 1) / 2) cut = cut.slice(0, space);
+  }
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+  return `${cut.replace(/[\s,;:.\-–—(]+$/u, "")}…`;
+}
+
+// ---- Plugin icons -------------------------------------------------------------------------------
+
+/** The single default plugin icon (`packages/web/public/plugin-default.svg`, served at the root). */
+export const DEFAULT_PLUGIN_ICON = "/plugin-default.svg";
+
+/** What a plugin icon tile shows: the image, or the one default (a puzzle piece). */
+export const iconState = (icon: string | undefined, failed: boolean): "image" | "default" =>
+  icon && !failed ? "image" : "default";
+
+/**
+ * The icon URL of a package: the catalog entry's when the package is in the catalog, else the one
+ * the installed package ships, else none (the tile then shows the default icon).
+ */
+export function resolvePluginIcon(
+  packageName: string | undefined,
+  catalogPlugins: Array<Pick<CatalogPluginView, "package" | "icon">> | undefined,
+  installed: Array<Pick<InstalledPackageView, "package" | "icon">> | undefined,
+): string | undefined {
+  if (!packageName) return undefined;
+  return (
+    catalogPlugins?.find((p) => p.package === packageName)?.icon ??
+    installed?.find((p) => p.package === packageName)?.icon
+  );
+}
+
+// ---- Detail view ---------------------------------------------------------------------------------------
+
+export type InfoFieldId =
+  | "version"
+  | "installed"
+  | "author"
+  | "license"
+  | "categories"
+  | "tags"
+  | "sdk"
+  | "package"
+  | "published";
+
+export interface DetailInfo {
+  /** The "Information" definition list: only fields the catalog provides, in a fixed order. */
+  fields: Array<{ id: InfoFieldId; value: string }>;
+  links: Array<{ id: "npm" | "repository" | "homepage"; href: string }>;
+}
+
+export function detailInfo(plugin: CatalogPluginView): DetailInfo {
+  const fields: DetailInfo["fields"] = [{ id: "version", value: plugin.version }];
+  const add = (id: InfoFieldId, value: string | undefined) => {
+    if (value) fields.push({ id, value });
+  };
+  add("installed", plugin.installedVersion);
+  add("author", plugin.author);
+  add("license", plugin.license);
+  add("categories", plugin.categories.join(", "));
+  add("tags", plugin.tags.join(", "));
+  add("sdk", plugin.sdk);
+  add("package", plugin.package);
+  add("published", /^\d{4}-\d{2}-\d{2}/.exec(plugin.publishedAt ?? "")?.[0]);
+  const links: DetailInfo["links"] = [];
+  if (plugin.npmUrl) links.push({ id: "npm", href: plugin.npmUrl });
+  if (plugin.repository) links.push({ id: "repository", href: plugin.repository });
+  if (plugin.homepage && plugin.homepage !== plugin.repository)
+    links.push({ id: "homepage", href: plugin.homepage });
+  return { fields, links };
+}
+
+// ---- List / detail navigation ----------------------------------------------------------------------
+
+export interface ListState {
+  query: string;
+  category?: string | undefined;
+  tags: string[];
+  group: boolean;
+  page: number;
+}
+
+/** The list state lives next to the open detail, so going back finds the list as it was left. */
+export interface CatalogNav {
+  list: ListState;
+  /** Slug of the plugin whose detail is open. */
+  detail?: string;
+}
+
+export const INITIAL_NAV: CatalogNav = {
+  list: { query: "", tags: [], group: false, page: 1 },
+};
+
+export type NavAction =
+  | { type: "filter"; patch: Partial<Pick<ListState, "query" | "category" | "tags" | "group">> }
+  | { type: "page"; page: number }
+  | { type: "clear" }
+  | { type: "open"; slug: string }
+  | { type: "back" };
+
+export function catalogNav(state: CatalogNav, action: NavAction): CatalogNav {
+  switch (action.type) {
+    case "filter":
+      return { ...state, list: { ...state.list, ...action.patch, page: 1 } };
+    case "page":
+      return { ...state, list: { ...state.list, page: action.page } };
+    case "clear":
+      return {
+        ...state,
+        list: { ...state.list, query: "", category: undefined, tags: [], page: 1 },
+      };
+    case "open":
+      return { ...state, detail: action.slug };
+    case "back": {
+      const { detail: _closed, ...rest } = state;
+      return rest;
+    }
+  }
 }

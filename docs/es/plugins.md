@@ -757,6 +757,15 @@ su `package.json` se rechaza, para que un error tipográfico no cargue un paquet
 entrada se toma de `exports["."]` (condiciones `import`, `node` o `default`), después de `main` y, por
 último, de `./index.js`.
 
+**Icono del complemento (opcional).** La interfaz web y la app de escritorio muestran un icono junto
+a cada complemento. Uno del catálogo usa el `icon` del catálogo. Cualquier otro complemento de npm
+puede incluir el suyo declarando en `package.json` una ruta relativa al paquete, y listando el
+archivo en `files`: `"alisio": { "icon": "assets/icon.svg" }`. El archivo debe ser SVG, PNG, WebP o
+JPEG de 256 KB como máximo y quedarse dentro del paquete (se ignora una ruta que salga de él, una
+ruta absoluta o un enlace simbólico hacia fuera); el servidor lo entrega solo como imagen, nunca como
+página. Sin icono (o si no carga) se muestra el icono predeterminado. Los complementos integrados,
+de proyecto y de archivo usan el predeterminado salvo que sean paquetes de npm que declaren uno.
+
 Un directorio indicado como ruta debe contener un manifiesto `alisio-plugin.json` que declare su
 entrada (un paquete también puede incluirlo); la entrada debe permanecer dentro del directorio:
 

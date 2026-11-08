@@ -29,6 +29,8 @@ export interface CatalogPlugin {
   featured: boolean;
   /** Where the cover is fetched from (on the catalog origin); never sent to the browser. */
   coverSource?: string;
+  /** Where the icon is fetched from (same rules as the cover); never sent to the browser. */
+  iconSource?: string;
 }
 
 export interface SanitizedCatalog {
@@ -111,6 +113,7 @@ function sanitizePlugin(
   }
   const link = (value: unknown) => safeUrl(value, 500, loopbackOk)?.href;
   const cover = safeUrl(raw.cover, 500, loopbackOk);
+  const icon = safeUrl(raw.icon, 500, loopbackOk);
   const sdk = text(raw.sdk, 60);
   const author = text(raw.author, 100);
   const license = text(raw.license, 60);
@@ -136,6 +139,7 @@ function sanitizePlugin(
     ...(publishedAt ? { publishedAt } : {}),
     featured: raw.featured === true,
     ...(cover && sameOrigin(cover, catalogUrl) ? { coverSource: cover.href } : {}),
+    ...(icon && sameOrigin(icon, catalogUrl) ? { iconSource: icon.href } : {}),
   };
 }
 

@@ -60,18 +60,22 @@ export interface CatalogServiceOptions {
 }
 
 /**
- * The on-disk form of a sanitized catalog: the cover source goes back under its catalog key so the
- * cache is validated by the same `sanitizeCatalog` it was produced by.
+ * The on-disk form of a sanitized catalog: the cover and icon sources go back under their catalog
+ * keys so the cache is validated by the same `sanitizeCatalog` it was produced by.
  */
 function storable(catalog: SanitizedCatalog): unknown {
   return {
     ...catalog,
-    plugins: catalog.plugins.map(({ coverSource, ...rest }) => ({
+    plugins: catalog.plugins.map(({ coverSource, iconSource, ...rest }) => ({
       ...rest,
       ...(coverSource ? { cover: coverSource } : {}),
+      ...(iconSource ? { icon: iconSource } : {}),
     })),
   };
 }
+
+/** The two images a catalog entry can have; both share one fetch-and-cache path. */
+export type ImageKind = "cover" | "icon";
 
 export class CatalogUnavailableError extends Error {}
 
@@ -140,7 +144,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 export class CatalogService {
   private inflight = new Map<boolean, Promise<CatalogResult>>();
-  private coverInflight = new Map<string, Promise<Cover | undefined>>();
+  private imageInflight = new Map<string, Promise<Cover | undefined>>();
   private fetcher: typeof fetch;
   private clock: () => number;
 
@@ -158,11 +162,11 @@ export class CatalogService {
   private get cacheFile(): string {
     return join(stateHome(), "cache", "plugin-catalog.json");
   }
-  private coverFile(slug: string, ext: string): string {
-    return join(stateHome(), "cache", "plugin-covers", `${slug}.${ext}`);
+  private imageFile(kind: ImageKind, slug: string, ext: string): string {
+    return join(stateHome(), "cache", `plugin-${kind}s`, `${slug}.${ext}`);
   }
-  private coverMetaFile(slug: string): string {
-    return join(stateHome(), "cache", "plugin-covers", `${slug}.json`);
+  private imageMetaFile(kind: ImageKind, slug: string): string {
+    return join(stateHome(), "cache", `plugin-${kind}s`, `${slug}.json`);
   }
 
   private async readCache(): Promise<CatalogCache | undefined> {
@@ -293,26 +297,40 @@ export class CatalogService {
   }
 
   /**
-   * The cover SVG of a catalog plugin. It is fetched from the sanitized catalog URL only and kept
-   * on disk; it is revalidated (conditionally) only when the catalog content changed since it was
+   * The cover of a catalog plugin. It is fetched from the sanitized catalog URL only and kept on
+   * disk; it is revalidated (conditionally) only when the catalog content changed since it was
    * last checked, and an unreachable origin falls back to the copy on disk.
    */
   cover(plugin: CatalogPlugin, catalogFetchedAt: number): Promise<Cover | undefined> {
-    const key = plugin.slug;
-    const running = this.coverInflight.get(key);
-    if (running) return running;
-    const task = this.loadCover(plugin, catalogFetchedAt).finally(() =>
-      this.coverInflight.delete(key),
-    );
-    this.coverInflight.set(key, task);
-    return task;
+    return this.image("cover", plugin, catalogFetchedAt);
   }
 
-  private async loadCover(
+  /** The small icon of a catalog plugin: same origin rules, cache and revalidation as the cover. */
+  icon(plugin: CatalogPlugin, catalogFetchedAt: number): Promise<Cover | undefined> {
+    return this.image("icon", plugin, catalogFetchedAt);
+  }
+
+  private image(
+    kind: ImageKind,
     plugin: CatalogPlugin,
     catalogFetchedAt: number,
   ): Promise<Cover | undefined> {
-    const metaFile = this.coverMetaFile(plugin.slug);
+    const key = `${kind}:${plugin.slug}`;
+    const running = this.imageInflight.get(key);
+    if (running) return running;
+    const task = this.loadImage(kind, plugin, catalogFetchedAt).finally(() =>
+      this.imageInflight.delete(key),
+    );
+    this.imageInflight.set(key, task);
+    return task;
+  }
+
+  private async loadImage(
+    kind: ImageKind,
+    plugin: CatalogPlugin,
+    catalogFetchedAt: number,
+  ): Promise<Cover | undefined> {
+    const metaFile = this.imageMetaFile(kind, plugin.slug);
     interface CoverMeta {
       source?: string;
       /** The origin's validator, sent back as `If-None-Match`. */
@@ -326,11 +344,11 @@ export class CatalogService {
     try {
       meta = JSON.parse(await readFile(metaFile, "utf8")) as CoverMeta;
       if (meta.ext && COVER_TYPES.some((entry) => entry.ext === meta.ext))
-        body = await readFile(this.coverFile(plugin.slug, meta.ext));
+        body = await readFile(this.imageFile(kind, plugin.slug, meta.ext));
     } catch {
       /* no usable copy yet */
     }
-    const source = plugin.coverSource;
+    const source = kind === "cover" ? plugin.coverSource : plugin.iconSource;
     if (!source) return undefined;
     const usable = body !== undefined && meta.source === source && !!meta.contentType;
     const served = (data: Buffer, contentType: string, upstream?: string): Cover => ({
@@ -359,15 +377,21 @@ export class CatalogService {
         throw new Error(`HTTP ${res.status}`);
       }
       const fresh = await readCapped(res, MAX_COVER_BYTES);
-      const kind = sniffCover(fresh);
-      if (!kind) throw new Error("The cover is not an SVG, WebP, PNG or JPEG image");
+      const sniffed = sniffCover(fresh);
+      if (!sniffed) throw new Error(`The ${kind} is not an SVG, WebP, PNG or JPEG image`);
       const upstream = res.headers.get("etag") ?? undefined;
-      await writeAtomic(this.coverFile(plugin.slug, kind.ext), fresh).catch(() => {});
+      await writeAtomic(this.imageFile(kind, plugin.slug, sniffed.ext), fresh).catch(() => {});
       await writeAtomic(
         metaFile,
-        JSON.stringify({ source, upstream, checkedAt: now, contentType: kind.type, ext: kind.ext }),
+        JSON.stringify({
+          source,
+          upstream,
+          checkedAt: now,
+          contentType: sniffed.type,
+          ext: sniffed.ext,
+        }),
       ).catch(() => {});
-      return served(fresh, kind.type, upstream);
+      return served(fresh, sniffed.type, upstream);
     } catch {
       return usable && body && meta.contentType
         ? served(body, meta.contentType, meta.upstream)

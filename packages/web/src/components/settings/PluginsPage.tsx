@@ -17,10 +17,12 @@ import {
   installedUpdateState,
   needsRestart,
   type PluginCatalogView,
+  resolvePluginIcon,
   runUpdateAll,
   uninstallInfo,
   updatablePackages,
 } from "./catalog-model.ts";
+import { PluginIcon } from "./catalog-parts.tsx";
 import { cs } from "./catalog-strings.ts";
 import { useInstallFlow } from "./InstallFlow.tsx";
 import { LocalInstall } from "./LocalInstall.tsx";
@@ -87,6 +89,7 @@ function PluginCard(props: {
         aria-controls={id}
         onClick={() => setOpen(!open)}
       >
+        <PluginIcon icon={pkg?.icon} size="small" />
         <span class={styles.cardName} title={plugin.name}>
           {plugin.name}
           {pkg ? <span class={styles.version}> v{pkg.version}</span> : null}
@@ -380,6 +383,7 @@ export function PluginsPage() {
       version: pkg.latestVersion ?? pkg.version,
       installedVersion: pkg.version,
       mode: "update",
+      ...(pkg.icon ? { icon: pkg.icon } : {}),
     };
     flow.ask(target);
   };
@@ -535,6 +539,10 @@ export function PluginsPage() {
                           <Icon name="x" size={14} />
                         ) : null}
                       </span>
+                      <PluginIcon
+                        icon={resolvePluginIcon(item.package, undefined, packages.data)}
+                        size="small"
+                      />
                       <span>
                         <code>{item.package}</code>{" "}
                         {item.status === "done"
@@ -602,6 +610,9 @@ export function PluginsPage() {
         {tab === "file" ? (
           <LocalInstall
             {...(scope ? { scope } : {})}
+            iconFor={(name) =>
+              resolvePluginIcon(name, catalog.data?.catalog.plugins, packages.data)
+            }
             {...(catalog.data?.sdkVersion ? { sdkVersion: catalog.data.sdkVersion } : {})}
             onChanged={changed}
             onShowInstalled={() => select("list")}
@@ -613,6 +624,7 @@ export function PluginsPage() {
       {removing ? (
         <ConfirmDialog
           title={cs("uninstall.title", { name: removing.name })}
+          icon={<PluginIcon icon={removing.pkg.icon} size="small" />}
           confirmLabel={cs("uninstall.confirm")}
           cancelLabel={cs("uninstall.cancel")}
           danger
@@ -640,7 +652,8 @@ export function PluginsPage() {
           <p>{cs("install.warning")}</p>
           <ul>
             {pending.map((pkg) => (
-              <li key={pkg.package}>
+              <li key={pkg.package} class={styles.iconItem}>
+                <PluginIcon icon={pkg.icon} size="small" />
                 <code>
                   {pkg.package} v{pkg.version} → v{pkg.latestVersion}
                 </code>

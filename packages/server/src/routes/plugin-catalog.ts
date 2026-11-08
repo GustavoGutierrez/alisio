@@ -30,14 +30,16 @@ import {
 } from "@alisio/core";
 import { readJson } from "../http/body.ts";
 import { HttpError } from "../http/errors.ts";
-import type { Router } from "../http/router.ts";
+import type { RouteContext, Router } from "../http/router.ts";
 import type { CatalogPlugin } from "../plugins/catalog-schema.ts";
 import {
   type CatalogResult,
   type CatalogService,
   CatalogUnavailableError,
+  type ImageKind,
 } from "../plugins/catalog-service.ts";
 import { InstallJobs, type JobView } from "../plugins/jobs.ts";
+import { readPackageIcon } from "../plugins/package-icon.ts";
 import {
   createStaging,
   isStagingId,
@@ -84,9 +86,11 @@ export type LocalInstallJobResponse = { jobId: string };
 export type { JobView };
 
 /** A catalog plugin as the browser sees it: no remote URLs for the cover, plus its install state. */
-export interface CatalogPluginWire extends Omit<CatalogPlugin, "coverSource"> {
+export interface CatalogPluginWire extends Omit<CatalogPlugin, "coverSource" | "iconSource"> {
   /** Same-origin cover URL, absent when the catalog has none. */
   cover?: string;
+  /** Same-origin icon URL, absent when the catalog has none. */
+  icon?: string;
   installedVersion?: string;
   updateAvailable: boolean;
   compatible: boolean;
@@ -158,10 +162,15 @@ export interface InstalledPluginPackage {
   updateAvailable: boolean;
   /** False when the newer version needs a newer `@alisio/sdk` than this Alisio has. */
   updateCompatible: boolean;
+  /** Same-origin icon URL: the catalog's, else the package's own (`alisio.icon`); else absent. */
+  icon?: string;
 }
 
 const COVER_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 const SLUG = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+const packageIconUrl = (name: string) =>
+  `/api/plugins/package-icon?package=${encodeURIComponent(name)}`;
 /** npm's answer for a version the registry does not have. */
 const NOT_PUBLISHED = /\bETARGET\b|No matching version found/;
 const PEER_CONFLICT = /ERESOLVE|Conflicting peer|require an older/;
@@ -261,7 +270,7 @@ export function registerPluginCatalogRoutes(
   };
 
   const toWire = (plugin: CatalogPlugin, installed: Map<string, string>): CatalogPluginWire => {
-    const { coverSource, ...rest } = plugin;
+    const { coverSource, iconSource, ...rest } = plugin;
     const state = catalogPluginState({
       catalogVersion: plugin.version,
       ...(installed.has(plugin.package) ? { installedVersion: installed.get(plugin.package) } : {}),
@@ -272,6 +281,9 @@ export function registerPluginCatalogRoutes(
       ...rest,
       ...(coverSource
         ? { cover: `/api/plugin-catalog/covers/${encodeURIComponent(plugin.slug)}` }
+        : {}),
+      ...(iconSource
+        ? { icon: `/api/plugin-catalog/icons/${encodeURIComponent(plugin.slug)}` }
         : {}),
       ...(state.installedVersion ? { installedVersion: state.installedVersion } : {}),
       updateAvailable: state.updateAvailable,
@@ -335,30 +347,37 @@ export function registerPluginCatalogRoutes(
     return { body };
   });
 
-  router.get("/api/plugin-catalog/covers/:slug", async ({ req, res, params }) => {
-    const slug = params.slug ?? "";
-    if (!SLUG.test(slug)) throw new HttpError("not_found", "Cover not found");
-    const result = await loadCatalog(false);
-    const plugin = result.catalog.plugins.find((entry) => entry.slug === slug);
-    if (!plugin?.coverSource) throw new HttpError("not_found", "Cover not found");
-    const cover = await service.cover(plugin, result.meta.fetchedAt);
-    if (!cover) throw new HttpError("not_found", "Cover not found");
-    res.setHeader("Content-Security-Policy", COVER_CSP);
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    res.setHeader("ETag", cover.etag);
-    if (req.headers["if-none-match"] === cover.etag) {
-      res.writeHead(304);
-      res.end();
+  /** The cover and the icon are proxied the same way: locked-down headers, cached on disk. */
+  const serveImage =
+    (kind: ImageKind) =>
+    async ({ req, res, params }: RouteContext) => {
+      const notFound = () =>
+        new HttpError("not_found", `${kind === "cover" ? "Cover" : "Icon"} not found`);
+      const slug = params.slug ?? "";
+      if (!SLUG.test(slug)) throw notFound();
+      const result = await loadCatalog(false);
+      const plugin = result.catalog.plugins.find((entry) => entry.slug === slug);
+      if (!(kind === "cover" ? plugin?.coverSource : plugin?.iconSource)) throw notFound();
+      const image = await service[kind](plugin as CatalogPlugin, result.meta.fetchedAt);
+      if (!image) throw notFound();
+      res.setHeader("Content-Security-Policy", COVER_CSP);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.setHeader("ETag", image.etag);
+      if (req.headers["if-none-match"] === image.etag) {
+        res.writeHead(304);
+        res.end();
+        return undefined;
+      }
+      res.writeHead(200, {
+        "Content-Type": image.contentType,
+        "Content-Length": String(image.body.length),
+      });
+      res.end(image.body);
       return undefined;
-    }
-    res.writeHead(200, {
-      "Content-Type": cover.contentType,
-      "Content-Length": String(cover.body.length),
-    });
-    res.end(cover.body);
-    return undefined;
-  });
+    };
+  router.get("/api/plugin-catalog/covers/:slug", serveImage("cover"));
+  router.get("/api/plugin-catalog/icons/:slug", serveImage("icon"));
 
   // ---- Installed packages -------------------------------------------------------------------
   router.get("/api/plugins/packages", async ({ url }) => {
@@ -383,9 +402,16 @@ export function registerPluginCatalogRoutes(
             ...(options.sdkVersion ? { sdkVersion: options.sdkVersion } : {}),
           })
         : undefined;
+      const own = catalog?.plugins.find((p) => p.package === item.name);
+      const icon = own?.iconSource
+        ? `/api/plugin-catalog/icons/${encodeURIComponent(own.slug)}`
+        : (await readPackageIcon(join(pluginsDir, "node_modules", item.name)))
+          ? packageIconUrl(item.name)
+          : undefined;
       body.push({
         package: item.name,
         version: item.version,
+        ...(icon ? { icon } : {}),
         pluginIds: loaded.filter((plugin) => plugin.spec === item.name).map((plugin) => plugin.id),
         removable: !ctx.base.readOnly,
         restartRequired: pendingRestart.has(item.name),
@@ -396,6 +422,33 @@ export function registerPluginCatalogRoutes(
       });
     }
     return { body };
+  });
+
+  router.get("/api/plugins/package-icon", async ({ req, res, url }) => {
+    const name = url.searchParams.get("package");
+    if (!name) throw new HttpError("validation_failed", "Missing package", { fields: ["package"] });
+    if (!PACKAGE_NAME.test(name) || name.includes(".."))
+      throw new HttpError("not_found", "Icon not found");
+    const installed = await installedGlobalPlugins(configHome());
+    if (!installed.some((item) => item.name === name))
+      throw new HttpError("not_found", "Icon not found");
+    const icon = await readPackageIcon(join(configHome(), "plugins", "node_modules", name));
+    if (!icon) throw new HttpError("not_found", "Icon not found");
+    res.setHeader("Content-Security-Policy", COVER_CSP);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("ETag", icon.etag);
+    if (req.headers["if-none-match"] === icon.etag) {
+      res.writeHead(304);
+      res.end();
+      return undefined;
+    }
+    res.writeHead(200, {
+      "Content-Type": icon.contentType,
+      "Content-Length": String(icon.body.length),
+    });
+    res.end(icon.body);
+    return undefined;
   });
 
   // ---- Install ------------------------------------------------------------------------------

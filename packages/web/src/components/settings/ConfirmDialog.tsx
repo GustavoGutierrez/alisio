@@ -8,6 +8,8 @@ import styles from "./settings.module.css";
  */
 export function ConfirmDialog(props: {
   title: string;
+  /** Shown before the title (the plugin icon). */
+  icon?: ComponentChildren;
   children: ComponentChildren;
   confirmLabel: string;
   cancelLabel: string;
@@ -49,9 +51,12 @@ export function ConfirmDialog(props: {
         aria-modal="true"
         aria-labelledby="plugin-dialog-title"
       >
-        <h4 id="plugin-dialog-title" class={styles.dialogTitle}>
-          {props.title}
-        </h4>
+        <div class={styles.dialogHead}>
+          {props.icon}
+          <h4 id="plugin-dialog-title" class={styles.dialogTitle}>
+            {props.title}
+          </h4>
+        </div>
         <div class={styles.dialogBody}>{props.children}</div>
         {props.checkbox ? (
           <label class={styles.checkLine}>

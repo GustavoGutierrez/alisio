@@ -295,28 +295,50 @@ with **Update requires a newer Alisio**.
   <figcaption>Installed plugins: the update count, Check for updates, the Update button and Uninstall with its package name.</figcaption>
 </figure>
 
-**Plugin catalog.** The published plugins as cards: the cover with the name and a short description,
-and a status badge (**Installed**, **Update**, **Incompatible**). Click a card (or press `Enter` on
-it) to flip it: the back has the full description, categories, tags, author, license, links to npm
-and the repository, and the **Install**, **Update**, **Reinstall** or **Downgrade** button (`Esc` or
-the close button turns it back; with reduced motion the card swaps without rotating). Search covers
-name, description, tags and package; filter by category and tags, optionally **Group by category**.
-Ten plugins per page, with lazy images, loading skeletons and an error state with **Try again**.
-**Incompatible** means the plugin's `sdk` range does not match the installed `@alisio/sdk`; its
-button is disabled and says why.
+**Plugin catalog.** The published plugins as a compact list, one row per plugin: the plugin's icon,
+its name, a short description (cut at the same length for every row; the full text is the tooltip
+and the accessible description) and one icon button for the action: **Install** (+), **Update**,
+**Reinstall** when the same version is installed, or **Downgrade**. An incompatible plugin has the
+button disabled with a tooltip that says why, and rows carry an **Installed**, **Update** or
+**Incompatible** badge. The list has one column when narrow, two at the default dialog width and
+three when the dialog is maximized. Search covers name, description, tags and package; filter by
+category and tags, optionally **Group by category**. Ten plugins per page, with loading skeletons and
+an error state with **Try again**. The action never opens the detail; click the row (or press `Enter`
+or `Space` on it) to open it.
 
 <figure class="doc-shot">
-  <img src="./assets/web-ui/plugin_catalog_web_ui.webp" alt="Settings, Plugins, Plugin catalog: search box, Check for updates, category and tag filters, and a grid of plugin cards with covers; the Atlassian card is flipped and shows its description and the Install button." width="1060" height="780" loading="lazy" decoding="async" />
-  <figcaption>The Plugin catalog: cover cards that flip to show the details and the Install button.</figcaption>
+  <img src="./assets/web-ui/plugin_catalog_web_ui.webp" alt="Settings, Plugins, Plugin catalog: search box, Check for updates, category and tag filters, and a two-column list of plugins, each with its icon, name, short description and an Install or Reinstall icon button." width="1040" height="760" loading="lazy" decoding="async" />
+  <figcaption>The Plugin catalog: a compact list with icon, name, short description and the action button.</figcaption>
 </figure>
+
+**Plugin detail.** Opening a row shows the plugin inside the same tab: the icon, the name, the author
+and a one-line summary, the main action (**Install**, **Update**, **Reinstall** or **Downgrade**),
+**Uninstall** when it is installed, and links to npm and the website. Below are the cover, the full
+description, an **Information** list (latest and installed version, developer, license, category,
+tags, the `@alisio/sdk` range it needs and whether this Alisio satisfies it, the npm package, the
+publication date and the npm, repository and website links; only what the catalog provides), and a
+note that plugins are not sandboxed. **Back to the catalog** (or `Esc`) returns to the list with the
+same search, filters and page, and the focus on the row you opened.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugin_catalog_detail_web_ui.webp" alt="Settings, Plugins, Plugin detail of OpenAI: icon, name, author, the Update, Uninstall, npm and Website buttons, the large cover, the description, the Information list and the not sandboxed note." width="1068" height="1468" loading="lazy" decoding="async" />
+  <figcaption>The plugin detail: actions, cover, full description and the Information list.</figcaption>
+</figure>
+
+**Plugin icons.** An icon appears next to each plugin in the catalog, in **Installed plugins**, in
+the install, update and uninstall confirmations and in the **Install from file** preview. It is the
+catalog's icon when the package is in the catalog, else the icon the installed package ships (see
+[Plugin icon](/plugins)), else one default icon (a puzzle piece); the default also stands
+in when an icon fails to load, and for built-in, project and not-yet-installed file plugins. The icons
+go through the server like the covers, so the browser never contacts the catalog origin.
 
 **Catalog cache.** The server downloads the catalog (`ALISIO_PLUGIN_CATALOG_URL`, by default the
 published `alisio-plugins` catalog) and keeps it under its state directory. It does not look again
 for 24 hours unless you press **Check for updates**; then it sends a conditional request, so an
 unchanged catalog costs a `304`. The tab shows when it was last checked and whether it is cached or
 offline. Offline, the saved copy is shown with a notice; offline with nothing saved shows an error
-with **Try again**. Covers go through the server (the browser never contacts the catalog origin) and
-are cached on disk. Every field of the catalog is validated: links must be `https:`, covers must come
+with **Try again**. Covers and icons go through the server (the browser never contacts the catalog origin) and
+are cached on disk. Every field of the catalog is validated: links must be `https:`, covers and icons must come
 from the catalog's own origin, and a package with an invalid npm name is dropped.
 
 **Install from the catalog.** One click, a loading state, and the plugin appears in **Installed
@@ -826,6 +848,8 @@ GET  /api/events?session=<sid>         the event stream (snapshot, then live fra
 GET  /api/plugins?workspace=<wid>      PATCH /api/plugins/:id {workspace, enabled}
 GET  /api/plugin-catalog?refresh=0|1   catalog, cache metadata and installed versions
 GET  /api/plugin-catalog/covers/:slug  a cover through the server cache
+GET  /api/plugin-catalog/icons/:slug   an icon through the server cache
+GET  /api/plugins/package-icon?package=  the icon an installed package ships (alisio.icon)
 GET  /api/plugins/packages?workspace=<wid>   installed npm packages, update and restart flags
 POST /api/plugins/install {package, version?, confirmed: true}   a catalog package only
 POST /api/plugins/update-all {confirmed: true}   every outdated plugin in one npm install

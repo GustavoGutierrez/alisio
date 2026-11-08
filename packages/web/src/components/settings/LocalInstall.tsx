@@ -6,6 +6,7 @@ import { useEffect, useReducer, useRef, useState } from "preact/hooks";
 import { api, showToast } from "../../store/app.ts";
 import { Icon } from "../icons.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { PluginIcon } from "./catalog-parts.tsx";
 import { cs } from "./catalog-strings.ts";
 import {
   acceptsFile,
@@ -88,6 +89,8 @@ function Fact(props: { label: string; children: preact.ComponentChildren }) {
 export function LocalInstall(props: {
   /** "Update from file…": the package this file is expected to be. */
   scope?: string;
+  /** Icon of a package that is already known (catalog or installed); none means the default. */
+  iconFor?: (packageName: string) => string | undefined;
   sdkVersion?: string;
   onChanged: () => void;
   onShowInstalled: () => void;
@@ -233,7 +236,13 @@ export function LocalInstall(props: {
           aria-label={cs(info.isAlisioPlugin ? "file.valid" : "file.invalid")}
         >
           <header class={styles.validationHead}>
-            <h4>{info.package ?? flow.fileName}</h4>
+            <h4 class={styles.iconTitle}>
+              <PluginIcon
+                icon={info.package ? props.iconFor?.(info.package) : undefined}
+                size="small"
+              />
+              {info.package ?? flow.fileName}
+            </h4>
             <Pill tone={verdict.canInstall ? "ok" : "danger"}>
               {cs(info.isAlisioPlugin ? "file.valid" : "file.invalid")}
             </Pill>

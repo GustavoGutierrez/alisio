@@ -89,6 +89,11 @@ packages/plugin-foo/   package.json  README.md  LICENSE  tsconfig.build.json  sr
 `scripts.build: tsc -p tsconfig.build.json`. `tsconfig.build.json` extends `../../tsconfig.base.json`
 (`rootDir: src`, `outDir: dist`, `declaration: true`, `noEmit: false`).
 
+Optional icon for the web/desktop plugin lists: `package.json` → `"alisio": { "icon": "assets/icon.svg" }`
+(relative path inside the package, SVG/PNG/WebP/JPEG up to 256 KB, listed in `files`; the server
+ignores anything that escapes the package). Catalog plugins use the catalog `icon` instead; no icon
+shows the default `plugin-default.svg`.
+
 ```ts
 import { definePlugin, textResult } from "@alisio/sdk";
 

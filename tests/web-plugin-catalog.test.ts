@@ -7,10 +7,17 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   actionState,
   ageLabel,
+  type CatalogNav,
   type CatalogPluginView,
+  catalogNav,
+  DEFAULT_PLUGIN_ICON,
+  DESCRIPTION_LIMIT,
+  detailInfo,
   filterCatalog,
   groupByCategory,
+  INITIAL_NAV,
   type InstalledPackageView,
+  iconState,
   installedUpdateState,
   installOutcome,
   needsRestart,
@@ -20,9 +27,12 @@ import {
   PAGE_SIZE,
   pageNumbers,
   paginate,
+  resolvePluginIcon,
+  rowAction,
   runUpdateAll,
   sortCatalog,
   tagCounts,
+  truncateDescription,
   uninstallInfo,
   updatablePackages,
 } from "../packages/web/src/components/settings/catalog-model.ts";
@@ -202,6 +212,237 @@ describe("install button state", () => {
       busy: true,
     });
     expect(actionState(plugin("a", { installedVersion: "0.5.0" }), "x").kind).toBe("installed");
+  });
+});
+
+describe("compact row description", () => {
+  const long =
+    "Read-first Jira, Confluence, and Agile tools with strict environment configuration and opt-in writes";
+
+  it("keeps a short description untouched, with no ellipsis", () => {
+    expect(truncateDescription("Short text")).toBe("Short text");
+    const exact = "x".repeat(DESCRIPTION_LIMIT);
+    expect(truncateDescription(exact)).toBe(exact);
+  });
+
+  it("cuts a long one at a word boundary, never past the shared limit, and adds one ellipsis", () => {
+    const out = truncateDescription(long);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+    expect(long.startsWith(out.slice(0, -1))).toBe(true);
+    // The cut falls between words: the next character of the source is a space.
+    expect(long[out.length - 1]).toBe(" ");
+    expect(out).not.toMatch(/[\s,;:.]…$/);
+  });
+
+  it("uses the same limit for every row and collapses whitespace", () => {
+    expect(truncateDescription("a   b\n c")).toBe("a b c");
+    for (const text of [long, `${long} ${long}`, "word ".repeat(40)])
+      expect(truncateDescription(text).length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+  });
+
+  it("hard-cuts a single long word and never splits a surrogate pair", () => {
+    const out = truncateDescription("😀".repeat(80));
+    expect(out.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out.slice(0, -1)).toMatch(/^(?:😀)+$/u);
+  });
+});
+
+describe("row action by state", () => {
+  it("maps each state to install / update / reinstall / downgrade with the install mode", () => {
+    expect(rowAction(plugin("a"))).toEqual({ kind: "install", mode: "install", disabled: false });
+    expect(rowAction(plugin("a", { installedVersion: "0.4.0", updateAvailable: true }))).toEqual({
+      kind: "update",
+      mode: "update",
+      disabled: false,
+    });
+    expect(rowAction(plugin("a", { installedVersion: "0.5.0" }))).toEqual({
+      kind: "reinstall",
+      mode: "reinstall",
+      disabled: false,
+    });
+    expect(rowAction(plugin("a", { installedVersion: "0.6.0" }))).toEqual({
+      kind: "downgrade",
+      mode: "downgrade",
+      disabled: false,
+    });
+  });
+
+  it("disables with a reason: incompatible, or busy while another install runs", () => {
+    expect(rowAction(plugin("a", { compatible: false }))).toEqual({
+      kind: "incompatible",
+      disabled: true,
+      reason: "incompatible",
+    });
+    // Same version installed but it needs a newer SDK: reinstalling is pointless.
+    expect(rowAction(plugin("a", { installedVersion: "0.5.0", compatible: false }))).toEqual({
+      kind: "reinstall",
+      disabled: true,
+      reason: "incompatible",
+    });
+    expect(rowAction(plugin("a"), "@alisio/plugin-b")).toEqual({
+      kind: "install",
+      mode: "install",
+      disabled: true,
+      reason: "busy",
+    });
+    expect(rowAction(plugin("a", { installedVersion: "0.5.0" }), "x")).toMatchObject({
+      kind: "reinstall",
+      disabled: true,
+      reason: "busy",
+    });
+    expect(rowAction(plugin("a"), "@alisio/plugin-a")).toEqual({
+      kind: "installing",
+      disabled: true,
+    });
+  });
+});
+
+describe("plugin icons and the one default", () => {
+  const catalogPlugins = [
+    plugin("alpha", { icon: "/api/plugin-catalog/icons/alpha" }),
+    plugin("noicon"),
+  ];
+  const installed = [
+    pkg("@alisio/plugin-alpha", { icon: "/api/plugins/package-icon?package=own" }),
+    pkg("@acme/shipped", { icon: "/api/plugins/package-icon?package=%40acme%2Fshipped" }),
+    pkg("@acme/plain"),
+  ];
+
+  it("prefers the catalog icon, then the icon the installed package ships", () => {
+    expect(resolvePluginIcon("@alisio/plugin-alpha", catalogPlugins, installed)).toBe(
+      "/api/plugin-catalog/icons/alpha",
+    );
+    expect(resolvePluginIcon("@acme/shipped", catalogPlugins, installed)).toBe(
+      "/api/plugins/package-icon?package=%40acme%2Fshipped",
+    );
+  });
+
+  it("resolves nothing (so the default shows) without a catalog match or a packaged icon", () => {
+    expect(resolvePluginIcon("@acme/plain", catalogPlugins, installed)).toBeUndefined();
+    expect(resolvePluginIcon("@alisio/plugin-noicon", catalogPlugins, installed)).toBeUndefined();
+    expect(resolvePluginIcon("@acme/unknown", catalogPlugins, installed)).toBeUndefined();
+    expect(resolvePluginIcon(undefined, catalogPlugins, installed)).toBeUndefined();
+    expect(resolvePluginIcon("x", undefined, undefined)).toBeUndefined();
+  });
+
+  it("the default is the one shipped image, served from the web root", () => {
+    expect(DEFAULT_PLUGIN_ICON).toBe("/plugin-default.svg");
+  });
+
+  it("shows the default whenever there is no icon or the image failed to load", () => {
+    expect(iconState(undefined, false)).toBe("default");
+    expect(iconState("", false)).toBe("default");
+    expect(iconState("/api/plugin-catalog/icons/alpha", true)).toBe("default");
+    expect(iconState("/api/plugin-catalog/icons/alpha", false)).toBe("image");
+  });
+
+  it("the file-install preview uses the same rule: a file with no known icon gets the default", () => {
+    const inspected = (name: string): LocalInspectView => ({
+      package: name,
+      compatible: true,
+      isAlisioPlugin: true,
+      reasons: [],
+      lifecycleScripts: [],
+      size: 10,
+    });
+    const iconFor = (info: LocalInspectView) =>
+      resolvePluginIcon(info.package, catalogPlugins, installed);
+    expect(iconState(iconFor(inspected("@acme/brand-new")), false)).toBe("default");
+    expect(iconState(iconFor(inspected("@acme/shipped")), false)).toBe("image");
+    expect(iconState(iconFor({ ...inspected("x"), package: undefined as never }), false)).toBe(
+      "default",
+    );
+  });
+});
+
+describe("plugin detail model", () => {
+  it("shows only the fields the catalog provides, in a fixed order", () => {
+    const bare = detailInfo(plugin("a", { categories: [], tags: [] }));
+    expect(bare.fields.map((f) => f.id)).toEqual(["version", "package"]);
+    expect(bare.links).toEqual([]);
+    const full = detailInfo(
+      plugin("a", {
+        installedVersion: "0.4.0",
+        author: "Alisio",
+        license: "MIT",
+        sdk: ">=0.9.0 <0.12.0",
+        publishedAt: "2026-11-08T02:52:23.558Z",
+        categories: ["tools", "search"],
+        tags: ["x", "y"],
+        homepage: "https://example.test/home",
+        repository: "https://example.test/repo",
+        npmUrl: "https://www.npmjs.com/package/x",
+      }),
+    );
+    expect(full.fields.map((f) => [f.id, f.value])).toEqual([
+      ["version", "0.5.0"],
+      ["installed", "0.4.0"],
+      ["author", "Alisio"],
+      ["license", "MIT"],
+      ["categories", "tools, search"],
+      ["tags", "x, y"],
+      ["sdk", ">=0.9.0 <0.12.0"],
+      ["package", "@alisio/plugin-a"],
+      ["published", "2026-11-08"],
+    ]);
+    expect(full.links.map((l) => l.id)).toEqual(["npm", "repository", "homepage"]);
+  });
+
+  it("drops a homepage that repeats the repository and ignores an unparsable date", () => {
+    const info = detailInfo(
+      plugin("a", {
+        homepage: "https://example.test/repo",
+        repository: "https://example.test/repo",
+        publishedAt: "yesterday",
+      }),
+    );
+    expect(info.links.map((l) => l.id)).toEqual(["repository"]);
+    expect(info.fields.some((f) => f.id === "published")).toBe(false);
+  });
+});
+
+describe("catalog navigation: list state survives the detail view", () => {
+  const apply = (state: CatalogNav, ...actions: Parameters<typeof catalogNav>[1][]) =>
+    actions.reduce(catalogNav, state);
+
+  it("starts on page 1 of an unfiltered list with no detail open", () => {
+    expect(INITIAL_NAV).toEqual({
+      list: { query: "", tags: [], group: false, page: 1 },
+    });
+  });
+
+  it("opening a detail and going back keeps query, filters and page", () => {
+    const before = apply(
+      INITIAL_NAV,
+      { type: "filter", patch: { query: "jira", category: "tools", tags: ["a"] } },
+      { type: "page", page: 3 },
+    );
+    const open = apply(before, { type: "open", slug: "atlassian" });
+    expect(open.detail).toBe("atlassian");
+    expect(open.list).toEqual(before.list);
+    const back = apply(open, { type: "back" });
+    expect(back.detail).toBeUndefined();
+    expect(back.list).toEqual(before.list);
+    expect(back.list.page).toBe(3);
+  });
+
+  it("a filter change returns to page 1; a page change does not touch the filters", () => {
+    const paged = apply(INITIAL_NAV, { type: "page", page: 4 });
+    expect(paged.list.page).toBe(4);
+    const filtered = apply(paged, { type: "filter", patch: { group: true } });
+    expect(filtered.list).toMatchObject({ group: true, page: 1 });
+    expect(apply(filtered, { type: "page", page: 2 }).list.group).toBe(true);
+  });
+
+  it("clear resets the filters but leaves grouping alone", () => {
+    const s = apply(
+      INITIAL_NAV,
+      { type: "filter", patch: { query: "x", category: "tools", tags: ["a"], group: true } },
+      { type: "clear" },
+    );
+    expect(s.list).toEqual({ query: "", tags: [], group: true, page: 1 });
   });
 });
 

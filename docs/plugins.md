@@ -731,6 +731,15 @@ roots: `NODE_PATH` entries and the global prefix of the running Node/npm.
 `package.json` is rejected, so a typo cannot load an unrelated package. The entry is taken from
 `exports["."]` (`import`, `node` or `default` conditions), then `main`, then `./index.js`.
 
+**Plugin icon (optional).** The Web UI and the desktop app show an icon next to each plugin. A plugin
+in the catalog uses the catalog's `icon`. Any other npm plugin can ship its own by declaring a path
+relative to the package in `package.json`, and listing the file in `files`:
+`"alisio": { "icon": "assets/icon.svg" }`. The file must be an SVG, PNG, WebP or JPEG of at most
+256 KB and must stay inside the package (a path that leaves it, an absolute path or a symlink out of
+the package is ignored); the server serves it as an image only, never as a page. Without an icon (or
+if it fails to load) the default plugin icon is shown. Built-in, project and file plugins have the
+default unless they are npm packages that declare one.
+
 A directory given as a path must contain an `alisio-plugin.json` manifest declaring its entry (a
 package may ship one too); the entry must stay inside the directory:
 

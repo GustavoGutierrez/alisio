@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -29,7 +29,7 @@ import {
 interface FakeCatalog {
   url: string;
   origin: string;
-  hits: { catalog: number; conditional: number; covers: number };
+  hits: { catalog: number; conditional: number; covers: number; icons: number };
   setPlugins(plugins: Array<Record<string, unknown>>, etag?: string): void;
   offline: boolean;
   /** Extra cover files by name (`pic.webp`); the rest are the default SVG. */
@@ -73,7 +73,7 @@ async function startCatalog(
   const state: FakeCatalog = {
     url: "",
     origin: "",
-    hits: { catalog: 0, conditional: 0, covers: 0 },
+    hits: { catalog: 0, conditional: 0, covers: 0, icons: 0 },
     setPlugins(next, nextEtag) {
       plugins = next;
       if (nextEtag) etag = nextEtag;
@@ -104,6 +104,12 @@ async function startCatalog(
       const custom = state.covers[req.url.slice("/covers/".length)];
       res.writeHead(200, { "content-type": custom ? "application/octet-stream" : "image/svg+xml" });
       res.end(custom ?? COVER);
+      return;
+    }
+    if (req.url?.startsWith("/icons/")) {
+      state.hits.icons++;
+      res.writeHead(200, { "content-type": "image/svg+xml" });
+      res.end(COVER);
       return;
     }
     res.writeHead(404);
@@ -380,6 +386,29 @@ describe("catalog sanitization", () => {
     ]);
   });
 
+  it("applies the cover rules to the icon: same origin and https only, the entry stays", () => {
+    const result = sanitizeCatalog(
+      {
+        schemaVersion: 1,
+        plugins: [
+          { ...good, slug: "a", package: "a-pkg", icon: "https://evil.example/i.svg" },
+          { ...good, slug: "b", package: "b-pkg", icon: "http://catalog.example/i.svg" },
+          { ...good, slug: "c", package: "c-pkg", icon: "javascript:alert(1)" },
+          { ...good, slug: "d", package: "d-pkg", icon: 42 },
+          { ...good, slug: "e", package: "e-pkg", icon: "https://catalog.example/plugins/i.svg" },
+        ],
+      },
+      url,
+    );
+    expect(result.plugins.map((p) => [p.slug, p.iconSource])).toEqual([
+      ["a", undefined],
+      ["b", undefined],
+      ["c", undefined],
+      ["d", undefined],
+      ["e", "https://catalog.example/plugins/i.svg"],
+    ]);
+  });
+
   it("drops non-https links, entries with an invalid package or version, and duplicates", () => {
     const result = sanitizeCatalog(
       {
@@ -533,6 +562,173 @@ describe("GET /api/plugin-catalog/covers/:slug", () => {
     expect((await t.api.get("/api/plugin-catalog/covers/unknown")).status).toBe(404);
     expect((await t.api.get("/api/plugin-catalog/covers/..%2Fcatalog")).status).toBe(404);
     expect(catalog.hits.covers).toBe(0);
+  });
+});
+
+describe("GET /api/plugin-catalog/icons/:slug", () => {
+  const withIcons = (origin: string) => [
+    plugin(origin, "alpha", { icon: `${origin}/icons/alpha.svg` }),
+    plugin(origin, "noicon"),
+    plugin(origin, "offsite", { icon: "https://evil.example/i.svg" }),
+  ];
+
+  it("exposes only a same-origin icon URL and proxies it with the cover's locked-down headers", async () => {
+    const { t, catalog } = await start({ plugins: withIcons });
+    const body = (await getCatalog(t)).json<PluginCatalogResponse>();
+    expect(body.catalog.plugins[0]?.icon).toBe("/api/plugin-catalog/icons/alpha");
+    expect(body.catalog.plugins[1]?.icon).toBeUndefined();
+    expect(body.catalog.plugins[2]?.icon).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain(catalog.origin);
+    const res = await t.api.get("/api/plugin-catalog/icons/alpha");
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(COVER);
+    expect(res.headers["content-type"]).toBe("image/svg+xml");
+    expect(res.headers["content-security-policy"]).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    );
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(catalog.hits.icons).toBe(1);
+    expect((await t.api.get("/api/plugin-catalog/icons/alpha")).status).toBe(200);
+    expect(catalog.hits.icons).toBe(1);
+    expect((await readdir(join(t.root, "state", "cache", "plugin-icons"))).sort()).toContain(
+      "alpha.svg",
+    );
+    const conditional = await t.api.get("/api/plugin-catalog/icons/alpha", {
+      "If-None-Match": String(res.headers.etag),
+    });
+    expect(conditional.status).toBe(304);
+  });
+
+  it("404s for plugins without a usable icon and for bad slugs without touching the origin", async () => {
+    const { t, catalog } = await start({ plugins: withIcons });
+    expect((await t.api.get("/api/plugin-catalog/icons/noicon")).status).toBe(404);
+    expect((await t.api.get("/api/plugin-catalog/icons/offsite")).status).toBe(404);
+    expect((await t.api.get("/api/plugin-catalog/icons/..%2Fcatalog")).status).toBe(404);
+    expect(catalog.hits.icons).toBe(0);
+  });
+});
+
+describe("icons of installed plugin packages", () => {
+  const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><circle r="2"/></svg>';
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(16),
+  ]);
+
+  /** Seeds `<config>/plugins/node_modules/<name>` as if npm had installed it. */
+  async function seed(
+    tt: TestServer,
+    name: string,
+    manifest: Record<string, unknown>,
+    files: Record<string, string | Buffer> = {},
+  ) {
+    const home = join(tt.root, "config");
+    const dir = join(home, "plugins", "node_modules", name);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({ name, version: "1.0.0", ...manifest }),
+    );
+    for (const [file, body] of Object.entries(files)) {
+      await mkdir(join(dir, file, ".."), { recursive: true });
+      await writeFile(join(dir, file), body);
+    }
+    const configFile = join(home, "config.json");
+    const config = JSON.parse(await readFile(configFile, "utf8").catch(() => "{}"));
+    config.plugins = [...(config.plugins ?? []), name];
+    await writeFile(configFile, JSON.stringify(config));
+    return dir;
+  }
+  const listed = async (tt: TestServer, wid: string) =>
+    (await tt.api.get(`/api/plugins/packages?workspace=${wid}`)).json<InstalledPluginPackage[]>();
+  const iconUrl = (name: string) => `/api/plugins/package-icon?package=${encodeURIComponent(name)}`;
+
+  it("uses the catalog icon when the package matches a catalog entry", async () => {
+    const { t, wid } = await start({
+      plugins: (origin) => [plugin(origin, "alpha", { icon: `${origin}/icons/alpha.svg` })],
+    });
+    await seed(t, "@alisio/plugin-alpha", { alisio: { icon: "own.svg" } }, { "own.svg": SVG });
+    const [pkg] = await listed(t, wid);
+    expect(pkg?.icon).toBe("/api/plugin-catalog/icons/alpha");
+  });
+
+  it("falls back to the icon the package declares and serves it with locked-down headers", async () => {
+    const { t, wid } = await start();
+    await seed(
+      t,
+      "@acme/extra",
+      { alisio: { icon: "assets/logo.svg" } },
+      { "assets/logo.svg": SVG },
+    );
+    const [pkg] = await listed(t, wid);
+    expect(pkg?.icon).toBe(iconUrl("@acme/extra"));
+    const res = await t.api.get(iconUrl("@acme/extra"));
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(SVG);
+    expect(res.headers["content-type"]).toBe("image/svg+xml");
+    expect(res.headers["content-security-policy"]).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    );
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(String(res.headers["cache-control"])).toMatch(/max-age=\d+/);
+    const conditional = await t.api.get(iconUrl("@acme/extra"), {
+      "If-None-Match": String(res.headers.etag),
+    });
+    expect(conditional.status).toBe(304);
+  });
+
+  it("serves a raster icon by its bytes, not by its extension", async () => {
+    const { t } = await start();
+    await seed(t, "pngy", { alisio: { icon: "logo.webp" } }, { "logo.webp": PNG });
+    expect((await t.api.get(iconUrl("pngy"))).headers["content-type"]).toBe("image/png");
+  });
+
+  it("has no icon when none is declared, the file is missing, or it is not an allowed image", async () => {
+    const { t, wid } = await start();
+    await seed(t, "plain", {});
+    await seed(t, "missing", { alisio: { icon: "nope.svg" } });
+    await seed(
+      t,
+      "script",
+      { alisio: { icon: "icon.html" } },
+      { "icon.html": "<svg><script>1</script></svg>" },
+    );
+    await seed(t, "fake", { alisio: { icon: "icon.png" } }, { "icon.png": "not an image at all" });
+    await seed(
+      t,
+      "huge",
+      { alisio: { icon: "big.svg" } },
+      { "big.svg": `${SVG}${" ".repeat(400_000)}` },
+    );
+    await seed(t, "weird", { alisio: { icon: 42 } });
+    for (const pkg of await listed(t, wid)) expect(pkg.icon, pkg.package).toBeUndefined();
+    for (const name of ["plain", "missing", "script", "fake", "huge", "weird"])
+      expect((await t.api.get(iconUrl(name))).status, name).toBe(404);
+  });
+
+  it("never leaves the package directory: traversal, absolute paths and symlinks", async () => {
+    const { t, wid } = await start();
+    const outside = join(t.root, "secret.svg");
+    await writeFile(outside, SVG);
+    await seed(t, "up", { alisio: { icon: "../../../../secret.svg" } });
+    await seed(t, "abs", { alisio: { icon: outside } });
+    const dir = await seed(t, "link", { alisio: { icon: "logo.svg" } });
+    await symlink(outside, join(dir, "logo.svg"));
+    const dirLink = await seed(t, "dirlink", { alisio: { icon: "d/logo.svg" } });
+    await symlink(t.root, join(dirLink, "d"));
+    for (const pkg of await listed(t, wid)) expect(pkg.icon, pkg.package).toBeUndefined();
+    for (const name of ["up", "abs", "link", "dirlink"])
+      expect((await t.api.get(iconUrl(name))).status, name).toBe(404);
+  });
+
+  it("only serves packages installed globally, with a valid name, and requires authentication", async () => {
+    const { t } = await start();
+    await seed(t, "ok", { alisio: { icon: "i.svg" } }, { "i.svg": SVG });
+    expect((await t.api.get(iconUrl("not-installed"))).status).toBe(404);
+    expect((await t.api.get(iconUrl("../ok"))).status).toBe(404);
+    expect((await t.api.get("/api/plugins/package-icon")).status).toBe(400);
+    expect((await raw(t.server.port, iconUrl("ok"))).status).toBe(401);
+    expect((await t.api.get(iconUrl("ok"))).status).toBe(200);
   });
 });
 
