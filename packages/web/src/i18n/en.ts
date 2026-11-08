@@ -488,6 +488,7 @@ export const en = {
     "Enable full access? Writes, commands and network calls run without asking. Not a sandbox: the agent has your user's permissions.",
   "modes.manage": "Manage saved permissions…",
   "permissions.title": "Session permissions",
+  "permissions.short": "Permissions",
   "permissions.analysisRun": "Python analysis",
   "permissions.allowedSession": "Allowed for this session · since {time}",
   "permissions.revoke": "Revoke",

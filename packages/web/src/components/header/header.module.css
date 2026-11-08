@@ -83,7 +83,9 @@
   border-radius: 999px;
   color: var(--text);
   font-size: 13.5px;
+  background: none;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .log:hover {

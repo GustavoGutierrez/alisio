@@ -290,9 +290,9 @@ function ProfileCard(props: {
     }
   };
   return (
-    <li class={styles.row} data-current={current}>
-      <div class={styles.rowMain}>
-        <div class={styles.rowTitle}>
+    <li class={`${styles.row} ${styles.profileCard}`} data-current={current}>
+      <div class={`${styles.rowMain} ${styles.profileBody}`}>
+        <div class={`${styles.rowTitle} ${styles.profileHead}`}>
           <span class={styles.cardName}>{profile.name}</span>
           <Pill tone="off">{type?.name ?? profile.provider}</Pill>
           {profile.active ? <Pill tone="ok">{t("models.activeGlobal")}</Pill> : null}
@@ -356,7 +356,7 @@ function ProfileCard(props: {
           </p>
         ) : (
           <form
-            class={styles.credentialForm}
+            class={`${styles.credentialForm} ${styles.activateForm}`}
             onSubmit={(event) => {
               event.preventDefault();
               void activate();

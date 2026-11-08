@@ -495,6 +495,7 @@ export const es: Record<MessageKey, string> = {
     "¿Activar el acceso total? Las escrituras, los comandos y la red se ejecutan sin preguntar. No es un sandbox: el agente tiene los permisos de tu usuario.",
   "modes.manage": "Gestionar permisos guardados…",
   "permissions.title": "Permisos de la sesión",
+  "permissions.short": "Permisos",
   "permissions.analysisRun": "Análisis en Python",
   "permissions.allowedSession": "Permitido en esta sesión · desde {time}",
   "permissions.revoke": "Revocar",

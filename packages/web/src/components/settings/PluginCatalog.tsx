@@ -56,10 +56,10 @@ function CatalogRow(props: {
             : { tone: "ok" as const, text: cs("action.installed") }
           : undefined;
   return (
-    <li class={styles.row} aria-busy={action.kind === "installing" || undefined}>
+    <li class={styles.catalogRow} aria-busy={action.kind === "installing" || undefined}>
       <button
         type="button"
-        class={styles.rowMain}
+        class={styles.catalogRowMain}
         data-slug={plugin.slug}
         title={plugin.description}
         aria-label={cs("row.open", { name: plugin.name })}
@@ -67,16 +67,16 @@ function CatalogRow(props: {
         onClick={() => props.onOpen(plugin.slug)}
       >
         <PluginIcon icon={plugin.icon} />
-        <span class={styles.rowText}>
-          <span class={styles.rowName}>
-            <span class={styles.rowNameText}>{plugin.name}</span>
+        <span class={styles.catalogRowText}>
+          <span class={styles.catalogRowName}>
+            <span class={styles.catalogRowNameText}>{plugin.name}</span>
             {badge ? (
-              <span class={styles.rowBadge} data-tone={badge.tone}>
+              <span class={styles.catalogRowBadge} data-tone={badge.tone}>
                 {badge.text}
               </span>
             ) : null}
           </span>
-          <span class={styles.rowDesc} aria-hidden="true">
+          <span class={styles.catalogRowDesc} aria-hidden="true">
             {truncateDescription(plugin.description)}
           </span>
           <span id={descId} class={styles.srOnly}>
@@ -86,7 +86,7 @@ function CatalogRow(props: {
       </button>
       <button
         type="button"
-        class={styles.rowAction}
+        class={styles.catalogRowAction}
         data-kind={action.kind}
         disabled={action.disabled}
         title={text.reason ? `${text.label}: ${text.reason}` : text.label}
@@ -112,7 +112,7 @@ function Skeletons() {
   return (
     <ul class={styles.catalogGrid} aria-hidden="true">
       {Array.from({ length: 6 }, (_, index) => (
-        <li key={index} class={styles.row} data-skeleton="true">
+        <li key={index} class={styles.catalogRow} data-skeleton="true">
           <span class={styles.skeletonIcon} />
           <span class={styles.skeletonLines}>
             <span class={styles.skeletonLine} />

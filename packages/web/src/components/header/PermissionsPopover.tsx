@@ -29,17 +29,17 @@ export function PermissionsButton() {
     <span class={styles.permissions}>
       <button
         type="button"
-        class="icon-btn"
+        class={styles.log}
         aria-haspopup="dialog"
         aria-expanded={permissionsOpen.value}
-        aria-label={t("permissions.title")}
         title={t("permissions.title")}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={() => {
           permissionsOpen.value = !permissionsOpen.value;
         }}
       >
-        <Icon name="key" size={16} />
+        <Icon name="lock" size={15} />
+        {t("permissions.short")}
       </button>
       {permissionsOpen.value ? <PermissionsPopover /> : null}
     </span>

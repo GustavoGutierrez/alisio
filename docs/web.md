@@ -246,7 +246,7 @@ shows no API key field; once signed in, the card offers **Sign out**, and an exp
   are stored.
 
 <figure class="doc-shot">
-  <img src="./assets/web-ui/provider_oauth_web_ui.webp" alt="Settings, Models: a profile with an unofficial sign-in method marked unofficial, and a profile whose sign-in is running with a device code, its address with Copy and Open link buttons, a progress line, a field for the confirmation code and a Cancel button." width="1060" height="780" loading="lazy" decoding="async" />
+  <img src="./assets/web-ui/provider_oauth_web_ui.webp" alt="Settings, Models: a profile with an unofficial sign-in method marked unofficial, and a profile whose sign-in is running with a device code, its address with Copy and Open link buttons, a progress line, a field for the confirmation code and a Cancel button." width="1060" height="960" loading="lazy" decoding="async" />
   <figcaption>Sign-in from Settings → Models, with a scripted fake provider: the device code and address, a masked field for the answer the plugin asks for, and Cancel.</figcaption>
 </figure>
 

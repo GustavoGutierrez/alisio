@@ -261,7 +261,7 @@ sesión iniciada, la tarjeta ofrece **Cerrar sesión**, y una sesión vencida mu
   se explica cómo se guardan las sesiones.
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/provider_oauth_web_ui.webp" alt="Ajustes, Modelos: un perfil con un método de inicio de sesión no oficial, marcado como tal, y un perfil con un inicio de sesión en curso con un código de dispositivo, su dirección con botones Copiar y Abrir enlace, una línea de progreso, un campo para el código de confirmación y un botón Cancelar." width="1060" height="780" loading="lazy" decoding="async" />
+  <img src="../assets/web-ui/provider_oauth_web_ui.webp" alt="Ajustes, Modelos: un perfil con un método de inicio de sesión no oficial, marcado como tal, y un perfil con un inicio de sesión en curso con un código de dispositivo, su dirección con botones Copiar y Abrir enlace, una línea de progreso, un campo para el código de confirmación y un botón Cancelar." width="1060" height="960" loading="lazy" decoding="async" />
   <figcaption>Inicio de sesión desde Ajustes → Modelos, con un proveedor falso programado: el código y la dirección, un campo enmascarado para la respuesta que pide el plugin y Cancelar.</figcaption>
 </figure>
 

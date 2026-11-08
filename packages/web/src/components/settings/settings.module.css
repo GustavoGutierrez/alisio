@@ -1114,7 +1114,7 @@
 }
 
 .links,
-.rowActions {
+.inlineActions {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1403,7 +1403,7 @@
 }
 
 /* ---- Compact catalog rows ---- */
-.row {
+.catalogRow {
   position: relative;
   display: flex;
   align-items: center;
@@ -1416,11 +1416,11 @@
   list-style: none;
 }
 
-.row:hover {
+.catalogRow:hover {
   border-color: var(--border-strong);
 }
 
-.rowMain {
+.catalogRowMain {
   display: flex;
   flex: 1;
   align-items: center;
@@ -1435,14 +1435,14 @@
   cursor: pointer;
 }
 
-.rowText {
+.catalogRowText {
   display: grid;
   flex: 1;
   gap: 2px;
   min-width: 0;
 }
 
-.rowName {
+.catalogRowName {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1451,14 +1451,14 @@
   font-weight: 600;
 }
 
-.rowNameText {
+.catalogRowNameText {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rowDesc {
+.catalogRowDesc {
   /* The text is already cut at DESCRIPTION_LIMIT characters; two lines hold that at the narrowest
      column, and the clamp is only a safety net so every row has the same height. */
   display: -webkit-box;
@@ -1470,7 +1470,7 @@
   -webkit-box-orient: vertical;
 }
 
-.rowBadge {
+.catalogRowBadge {
   flex: none;
   padding: 0 7px;
   border-radius: 999px;
@@ -1481,22 +1481,22 @@
   line-height: 18px;
 }
 
-.rowBadge[data-tone="ok"] {
+.catalogRowBadge[data-tone="ok"] {
   background: color-mix(in srgb, var(--ok) 14%, transparent);
   color: var(--ok);
 }
 
-.rowBadge[data-tone="warn"] {
+.catalogRowBadge[data-tone="warn"] {
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
 }
 
-.rowBadge[data-tone="danger"] {
+.catalogRowBadge[data-tone="danger"] {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-.rowAction {
+.catalogRowAction {
   display: inline-grid;
   flex: none;
   place-items: center;
@@ -1509,36 +1509,36 @@
   cursor: pointer;
 }
 
-.rowAction:hover:not(:disabled) {
+.catalogRowAction:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
 
-.rowAction[data-kind="install"],
-.rowAction[data-kind="update"] {
+.catalogRowAction[data-kind="install"],
+.catalogRowAction[data-kind="update"] {
   border-color: transparent;
   background: var(--accent);
   color: var(--accent-contrast);
 }
 
-.rowAction[data-kind="install"]:hover:not(:disabled),
-.rowAction[data-kind="update"]:hover:not(:disabled) {
+.catalogRowAction[data-kind="install"]:hover:not(:disabled),
+.catalogRowAction[data-kind="update"]:hover:not(:disabled) {
   background: var(--accent-strong);
 }
 
-.rowAction:disabled {
+.catalogRowAction:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.rowMain:focus-visible,
-.rowAction:focus-visible,
+.catalogRowMain:focus-visible,
+.catalogRowAction:focus-visible,
 .backLink:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.row[data-skeleton="true"] {
+.catalogRow[data-skeleton="true"] {
   padding: 10px;
   gap: 12px;
 }
@@ -1819,4 +1819,78 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* ---- Models: provider profile card (one vertical flow) ---- */
+.profileCard {
+  align-items: stretch;
+  padding: 16px;
+}
+
+.profileBody {
+  display: grid;
+  gap: 12px;
+}
+
+.profileHead {
+  gap: 8px 10px;
+}
+
+.profileHead .linkButton {
+  margin-left: auto;
+}
+
+.profileBody .facts {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.profileBody .facts dd {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: break-word;
+}
+
+.profileBody .signIn,
+.profileBody .credential {
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+
+.profileBody .credential {
+  gap: 10px 16px;
+}
+
+.profileBody .credentialForm {
+  flex: 1 1 360px;
+  margin-top: 0;
+}
+
+.profileBody .credentialForm .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.profileBody .activateForm {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.profileBody .activateForm .input {
+  flex: 1 1 240px;
+}
+
+.profileBody .activateForm .meta {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.profileBody > .note {
+  max-width: none;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }

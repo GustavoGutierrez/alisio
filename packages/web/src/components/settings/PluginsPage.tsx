@@ -471,7 +471,7 @@ export function PluginsPage() {
                     : cs("update.countMany", { n: pending.length })
                   : cs("update.none")}
               </p>
-              <span class={styles.rowActions}>
+              <span class={styles.inlineActions}>
                 {pending.length > 1 ? (
                   <button
                     type="button"
