@@ -16,16 +16,16 @@ configuration, plugins and the session database are the ones the CLI uses.
 
 ## Download and install
 
-Download the file for your system from the [Alisio Desktop 0.10.0 release](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.10.0) (the same links
+Download the file for your system from the [Alisio Desktop 0.11.0 release](https://github.com/GustavoGutierrez/alisio/releases/tag/desktop-v0.11.0) (the same links
 are on the [home page](/)):
 
 | System | Download | How to install |
 | --- | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.10.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-Setup-0.10.0-x64.exe) | Run it and follow the wizard |
-| macOS Apple Silicon (arm64) | [`Alisio-0.10.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-arm64.dmg) | Open it and drag Alisio to Applications |
-| macOS Intel (x64) | [`Alisio-0.10.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-x64.dmg) | Open it and drag Alisio to Applications |
-| Linux, any distribution | [`Alisio-0.10.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-x86_64.AppImage) | Make it executable (`chmod +x`) and run it |
-| Debian and Ubuntu | [`Alisio-0.10.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.10.0/Alisio-0.10.0-amd64.deb) | Install it with your package manager |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.0-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.11.0/Alisio-Setup-0.11.0-x64.exe) | Run it and follow the wizard |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.0-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.11.0/Alisio-0.11.0-arm64.dmg) | Open it and drag Alisio to Applications |
+| macOS Intel (x64) | [`Alisio-0.11.0-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.11.0/Alisio-0.11.0-x64.dmg) | Open it and drag Alisio to Applications |
+| Linux, any distribution | [`Alisio-0.11.0-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.11.0/Alisio-0.11.0-x86_64.AppImage) | Make it executable (`chmod +x`) and run it |
+| Debian and Ubuntu | [`Alisio-0.11.0-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/desktop-v0.11.0/Alisio-0.11.0-amd64.deb) | Install it with your package manager |
 
 Each release also lists `SHA256SUMS-desktop.txt`, so you can verify a download. To build the
 installers yourself, see [Building the installers](#building-the-installers).
