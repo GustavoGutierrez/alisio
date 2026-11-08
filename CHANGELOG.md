@@ -4,29 +4,31 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
-## [Unreleased]
+## [0.11.3] - 2026-11-08
+
+Designed PDFs from a request and a Skill Builder.
 
 ### Added
 
 - **Designed PDFs**: ask for a PDF, a printable document or "convert this Markdown to PDF" and Alisio
-  builds it from content only (Markdown or structured blocks) with `document_create`: cover, table of
-  contents, page numbers, styled tables, callouts and code, in one of three themes (`executive-clean`,
-  `data-report`, `technical-spec`) with bundled fonts. It checks the layout, repairs wide tables by
-  itself and publishes the PDF as an artifact. It uses your installed Chrome, Edge or Chromium (nothing
-  is downloaded) and renders with the network off; `alisio documents status` shows whether it is ready.
-  Without front matter the first heading and the bold `Key: value` lines under it become a designed
-  cover; `cover: false` turns it off, `theme: {id, accent, ink}` applies a brand color to every
-  theme, headings that already carry numbers are never numbered twice, and an unusable image (SVG,
-  missing file) is replaced by a placeholder instead of failing the document.
-  Alisio Desktop prints with its own Chromium (no browser to install), the table of contents now
-  shows page numbers, and documents gain charts drawn from your numbers (bar, line, pie), SVG
-  images and logos (sanitized, also on the cover), appendices, and a cover painted with your dark
-  brand color in every theme. The standalone binary now carries the themes and fonts.
+  builds it with `document_create` in one of three themes (`executive-clean`, `data-report`,
+  `technical-spec`) with bundled fonts: designed cover with your logo, table of contents with page
+  numbers, page numbers, styled tables, callouts, code, charts drawn from your numbers (bar, line,
+  pie), SVG images and appendices. Give it your brand colors (`theme: {id, accent, ink}`) or let the
+  model pick a palette that fits the document. It checks the layout, repairs wide tables by itself and
+  publishes the PDF as an artifact. Alisio Desktop prints with its own Chromium; the CLI and the
+  browser UI use your installed Chrome, Edge or Chromium (nothing is downloaded), always with the
+  network off. `alisio documents status` shows whether it is ready.
 - **Skill Builder** (sidebar, above Settings, and **New skill** in Settings → Skills): describe a
   skill, let the active model draft it in the open Agent Skills format, then review, edit and save
   it to the project (`.agents/skills`) or globally (`~/.agents/skills`). It shows live errors and
   suggestions, can regenerate with your feedback and activates the skill without a restart.
 - `.agents/skills` and `.claude/skills` now count as project resources for project trust.
+
+### Fixed
+
+- Settings → Models shows its profile rows correctly again (the 0.11.2 plugin catalog restyled them).
+- The session permissions button shows a padlock and a visible **Permissions** label.
 
 ## [0.11.2] - 2026-11-08
 

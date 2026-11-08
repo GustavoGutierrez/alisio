@@ -2,7 +2,7 @@
   "name": "@alisio/desktop",
   "desktopName": "Alisio.desktop",
   "productName": "Alisio",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "private": true,
   "description": "Alisio desktop app: an Electron shell around the local Alisio web UI server. Not published to npm.",
   "author": "Gustavo Gutiérrez",
