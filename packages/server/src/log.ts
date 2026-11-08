@@ -1,4 +1,6 @@
 /** Structured JSON-per-line logs to stderr (RNF-13). No OpenTelemetry. */
+import { redactDeep } from "@alisio/core";
+
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
 export interface LogFields {
@@ -35,7 +37,10 @@ export function createLogger(
     (msg: string, fields: LogFields = {}) => {
       if (ORDER[at] < ORDER[level]) return;
       try {
-        write(`${JSON.stringify({ ts: new Date().toISOString(), level: at, msg, ...fields })}\n`);
+        // Provider text may reach a log field: known token values and JWTs are redacted (D26a).
+        write(
+          `${JSON.stringify(redactDeep({ ts: new Date().toISOString(), level: at, msg, ...fields }))}\n`,
+        );
       } catch {
         /* Logging never breaks a request. */
       }

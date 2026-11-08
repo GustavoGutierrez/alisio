@@ -678,3 +678,23 @@ describe("handles come from the registry's one create() point (OA-AC-14)", () =>
     expect((await seen[1]?.oauth?.get())?.access).toBe("access-TWO-0123456789");
   });
 });
+
+describe("headless use of a stored session (OA-AC-27)", () => {
+  it("serves a valid session, renews an expired one and, with none, says where to sign in without any token", async () => {
+    const valid = await setup();
+    await valid.seed(cred({ expires: NOW + 3_600_000 }));
+    expect((await get(valid)).access).toBe("access-A-0123456789");
+    expect(valid.refresh).not.toHaveBeenCalled();
+
+    const expired = await setup();
+    await expired.seed(cred({ expires: NOW - 1 }));
+    expect((await get(expired)).access).toMatch(/^access-N1/);
+
+    const none = await setup();
+    const failure = await get(none).catch((error: Error) => error);
+    expect(failure).toMatchObject({ code: "OAUTH_SIGN_IN_REQUIRED" });
+    expect((failure as Error).message).toMatch(/Settings > Models or \/connect/);
+    expect((failure as Error).message).not.toMatch(/access-|refresh-/);
+    expect(none.refresh).not.toHaveBeenCalled();
+  });
+});

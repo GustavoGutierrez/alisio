@@ -602,11 +602,32 @@ export {
 } from "./plugins/version-compat.ts";
 export * from "./proof/index.ts";
 export {
+  AuthFlow,
+  AuthFlowLimitError,
+  AuthFlowRegistry,
+  type AuthFlowRegistryOptions,
+  type AuthFlowStatus,
+  FLOW_MAX_ACTIVE,
+  FLOW_RETAIN_MS,
+  FLOW_TTL_MS,
+  isSafeStepUrl,
+  type RunAuthFlowOptions,
+  runAuthFlow,
+  type Schedule,
+  type StartFlowInput,
+} from "./providers/oauth/flow.ts";
+export {
   type FileLockOptions,
   FileLockTimeoutError,
   isStaleLock,
   withFileLock,
 } from "./providers/oauth/lock.ts";
+export {
+  LOOPBACK_MAX_MS,
+  LoopbackError,
+  type OpenLoopbackOptions,
+  openLoopback,
+} from "./providers/oauth/loopback.ts";
 export {
   needsRefresh,
   OAuthError,
@@ -617,6 +638,7 @@ export {
 export {
   knownSecretValues,
   redactCredentials,
+  redactDeep,
   redactEventData,
   registerSecret,
   SecretRegistry,
@@ -625,6 +647,7 @@ export {
   ActiveProvider,
   ProviderAuthDeclarationError,
   ProviderRegistry,
+  type RegisteredProvider,
   UnconfiguredProvider,
 } from "./providers/registry.ts";
 export {

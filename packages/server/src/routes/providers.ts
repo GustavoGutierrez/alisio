@@ -5,7 +5,7 @@
  * changes the provider of one workspace application, so it is refused while that workspace has
  * runs (P-01: 409 `runs_active`).
  */
-import { maskSecret, ProviderSettingsStore } from "@alisio/core";
+import { type AuthFlowRegistry, maskSecret, ProviderSettingsStore } from "@alisio/core";
 import type {
   CredentialStatus,
   ProviderConfigurationField,
@@ -24,7 +24,7 @@ import { type ManagementContext, type WorkspaceRecycler, workspaceApp } from "./
 
 /** Credential keys the web may write (RF-15). */
 const CREDENTIAL_KEYS = ["apiKey", "bearerToken"] as const;
-const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const secretValue = (v: unknown) => typeof v === "string" && /^\S{1,4096}$/.test(v);
 
 type Registration = ProviderTypeInfo & { fields: ProviderConfigurationField[] };
@@ -35,6 +35,18 @@ function typesOf(opened: OpenWorkspace | undefined): Registration[] {
       id: r.id,
       name: r.name,
       ...(r.description ? { description: r.description } : {}),
+      // Only the serializable face of each method: never `start` or `refresh` (D18).
+      ...(r.auth?.length
+        ? {
+            auth: r.auth.map((method) => ({
+              id: method.id,
+              label: method.label,
+              kind: method.kind,
+              ...(method.description ? { description: method.description } : {}),
+              ...(method.unofficial ? { unofficial: true } : {}),
+            })),
+          }
+        : {}),
       fields: r.fields.map((field) => {
         // A secret field never carries a default value to the client.
         const { defaultValue, ...rest } = field;
@@ -51,6 +63,7 @@ async function credentialStatus(
   name: string,
   values: Record<string, ProviderConfigurationValue>,
   type: Registration | undefined,
+  providerId: string,
 ): Promise<Record<string, CredentialStatus>> {
   const stored = await store.credentialStatus(name);
   const keys = new Set<string>([
@@ -69,6 +82,19 @@ async function credentialStatus(
       out[key] = { configured: true, source: "env" };
     else out[key] = { configured: false };
   }
+  // The synthetic sign-in credential: state and expiry only, never a token or a tail (D6, D18).
+  // A session left by another registration does not count for this profile (D21).
+  const session = await store.getOAuth(name, providerId);
+  if (type?.auth?.length || session)
+    out.oauth = session
+      ? {
+          configured: true,
+          source: "file",
+          kind: "oauth",
+          state: session.state === "needs_sign_in" ? "needs_sign_in" : "ok",
+          ...(typeof session.expires === "number" ? { expires: session.expires } : {}),
+        }
+      : { configured: false, kind: "oauth" };
   return out;
 }
 
@@ -113,6 +139,7 @@ export function registerProviderRoutes(
   router: Router,
   ctx: ManagementContext,
   recycler: WorkspaceRecycler,
+  flows?: AuthFlowRegistry,
 ): void {
   /** Any open app serves the provider types when no workspace is named. */
   const optionalApp = async (reference: string | null) =>
@@ -134,7 +161,13 @@ export function registerProviderRoutes(
       model: profile.model,
       values: publicValues(profile.values ?? {}, type),
       active: settings.active === name,
-      credentials: await credentialStatus(store(), name, profile.values ?? {}, type),
+      credentials: await credentialStatus(
+        store(),
+        name,
+        profile.values ?? {},
+        type,
+        profile.provider,
+      ),
     };
   }
 
@@ -198,6 +231,10 @@ export function registerProviderRoutes(
     }
     if (invalid.length)
       throw new HttpError("validation_failed", "Invalid profile values", { fields: invalid });
+    // A profile that changes provider type loses its sign-in session (the store drops it) and any
+    // flow that was about to write one (D21b).
+    const before = (await store().load()).profiles[name];
+    if (before && before.provider !== type.id) flows?.cancelProfile(name);
     await store().saveProfile(name, {
       provider: type.id,
       values: input.values as Record<string, ProviderConfigurationValue>,
@@ -230,7 +267,10 @@ export function registerProviderRoutes(
 
   router.delete("/api/providers/:profile/credentials", async ({ params }) => {
     const name = profileParam(params.profile);
-    if (!(await store().deleteCredentials(name)))
+    // Cancel first: a flow that finishes afterwards finds itself cancelled under the lock (D22b).
+    const cancelled = flows?.cancelProfile(name) ?? 0;
+    const deleted = await store().deleteCredentials(name);
+    if (!deleted && !cancelled)
       throw new HttpError("not_found", "No stored credentials for this profile");
     return { body: { configured: false } };
   });

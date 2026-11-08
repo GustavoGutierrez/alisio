@@ -10,10 +10,13 @@ import {
   AnalysisJobs,
   type AppOptions,
   ArtifactStore,
+  AuthFlowRegistry,
   BackgroundTaskStore,
   BlobStore,
   CapabilityGrants,
   GoalStore,
+  ProviderSettingsStore,
+  redactCredentials,
   SQLiteStore,
   stateHome,
   type TaskWakeRequest,
@@ -61,6 +64,7 @@ import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProofRoutes } from "./routes/proof.ts";
+import { registerProviderAuthRoutes } from "./routes/provider-auth.ts";
 import { registerProviderRoutes } from "./routes/providers.ts";
 import { registerScratchRoutes } from "./routes/scratch.ts";
 import { registerRestartRoutes } from "./routes/server-restart.ts";
@@ -120,6 +124,12 @@ export interface ServerOptions {
   app?: ServerAppOptions;
   /** Listed as a workspace even before it has sessions (the CLI passes its cwd). */
   defaultWorkspace?: string;
+  /**
+   * The host declares that the browser runs on this same machine (the desktop app). Purely
+   * declarative: it lets sign-in methods be offered a loopback listener without the "only if your
+   * browser is on this machine" caveat (specs/025 D16). Never inferred from the bind address.
+   */
+  localBrowser?: boolean;
   /** Maximum workspace applications open at once (default 4). */
   maxOpenWorkspaces?: number;
   /** Maximum runs executing at once across all sessions (default 4). */
@@ -599,7 +609,20 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     });
   }
   registerAgentDefinitionRoutes(router, management, recycler);
-  registerProviderRoutes(router, management, recycler);
+  // Sign-in flows live in memory, per process; a plugin may be offered a loopback listener only
+  // when the browser can be assumed local (D16) and the server is not read-only.
+  const authFlows = new AuthFlowRegistry({ store: new ProviderSettingsStore() });
+  registerProviderRoutes(router, management, recycler, authFlows);
+  registerProviderAuthRoutes(router, management, {
+    flows: authFlows,
+    loopback: base.readOnly
+      ? false
+      : options.localBrowser
+        ? "declared"
+        : loopback
+          ? "assumed"
+          : false,
+  });
   registerEventRoutes(router, {
     hub,
     sessions,
@@ -679,7 +702,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         logger.error("request failed", {
           correlationId,
           route,
-          error: error instanceof Error ? error.message : String(error),
+          error: redactCredentials(error instanceof Error ? error.message : String(error)),
         });
       if (!res.headersSent) sendJson(res, status, body);
       else res.end();
@@ -726,6 +749,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         closing = true;
         clearInterval(sweeper);
         pickerAbort.abort();
+        authFlows.cancelAll();
         const settling = scheduler.shutdown(2_000);
         approvals?.denyAll();
         interactions?.cancelAll();

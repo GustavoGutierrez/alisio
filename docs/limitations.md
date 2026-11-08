@@ -384,14 +384,20 @@ needs a restart (the desktop app restarts itself, `alisio serve` does not); inst
 run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
 ranges make npm fail and roll back; update the older plugin first.
 
-### Provider sign-in (contract and core, phase 1)
+### Provider sign-in (contract, core and server API, phases 1 and 2)
 
-Plugins can now declare sign-in methods and receive `request.oauth`; the host stores, renews, locks
-and redacts the session. Until the next phases land there is no flow runner, route, Web UI or `/connect`
-screen to sign in, so no provider offers it yet. Sessions are plaintext in `credentials.json` (`0600`),
-readable by any process of the same user and by any loaded plugin; this is session convenience, not
-encryption or isolation, and redaction is best effort. The file lock protects only between versions
-that take it: an older core writes without it and can overwrite a newer file with a stale copy.
+Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and
+redacts the session, and the server can start, poll, answer and cancel a sign-in flow
+(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect). Until
+the next phases land there is no Web UI or `/connect` screen that uses it, and no provider offers it
+yet. Flows live in memory: restarting the server loses them. Sessions are plaintext in
+`credentials.json` (`0600`), readable by any process of the same user and by any loaded plugin; this
+is session convenience, not encryption or isolation, and redaction (of SSE frames, API errors, server
+logs, `alisio run --json` lines and the desktop host's output) is best effort: it does not see a token
+split across two chunks of streamed text. The file lock protects only between versions that take it:
+an older core writes without it and can overwrite a newer file with a stale copy. The loopback
+listener is offered when the server listens on loopback even if the browser is on another machine
+(an SSH tunnel), so the UI must also offer pasting the redirect URL.
 
 ## Verification scope
 
@@ -574,14 +580,18 @@ browser behavior (components are tested as VNode trees and the screenshot is man
 testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
 command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).
 
-**Provider sign-in (phase 1).** Verified with Vitest on a temporary configuration directory: the
+**Provider sign-in (phases 1 and 2).** Verified with Vitest on a temporary configuration directory: the
 credentials store (unknown keys, `oauth` without `providers`, generation counter, provider binding,
 conditional writes), file locks (stale at 31 s, not at 29 s, owner-only release), the renewal manager
 (single flight, per-caller abort, conditional write after a delete or a new sign-in, permanent and
 transient failures, `invalidate`), redaction and its feed to cassette and export scans, and, with real
-child processes, no lost writes, a single holder of a stale lock and one shared renewal. Not verified:
-Windows, macOS and network file systems, a real provider plugin, and any behavior of a real sign-in
-service. Details live in `docs/implementation-status.md`.
+child processes, no lost writes, a single holder of a stale lock and one shared renewal. Phase 2 adds
+the flow state machine with an injected clock, URL validation, the real loopback listener, the HTTP
+routes against a real server with a fake provider plugin, and redaction of SSE frames, API errors,
+logs, `--json` lines and the output of a real desktop host process. Not verified: Windows, macOS and
+network file systems, a real provider plugin, a real browser or SSH tunnel against the listener, the
+Web UI and the TUI, and any behavior of a real sign-in service. Details live in
+`docs/implementation-status.md`.
 
 ### Desktop app (Electron)
 

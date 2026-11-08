@@ -1,19 +1,28 @@
 import { mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type BuiltinPlugin, ProviderSettingsStore } from "@alisio/core";
+import {
+  type BuiltinPlugin,
+  ProviderSettingsStore,
+  redactDeep,
+  registerSecret,
+} from "@alisio/core";
 import { createOpenAICompatiblePlugin } from "@alisio/plugin-openai-compatible";
 import type { ProviderModelsInfo, ProvidersOverview, ServerFrame } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { jsonLine } from "../packages/cli/src/json-lines.ts";
+import { HttpError, toApiError } from "../packages/server/src/http/errors.ts";
 import { type RunningServer, startServer } from "../packages/server/src/index.ts";
 import { createLogger } from "../packages/server/src/log.ts";
 import {
   client,
+  fakeProvider,
   gatedProvider,
   login,
   newSession,
   openStream,
   type RawResponse,
+  reply,
   settled,
   startTestServer,
   type TestServer,
@@ -264,5 +273,88 @@ describe("provider activation (P-01)", () => {
       model: "m",
     });
     expect(missing.status).toBe(404);
+  });
+});
+
+// OA-AC-57: the same token never leaves through any output surface of the server and the CLI.
+const JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMzQ1Njc4OSJ9.c2lnbmF0dXJlLXZhbHVlLTEyMzQ1";
+const EXACT = "exact-live-token-OA57-0123456789";
+describe("output surfaces redact credentials (OA-AC-57)", () => {
+  it("redacts SSE frames, ApiError messages and log lines", async () => {
+    registerSecret(EXACT);
+    const logs: string[] = [];
+    test = await startTestServer({
+      provider: fakeProvider(() => reply(`the model echoed ${JWT} and ${EXACT} back`)),
+      logger: createLogger("debug", (line) => logs.push(line)),
+    });
+    const { api } = test;
+    const session = await newSession(test);
+    const stream = openStream(test.server.port, test.cookie, [session.id]);
+    await stream.next((e) => e.frame.t === "hello");
+    const run = await api.post(`/api/sessions/${session.id}/prompts`, {
+      requestId: "r1",
+      text: "go",
+    });
+    await settled(test, session.id, run.json<{ runId: string }>().runId);
+    await stream.next((e) => e.frame.t === "event" && JSON.stringify(e.frame).includes("redacted"));
+    const frames = JSON.stringify(stream.frames());
+    expect(frames).not.toContain(JWT);
+    expect(frames).not.toContain(EXACT);
+    expect(frames).toContain("the model echoed [redacted] and [redacted] back");
+    stream.close();
+
+    // An ApiError built from a thrown error with a token in its message and details.
+    const { body } = toApiError(
+      new HttpError("provider_unavailable", `cannot start: ${JWT} ${EXACT}`, {
+        fields: [`values.${JWT}`],
+      }),
+      "cid",
+    );
+    expect(JSON.stringify(body)).not.toContain(JWT);
+    expect(JSON.stringify(body)).not.toContain(EXACT);
+    expect(body.error).toMatchObject({
+      code: "provider_unavailable",
+      message: "cannot start: [redacted] [redacted]",
+    });
+
+    // A route that carries a token in its path reaches the debug log redacted.
+    await api.get(`/api/nothing/${JWT}`);
+    expect(logs.length).toBeGreaterThan(0);
+    for (const line of logs) {
+      expect(line).not.toContain(JWT);
+      expect(line).not.toContain(EXACT);
+    }
+  });
+
+  it("redacts every string of a value without touching its shape, and keeps the reference when nothing matched", () => {
+    registerSecret(EXACT);
+    const clean = { a: 1, list: ["short", "fine and long enough"], nested: { ok: true } };
+    expect(redactDeep(clean)).toBe(clean);
+    const dirty = {
+      type: "text_delta",
+      delta: `x ${JWT} y`,
+      list: [`${EXACT}`, 3],
+      n: { v: EXACT },
+    };
+    const out = redactDeep(dirty);
+    expect(out).toEqual({
+      type: "text_delta",
+      delta: "x [redacted] y",
+      list: ["[redacted]", 3],
+      n: { v: "[redacted]" },
+    });
+    expect(dirty.delta).toContain(JWT);
+  });
+
+  it("writes `alisio run --json` lines with redacted values and valid JSON", () => {
+    registerSecret(EXACT);
+    const line = jsonLine({ type: "error", data: { error: `failed: ${JWT} ${EXACT} \"quoted\"` } });
+    expect(line.endsWith("\n")).toBe(true);
+    expect(line).not.toContain(JWT);
+    expect(line).not.toContain(EXACT);
+    expect(JSON.parse(line)).toEqual({
+      type: "error",
+      data: { error: 'failed: [redacted] [redacted] "quoted"' },
+    });
   });
 });

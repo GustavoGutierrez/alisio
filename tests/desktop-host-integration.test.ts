@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { launchHost, type RunningHost } from "../apps/desktop/src/host-process.ts";
+import { installOutputRedaction } from "../apps/desktop/src/redact-output.ts";
 import { buildHostSpawn } from "../apps/desktop/src/spawn-plan.ts";
 
 const HOST_SOURCE = join(import.meta.dirname, "..", "apps", "desktop", "src", "host.ts");
@@ -159,5 +160,88 @@ describe("desktop host process", () => {
       child.kill("SIGTERM");
       expect(await exited).toBe(0);
     }
+  });
+});
+
+// OA-AC-57 (Desktop): the host's stdout and stderr never carry a token.
+const JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMzQ1Njc4OSJ9.c2lnbmF0dXJlLXZhbHVlLTEyMzQ1";
+
+/** A preload that prints a JWT on both streams once the host has installed its redaction. */
+function leakingEnv(): NodeJS.ProcessEnv {
+  const env = hermeticEnv();
+  const dir = mkdtempSync(join(tmpdir(), "alisio-desktop-preload-"));
+  homes.push(dir);
+  const preload = join(dir, "leak.cjs");
+  writeFileSync(
+    preload,
+    `setTimeout(() => { process.stderr.write("leak-stderr ${JWT}\\n"); process.stdout.write("leak-stdout ${JWT}\\n"); }, 700).unref();`,
+  );
+  return { ...env, NODE_OPTIONS: `--require ${preload}` };
+}
+
+describe("desktop host output redaction (OA-AC-57)", () => {
+  it("redacts the text a plugin or a library writes to the host's stderr and stdout", async () => {
+    const lines: string[] = [];
+    const plan = buildHostSpawn({
+      execPath: process.execPath,
+      hostEntry: HOST_SOURCE,
+      parentEnv: leakingEnv(),
+      nodeArgs: NODE_ARGS,
+    });
+    const child = spawn(plan.command, plan.args, {
+      env: plan.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    try {
+      const out: string[] = [];
+      child.stdout.on("data", (chunk: Buffer) => out.push(chunk.toString()));
+      child.stderr.on("data", (chunk: Buffer) => lines.push(chunk.toString()));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("no leak lines")), 20_000);
+        const check = setInterval(() => {
+          if (out.join("").includes("leak-stdout") && lines.join("").includes("leak-stderr")) {
+            clearTimeout(timer);
+            clearInterval(check);
+            resolve();
+          }
+        }, 25);
+        child.on("exit", () => reject(new Error("exited early")));
+      });
+      expect(out.join("")).toContain("leak-stdout [redacted]");
+      expect(lines.join("")).toContain("leak-stderr [redacted]");
+      expect(out.join("")).not.toContain(JWT);
+      expect(lines.join("")).not.toContain(JWT);
+    } finally {
+      const exited = new Promise<number | null>((r) => child.once("exit", (c) => r(c)));
+      child.kill("SIGTERM");
+      await exited;
+    }
+  });
+
+  it("wraps a stream's write: strings and buffers are redacted, callbacks and return values kept", () => {
+    const written: string[] = [];
+    const stream = {
+      write(chunk: string | Uint8Array, ...rest: unknown[]): boolean {
+        written.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+        for (const arg of rest) if (typeof arg === "function") (arg as () => void)();
+        return true;
+      },
+    };
+    const restore = installOutputRedaction(
+      (text) => text.replaceAll("SECRET-VALUE-1", "[redacted]"),
+      [stream],
+    );
+    let called = 0;
+    expect(stream.write("a SECRET-VALUE-1 b", () => called++)).toBe(true);
+    stream.write(Buffer.from("buffer SECRET-VALUE-1"), "utf8", () => called++);
+    const untouched = Buffer.from([0xff, 0xfe, 0x00]);
+    stream.write(untouched);
+    expect(written[0]).toBe("a [redacted] b");
+    expect(written[1]).toBe("buffer [redacted]");
+    expect(called).toBe(2);
+    expect(written).toHaveLength(3);
+    restore();
+    stream.write("SECRET-VALUE-1");
+    expect(written.at(-1)).toBe("SECRET-VALUE-1");
   });
 });

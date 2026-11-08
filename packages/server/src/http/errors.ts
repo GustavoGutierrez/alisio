@@ -1,3 +1,4 @@
+import { redactCredentials, redactDeep } from "@alisio/core";
 import type { ApiError, ApiErrorCode } from "@alisio/sdk";
 
 /** HTTP status for every web API error code (§8.3). */
@@ -71,8 +72,9 @@ export function toApiError(
       body: {
         error: {
           code: error.code,
-          message: error.message,
-          ...(error.details !== undefined ? { details: error.details } : {}),
+          // An error may carry text from a plugin or a provider: never a token (D26a).
+          message: redactCredentials(error.message),
+          ...(error.details !== undefined ? { details: redactDeep(error.details) } : {}),
         },
         correlationId,
       },

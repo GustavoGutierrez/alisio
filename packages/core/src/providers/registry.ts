@@ -47,6 +47,16 @@ function validateAuth(providerId: string, auth: unknown): void {
 export class ProviderRegistry {
   private entries = new Map<string, RegisteredProvider>();
   private oauth: OAuthManager | undefined;
+  private removedListeners = new Set<(entry: RegisteredProvider) => void>();
+
+  /**
+   * Calls `listener` whenever a registration is removed (its plugin was uninstalled or recycled):
+   * the point where pending sign-in flows of that registration are cancelled (D28a).
+   */
+  onRemoved(listener: (entry: RegisteredProvider) => void): () => void {
+    this.removedListeners.add(listener);
+    return () => void this.removedListeners.delete(listener);
+  }
 
   /** Connects the sign-in custodian; handles are built here, in one place (D19). */
   attachOAuth(manager: OAuthManager): void {
@@ -65,7 +75,14 @@ export class ProviderRegistry {
     const entry = { ...registration, ...owner };
     this.entries.set(entry.id, entry);
     return () => {
-      if (this.entries.get(entry.id) === entry) this.entries.delete(entry.id);
+      if (this.entries.get(entry.id) !== entry) return;
+      this.entries.delete(entry.id);
+      for (const listener of [...this.removedListeners])
+        try {
+          listener(entry);
+        } catch {
+          /* A listener's failure never blocks the removal. */
+        }
     };
   }
 

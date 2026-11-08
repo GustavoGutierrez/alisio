@@ -512,6 +512,39 @@ export interface ProviderAuthMethodInfo {
   description?: string;
   unofficial?: boolean;
 }
+/** `POST /api/providers/:profile/auth/:method/start` (202). */
+export interface ProviderAuthFlowStarted {
+  flowId: string;
+}
+/**
+ * `GET /api/providers/:profile/auth/flows/:flowId?after=n`: the state of one sign-in flow, as
+ * polled by the web. Never carries a token, an authorization code or a prompt answer.
+ */
+export interface ProviderAuthFlowView {
+  status: "running" | "awaiting_input" | "succeeded" | "failed" | "cancelled" | "expired";
+  /** Only the steps numbered above `after`. */
+  steps: Array<ProviderAuthStep & { n: number }>;
+  /** The one pending prompt, when `status` is `awaiting_input`. */
+  prompt?: ProviderAuthPrompt & { id: string };
+  error?: {
+    code:
+      | "auth_failed"
+      | "loopback_unavailable"
+      | "expired"
+      | "cancelled"
+      | "unsupported"
+      | "unsafe_url";
+    message: string;
+  };
+  /** On success: kind, state and expiry of the stored session, never a tail. */
+  credential?: CredentialStatus;
+  /**
+   * Present when the plugin was offered a loopback listener: `declared` when the host knows the
+   * browser is on this machine (desktop app), `assumed` when it only infers it from a loopback
+   * bind (an SSH tunnel breaks the assumption, so the UI keeps the paste-the-URL input too).
+   */
+  loopback?: "declared" | "assumed";
+}
 export interface ToolContext {
   signal: AbortSignal;
   workspace: string;

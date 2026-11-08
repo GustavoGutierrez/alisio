@@ -61,3 +61,36 @@ export function redactEventData<T>(data: T): T {
   const clean = redactCredentials(error);
   return clean === error ? data : ({ ...data, error: clean } as T);
 }
+
+/**
+ * `value` with every string inside it redacted (`redactCredentials`), copying only what changed:
+ * the same reference comes back when nothing matched. Used on JSON-shaped output (SSE frames, log
+ * fields, `--json` events) where redacting the serialized text could cut through the JSON syntax.
+ */
+export function redactDeep<T>(value: T, registry: SecretRegistry = sharedSecrets, depth = 0): T {
+  if (typeof value === "string") {
+    // Nothing shorter than the shortest rule or exact value can match.
+    if (value.length < MIN_EXACT_LENGTH) return value;
+    const clean = redactCredentials(value, [], registry);
+    return (clean === value ? value : clean) as T;
+  }
+  if (!value || typeof value !== "object" || depth > 64) return value;
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const clean = redactDeep(item, registry, depth + 1);
+      if (clean !== item) changed = true;
+      return clean;
+    });
+    return (changed ? next : value) as T;
+  }
+  let copy: Record<string, unknown> | undefined;
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    const clean = redactDeep(item, registry, depth + 1);
+    if (clean !== item) {
+      copy ??= { ...(value as Record<string, unknown>) };
+      copy[key] = clean;
+    }
+  }
+  return (copy ?? value) as T;
+}

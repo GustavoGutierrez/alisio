@@ -5,6 +5,7 @@
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { installOutputRedaction } from "./redact-output.ts";
 import { parseHostArgs } from "./spawn-plan.ts";
 
 type HostReport = { type: "ready"; launchUrl: string } | { type: "error"; message: string };
@@ -22,14 +23,20 @@ function desktopVersion(): string {
 }
 
 async function main(): Promise<void> {
-  const [{ startServer }, { cliDefaults }] = await Promise.all([
+  const [{ startServer }, { cliDefaults }, { redactCredentials }] = await Promise.all([
     import("@alisio/server"),
     import("@alisio/alisio-code/defaults"),
+    import("@alisio/core"),
   ]);
+  // Nothing the host prints (server logs, plugins, libraries) may carry a token (specs/025 D26a).
+  installOutputRedaction((text) => redactCredentials(text), [process.stdout, process.stderr]);
   const { webRoot } = parseHostArgs(process.argv.slice(2));
   const server = await startServer({
     host: "127.0.0.1",
     port: 0,
+    // The window and this process share one machine by construction: sign-in methods may use a
+    // loopback listener without the "only if your browser is on this computer" caveat (D16).
+    localBrowser: true,
     version: desktopVersion(),
     defaultWorkspace: homedir(),
     app: await cliDefaults(),

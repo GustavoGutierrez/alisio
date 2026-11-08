@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { redactDeep } from "@alisio/core";
 import type { Message, RunEvent, ServerFrame, ToolResult } from "@alisio/sdk";
 import { isEphemeralRunEventType } from "@alisio/sdk";
 import { PROTOCOL_VERSION } from "../routes/health.ts";
@@ -269,7 +270,12 @@ export class SseHub {
   }
 
   private frame(client: Client, frame: ServerFrame, id?: string, droppable = false) {
-    this.write(client, `${id ? `id: ${id}\n` : ""}data: ${JSON.stringify(frame)}\n\n`, droppable);
+    // Frames may carry provider or plugin text: known token values and JWTs never leave (D26a).
+    this.write(
+      client,
+      `${id ? `id: ${id}\n` : ""}data: ${JSON.stringify(redactDeep(frame))}\n\n`,
+      droppable,
+    );
   }
 
   /** Writes with backpressure: queue while the socket drains; overflow ends with `resync`. */

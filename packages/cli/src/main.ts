@@ -132,11 +132,12 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       ? await (await import("./proof.ts")).collectProofCriteria(proofFlags)
       : [];
   const { createApplication, formatBytes, KIND_LABELS } = await import("@alisio/core");
+  const { jsonLine } = await import("./json-lines.ts");
   const app = await createApplication({
     ...(await cliDefaults()),
     ...opts,
     onEvent: (event) => {
-      if (opts.json) process.stdout.write(`${JSON.stringify(event)}\n`);
+      if (opts.json) process.stdout.write(jsonLine(event));
       else if (event.type === "text_delta")
         process.stdout.write(String((event.data as { delta: string }).delta));
       else if (event.type === "request_retry") {
@@ -209,7 +210,12 @@ async function run(cmd: Command, prompt?: string, sessionId?: string) {
       });
       process.stdout.write(
         opts.json
-          ? `${JSON.stringify({ type: "command_result", command: pluginCall.name, sessionId: session, text: result.text ?? "" })}\n`
+          ? jsonLine({
+              type: "command_result",
+              command: pluginCall.name,
+              sessionId: session,
+              text: result.text ?? "",
+            })
           : `${result.text ?? ""}\n`,
       );
       return;
