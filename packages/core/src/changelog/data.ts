@@ -6,6 +6,19 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.2",
+      date: "2026-11-08",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Settings → Plugins → **Plugin catalog** lists each plugin with its icon, name, a short description (the full text is in the tooltip) and an **Install**, **Update** or **Reinstall** button. Clicking a plugin opens its detail: cover, description, version, developer, license, compatibility, npm package and links, with **Back** keeping your search, filters and page.",
+            'Plugin icons across Settings → Plugins: the catalog icon, an icon the installed package declares (`"alisio": { "icon": "..." }` in its `package.json`) or a default plugin icon.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.1",
       date: "2026-11-08",
       sections: [

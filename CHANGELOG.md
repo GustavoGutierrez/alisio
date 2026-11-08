@@ -4,6 +4,19 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.2] - 2026-11-08
+
+A compact plugin catalog with icons and a detail page.
+
+### Added
+
+- Settings → Plugins → **Plugin catalog** lists each plugin with its icon, name, a short
+  description (the full text is in the tooltip) and an **Install**, **Update** or **Reinstall**
+  button. Clicking a plugin opens its detail: cover, description, version, developer, license,
+  compatibility, npm package and links, with **Back** keeping your search, filters and page.
+- Plugin icons across Settings → Plugins: the catalog icon, an icon the installed package declares
+  (`"alisio": { "icon": "..." }` in its `package.json`) or a default plugin icon.
+
 ## [0.11.1] - 2026-11-08
 
 Projects in the sidebar, project settings and reliable plugin updates.
