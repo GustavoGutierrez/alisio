@@ -166,6 +166,42 @@ const forgeServer = await serve(async (req) => {
   );
 });
 /**
+ * A fake model for the document engine: the first turn calls document_create with a small
+ * Markdown report, the second repeats what the tool said.
+ */
+const docServer = await serve(async (req) => {
+  const body = (await req.json()) as { messages: Array<{ role: string; content?: string }> };
+  const results = body.messages.filter((m) => m.role === "tool");
+  const choice =
+    results.length === 0
+      ? {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "d0",
+                type: "function",
+                function: {
+                  name: "document_create",
+                  arguments: JSON.stringify({
+                    markdown: "# Informe\n\nTexto de prueba con ñ y €.",
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        }
+      : {
+          delta: { content: `Document says ${JSON.stringify(String(results[0]?.content ?? ""))}` },
+          finish_reason: "stop",
+        };
+  return new Response(
+    `data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "test", choices: [{ index: 0, ...choice }] })}\n\ndata: [DONE]\n\n`,
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+});
+/**
  * A fake model for Proof: it runs `node -e 0` through `run_process` once, then answers. A criterion
  * bound to that command ends up verified from the captured evidence; any other stays unchecked.
  */
@@ -1316,6 +1352,36 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   } finally {
     await rm(setupDirectory, { recursive: true, force: true });
   }
+  // Document engine (spec 026): document_create finds its themes and fonts in every runtime (the
+  // standalone binary extracts the embedded copy, D-28). Without a Chromium-family browser the tool
+  // says so and offers the HTML; with one it publishes a PDF.
+  {
+    const file = join(directory, "docs.json");
+    await writeFile(
+      file,
+      JSON.stringify({
+        provider: {
+          baseURL: `http://127.0.0.1:${docServer.port}/v1`,
+          model: "test",
+          auth: "none",
+          apiMode: "chat",
+        },
+      }),
+    );
+    const run = forgeRun([
+      "run",
+      "Make a PDF report",
+      "--cwd",
+      directory,
+      "--config",
+      file,
+      "--json",
+    ]);
+    assert.equal(await run.closed, 0, run.out.stderr);
+    const text = run.out.stdout;
+    assert.doesNotMatch(text, /not part of this build/, "document assets are available");
+    assert.match(text, /PDF created|No document engine is ready/, text.slice(-1500));
+  }
   console.log(
     JSON.stringify({
       ok: true,
@@ -1326,6 +1392,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio analysis status (mode, container settings, retention) and analysis sweep",
         "compatible MCP config list/doctor with fake stdio server and redacted direct env",
         "bg_run + bg_list through the process policy; run stops the task still running and says so",
+        "document_create finds its embedded themes and fonts (PDF with a browser, an engine-unavailable answer without one)",
         "forge status --probe and js_run in the isolate (reads a file through the gate, streams progress); SIGINT cancels a busy loop and leaves no isolate behind",
         "JSONL output",
         `external ${ext === "ts" ? "TypeScript" : "JavaScript"} plugin with dependency`,
@@ -1350,6 +1417,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
   await server.close();
   await dataServer.close();
   await forgeServer.close();
+  await docServer.close();
   await bgServer.close();
   await proofServer.close();
   await rm(directory, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -57,7 +57,7 @@ describe("resolveAssets (DOC-AC-04, DOC-AC-05)", () => {
     await writeFile(join(ws, "img", "fake.png"), "not an image at all");
     await writeFile(
       join(ws, "img", "logo.svg"),
-      '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+      '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
     );
     await writeFile(
       join(ws, "img", "big.png"),
@@ -79,10 +79,29 @@ describe("resolveAssets (DOC-AC-04, DOC-AC-05)", () => {
     expect(out.skipped.map((k) => k.id)).toEqual(["fake", "svg", "big", "gone", "art"]);
     expect(out.skipped.find((k) => k.id === "svg")).toMatchObject({
       alt: "Logo",
-      reason: expect.stringMatching(/SVG/),
+      reason: expect.stringMatching(/SVG.*script/),
     });
     expect(out.skipped.find((k) => k.id === "gone")?.reason).toMatch(/not found/);
     for (const k of out.skipped) expect(k.reason).not.toContain(root);
+  });
+
+  it("sanitizes SVG assets into the bundle", async () => {
+    await writeFile(
+      join(ws, "img", "logo.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4" fill="#336699"/></svg>',
+    );
+    const out = await resolveAssets(
+      [{ id: "logo", path: "img/logo.svg", alt: "L" }],
+      bundle,
+      ctx(),
+    );
+    expect(out.skipped).toEqual([]);
+    expect(out.assets.get("logo")).toMatchObject({
+      file: "assets/logo.svg",
+      mime: "image/svg+xml",
+    });
+    const written = await readFile(join(bundle, "assets", "logo.svg"), "utf8");
+    expect(written).toContain('<rect width="4" height="4" fill="#336699"/>');
   });
 
   it("still fails the call when the total size of the images is too large", async () => {

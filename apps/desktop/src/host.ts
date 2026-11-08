@@ -37,6 +37,21 @@ async function main(): Promise<void> {
     import("@alisio/core"),
   ]);
   redact = (text) => redactCredentials(text);
+  const { ElectronPrintEngine } = await import("./print-client.ts");
+  const printEngine =
+    process.send && process.env.ALISIO_PRINT_ROOT && process.env.ALISIO_PRINT_VERSION
+      ? new ElectronPrintEngine({
+          printRoot: process.env.ALISIO_PRINT_ROOT,
+          version: process.env.ALISIO_PRINT_VERSION,
+          channel: {
+            send: (message) => void process.send?.(message),
+            onMessage: (callback) => {
+              process.on("message", callback);
+              return () => process.off("message", callback);
+            },
+          },
+        })
+      : undefined;
   const { webRoot } = parseHostArgs(process.argv.slice(2));
   const server = await startServer({
     host: "127.0.0.1",
@@ -46,7 +61,11 @@ async function main(): Promise<void> {
     localBrowser: true,
     version: desktopVersion(),
     defaultWorkspace: homedir(),
-    app: await cliDefaults(),
+    app: {
+      ...(await cliDefaults()),
+      // Alisio Desktop prints documents through Electron's Chromium (spec 026 D7).
+      ...(printEngine ? { documentEngines: () => [printEngine] } : {}),
+    },
     ...(webRoot ? { webRoot } : {}),
   });
   let stopping = false;

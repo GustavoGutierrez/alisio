@@ -22,7 +22,7 @@ h2 {
 }
 h3 {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-text);
   text-transform: uppercase;
   font-size: calc(var(--fs-h3) - 1.5pt);
   letter-spacing: 0.07em;
@@ -53,7 +53,7 @@ caption {
 }
 .stat .v {
   font-size: 21pt;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .callout {
   border-radius: 0 4pt 4pt 0;
@@ -80,7 +80,7 @@ caption {
   top: 0;
   width: 70mm;
   height: 70mm;
-  background: var(--accent-tint);
+  background: var(--cover-deco, var(--accent-tint));
   border-bottom-left-radius: 100%;
 }
 .cover .cover-rule {
@@ -94,14 +94,14 @@ caption {
   font-size: 38pt;
   letter-spacing: -0.025em;
   max-width: 140mm;
-  color: var(--heading);
+  color: var(--cover-title, var(--heading));
 }
 .cover .cover-kicker {
-  color: var(--accent);
+  color: var(--cover-kicker, var(--accent-text));
 }
 .cover .cover-sub {
   max-width: 125mm;
-  color: var(--muted);
+  color: var(--cover-sub, var(--muted));
 }
 .cover .cover-spacer {
   flex: 1 1 auto;
@@ -114,6 +114,6 @@ caption {
   gap: 3pt 12pt;
 }
 .cover .cover-meta li:first-child {
-  color: var(--heading);
+  color: var(--cover-title, var(--heading));
   font-weight: 700;
 }

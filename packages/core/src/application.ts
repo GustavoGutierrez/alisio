@@ -55,6 +55,7 @@ import {
   DecisionRegistry,
   DecisionService,
 } from "./decisions/index.ts";
+import type { DocumentEngine } from "./documents/ports.ts";
 import { reconcileInterruptedExecutions, SqliteExecutionJournal } from "./forge/journal.ts";
 import { describePythonBackends } from "./forge/python/status.ts";
 import { createPythonBackends } from "./forge/python/wiring.ts";
@@ -112,6 +113,11 @@ export interface AppOptions {
   allowExternal?: boolean;
   allowMcp?: boolean;
   readOnly?: boolean;
+  /**
+   * Document engines supplied by the host (Alisio Desktop prints through Electron, spec 026 D7).
+   * They are tried before the system Chromium; the host owns their lifecycle.
+   */
+  documentEngines?: (context: { tmpRoot: string }) => DocumentEngine[];
   allowAgents?: boolean;
   /** Extra directories the tools may touch outside the workspace (per-run `--add-dir`). */
   addDirs?: string[];
@@ -870,9 +876,10 @@ export async function createApplication(options: AppOptions = {}) {
         },
       });
       documentEngines = [chromium];
+      const hostEngines = options.documentEngines?.({ tmpRoot }) ?? [];
       registerDocumentTools(registry, {
         tmpRoot,
-        engines: () => [chromium],
+        engines: () => [...hostEngines, chromium],
         settings: () => ({
           engine: config.documents.engine,
           defaultPageSize: config.documents.defaultPageSize,

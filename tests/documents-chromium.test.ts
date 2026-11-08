@@ -3,6 +3,7 @@
  * DOC-AC-11 (corpus on the three themes and page variants), DOC-AC-12 (network off), DOC-AC-17.
  */
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -76,6 +77,103 @@ describe.skipIf(!enabled)("chromium adapter", () => {
     },
     60_000,
   );
+
+  it("DOC-AC-23: the contents carry the real page of every heading", async () => {
+    const filler = "Texto de relleno. ".repeat(60);
+    const md = [
+      "---\ntitle: Informe\ntoc: true\n---",
+      ...Array.from({ length: 6 }, (_, i) => `# Sección ${i + 1}\n\n${`${filler}\n\n`.repeat(7)}`),
+    ].join("\n");
+    const r = await createDocument({ markdown: md }, deps());
+    expect(r.info.degraded.map((d) => d.feature)).not.toContain("toc_page_numbers");
+    const s = scan(readFileSync(join(root, "out.pdf")));
+    const pages = s.links.map((l) => l.page);
+    expect(pages.length).toBe(6);
+    expect(pages.every((p) => typeof p === "number" && p >= 3)).toBe(true);
+    const text = execFileSync("pdftotext", ["-layout", join(root, "out.pdf"), "-"], {
+      encoding: "utf8",
+    }).split("\f");
+    const toc = text[1] ?? "";
+    for (const [i, p] of pages.entries())
+      expect(toc, `section ${i + 1}`).toMatch(new RegExp(`Sección ${i + 1}\\s+${p}\\b`));
+    expect(text[(pages[0] as number) - 1]).toContain("Sección 1");
+  }, 60_000);
+
+  it("DOC-AC-24: a sanitized SVG logo renders on the cover with the network off", async () => {
+    await writeFile(
+      join(root, "mark.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 10"><rect width="40" height="10" fill="#cc5500"/></svg>',
+    );
+    const r = await createDocument(
+      {
+        markdown: "---\ntitle: Informe\nlogo: mark.svg\n---\n# Uno\n\nTexto",
+        theme: { accent: "#cc5500", ink: "#223355" },
+      },
+      deps(),
+    );
+    expect(r.info.qa.warnings.map((w) => w.code)).not.toContain("image_skipped");
+    expect(r.info.qa.warnings.map((w) => w.code)).not.toContain("low_resolution_image");
+    expect(r.info.qa.passed).toBe(true);
+  }, 60_000);
+
+  it("DOC-AC-26: charts, svg blocks and appendices render with bundled fonts only", async () => {
+    await writeFile(
+      join(root, "d.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="40" height="20" fill="#336699"/></svg>',
+    );
+    const spec = {
+      version: 1,
+      meta: { title: "Informe" },
+      blocks: [
+        { type: "cover", title: "Informe" },
+        { type: "toc" },
+        { type: "heading", level: 1, text: "Resultados" },
+        {
+          type: "chart",
+          kind: "bar",
+          title: "Ventas",
+          labels: ["Ene", "Feb", "Mar"],
+          series: [
+            { name: "2026", values: [10, 25, 18] },
+            { name: "2025", values: [8, 20, 21] },
+          ],
+          unit: "k€",
+        },
+        {
+          type: "chart",
+          kind: "line",
+          labels: ["a", "b", "c", "d"],
+          series: [{ name: "s", values: [1, 3, 2, 5] }],
+        },
+        {
+          type: "chart",
+          kind: "pie",
+          title: "Reparto",
+          labels: ["A", "B", "C"],
+          series: [{ name: "s", values: [5, 3, 2] }],
+        },
+        { type: "svg", asset: "d", caption: "Diagrama" },
+        {
+          type: "appendix",
+          title: "Anexo A",
+          blocks: [
+            { type: "heading", level: 2, text: "Detalle" },
+            { type: "paragraph", text: "Texto del anexo." },
+          ],
+        },
+      ],
+    };
+    const r = await createDocument(
+      { spec, assets: [{ id: "d", path: "d.svg" }], lang: "es" },
+      deps(),
+    );
+    expect(r.info.qa.passed, JSON.stringify(r.info.qa.warnings)).toBe(true);
+    expect(r.info.qa.warnings.map((w) => w.code)).not.toContain("font_not_bundled");
+    expect(r.info.degraded.map((d) => d.feature)).not.toContain("toc_page_numbers");
+    const text = execFileSync("pdftotext", [join(root, "out.pdf"), "-"], { encoding: "utf8" });
+    expect(text).toContain("Anexo A");
+    expect(text).toContain("Ene");
+  }, 60_000);
 
   it("DOC-AC-12: external requests fail and no connection is attempted", async () => {
     let hits = 0;

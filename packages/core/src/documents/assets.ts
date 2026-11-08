@@ -5,6 +5,7 @@
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { DOCUMENT_LIMITS, DocumentError } from "./limits.ts";
+import { sanitizeSvg } from "./svg-sanitize.ts";
 
 export interface AssetRequest {
   id: string;
@@ -95,8 +96,8 @@ export interface ResolvedAssets {
 }
 
 const isSvg = (b: Uint8Array) =>
-  /^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)?<svg[\s>]/i.test(
-    Buffer.from(b.subarray(0, 600)).toString("utf8"),
+  /^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(
+    Buffer.from(b.subarray(0, 4000)).toString("utf8"),
   );
 
 /**
@@ -133,13 +134,15 @@ export async function resolveAssets(
         if (found.length > DOCUMENT_LIMITS.assetBytes) throw skipped("larger than 10 MB");
         bytes = found;
       }
-      const kind = sniffImage(bytes);
-      if (!kind)
-        throw skipped(
-          isSvg(bytes)
-            ? "SVG images are not supported in this version (use PNG, JPEG, WebP or GIF)"
-            : "not a PNG, JPEG, WebP or GIF image",
-        );
+      let kind = sniffImage(bytes);
+      if (!kind && isSvg(bytes)) {
+        // SVG is rebuilt from an allowlist; what cannot be made safe is skipped.
+        const clean = sanitizeSvg(bytes);
+        if (!clean.ok) throw skipped(`SVG image was not used (${clean.reason})`);
+        bytes = Buffer.from(clean.svg, "utf8");
+        kind = { mime: "image/svg+xml", ext: "svg" };
+      }
+      if (!kind) throw skipped("not a PNG, JPEG, WebP, GIF or SVG image");
       total += bytes.length;
       if (total > DOCUMENT_LIMITS.totalAssetBytes)
         throw new DocumentError(

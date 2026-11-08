@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { launchHost, type RunningHost } from "../apps/desktop/src/host-process.ts";
 import { installOutputRedaction } from "../apps/desktop/src/redact-output.ts";
 import { buildHostSpawn } from "../apps/desktop/src/spawn-plan.ts";
@@ -85,6 +85,59 @@ describe("desktop host process", () => {
       running = undefined;
     },
   );
+
+  it("answers print requests of the host through the print handler and ignores invalid ones", async () => {
+    const printRoot = mkdtempSync(join(tmpdir(), "alisio-print-route-"));
+    homes.push(printRoot);
+    const good = {
+      type: "print",
+      id: "j1",
+      bundleDir: join(printRoot, "j1"),
+      entry: "index.html",
+      options: { contentWidthMm: 150, tagged: true, measure: false, timeoutMs: 1000 },
+    };
+    const bad = { ...good, id: "j2", bundleDir: "/etc" };
+    const script = `
+      process.send({ type: "ready", launchUrl: "http://127.0.0.1:1/?token=t" });
+      process.send(${JSON.stringify(bad)});
+      process.send(${JSON.stringify(good)});
+      process.send({ type: "print-cancel", id: "j1" });
+      process.on("message", (m) => { console.error("REPLY " + JSON.stringify(m)); });
+      setTimeout(() => process.exit(0), 3000);`;
+    const seen: string[] = [];
+    const cancelled: string[] = [];
+    const logs: string[] = [];
+    running = await launchHost({
+      command: process.execPath,
+      args: ["-e", script],
+      env: process.env,
+      timeoutMs: 5_000,
+      onLog: (l) => logs.push(l),
+      print: {
+        root: printRoot,
+        run: async (request) => {
+          seen.push(request.id);
+          return {
+            type: "print-result",
+            id: request.id,
+            ok: true,
+            pdfPath: join(request.bundleDir, "out.pdf"),
+          };
+        },
+        cancel: (id) => cancelled.push(id),
+      },
+    });
+    await vi.waitFor(() => expect(logs.some((l) => l.startsWith("REPLY"))).toBe(true), {
+      timeout: 3000,
+    });
+    expect(seen).toEqual(["j1"]);
+    expect(cancelled).toEqual(["j1"]);
+    expect(JSON.parse((logs.find((l) => l.startsWith("REPLY")) as string).slice(6))).toMatchObject({
+      type: "print-result",
+      id: "j1",
+      ok: true,
+    });
+  });
 
   it("reports a failure to start as an error instead of hanging", async () => {
     await expect(

@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { DOCUMENT_LIMITS } from "./limits.ts";
 import { isBundledFontName, type PdfScan } from "./pdf-scan.ts";
 import type { DomMeasurements } from "./ports.ts";
-import { ASSETS_ROOT } from "./themes.ts";
+import { assetsRoot } from "./themes.ts";
 
 export interface Finding {
   code: string;
@@ -21,7 +21,7 @@ let coverageCache: Range[] | undefined;
 /** Unicode ranges covered by the bundled fonts (generated `coverage.json`). */
 export async function loadCoverage(): Promise<Range[]> {
   if (coverageCache) return coverageCache;
-  const raw = JSON.parse(await readFile(`${ASSETS_ROOT}fonts/coverage.json`, "utf8")) as Record<
+  const raw = JSON.parse(await readFile(`${assetsRoot()}fonts/coverage.json`, "utf8")) as Record<
     string,
     string[]
   >;

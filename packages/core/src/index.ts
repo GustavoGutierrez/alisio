@@ -331,6 +331,15 @@ export {
   validateAnswers,
   validateRequest,
 } from "./decisions/index.ts";
+export { DocumentError } from "./documents/limits.ts";
+export type {
+  DocumentEngine,
+  DomMeasurements,
+  EngineCapabilities,
+  Readiness,
+  RenderJob,
+  RenderOutput,
+} from "./documents/ports.ts";
 export { type DocumentEngineStatus, documentEngineStatus } from "./documents/status.ts";
 export { canonicalJson, hashCanonical } from "./eval/canonical.ts";
 export {

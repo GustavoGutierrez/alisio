@@ -5,9 +5,10 @@
  * the page setup and the document title.
  */
 import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { type Brand, mix } from "./brand.ts";
+import { type Brand, contrast, MIN_CONTRAST, mix } from "./brand.ts";
 import { DocumentError } from "./limits.ts";
 import type { PageSetup, PageSize } from "./ports.ts";
 
@@ -82,11 +83,15 @@ export interface Theme {
   css: string;
 }
 
-const readText = (rel: string) => readFile(`${ASSETS_ROOT}${rel}`, "utf8");
+/** Where the assets are read from: the package folder, or the extracted embedded copy (binary). */
+let activeRoot = ASSETS_ROOT;
+export const assetsRoot = () => activeRoot;
+
+const readText = (rel: string) => readFile(`${activeRoot}${rel}`, "utf8");
 
 export async function themeIds(): Promise<string[]> {
   try {
-    const entries = await readdir(`${ASSETS_ROOT}themes`, { withFileTypes: true });
+    const entries = await readdir(`${activeRoot}themes`, { withFileTypes: true });
     return entries
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
@@ -96,8 +101,20 @@ export async function themeIds(): Promise<string[]> {
   }
 }
 
-/** False in the standalone binary, which carries no loose asset files (spec 026 Q5). */
+/**
+ * True when themes and fonts can be read. The standalone binary carries no loose files: its
+ * embedded copy (D-28) is extracted once under the state folder and read from there.
+ */
 export async function assetsAvailable(): Promise<boolean> {
+  if ((await themeIds()).length > 0) return true;
+  const { EMBEDDED_ASSETS } = await import("./embedded-assets.ts");
+  if (!EMBEDDED_ASSETS) return false;
+  const { materializeAssets } = await import("./embedded.ts");
+  const { stateHome } = await import("../config.ts");
+  activeRoot = await materializeAssets(
+    EMBEDDED_ASSETS,
+    join(stateHome(), "documents", "assets", EMBEDDED_ASSETS.version),
+  );
   return (await themeIds()).length > 0;
 }
 
@@ -191,9 +208,22 @@ export function tokensCss(manifest: ThemeManifest, page: PageSetup, brand?: Bran
   };
   const accent = brand?.accent ?? c.accent;
   vars.accent = accent;
-  vars["accent-dark"] = mix(accent, "#000000", 0.42);
+  vars["accent-text"] = brand?.accentText ?? c.accent;
+  vars["accent-dark"] = mix(vars["accent-text"] as string, "#000000", 0.3);
   vars["accent-tint"] = mix(accent, "#ffffff", 0.9);
   vars["accent-soft"] = mix(accent, "#ffffff", 0.75);
+  const chartInk = brand?.ink ?? c.heading;
+  const palette = [
+    accent,
+    chartInk,
+    mix(accent, "#ffffff", 0.4),
+    mix(chartInk, "#ffffff", 0.45),
+    mix(accent, chartInk, 0.5),
+    mix(accent, "#ffffff", 0.7),
+  ];
+  palette.forEach((color, i) => {
+    vars[`chart-${i + 1}`] = color;
+  });
   if (brand?.ink) {
     vars.ink = brand.ink;
     vars.heading = brand.ink;
@@ -201,7 +231,26 @@ export function tokensCss(manifest: ThemeManifest, page: PageSetup, brand?: Bran
   if (brand?.accent) {
     vars["info-bar"] = accent;
     vars["info-bg"] = vars["accent-tint"] as string;
-    if (manifest.coverFromAccent) vars["cover-bg"] = vars["accent-dark"] as string;
+    if (!brand.ink && manifest.coverFromAccent)
+      vars["cover-bg"] = mix(vars["accent-text"] as string, "#000000", 0.42);
+  }
+  if (brand?.ink) {
+    // Ink is the dark brand color: it paints the cover (large surface) in every theme and the
+    // accent stays for rules, bars and highlights.
+    const onInk = "#ffffff";
+    let muted = mix(brand.ink, onInk, 0.78);
+    for (let t = 0.78; contrast(muted, brand.ink) < MIN_CONTRAST && t < 1; t += 0.04)
+      muted = mix(brand.ink, onInk, t);
+    let kicker = accent;
+    for (let t = 0; contrast(kicker, brand.ink) < MIN_CONTRAST && t <= 1; t += 0.1)
+      kicker = mix(accent, onInk, t);
+    vars["cover-bg"] = brand.ink;
+    vars["cover-ink"] = onInk;
+    vars["cover-muted"] = muted;
+    vars["cover-title"] = onInk;
+    vars["cover-sub"] = muted;
+    vars["cover-kicker"] = kicker;
+    vars["cover-deco"] = mix(brand.ink, onInk, 0.12);
   }
   return `:root {\n${Object.entries(vars)
     .map(([k, v]) => `  --${k}: ${v};`)

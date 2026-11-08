@@ -144,6 +144,117 @@ describe("numbering, placeholders and brand colors", () => {
     expect(tokens).not.toContain("--cover-bg: #0f2342");
   });
 
+  it("paints the cover with ink in every theme, keeps the given accent for fills and darkens it only for text", async () => {
+    for (const theme of ["executive-clean", "data-report", "technical-spec"]) {
+      await writeBundle(doc(["A"]), new Map(), dir, {
+        theme,
+        page,
+        brand: { accent: "#ff8844", accentText: "#a64a1c", ink: "#223355", warnings: [] },
+      });
+      const tokens = await readFile(join(dir, "css/tokens.css"), "utf8");
+      expect(tokens).toContain("--cover-bg: #223355;");
+      expect(tokens).toContain("--cover-ink: #ffffff;");
+      expect(tokens).toContain("--accent: #ff8844;");
+      expect(tokens).toContain("--accent-text: #a64a1c;");
+      expect(tokens).toMatch(/--cover-kicker: #[0-9a-f]{6};/);
+    }
+  });
+
+  it("renders the cover logo as an image from the bundle", async () => {
+    const s: DocumentSpec = {
+      version: 1,
+      blocks: [
+        { type: "cover", title: "T", logoAsset: "logo" },
+        { type: "paragraph", text: "x" },
+      ],
+    };
+    const assets = new Map([
+      [
+        "logo",
+        { id: "logo", file: "assets/logo.svg", mime: "image/svg+xml", bytes: 1, alt: "Mark" },
+      ],
+    ]);
+    await writeBundle(s, assets, dir, { theme: "executive-clean", page });
+    const html = await readFile(join(dir, "index.html"), "utf8");
+    expect(html).toContain(`<img class="cover-logo" src="${ORIGIN}assets/logo.svg" alt="Mark">`);
+  });
+
+  it("prints contents entries as links, placeholders or real page numbers by mode", async () => {
+    const s: DocumentSpec = {
+      version: 1,
+      blocks: [
+        { type: "toc" },
+        { type: "heading", level: 1, text: "Uno", id: "uno" },
+        { type: "heading", level: 2, text: "Dos", id: "dos" },
+      ],
+    };
+    const html = async (toc?: Parameters<typeof writeBundle>[3]["toc"]) => {
+      await writeBundle(s, new Map(), dir, {
+        theme: "executive-clean",
+        page,
+        ...(toc ? { toc } : {}),
+      });
+      return readFile(join(dir, "index.html"), "utf8");
+    };
+    expect(await html()).not.toContain("toc-p");
+    expect(await html({ kind: "none" })).not.toContain("toc-p");
+    expect(await html({ kind: "placeholder" })).toContain('<span class="toc-p">00</span>');
+    const numbered = await html({
+      kind: "numbers",
+      pages: new Map([
+        ["uno", 3],
+        ["dos", 12],
+      ]),
+    });
+    expect(numbered).toContain(
+      '<a href="#uno"><span class="toc-t">Uno</span><span class="toc-p">3</span></a>',
+    );
+    expect(numbered).toContain('<span class="toc-p">12</span>');
+  });
+
+  it("draws charts inline from data, svg blocks as images and appendices with their own contents entry", async () => {
+    const s: DocumentSpec = {
+      version: 1,
+      blocks: [
+        { type: "toc" },
+        { type: "heading", level: 1, text: "Uno", id: "uno" },
+        {
+          type: "chart",
+          kind: "bar",
+          title: "Ventas <b>",
+          labels: ["a", "b"],
+          series: [{ name: "s", values: [1, 2] }],
+        },
+        { type: "svg", asset: "dia", caption: "Diagrama" },
+        {
+          type: "appendix",
+          title: "Anexo A",
+          blocks: [
+            { type: "heading", level: 2, text: "Detalle" },
+            { type: "paragraph", text: "texto" },
+          ],
+        },
+      ],
+    };
+    const assets = new Map([
+      ["dia", { id: "dia", file: "assets/dia.svg", mime: "image/svg+xml", bytes: 1, alt: "" }],
+    ]);
+    await writeBundle(s, assets, dir, { theme: "executive-clean", page });
+    const html = await readFile(join(dir, "index.html"), "utf8");
+    expect(html).toContain('<figure class="chart" data-b="2">');
+    expect(html).toContain('class="chart-svg"');
+    expect(html).toContain("Ventas &lt;b&gt;");
+    expect(html).not.toMatch(/<svg[^>]*style=|<script/);
+    expect(html).toContain(`<img src="${ORIGIN}assets/dia.svg"`);
+    expect(html).toContain('<section class="appendix" id="appendix-4"');
+    expect(html).toContain('<a href="#appendix-4">Anexo A</a>');
+    expect(html).toContain('<a href="#h-4-0">Detalle</a>');
+    expect(html).toContain('<h2 id="h-4-0" data-n="4-0">Detalle</h2>');
+    const tokens = await readFile(join(dir, "css/tokens.css"), "utf8");
+    expect(tokens).toMatch(/--chart-1: #[0-9a-f]{6};/);
+    expect(tokens).toMatch(/--chart-6: #[0-9a-f]{6};/);
+  });
+
   it("keeps the theme's own colors without a brand", async () => {
     await writeBundle(doc(["A"]), new Map(), dir, { theme: "executive-clean", page });
     const tokens = await readFile(join(dir, "css/tokens.css"), "utf8");

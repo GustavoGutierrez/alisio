@@ -119,6 +119,20 @@ describe("cover without front matter", () => {
     });
   });
 
+  it("takes the logo from front matter or from the first image right after the H1 (or its details)", () => {
+    const fm = markdownToSpec("---\ntitle: T\nlogo: assets/mark.svg\n---\n# H\n\nTexto");
+    expect(fm.assets).toEqual([{ id: "logo", href: "assets/mark.svg", alt: "" }]);
+    expect(fm.spec.blocks[0]).toMatchObject({ type: "cover", logoAsset: "logo" });
+    const afterH1 = markdownToSpec("# T\n\n![Mark](a/m.svg)\n\n**Versión:** 1\n\nTexto");
+    expect(afterH1.assets).toEqual([{ id: "logo", href: "a/m.svg", alt: "Mark" }]);
+    expect(afterH1.spec.blocks.map((b) => b.type)).toEqual(["cover", "paragraph"]);
+    expect(afterH1.spec.blocks[0]).toMatchObject({ logoAsset: "logo", meta: ["Versión: 1"] });
+    const afterMeta = markdownToSpec("# T\n\n**Versión:** 1\n\n![Mark](m.png)\n\nTexto");
+    expect(afterMeta.spec.blocks[0]).toMatchObject({ logoAsset: "logo" });
+    const late = markdownToSpec("# T\n\nUn párrafo.\n\n![Mark](m.png)");
+    expect(late.spec.blocks.map((b) => b.type)).toEqual(["cover", "paragraph", "image"]);
+  });
+
   it("keeps ordinary paragraphs under the title as body", () => {
     const r = markdownToSpec("# T\n\nUn párrafo normal con **énfasis**.\n");
     expect(r.spec.blocks.map((b) => b.type)).toEqual(["cover", "paragraph"]);

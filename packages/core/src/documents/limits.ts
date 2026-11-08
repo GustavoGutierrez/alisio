@@ -4,6 +4,8 @@ export const DOCUMENT_LIMITS = {
   markdownBytes: 400 * 1024,
   blocks: 2000,
   tableRows: 500,
+  chartLabels: 50,
+  chartSeries: 6,
   totalTableRows: 5000,
   pages: 200,
   assetBytes: 10 * 1024 * 1024,

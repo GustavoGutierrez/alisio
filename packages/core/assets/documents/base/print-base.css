@@ -71,7 +71,7 @@ del {
   text-decoration: line-through;
 }
 a {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   text-decoration-thickness: 0.5pt;
   text-underline-offset: 1.5pt;
@@ -98,7 +98,7 @@ li > ol {
   margin: calc(var(--u) * 0.75) 0 0;
 }
 li::marker {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .page-break {
   break-after: page;
@@ -220,7 +220,7 @@ col.wide {
   line-height: 1;
   font-family: var(--font-body);
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .quote p {
   font-style: italic;
@@ -380,6 +380,21 @@ figcaption {
   padding: 2.5pt 0;
   border-bottom: 0.5pt solid var(--rule);
 }
+.toc a:has(.toc-p) {
+  display: flex;
+  align-items: baseline;
+  gap: 8pt;
+}
+.toc-t {
+  flex: 1 1 auto;
+}
+.toc-p {
+  flex: 0 0 auto;
+  min-width: 2.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
 .toc li.l1 > a {
   font-weight: 600;
   margin-top: 5pt;
@@ -440,6 +455,16 @@ figcaption {
   margin: 0 0 3pt;
   padding: 0;
 }
+.cover .cover-logo {
+  position: absolute;
+  top: 17mm;
+  left: var(--cover-pad-x);
+  height: 15mm;
+  width: auto;
+  max-width: 72mm;
+  object-fit: contain;
+  object-position: left center;
+}
 .cover .cover-image {
   display: block;
   width: 100%;
@@ -471,4 +496,93 @@ figure.placeholder .ph {
 }
 .no-h1 main > h2:first-child {
   margin-top: 0;
+}
+
+/* Charts (inline SVG drawn from data; colors by class) and appendices */
+figure.chart {
+  margin: calc(var(--u) * 2) 0;
+  break-inside: avoid;
+}
+.chart-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  color: var(--heading);
+  margin: 0 0 4pt;
+}
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 95mm;
+}
+.chart-svg text {
+  font-family: var(--font-display);
+  font-size: 11px;
+  fill: var(--ink);
+}
+.chart-svg .tick,
+.chart-svg .xl {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+.chart-svg .val {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-svg .grid {
+  stroke: var(--rule);
+  stroke-width: 0.6;
+}
+.chart-svg .axis {
+  stroke: var(--muted);
+  stroke-width: 0.9;
+}
+.chart-svg polyline.line {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+.chart-svg .slice {
+  stroke: var(--paper);
+  stroke-width: 1.5;
+}
+.chart-svg .s0 {
+  fill: var(--chart-1);
+}
+.chart-svg .s1 {
+  fill: var(--chart-2);
+}
+.chart-svg .s2 {
+  fill: var(--chart-3);
+}
+.chart-svg .s3 {
+  fill: var(--chart-4);
+}
+.chart-svg .s4 {
+  fill: var(--chart-5);
+}
+.chart-svg .s5 {
+  fill: var(--chart-6);
+}
+.chart-svg .line.s0 {
+  stroke: var(--chart-1);
+}
+.chart-svg .line.s1 {
+  stroke: var(--chart-2);
+}
+.chart-svg .line.s2 {
+  stroke: var(--chart-3);
+}
+.chart-svg .line.s3 {
+  stroke: var(--chart-4);
+}
+.chart-svg .line.s4 {
+  stroke: var(--chart-5);
+}
+.chart-svg .line.s5 {
+  stroke: var(--chart-6);
+}
+.appendix {
+  break-before: page;
 }

@@ -28,6 +28,7 @@ const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".svg": "image/svg+xml",
 };
 
 export const MIN_CHROME_MAJOR = 131;
@@ -42,7 +43,7 @@ export const CHROMIUM_CAPABILITIES: EngineCapabilities = {
 };
 
 /** Runs in an isolated world (works under a CSP without script-src, D-27). */
-const MEASURE_SCRIPT = `(() => {
+export const MEASURE_SCRIPT = `(() => {
   const main = document.querySelector('main');
   const out = { overflow: [], lowDpi: [] };
   if (!main) return JSON.stringify(out);
@@ -56,7 +57,7 @@ const MEASURE_SCRIPT = `(() => {
   }
   for (const img of document.images) {
     const w = img.getBoundingClientRect().width / 96;
-    if (w > 0 && img.naturalWidth > 0) { const dpi = Math.round(img.naturalWidth / w); if (dpi < 150) out.lowDpi.push({ src: img.getAttribute('src') || '', dpi }); }
+    if (w > 0 && img.naturalWidth > 0 && !/\\.svg(\\?|$)/i.test(img.getAttribute('src') || '')) { const dpi = Math.round(img.naturalWidth / w); if (dpi < 150) out.lowDpi.push({ src: img.getAttribute('src') || '', dpi }); }
   }
   return JSON.stringify(out);
 })()`;

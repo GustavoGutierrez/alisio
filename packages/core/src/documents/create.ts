@@ -28,10 +28,11 @@ import type {
   Readiness,
 } from "./ports.ts";
 import { analyzeOutput, checkText, type Finding } from "./qa.ts";
-import { plain, type RenderHints, writeBundle } from "./render-html.ts";
+import { collectHeadings, plain, type RenderHints, writeBundle } from "./render-html.ts";
 import { MAX_REPAIRS, nextRepair, type RepairState } from "./repair.ts";
 import { type DocumentSpec, validateDocumentSpec } from "./spec.ts";
 import { assetsAvailable, loadManifest, pageDimensions } from "./themes.ts";
+import { type TocMode, twoPassToc } from "./toc-two-pass.ts";
 
 export interface CreateInput {
   markdown?: string | undefined;
@@ -88,7 +89,9 @@ const slug = (s: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "document";
 
-const DEGRADE_TOC = "Table of contents entries are links without page numbers in this version.";
+const DEGRADE_TOC = "Table of contents entries are links without page numbers on this engine.";
+const DEGRADE_TOC_UNSTABLE =
+  "Table of contents page numbers could not be stabilized; entries are links.";
 
 /** A self-contained HTML of the bundle (fallback when no engine is ready, D16). */
 async function selfContainedHtml(bundleDir: string, files: string[]): Promise<string> {
@@ -122,7 +125,7 @@ async function selfContainedHtml(bundleDir: string, files: string[]): Promise<st
   for (const m of html.matchAll(new RegExp(`${origin.replace(/\./g, "\\.")}(assets/[^"]+)`, "g"))) {
     const rel = m[1] as string;
     const ext = rel.split(".").pop() ?? "png";
-    const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+    const mime = ext === "jpg" ? "image/jpeg" : ext === "svg" ? "image/svg+xml" : `image/${ext}`;
     html = html.replaceAll(m[0], await dataUri(rel, mime));
   }
   return html;
@@ -283,40 +286,60 @@ export async function createDocument(input: CreateInput, deps: CreateDeps): Prom
     let engineVersion = "";
     let tagged = false;
     let pageCount = 0;
+    let tocNumbered = false;
+    let tocTried = false;
     for (let attempt = 0; ; attempt++) {
       page = state.page;
       deps.progress?.(
         attempt === 0 ? "Rendering…" : `Repairing layout (${attempt}/${MAX_REPAIRS})…`,
       );
-      const bundle = await writeBundle(state.spec, assets, bundleDir, {
-        theme: manifest.id,
-        page,
-        brand,
-        skippedAssets,
-        hints: state.hints,
-        ...(lang ? { lang } : {}),
-        ...(title ? { title } : {}),
-      });
       const dim = pageDimensions(page);
       const m = manifest.tokens.grid.margin;
       const contentWidthMm = dim.w - Number.parseFloat(m.left) - Number.parseFloat(m.right);
-      const out = await engine.render(
-        {
-          bundleDir,
-          entry: bundle.entry,
+      const renderOnce = async (toc: TocMode) => {
+        const bundle = await writeBundle(state.spec, assets, bundleDir, {
+          theme: manifest.id,
           page,
-          timeoutMs: DOCUMENT_LIMITS.renderTimeoutMs,
-          wantTagged: true,
-          measure: engine.capabilities.domMeasurements,
-          contentWidthMm,
-        },
-        deps.signal,
-      );
+          brand,
+          skippedAssets,
+          hints: state.hints,
+          toc,
+          ...(lang ? { lang } : {}),
+          ...(title ? { title } : {}),
+        });
+        const result = await engine.render(
+          {
+            bundleDir,
+            entry: bundle.entry,
+            page,
+            timeoutMs: DOCUMENT_LIMITS.renderTimeoutMs,
+            wantTagged: true,
+            measure: engine.capabilities.domMeasurements,
+            contentWidthMm,
+          },
+          deps.signal,
+        );
+        const scanned = scan(Buffer.from(result.pdf));
+        return { value: { out: result, scanned }, links: scanned.links };
+      };
+      const headingIds = new Set(collectHeadings(state.spec).map((h) => h.id));
+      const hasToc = state.spec.blocks.some((b) => b.type === "toc");
+      let final: Awaited<ReturnType<typeof renderOnce>>["value"];
+      if (hasToc && engine.capabilities.tocPageNumbers === "two-pass") {
+        deps.progress?.("Numbering the table of contents…");
+        const two = await twoPassToc(renderOnce, headingIds);
+        final = two.value;
+        tocNumbered = two.stable;
+        tocTried = true;
+      } else {
+        final = (await renderOnce({ kind: "none" })).value;
+      }
+      const out = final.out;
       pdf = out.pdf;
       engineVersion = out.engineVersion;
       if (pdf.length > DOCUMENT_LIMITS.pdfBytes)
         throw new DocumentError("DOCUMENT_LIMIT_EXCEEDED", "The PDF is larger than 50 MB.");
-      const scanned = scan(Buffer.from(pdf));
+      const scanned = final.scanned;
       pageCount = scanned.pages;
       tagged = scanned.tagged;
       findings = analyzeOutput(scanned, out.measurements, {
@@ -340,8 +363,11 @@ export async function createDocument(input: CreateInput, deps: CreateDeps): Prom
     await writeFile(file, pdf);
     const published = await deps.publishFile(file, title ?? plain(outputName));
     const degraded: DocumentResultInfo["degraded"] = [];
-    if (spec.blocks.some((b) => b.type === "toc"))
-      degraded.push({ feature: "toc_page_numbers", reason: DEGRADE_TOC });
+    if (spec.blocks.some((b) => b.type === "toc") && !tocNumbered)
+      degraded.push({
+        feature: "toc_page_numbers",
+        reason: tocTried ? DEGRADE_TOC_UNSTABLE : DEGRADE_TOC,
+      });
     const info: DocumentResultInfo = {
       artifacts: [
         {

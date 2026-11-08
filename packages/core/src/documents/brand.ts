@@ -10,7 +10,10 @@ export interface BrandInput {
 }
 
 export interface Brand {
+  /** As given (normalized): used for fills, rules and bars, which need no text contrast. */
   accent?: string;
+  /** The accent darkened to 4.5:1 on paper: used wherever the accent colors text. */
+  accentText?: string;
   ink?: string;
   warnings: Array<{ code: string; message: string }>;
 }
@@ -82,11 +85,17 @@ export function resolveBrand(input: BrandInput, paper: string): Brand {
     if (raw === undefined) continue;
     const hex = normalizeHex(raw, field);
     const fixed = ensureContrast(hex, paper);
-    out[field] = fixed.color;
+    if (field === "accent") {
+      out.accent = hex;
+      out.accentText = fixed.color;
+    } else out.ink = fixed.color;
     if (fixed.adjusted)
       out.warnings.push({
         code: `${field}_adjusted`,
-        message: `theme.${field} ${hex} has low contrast on the page (minimum ${MIN_CONTRAST}:1); it was darkened to ${fixed.color}.`,
+        message:
+          field === "accent"
+            ? `theme.accent ${hex} has low contrast on the page (minimum ${MIN_CONTRAST}:1); it is kept for rules and fills and darkened to ${fixed.color} where it colors text.`
+            : `theme.ink ${hex} has low contrast on the page (minimum ${MIN_CONTRAST}:1); it was darkened to ${fixed.color}.`,
       });
   }
   return out;

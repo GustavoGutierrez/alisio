@@ -13,6 +13,8 @@ export interface HostSpawnInput {
    * run it through the host instead of looking for a system npm.
    */
   npmCli?: string;
+  /** Printing offered by main (spec 026 D7): the root of its jobs and the engine version. */
+  print?: { root: string; version: string };
 }
 
 /**
@@ -47,6 +49,11 @@ export interface HostSpawn {
  * restart the host, and `ALISIO_NPM_CLI` points plugin installs at the bundled npm.
  */
 export function buildHostSpawn(input: HostSpawnInput): HostSpawn {
+  const {
+    ALISIO_PRINT_ROOT: _root,
+    ALISIO_PRINT_VERSION: _version,
+    ...inherited
+  } = input.parentEnv;
   return {
     command: input.execPath,
     args: [
@@ -55,11 +62,14 @@ export function buildHostSpawn(input: HostSpawnInput): HostSpawn {
       ...(input.webRoot ? ["--web-root", input.webRoot] : []),
     ],
     env: {
-      ...input.parentEnv,
+      ...inherited,
       ELECTRON_RUN_AS_NODE: "1",
       // A supervisor (this app) respawns the host when it exits asking for a restart.
       ALISIO_SUPERVISED: "1",
       ...(input.npmCli ? { ALISIO_NPM_CLI: input.npmCli } : {}),
+      ...(input.print
+        ? { ALISIO_PRINT_ROOT: input.print.root, ALISIO_PRINT_VERSION: input.print.version }
+        : {}),
     },
   };
 }

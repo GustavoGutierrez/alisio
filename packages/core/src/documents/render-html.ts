@@ -7,9 +7,12 @@ import { dirname, join } from "node:path";
 import { Lexer, type Token, type Tokens } from "marked";
 import type { ResolvedAsset } from "./assets.ts";
 import type { Brand } from "./brand.ts";
+import { chartSvg } from "./chart-svg.ts";
 import type { PageSetup } from "./ports.ts";
 import type { Block, DocumentSpec } from "./spec.ts";
-import { ASSETS_ROOT, loadBaseCss, loadFontsCss, loadTheme, pageCss, tokensCss } from "./themes.ts";
+import { sanitizeSvg } from "./svg-sanitize.ts";
+import { assetsRoot, loadBaseCss, loadFontsCss, loadTheme, pageCss, tokensCss } from "./themes.ts";
+import type { TocMode } from "./toc-two-pass.ts";
 
 export const ORIGIN = "https://document.invalid/";
 export const CSP =
@@ -32,6 +35,8 @@ export interface RenderOptions {
   brand?: Brand;
   /** Images left out of the bundle: id to alt text; they print as a small placeholder. */
   skippedAssets?: ReadonlyMap<string, string>;
+  /** Contents page numbers: placeholders (pass 1), real numbers (pass 2) or none (links only). */
+  toc?: TocMode;
 }
 
 const esc = (s: string) =>
@@ -131,31 +136,52 @@ export interface RenderedBundle {
   headings: Array<{ block: number; level: number; text: string; id: string }>;
 }
 
+/** Headings of the document (and appendix titles) with the ids the contents link to. */
+export function collectHeadings(spec: DocumentSpec): RenderedBundle["headings"] {
+  const out: RenderedBundle["headings"] = [];
+  spec.blocks.forEach((b, i) => {
+    if (b.type === "heading")
+      out.push({ block: i, level: b.level, text: plain(b.text), id: b.id ?? `h-${i}` });
+    if (b.type === "appendix") {
+      out.push({ block: i, level: 1, text: plain(b.title), id: `appendix-${i}` });
+      b.blocks.forEach((x, j) => {
+        if (x.type === "heading")
+          out.push({ block: i, level: x.level, text: plain(x.text), id: x.id ?? `h-${i}-${j}` });
+      });
+    }
+  });
+  return out;
+}
+
 function renderBlocks(
   spec: DocumentSpec,
   assets: ReadonlyMap<string, ResolvedAsset>,
   hints: RenderHints,
   tocLabel: string,
   skippedAlt: ReadonlyMap<string, string>,
+  toc: TocMode = { kind: "none" },
+  lang?: string,
 ) {
-  const headings: RenderedBundle["headings"] = [];
-  spec.blocks.forEach((b, i) => {
-    if (b.type === "heading")
-      headings.push({ block: i, level: b.level, text: plain(b.text), id: b.id ?? `h-${i}` });
-  });
-  const attr = (i: number, extra = "") =>
+  const headings = collectHeadings(spec);
+  const attrTop = (i: number, extra = "") =>
     `data-b="${i}"${hints.breakBefore?.has(i) ? ' class="force-break"' : ""}${extra}`;
   const src = (id: string) => {
     const a = assets.get(id);
     return a ? `${ORIGIN}${a.file}` : "";
   };
 
-  const render = (b: Block, i: number): string => {
+  const render = (b: Block, i: number, nested?: number): string => {
+    const key = nested === undefined ? `${i}` : `${i}-${nested}`;
+    const attr = (index: number, extra = "") =>
+      nested === undefined ? attrTop(index, extra) : `data-n="${key}"${extra}`;
     switch (b.type) {
       case "cover": {
         const org = spec.meta?.organization;
         const img = b.imageAsset && src(b.imageAsset);
+        const logo = b.logoAsset && src(b.logoAsset);
+        const logoAlt = (b.logoAsset && assets.get(b.logoAsset)?.alt) || "";
         return `<section class="cover" data-b="${i}">
+${logo ? `<img class="cover-logo" src="${esc(logo)}" alt="${esc(logoAlt)}">` : ""}
 <div class="cover-kicker">${org ? esc(org) : ""}</div>
 <div class="cover-rule"></div>
 <div class="cover-title" role="heading" aria-level="1">${inline(b.title)}</div>
@@ -166,7 +192,7 @@ ${b.meta?.length ? `<ul class="cover-meta">${b.meta.map((m) => `<li>${inline(m)}
 </section>`;
       }
       case "heading": {
-        const id = b.id ?? `h-${i}`;
+        const id = b.id ?? `h-${key}`;
         return `<h${b.level} id="${esc(id)}" ${attr(i)}>${inline(b.text)}</h${b.level}>`;
       }
       case "paragraph":
@@ -228,11 +254,44 @@ ${b.meta?.length ? `<ul class="cover-meta">${b.meta.map((m) => `<li>${inline(m)}
           .join("")}</div>`;
       case "page_break":
         return `<div class="page-break" ${attr(i)}></div>`;
+      case "chart": {
+        const svg = chartSvg({
+          kind: b.kind,
+          labels: b.labels,
+          series: b.series,
+          ...(b.title ? { title: plain(b.title) } : {}),
+          ...(b.unit ? { unit: b.unit } : {}),
+          ...(lang ? { lang } : {}),
+        });
+        const clean = sanitizeSvg(svg);
+        return `<figure class="chart" ${attr(i)}>${b.title ? `<div class="chart-title">${inline(b.title)}</div>` : ""}${clean.ok ? clean.svg : ""}</figure>`;
+      }
+      case "svg": {
+        if (!assets.has(b.asset)) {
+          const label = skippedAlt.get(b.asset) || b.caption || b.asset;
+          return `<figure class="img placeholder" ${attr(i)}><div class="ph">${esc(label)}</div></figure>`;
+        }
+        const a = assets.get(b.asset);
+        return `<figure class="img svg size-${b.size ?? "full"}" ${attr(i)}><img src="${esc(src(b.asset))}" alt="${esc(a?.alt ?? b.caption ?? "")}">${b.caption ? `<figcaption>${inline(b.caption)}</figcaption>` : ""}</figure>`;
+      }
+      case "appendix":
+        return `<section class="appendix" id="appendix-${i}" ${attr(i)}><h1 class="appendix-title">${inline(b.title)}</h1>${b.blocks.map((x, j) => render(x, i, j)).join("\n")}</section>`;
       case "toc": {
         const depth = b.depth ?? 2;
         const items = headings
           .filter((h) => h.level <= depth)
-          .map((h) => `<li class="l${h.level}"><a href="#${esc(h.id)}">${esc(h.text)}</a></li>`)
+          .map((h) => {
+            const page =
+              toc.kind === "placeholder"
+                ? "00"
+                : toc.kind === "numbers" && toc.pages.has(h.id)
+                  ? String(toc.pages.get(h.id))
+                  : "";
+            const label = page
+              ? `<span class="toc-t">${esc(h.text)}</span><span class="toc-p">${page}</span>`
+              : esc(h.text);
+            return `<li class="l${h.level}"><a href="#${esc(h.id)}">${label}</a></li>`;
+          })
           .join("");
         return `<nav class="toc" ${attr(i)}><div class="toc-title" role="heading" aria-level="1">${esc(tocLabel)}</div><ol>${items}</ol></nav>`;
       }
@@ -262,6 +321,8 @@ export async function writeBundle(
     hints,
     tocLabel,
     options.skippedAssets ?? new Map(),
+    options.toc,
+    options.lang,
   );
   const title =
     options.title ??
@@ -301,7 +362,7 @@ export async function writeBundle(
 ${spec.meta?.author ? `<meta name="author" content="${esc(spec.meta.author)}">` : ""}
 ${links}
 </head>
-<body class="density-${hints.density ?? "normal"}${autoNumber ? " auto-number" : ""}${headings.some((h) => h.level === 1) ? "" : " no-h1"}">
+<body class="density-${hints.density ?? "normal"}${autoNumber ? " auto-number" : ""}${spec.blocks.some((b) => b.type === "heading" && b.level === 1) ? "" : " no-h1"}">
 ${cover}
 <main>
 ${rest}
@@ -324,7 +385,7 @@ ${rest}
   for (const rel of new Set(fontFiles)) {
     if (!families.has(rel.split("/")[0] ?? "")) continue;
     await mkdir(dirname(join(bundleDir, "fonts", rel)), { recursive: true });
-    await copyFile(`${ASSETS_ROOT}fonts/${rel}`, join(bundleDir, "fonts", rel));
+    await copyFile(`${assetsRoot()}fonts/${rel}`, join(bundleDir, "fonts", rel));
     written.push(`fonts/${rel}`);
   }
   return { entry: "index.html", files: written, title, hasCover, headings };

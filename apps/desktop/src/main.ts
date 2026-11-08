@@ -2,12 +2,14 @@
  * Electron main process. It owns no Alisio logic: it starts the host (the Alisio server running on
  * the Electron binary as plain Node) and shows its web UI in a sandboxed window.
  */
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { launchHost, type RunningHost } from "./host-process.ts";
 import { classifyNavigation } from "./navigation.ts";
+import { createPrinter } from "./print.ts";
 import {
   buildHostSpawn,
   hostExitAction,
@@ -22,6 +24,9 @@ let host: RunningHost | undefined;
 let window: BrowserWindow | undefined;
 let quitting = false;
 let recentLog: string[] = [];
+// Hidden-window printing for `document_create` (spec 026 D7); jobs live under a private 0700 root.
+const printRoot = join(tmpdir(), `alisio-print-${process.pid}`);
+const printer = createPrinter();
 
 async function startHost(): Promise<RunningHost> {
   const paths = resolveRuntimePaths({
@@ -29,7 +34,12 @@ async function startHost(): Promise<RunningHost> {
     appDir: APP_DIR,
     resourcesPath: process.resourcesPath,
   });
+  mkdirSync(printRoot, { recursive: true, mode: 0o700 });
   const plan = buildHostSpawn({
+    print: {
+      root: printRoot,
+      version: `Electron ${process.versions.electron} (Chromium ${process.versions.chrome})`,
+    },
     execPath: process.execPath,
     hostEntry: paths.hostEntry,
     parentEnv: process.env,
@@ -43,6 +53,11 @@ async function startHost(): Promise<RunningHost> {
     ...plan,
     cwd: paths.runtimeDir,
     timeoutMs: READY_TIMEOUT_MS,
+    print: {
+      root: printRoot,
+      run: (request) => printer.print(request),
+      cancel: (id) => printer.cancel(id),
+    },
     onLog: (line) => {
       recentLog = [...recentLog.slice(-19), line];
     },
@@ -129,6 +144,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", (event) => {
     if (quitting) return;
     quitting = true;
+    rmSync(printRoot, { recursive: true, force: true });
     const running = host;
     host = undefined;
     if (!running) return;

@@ -24,7 +24,7 @@ export interface DocumentToolDeps {
   queue?: RenderQueue;
 }
 
-const BLOCKS_GUIDE = `Blocks (type: fields): cover (title, subtitle?, meta?[<=6], imageAsset?), heading (level 1-3, text), paragraph (text), bullets (items[], ordered?; nested {text, items[]}), table (columns[{label, align?, width?}], rows[][], caption?), image (asset, caption?, size?), quote (text, attribution?), callout (tone info|success|warning|danger, title?, text), code (text, language?), stat_grid (items[{label, value, delta?, tone?}] 2-8), page_break, toc (depth?). Text fields take Markdown inline only (**bold**, *italic*, \`code\`, [link](https://...)); never HTML. One cover (first) and one toc at most.`;
+const BLOCKS_GUIDE = `Blocks (type: fields): cover (title, subtitle?, meta?[<=6], imageAsset?), heading (level 1-3, text), paragraph (text), bullets (items[], ordered?; nested {text, items[]}), table (columns[{label, align?, width?}], rows[][], caption?), image (asset, caption?, size?), quote (text, attribution?), callout (tone info|success|warning|danger, title?, text), code (text, language?), stat_grid (items[{label, value, delta?, tone?}] 2-8), page_break, toc (depth?), chart (kind bar|line|pie, labels[<=50], series[{name, values[]}] <=6 (pie uses the first), title?, unit?; drawn from your numbers, never pass SVG), svg (asset of an .svg file, sanitized; caption?, size?), appendix (title, blocks[] of any block except cover, toc and appendix). Text fields take Markdown inline only (**bold**, *italic*, \`code\`, [link](https://...)); never HTML. One cover (first) and one toc at most.`;
 
 function failure(error: unknown): ToolResult {
   if (error instanceof DocumentError)
@@ -53,7 +53,7 @@ export function registerDocumentTools(registry: ToolRegistry, deps: DocumentTool
         BLOCKS_GUIDE,
         "",
         "Markdown works too: without front matter the first # heading becomes the cover title and bold **Key:** value lines under it the cover details; # headings (h4+ become level 3), lists, GFM tables, > quotes, ```code```, ![alt](relative/image.png), > [!NOTE] callouts, ---pagebreak--- line, [TOC], and front matter (title, subtitle, author, date, theme, toc: true; a title adds a cover).",
-        'Brand colors: theme {id, accent: "#1d4f91", ink} (low-contrast colors are darkened with a warning); cover:false removes the cover. Images are workspace files or artifacts, declared in `assets` as {id, path|artifactId} and used as `asset: id`. Remote images are never fetched.',
+        'Colors: theme {id, accent, ink} are optional hex values. When the user names colors (hex, brand colors, "in blue") pass exactly those: ink is the dark brand color (cover and headings), accent paints rules, bars and highlights; weak contrast is corrected with a warning. When the user gives none, choose accent and ink that fit the purpose of the document and audience (sober navy and gray for a financial report, warm tones for a school flyer, calm greens for health) or omit them to use the neutral default of the theme. Pick the theme the same way. A cover logo: front matter logo: path/to/logo.svg (or an image right under the # title); SVG, PNG, JPEG, WebP and GIF are accepted (SVG is sanitized). cover:false removes the cover. Images are workspace files or artifacts, declared in `assets` as {id, path|artifactId} and used as `asset: id`. Remote images are never fetched.',
         "",
         engines.length
           ? `Engine: ${engines.map((e) => (e.r.ready ? `${e.id} ready (${e.r.version})` : `${e.id} not ready (${e.r.reason})`)).join("; ")}`
@@ -61,7 +61,7 @@ export function registerDocumentTools(registry: ToolRegistry, deps: DocumentTool
         "Rules: content only, no HTML or CSS. quality professional (default) checks the layout and repairs it up to 2 times; fast only checks.",
         "Limits: Latin, Greek and Cyrillic text; emoji are removed; contents entries are links without page numbers.",
       ];
-      return { content: [{ type: "text", text: lines.join("\n").slice(0, 4000) }] };
+      return { content: [{ type: "text", text: lines.join("\n").slice(0, 6000) }] };
     },
   });
 
@@ -69,7 +69,7 @@ export function registerDocumentTools(registry: ToolRegistry, deps: DocumentTool
     name: "document_create",
     effect: "internal",
     description:
-      "Create a designed PDF (report, proposal, memo, spec, printable document) from Markdown or a structured DocumentSpec and a catalog theme. Use it whenever the user asks for a PDF or 'Markdown to PDF'; do not write HTML or CSS. Provide exactly one of markdown, markdownPath (workspace .md file) or spec. theme is an id or {id, accent, ink} with hex brand colors; cover:false omits the cover (without front matter the first # heading and the bold Key: value lines under it become the cover).",
+      "Create a designed PDF (report, proposal, memo, spec, printable document) from Markdown or a structured DocumentSpec and a catalog theme. Use it whenever the user asks for a PDF or 'Markdown to PDF'; do not write HTML or CSS. Provide exactly one of markdown, markdownPath (workspace .md file) or spec. theme is an id or {id, accent, ink} with hex colors (optional: use the exact colors the user gave, otherwise choose a palette that fits the document's purpose and audience, or omit them); cover:false omits the cover (without front matter the first # heading and the bold Key: value lines under it become the cover).",
     inputSchema: objectSchema(
       {
         markdown: { type: "string", maxLength: DOCUMENT_LIMITS.markdownBytes },

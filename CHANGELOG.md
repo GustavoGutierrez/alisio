@@ -18,6 +18,10 @@ out. `/changelog` (terminal and web) shows these entries offline.
   cover; `cover: false` turns it off, `theme: {id, accent, ink}` applies a brand color to every
   theme, headings that already carry numbers are never numbered twice, and an unusable image (SVG,
   missing file) is replaced by a placeholder instead of failing the document.
+  Alisio Desktop prints with its own Chromium (no browser to install), the table of contents now
+  shows page numbers, and documents gain charts drawn from your numbers (bar, line, pie), SVG
+  images and logos (sanitized, also on the cover), appendices, and a cover painted with your dark
+  brand color in every theme. The standalone binary now carries the themes and fonts.
 - **Skill Builder** (sidebar, above Settings, and **New skill** in Settings → Skills): describe a
   skill, let the active model draft it in the open Agent Skills format, then review, edit and save
   it to the project (`.agents/skills`) or globally (`~/.agents/skills`). It shows live errors and

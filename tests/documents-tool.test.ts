@@ -244,8 +244,11 @@ describe("document_create with a fake engine", () => {
 describe("images, covers and brand colors in the tool", () => {
   const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
-  it("skips an SVG or a missing image with a warning, keeps a placeholder and still publishes", async () => {
-    await writeFile(join(ws, "logo.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+  it("skips an unsafe SVG or a missing image with a warning, keeps a placeholder and still publishes", async () => {
+    await writeFile(
+      join(ws, "logo.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    );
     await writeFile(join(ws, "ok.png"), PNG);
     const engine = new FakeEngine();
     const { call } = setup(engine);

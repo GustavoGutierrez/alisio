@@ -17,10 +17,11 @@ describe("brand colors", () => {
 
   it("keeps a colour that already has 4.5:1 and darkens one that does not, with a warning", () => {
     const good = resolveBrand({ accent: "#1d4f91" }, "#ffffff");
-    expect(good).toMatchObject({ accent: "#1d4f91", warnings: [] });
+    expect(good).toMatchObject({ accent: "#1d4f91", accentText: "#1d4f91", warnings: [] });
     const weak = resolveBrand({ accent: "#ffcc00", ink: "#999999" }, "#ffffff");
     expect(weak.warnings.map((w) => w.code)).toEqual(["accent_adjusted", "ink_adjusted"]);
-    expect(contrast(weak.accent as string, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(weak.accent).toBe("#ffcc00");
+    expect(contrast(weak.accentText as string, "#ffffff")).toBeGreaterThanOrEqual(4.5);
     expect(contrast(weak.ink as string, "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
 

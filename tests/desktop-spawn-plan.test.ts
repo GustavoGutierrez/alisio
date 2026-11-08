@@ -34,6 +34,23 @@ describe("desktop spawn plan", () => {
     expect(parentEnv.ELECTRON_RUN_AS_NODE).toBe("0");
   });
 
+  it("tells the host where main prints and which Chromium it is, only when printing is offered", () => {
+    const plan = buildHostSpawn({
+      execPath: "e",
+      hostEntry: "h.js",
+      parentEnv: {},
+      print: { root: "/tmp/p", version: "Electron 1 (Chromium 2)" },
+    });
+    expect(plan.env.ALISIO_PRINT_ROOT).toBe("/tmp/p");
+    expect(plan.env.ALISIO_PRINT_VERSION).toBe("Electron 1 (Chromium 2)");
+    const none = buildHostSpawn({
+      execPath: "e",
+      hostEntry: "h.js",
+      parentEnv: { ALISIO_PRINT_ROOT: "/inherited" },
+    });
+    expect(none.env.ALISIO_PRINT_ROOT).toBeUndefined();
+  });
+
   it("passes the web root and extra node args", () => {
     const plan = buildHostSpawn({
       execPath: "node",

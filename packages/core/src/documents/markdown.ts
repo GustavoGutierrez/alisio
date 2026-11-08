@@ -223,6 +223,22 @@ export function markdownToSpec(source: string, options: MarkdownOptions = {}): M
   const wantCover = options.cover !== false && data.cover !== false;
   const head: Block[] = [];
   let derived: { title: string; subtitle?: string; meta?: string[] } | undefined;
+  let logoAsset: string | undefined;
+  const logoHref = str(data.logo, 300);
+  if (logoHref && !REMOTE.test(logoHref)) {
+    logoAsset = "logo";
+    assets.unshift({ id: "logo", href: logoHref, alt: str(data.logoAlt, 200) ?? "" });
+  }
+  /** An image block right under the cover title (or its details) becomes the cover logo. */
+  const takeLogo = () => {
+    const next = blocks[0];
+    if (logoAsset || next?.type !== "image") return;
+    const asset = assets.find((x) => x.id === next.asset);
+    if (!asset) return;
+    blocks.shift();
+    asset.id = "logo";
+    logoAsset = "logo";
+  };
   if (!title && wantCover) {
     // No front matter title: the first H1 is the title and the bold "Key: value" lines under it
     // (version, date, author...) become the cover.
@@ -230,12 +246,14 @@ export function markdownToSpec(source: string, options: MarkdownOptions = {}): M
     if (first?.type === "heading" && first.level === 1) {
       blocks.shift();
       derived = { title: first.text };
+      takeLogo();
       const next = blocks[0];
       const found = next?.type === "paragraph" ? coverMetadata(next.text) : undefined;
       if (found) {
         blocks.shift();
         if (found.subtitle) derived.subtitle = found.subtitle;
         if (found.meta.length) derived.meta = found.meta;
+        takeLogo();
       }
     }
   }
@@ -245,6 +263,7 @@ export function markdownToSpec(source: string, options: MarkdownOptions = {}): M
       title: derived.title,
       ...(derived.subtitle ? { subtitle: derived.subtitle } : {}),
       ...(derived.meta ? { meta: derived.meta } : {}),
+      ...(logoAsset ? { logoAsset } : {}),
     });
   } else if (title && wantCover) {
     const meta = [str(data.author, 200), str(data.date, 60), str(data.organization, 200)].filter(
@@ -256,6 +275,7 @@ export function markdownToSpec(source: string, options: MarkdownOptions = {}): M
       title,
       ...(subtitle ? { subtitle } : {}),
       ...(meta.length ? { meta } : {}),
+      ...(logoAsset ? { logoAsset } : {}),
     });
   }
   if (data.toc === true && !blocks.some((b) => b.type === "toc")) head.push({ type: "toc" });

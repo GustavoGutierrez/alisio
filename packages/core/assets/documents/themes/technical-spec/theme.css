@@ -12,21 +12,21 @@
 }
 .auto-number h1::before {
   content: counter(n1) "\2002";
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-weight: 700;
   font-size: 0.82em;
 }
 .auto-number h2::before {
   content: counter(n1) "." counter(n2) "\2002";
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: 0.82em;
 }
 .auto-number h3::before {
   content: counter(n1) "." counter(n2) "." counter(n3) "\2002";
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: 0.85em;
@@ -124,7 +124,7 @@ code {
 }
 .cover .cover-kicker {
   font-family: var(--font-mono);
-  color: var(--accent);
+  color: var(--cover-kicker, var(--accent-text));
   letter-spacing: 0.12em;
   margin-top: 48mm;
 }

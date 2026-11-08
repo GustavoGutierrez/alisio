@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { type HostMessage, parseHostLine, parseHostMessage } from "./host-protocol.ts";
+import { type PrintRequest, type PrintResult, parsePrintRequest } from "./print-protocol.ts";
 
 export interface LaunchOptions {
   command: string;
@@ -13,6 +14,12 @@ export interface LaunchOptions {
   killAfterMs?: number;
   /** Receives the host's stderr lines (diagnostics only). */
   onLog?: (line: string) => void;
+  /** Serves the host's print requests (spec 026 D7); requests outside `root` are ignored. */
+  print?: {
+    root: string;
+    run: (request: PrintRequest) => Promise<PrintResult>;
+    cancel: (id: string) => void;
+  };
 }
 
 export interface RunningHost {
@@ -75,7 +82,32 @@ export function launchHost(options: LaunchOptions): Promise<RunningHost> {
       () => fail(new Error("The Alisio host did not become ready in time")),
       options.timeoutMs ?? 30_000,
     );
-    child.on("message", (raw) => handle(parseHostMessage(raw)));
+    child.on("message", (raw) => {
+      handle(parseHostMessage(raw));
+      const print = options.print;
+      if (!print || !raw || typeof raw !== "object") return;
+      const type = (raw as { type?: unknown }).type;
+      if (type === "print-cancel") {
+        const id = (raw as { id?: unknown }).id;
+        if (typeof id === "string") print.cancel(id);
+        return;
+      }
+      const request = type === "print" ? parsePrintRequest(raw, print.root) : undefined;
+      if (!request) return;
+      void print
+        .run(request)
+        .catch(
+          (error: unknown): PrintResult => ({
+            type: "print-result",
+            id: request.id,
+            ok: false,
+            error: error instanceof Error ? error.message.slice(0, 500) : "print failed",
+          }),
+        )
+        .then((result) => {
+          if (child.connected) child.send(result);
+        });
+    });
     if (child.stdout) {
       createInterface({ input: child.stdout }).on("line", (line) => handle(parseHostLine(line)));
     }
