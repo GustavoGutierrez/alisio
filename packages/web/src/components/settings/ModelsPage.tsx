@@ -16,7 +16,9 @@ import { Fragment } from "preact";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, showToast } from "../../store/app.ts";
+import { credentialRows } from "../../store/provider-signin.ts";
 import { Icon } from "../icons.tsx";
+import { ProviderSignIn } from "./ProviderSignIn.tsx";
 import styles from "./settings.module.css";
 import { errorMessage, PageIntro, Pill, Status, settingsWorkspace, useLoad } from "./shared.tsx";
 
@@ -246,6 +248,8 @@ function ProfileCard(props: {
   workspace: string;
   onChange: (profile: ProviderProfileInfo) => void;
   onActivated: () => void;
+  /** Fetches the providers again (after a sign-in flow or a sign-out). */
+  onReload: () => void;
 }) {
   const { profile, overview } = props;
   const [editing, setEditing] = useState(false);
@@ -307,7 +311,16 @@ function ProfileCard(props: {
             ))}
           </dl>
         )}
-        {Object.entries(profile.credentials).map(([field, status]) => (
+        {type?.auth?.length ? (
+          <ProviderSignIn
+            profile={profile.name}
+            workspace={props.workspace}
+            methods={type.auth}
+            status={profile.credentials.oauth}
+            onChanged={props.onReload}
+          />
+        ) : null}
+        {credentialRows(profile, type).map(([field, status]) => (
           <CredentialRow
             key={field}
             profile={profile.name}
@@ -416,6 +429,7 @@ export function ModelsPage() {
             workspace={workspace?.id ?? ""}
             onChange={upsert}
             onActivated={() => overview.reload()}
+            onReload={() => overview.reload()}
           />
         ))}
       </ul>

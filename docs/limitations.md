@@ -384,20 +384,31 @@ needs a restart (the desktop app restarts itself, `alisio serve` does not); inst
 run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
 ranges make npm fail and roll back; update the older plugin first.
 
-### Provider sign-in (contract, core and server API, phases 1 and 2)
+### Provider sign-in (contract, core, server API and Web UI, phases 1 to 3)
 
 Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and
-redacts the session, and the server can start, poll, answer and cancel a sign-in flow
-(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect). Until
-the next phases land there is no Web UI or `/connect` screen that uses it, and no provider offers it
-yet. Flows live in memory: restarting the server loses them. Sessions are plaintext in
-`credentials.json` (`0600`), readable by any process of the same user and by any loaded plugin; this
-is session convenience, not encryption or isolation, and redaction (of SSE frames, API errors, server
-logs, `alisio run --json` lines and the desktop host's output) is best effort: it does not see a token
-split across two chunks of streamed text. The file lock protects only between versions that take it:
-an older core writes without it and can overwrite a newer file with a stale copy. The loopback
-listener is offered when the server listens on loopback even if the browser is on another machine
-(an SSH tunnel), so the UI must also offer pasting the redirect URL.
+redacts the session, and the Web UI (Settings → Models) can start, show, answer and cancel a sign-in
+(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect). The
+terminal `/connect` screen does not offer it yet, and no provider offers it yet. Flows live in
+memory: restarting the server loses them, and the page then says the sign-in was interrupted.
+
+- **Plain text storage.** Sessions are stored in plain text in `credentials.json` (`0600`), readable
+  by any process of the same user and by any loaded plugin; this is session convenience, not
+  encryption or isolation. On Alisio Desktop the default workspace is your home directory, so file
+  tools could read it with your approval.
+- **A plugin is trusted code.** It runs in the host process and can read the session through its
+  handle; a plugin manifest or a subprocess is not a sandbox.
+- **Preview status and eligibility.** A sign-in a provider offers as a preview can change or stop
+  working without notice, and eligibility rules (for example for hosted or commercial use, or a
+  server on a remote machine) belong to the provider and its plugin; read the plugin's own notes.
+  Methods the provider has not officially authorized are marked unofficial in the Web UI.
+- Redaction (of SSE frames, API errors, server logs, `alisio run --json` lines and the desktop host's
+  output) is best effort: it does not see a token split across two chunks of streamed text.
+- The file lock protects only between versions that take it: an older core writes without it and can
+  overwrite a newer file with a stale copy.
+- The loopback listener is offered when the server listens on loopback even if the browser is on
+  another machine (an SSH tunnel), so the UI keeps the paste field of the plugin. There is no TLS
+  with `--allow-remote`: the pasted value and the authorization link travel in the clear.
 
 ## Verification scope
 

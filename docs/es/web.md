@@ -203,6 +203,37 @@ ninguna):
 | **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
 | **Apariencia** | Tema (oscuro, claro o sistema) y si las filas de herramientas empiezan plegadas o desplegadas, guardado en este navegador |
 
+### Iniciar sesión en un proveedor {#provider-sign-in}
+
+Un proveedor cuyo plugin declara métodos de inicio de sesión muestra un bloque **Iniciar sesión** en la
+tarjeta de su perfil, con un botón por método (la etiqueta y la descripción las aporta el plugin).
+Mientras corre un inicio de sesión, el bloque consulta al servidor cada segundo y muestra lo que pide
+el plugin: un código de dispositivo y su dirección con botones **Copiar**, un botón que abre la página
+de autorización en una pestaña nueva, líneas de progreso y un campo para la respuesta que el plugin te
+pide pegar (enmascarado si es secreto), rotulado con el propio mensaje del plugin. **Cancelar** detiene
+el inicio de sesión. Un proveedor que solo inicia sesión no muestra campo de clave de API; con la
+sesión iniciada, la tarjeta ofrece **Cerrar sesión**, y una sesión vencida muestra **Sesión caducada** e
+**Iniciar sesión de nuevo**.
+
+- Un método marcado **no oficial** muestra un aviso de riesgo fijo (el proveedor no lo ha autorizado
+  oficialmente, el servicio puede cambiar y la cuenta podría ser restringida) y solo empieza tras
+  **Entiendo el riesgo**.
+- Los enlaces se abren únicamente con `window.open(url, "_blank", "noopener,noreferrer")` y solo si son
+  `https:` (o `http:` en `localhost`/`127.0.0.1`); cualquier otro enlace se bloquea y nunca se abre.
+- El texto del plugin (etiquetas, descripciones, instrucciones y mensajes de petición) se muestra
+  siempre como texto plano, nunca como HTML ni Markdown.
+- Si el servidor se reinicia mientras corre un inicio de sesión, el flujo desaparece: el bloque dice
+  **Inicio de sesión interrumpido, empieza de nuevo** y ofrece empezar otra vez. Cuando termina un
+  inicio de sesión, la página vuelve a pedir el perfil en lugar de fiarse de su estado local.
+- El navegador nunca recibe un token: solo el estado de la sesión (iniciada, caducada, vencimiento). El
+  inicio de sesión no está disponible con `--read-only`. En [Limitaciones conocidas](/es/limitations)
+  se explica cómo se guardan las sesiones.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/provider_oauth_web_ui.webp" alt="Ajustes, Modelos: un perfil con un método de inicio de sesión no oficial, marcado como tal, y un perfil con un inicio de sesión en curso con un código de dispositivo, su dirección con botones Copiar y Abrir enlace, una línea de progreso, un campo para el código de confirmación y un botón Cancelar." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Inicio de sesión desde Ajustes → Modelos, con un proveedor falso programado: el código y la dirección, un campo enmascarado para la respuesta que pide el plugin y Cancelar.</figcaption>
+</figure>
+
 **Abrir archivo de configuración** (arriba a la derecha) muestra el archivo de configuración
 efectivo del workspace, su archivo de ajustes de usuario y el de perfiles de proveedor, cada uno con
 un botón de copiar. El servidor nunca abre un editor. La versión de Alisio (la del servidor, la que imprime `alisio --version`) se

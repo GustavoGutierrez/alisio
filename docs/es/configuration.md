@@ -128,6 +128,18 @@ proyecto de confianza o explícito → variables de entorno → flags de la CLI.
 selección anterior determina cuándo se usa esa configuración en lugar del perfil activo de
 `/connect`.
 
+### Proveedores con inicio de sesión {#provider-sign-in}
+
+Algunos plugins de proveedor ofrecen iniciar sesión con una cuenta en lugar de una clave de API. Su
+perfil no tiene un valor `apiKeyEnv` que configurar: abre **Ajustes → Modelos** en la interfaz web y
+usa el bloque **Iniciar sesión** del perfil (ver [Iniciar sesión en un
+proveedor](/es/web#provider-sign-in)). Alisio guarda la sesión en `credentials.json` (modo `0600`,
+texto plano, junto a las claves de API) y la renueva antes de que caduque; cuando no puede, el perfil
+muestra **Sesión caducada** y pide iniciar sesión de nuevo. Un perfil con sesión nunca recurre a una
+variable de entorno. Cerrar sesión, borrar las credenciales del perfil o cambiar su tipo de proveedor
+elimina la sesión. `alisio run` no puede iniciar sesión: usa la sesión guardada o se detiene con un
+mensaje que pide iniciar sesión desde la interfaz web.
+
 ## `limits`
 
 | Campo | Por defecto | Descripción |

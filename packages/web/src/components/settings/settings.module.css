@@ -1668,3 +1668,49 @@
     visibility: hidden;
   }
 }
+
+/* Provider sign-in block of a profile card (specs/025 §5.7). */
+.signIn {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.signInMethods {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signInActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.signInCode {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+
+.signInAddress {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.signInStep {
+  display: grid;
+  gap: 6px;
+}

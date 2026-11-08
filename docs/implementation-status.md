@@ -23,7 +23,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
   Intelligence (fases 1 a 5 de `specs/006-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
   de `specs/007-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
-  release); inicio de sesión de proveedores (fases 1 y 2 de `specs/025-provider-oauth-v1.md`).
+  release); inicio de sesión de proveedores (fases 1 a 3 de `specs/025-provider-oauth-v1.md`).
 - Validación.
 - Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -82,13 +82,12 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
   continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
 
-### Inicio de sesión de proveedores (Provider OAuth, fases 1 y 2 de `specs/025-provider-oauth-v1.md`)
+### Inicio de sesión de proveedores (Provider OAuth, fases 1 a 3 de `specs/025-provider-oauth-v1.md`)
 
-- **Fases 1 y 2 implementadas (2026-11-07): contrato, núcleo, ejecutor de flujos, loopback y rutas del
-  servidor, sin interfaz.** Quedan para las fases 3 y 4 la interfaz web y la TUI: hoy el servidor sabe
-  iniciar, sondear, responder y cancelar un flujo (`/api/providers/:profile/auth/...`), pero **ningún
-  cliente de este repositorio lo usa todavía** y ningún proveedor lo ofrece (el plugin llega con la
-  fase 5, en `alisio-plugins`).
+- **Fases 1 a 3 implementadas (2026-11-07): contrato, núcleo, ejecutor de flujos, loopback, rutas del
+  servidor e interfaz web.** Queda para la fase 4 la TUI (`/connect`) y el cierre de sesión allí, y
+  la fase 5 es el plugin de OpenAI (repo `alisio-plugins`): ningún proveedor ofrece todavía inicio de
+  sesión. La web (Ajustes > Modelos) ya inicia, sondea, responde y cancela un flujo.
 - Contrato aditivo de `@alisio/sdk` (todo opcional): `ProviderRegistration.auth`,
   `ProviderAuthMethod` (con `refresh` opcional y fallo transitorio por `retryable === true`),
   `ProviderAuthContext`, `ProviderAuthStep` (incluido `device_code` con `verificationUriComplete` e
@@ -153,6 +152,22 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   servidor, salida `alisio run --json` (`packages/cli/src/json-lines.ts`), y stdout y stderr del host
   de Alisio Desktop. La redacción recorre los valores (`redactDeep`), no el texto serializado, para no
   romper el JSON.
+- Interfaz web del inicio de sesión (fase 3; `ProviderSignIn.tsx`, `store/provider-signin.ts`,
+  `net/api.ts`): un perfil cuyo tipo declara `auth` muestra un bloque «Iniciar sesión» con un botón
+  por método; un controlador sin Preact inicia el flujo, sondea cada 1 000 ms con `after`, acumula
+  los pasos (código de dispositivo con «Copiar», enlace de autorización, progreso), muestra el
+  `prompt` pendiente rotulado con el mensaje del plugin (enmascarado si es secreto) y cancela con
+  `DELETE`. Un método `unofficial` lleva la etiqueta «no oficial» y exige «Entiendo el riesgo» ante
+  el aviso fijo del host; `not_found` al sondear (reinicio del host) muestra «Inicio de sesión
+  interrumpido, empieza de nuevo»; tras cualquier fin de flujo se vuelve a pedir `GET
+  /api/providers` (un cancelar tardío no deshace una escritura que ya pasó el `guard`). Un
+  proveedor solo-inicio-de-sesión no muestra `CredentialRow`; el estado `needs_sign_in` muestra
+  «Sesión caducada» e «Iniciar sesión de nuevo», y hay «Cerrar sesión». Los enlaces solo se abren
+  con `window.open(url, "_blank", "noopener,noreferrer")` y solo si son `https:` o `http:` en
+  loopback, sin usuario ni contraseña (nunca como `<a>`); el texto del plugin se pinta solo como
+  texto; el host no escribe texto de ningún proveedor. Límites: no hay prueba de DOM (se recorre el
+  árbol de VNode y el controlador con temporizadores simulados); el bundle inicial quedó en 89,6 KB
+  de 90 KB gzip, así que la siguiente adición a Ajustes debe cargarse de forma diferida.
 
 ### Núcleo, límites y almacenamiento
 

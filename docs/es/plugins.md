@@ -618,6 +618,60 @@ npm run build
 alisio --plugin ./examples/plugins/custom-mascot/dist/index.js
 ```
 
+### Inicio de sesión del proveedor (`auth`) {#provider-auth}
+
+Una registración de proveedor puede declarar `auth: ProviderAuthMethod[]` para que el usuario inicie
+sesión con una cuenta en lugar de pegar una clave. El host ejecuta el flujo, guarda la sesión, la
+renueva y la redacta; el plugin solo habla con su propio servicio.
+
+```ts
+api.providers.register({
+  id: "my-service",
+  name: "My service",
+  fields: [], // sin campo secreto obligatorio: el proveedor es solo de inicio de sesión
+  auth: [
+    {
+      id: "browser", // ^[a-z0-9_-]{1,40}$, único dentro de la registración
+      label: "Cuenta de My service",
+      kind: "oauth",
+      description: "Abre la página de inicio de sesión de My service.",
+      async start(ctx) {
+        const loopback = await ctx.loopback?.({ port: 0, path: "/callback", state }).catch(() => undefined);
+        ctx.show({ type: "auth_url", url: authorizationUrl, instructions: "Aprueba el acceso." });
+        const code = loopback ? (await loopback.wait()).code : await ctx.prompt({ message: "Pega la dirección a la que te llevó", secret: true });
+        const tokens = await exchange(code, ctx.signal);
+        return { type: "oauth", access: tokens.access, refresh: tokens.refresh, expires: tokens.expiresAt };
+      },
+      async refresh(credential, signal) {
+        /* devuelve la credencial renovada; lanza un error con retryable = true si el fallo es temporal */
+      },
+    },
+  ],
+  create: (request) => makeClient(() => request.oauth?.get()), // request.oauth existe solo si se declara `auth`
+});
+```
+
+- `start(ctx)` resuelve con la credencial o rechaza; `ctx.signal` se aborta al cancelar, reemplazar o
+  expirar (15 minutos). `ctx.show` acepta pasos `auth_url`, `device_code` y `progress`; `ctx.prompt`
+  pide un valor al usuario y resuelve `undefined` donde nadie puede responder (`alisio run`).
+  `ctx.loopback` existe solo cuando el host puede suponer que el navegador está en la misma máquina
+  (Alisio Desktop, o un servidor enlazado a loopback); si no, usa `prompt`. Un túnel puede romper esa
+  suposición, así que ofrece también pegar la dirección.
+- Las URL de los pasos deben ser `https:` (o `http:` en `localhost`/`127.0.0.1`) sin credenciales; si
+  no, el flujo termina con `unsafe_url`.
+- Marca `unofficial: true` cuando el proveedor no haya autorizado oficialmente el método: la interfaz
+  web muestra un aviso de riesgo fijo y pide confirmación. No lo marques en un método oficial.
+- `label`, `description`, `instructions` y `prompt.message` se muestran como texto plano. Pon en
+  ellos cualquier texto propio del proveedor: el host solo añade botones y estados genéricos.
+- Sin `refresh` la sesión no se renueva: al caducar, el perfil necesita iniciar sesión de nuevo. Un
+  rechazo con `retryable === true` es un fallo temporal; cualquier otro es permanente. La `metadata`
+  de la renovación se fusiona sobre la guardada.
+- `request.oauth.get()` devuelve una credencial válida (renovando antes) e
+  `invalidate("sign_in_required")` avisa al host de que el proveedor rechazó la sesión.
+- Un plugin es código de confianza que corre en el proceso del host: puede leer la sesión guardada.
+  El host reduce la superficie (el asa existe solo con `auth` y está ligada al perfil), pero un plugin
+  nunca es un sandbox.
+
 ### Ejemplo: proveedor de búsqueda personalizado
 
 [`examples/plugins/custom-websearch`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-websearch)

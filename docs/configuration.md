@@ -132,6 +132,17 @@ Within legacy provider configuration, precedence is global file → trusted proj
 environment variables → CLI flags. The provider-selection precedence above determines when that
 legacy configuration is used instead of an active `/connect` profile.
 
+### Providers that sign in {#provider-sign-in}
+
+Some provider plugins offer signing in with an account instead of an API key. Their profile has no
+`apiKeyEnv` value to set: open **Settings → Models** in the Web UI and use the **Sign in** block of
+the profile (see [Signing in to a provider](/web#provider-sign-in)). Alisio stores the session in
+`credentials.json` (mode `0600`, plain text, next to the API keys) and renews it before it expires;
+when it cannot, the profile shows **Session expired** and asks you to sign in again. A signed-in
+profile never falls back to an environment variable. Signing out, deleting the profile's credentials
+or changing its provider type removes the session. `alisio run` cannot sign in: it uses the stored
+session or stops with a message to sign in from the Web UI.
+
 ## `limits`
 
 | Field | Default | Description |

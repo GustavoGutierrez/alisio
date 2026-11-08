@@ -40,6 +40,8 @@ import type {
   PermissionPresetId,
   PluginInfo,
   PromptAccepted,
+  ProviderAuthFlowStarted,
+  ProviderAuthFlowView,
   ProviderConfigurationValue,
   ProviderModelsInfo,
   ProviderProfileInfo,
@@ -512,6 +514,31 @@ export class ApiClient {
     this.request<CredentialStatus>("PUT", `/api/providers/${enc(name)}/credentials`, secrets);
   deleteCredentials = (name: string) =>
     this.request<CredentialStatus>("DELETE", `/api/providers/${enc(name)}/credentials`);
+  /** Starts a sign-in flow of `profile` (202 `{flowId}`); `workspace` picks the app whose plugins serve it. */
+  startProviderAuth = (profile: string, methodId: string, workspace: string) =>
+    this.request<ProviderAuthFlowStarted>(
+      "POST",
+      `/api/providers/${enc(profile)}/auth/${enc(methodId)}/start`,
+      { workspace },
+    );
+  /** The flow's state; only the steps numbered above `after` are returned. 404 when it is gone. */
+  providerAuthFlow = (profile: string, flowId: string, after = 0) =>
+    this.request<ProviderAuthFlowView>(
+      "GET",
+      `/api/providers/${enc(profile)}/auth/flows/${enc(flowId)}?after=${after}`,
+    );
+  /** Answers the pending prompt; the answer is never echoed back. */
+  providerAuthInput = (profile: string, flowId: string, promptId: string, value: string) =>
+    this.request<ProviderAuthFlowView>(
+      "POST",
+      `/api/providers/${enc(profile)}/auth/flows/${enc(flowId)}/input`,
+      { promptId, value },
+    );
+  cancelProviderAuth = (profile: string, flowId: string) =>
+    this.request<ProviderAuthFlowView>(
+      "DELETE",
+      `/api/providers/${enc(profile)}/auth/flows/${enc(flowId)}`,
+    );
   activateProvider = (wid: string, name: string, model: string) =>
     this.request<{ changed: boolean }>("POST", `/api/providers/${enc(name)}/activate`, {
       workspace: wid,

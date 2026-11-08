@@ -189,6 +189,36 @@ resources act on the workspace of the open session (or the first workspace when 
 | **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |
 | **Appearance** | Theme (dark, light or system) and whether tool rows start collapsed or expanded, stored in this browser |
 
+### Signing in to a provider {#provider-sign-in}
+
+A provider whose plugin declares sign-in methods shows a **Sign in** block on its profile card, with
+one button per method (its label and description come from the plugin). While a sign-in runs, the
+block polls the server every second and shows what the plugin asks for: a device code and its
+address with **Copy** buttons, a button that opens the authorization page in a new tab, progress
+lines, and a field for the answer the plugin asks you to paste (masked when it is a secret),
+labeled with the plugin's own message. **Cancel** stops the sign-in. A provider that only signs in
+shows no API key field; once signed in, the card offers **Sign out**, and an expired session shows
+**Session expired** and **Sign in again**.
+
+- A method marked **unofficial** shows a fixed risk notice (the provider has not officially
+  authorized it, the service may change and the account could be restricted) and starts only after
+  **I understand the risk**.
+- Links open only with `window.open(url, "_blank", "noopener,noreferrer")`, and only when they are
+  `https:` (or `http:` on `localhost`/`127.0.0.1`); any other link is blocked and never opened.
+- Plugin text (labels, descriptions, instructions and prompt messages) is always shown as plain
+  text, never as HTML or Markdown.
+- If the server restarts while a sign-in runs, the flow is gone: the block says **Sign-in
+  interrupted, start again** and offers to start again. After any sign-in ends, the page fetches the
+  profile again instead of trusting its local state.
+- The browser never receives a token: only the state of the session (signed in, expired, expiry).
+  Sign-in is unavailable under `--read-only`. See [Known limitations](/limitations) for how sessions
+  are stored.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/provider_oauth_web_ui.webp" alt="Settings, Models: a profile with an unofficial sign-in method marked unofficial, and a profile whose sign-in is running with a device code, its address with Copy and Open link buttons, a progress line, a field for the confirmation code and a Cancel button." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Sign-in from Settings → Models, with a scripted fake provider: the device code and address, a masked field for the answer the plugin asks for, and Cancel.</figcaption>
+</figure>
+
 **Open configuration file** (top right) shows the effective configuration file of the workspace,
 your user settings file and the provider profiles file, each with a copy button. The server never
 opens an editor. The Alisio version (the server's, the one `alisio --version` prints) is shown in

@@ -597,6 +597,60 @@ npm run build
 alisio --plugin ./examples/plugins/custom-mascot/dist/index.js
 ```
 
+### Provider sign-in (`auth`) {#provider-auth}
+
+A provider registration may declare `auth: ProviderAuthMethod[]` so users sign in with an account
+instead of pasting a key. The host runs the flow, stores the session, renews it and redacts it; the
+plugin only talks to its own service.
+
+```ts
+api.providers.register({
+  id: "my-service",
+  name: "My service",
+  fields: [], // no required secret field: the provider is sign-in only
+  auth: [
+    {
+      id: "browser", // ^[a-z0-9_-]{1,40}$, unique within the registration
+      label: "My service account",
+      kind: "oauth",
+      description: "Opens the sign-in page of My service.",
+      async start(ctx) {
+        const loopback = await ctx.loopback?.({ port: 0, path: "/callback", state }).catch(() => undefined);
+        ctx.show({ type: "auth_url", url: authorizationUrl, instructions: "Approve the access." });
+        const code = loopback ? (await loopback.wait()).code : await ctx.prompt({ message: "Paste the address you were sent to", secret: true });
+        const tokens = await exchange(code, ctx.signal);
+        return { type: "oauth", access: tokens.access, refresh: tokens.refresh, expires: tokens.expiresAt };
+      },
+      async refresh(credential, signal) {
+        /* return the renewed credential; throw an error with retryable = true for a temporary failure */
+      },
+    },
+  ],
+  create: (request) => makeClient(() => request.oauth?.get()), // request.oauth exists only when `auth` is declared
+});
+```
+
+- `start(ctx)` resolves with the credential or rejects; `ctx.signal` aborts on cancel, replacement or
+  expiry (15 minutes). `ctx.show` accepts `auth_url`, `device_code` and `progress` steps;
+  `ctx.prompt` asks the user for a value and resolves `undefined` where nobody can answer
+  (`alisio run`). `ctx.loopback` exists only when the host can assume the browser is on the same
+  machine (Alisio Desktop, or a server bound to loopback); otherwise fall back to `prompt`. A tunnel
+  can break that assumption, so offer the paste fallback too.
+- URLs in steps must be `https:` (or `http:` on `localhost`/`127.0.0.1`) without credentials, or the
+  flow ends with `unsafe_url`.
+- Set `unofficial: true` when the provider has not officially authorized the method: the Web UI
+  shows a fixed risk notice and asks for confirmation. Do not set it for an official method.
+- `label`, `description`, `instructions` and `prompt.message` are shown as plain text. Keep any
+  provider-specific wording in them: the host adds only generic buttons and states.
+- Without `refresh` the session is not renewable: when it expires the profile needs a new sign-in.
+  A rejection with `retryable === true` is a temporary failure; any other is permanent. Renewal
+  metadata is merged over the stored one.
+- `request.oauth.get()` returns a valid credential (renewing first), and `invalidate("sign_in_required")`
+  tells the host the provider rejected the session.
+- A plugin is trusted code running in the host process: it can read the stored session. The host
+  reduces the surface (the handle exists only with `auth` and is bound to the profile) but a plugin
+  is never a sandbox.
+
 ### Example: custom websearch provider
 
 [`examples/plugins/custom-websearch`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-websearch)
