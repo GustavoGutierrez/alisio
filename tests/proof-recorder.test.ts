@@ -7,8 +7,9 @@ import { createHash } from "node:crypto";
 import type { RunEvent, ToolDefinition } from "@alisio/sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import { PERMISSION_MODE_TABLE } from "../packages/core/src/permissions/modes.ts";
-import { ProofRecorder } from "../packages/core/src/proof/recorder.ts";
+import { excerptOf, ProofRecorder } from "../packages/core/src/proof/recorder.ts";
 import { ProofStore } from "../packages/core/src/proof/store.ts";
+import { registerSecret } from "../packages/core/src/providers/redaction.ts";
 import { effectTool, gateFixture, type ScriptedCall } from "./forge-gate-helpers.ts";
 
 interface Proc {
@@ -373,5 +374,17 @@ describe("ProofRecorder: no criteria means no behavior change (D7)", () => {
     await t.fx.play([pnpmTest()]);
     expect(evidenceRows(t)).toEqual([]);
     expect(t.updates()).toEqual([]);
+  });
+});
+
+describe("excerptOf: provider credentials (R2-04)", () => {
+  it("redacts a registered exact secret and an unknown JWT", () => {
+    const exact = "excerpt-exact-secret-0001";
+    const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzNDU2In0.c2lnbmF0dXJlLXZhbHVl";
+    registerSecret(exact);
+    const out = excerptOf(`ok ${exact} then ${jwt} done`);
+    expect(out).not.toContain(exact);
+    expect(out).not.toContain("c2lnbmF0dXJl");
+    expect(out).toContain("done");
   });
 });

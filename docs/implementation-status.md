@@ -2516,8 +2516,8 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
 - No verificado: Windows y macOS (`rename` y `open "wx"` sobre otros sistemas de archivos), sistemas de
   archivos de red, un plugin real de proveedor (llega con la fase 5 en `alisio-plugins`), un
   navegador real contra el listener de loopback, un túnel SSH real, la interfaz web y la TUI (fases 3
-  y 4), el ledger de Proof de `alisio run --json` (sus fragmentos ya pasan por `redactOutput`, pero no
-  por `redactDeep`) y todo comportamiento de OpenAI.
+  y 4) y todo comportamiento de OpenAI. La línea `proof_ledger` de `alisio run --json` pasa ya por
+  `redactDeep` y los fragmentos del ledger también por `redactCredentials`.
 
 ## Límites conocidos
 

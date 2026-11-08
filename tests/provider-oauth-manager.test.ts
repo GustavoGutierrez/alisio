@@ -547,6 +547,44 @@ describe("binding to the registration (OA-AC-43, OA-AC-59)", () => {
     expect((await s.store.getOAuthEntry("p"))?.state).toBe("ok");
   });
 
+  it("R2-07: after a provider switch a caller of registration B does not join the renewal of registration A", async () => {
+    const hold = deferred<ProviderOAuthCredential>();
+    const s = await setup({ refresh: () => hold.promise });
+    const otherRefresh = vi.fn<RefreshFn>(async (c) => ({
+      ...c,
+      access: "access-OTHER-0123456789",
+      expires: NOW + 3_600_000,
+    }));
+    s.registrations.set("other", {
+      auth: [
+        {
+          id: "browser",
+          label: "b",
+          kind: "oauth",
+          start: async () => cred(),
+          refresh: otherRefresh,
+        },
+      ],
+    });
+    await s.seed(cred({ expires: NOW - 1 }));
+    const first = get(s);
+    await vi.waitFor(() => expect(s.refresh).toHaveBeenCalledTimes(1));
+    // The profile is switched to registration B while A's renewal is still in flight.
+    await s.store.deleteOAuth("p");
+    await s.store.setOAuth("p", cred({ access: "access-B-0123456789", expires: NOW - 1 }), {
+      method: "browser",
+      provider: "other",
+    });
+    // B queues behind A on the file lock; A ends shortly after B joined or started its own.
+    const secondPending = s.manager.get("p", "other");
+    await new Promise((r) => setTimeout(r, 20));
+    hold.resolve(cred({ access: "access-A2-0123456789", expires: NOW + 3_600_000 }));
+    await first.catch(() => undefined);
+    const second = await secondPending;
+    expect(second.access).toBe("access-OTHER-0123456789");
+    expect(otherRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects when the provider has no registration or the stored method is gone (OA-AC-59)", async () => {
     const s = await setup();
     await s.seed(cred({ expires: NOW - 1 }));

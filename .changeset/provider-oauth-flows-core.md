@@ -10,3 +10,7 @@ sign-in method as a state machine (`running`, `awaiting_input`, `succeeded`, `fa
 removing a provider registration (`ProviderRegistry.onRemoved`) cancels its pending flows.
 `openLoopback` listens on `127.0.0.1` only, checks `state` in constant time with no failure cap, serves
 one request and closes. New `redactDeep` redacts every string inside a JSON-shaped value.
+Hardening after the security review: the loopback no longer waits for stray connections to close,
+`redactDeep` fails closed past its depth limit and redacts object keys, the JWT rule also catches a
+token glued to a word, a pasted redirect URL registers its parameters as secrets, `cancel()` reports
+whether it really cancelled, and the renewal single-flight is keyed by profile and registration.

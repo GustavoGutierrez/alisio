@@ -87,6 +87,9 @@ function toCredential(entry: StoredOAuthCredential): ProviderOAuthCredential {
  * a re-read), persists a rotated refresh token before returning it, and never falls back to any
  * other credential source. Convenience session management, not encryption or isolation.
  */
+/** Single-flight and rejection state belong to a profile AND the registration that owns it (R2-07). */
+const flightKey = (profile: string, registrationId: string) => `${profile}\0${registrationId}`;
+
 export class OAuthManager {
   private readonly store: ProviderSettingsStore;
   private readonly registry: OAuthRegistrations;
@@ -168,12 +171,13 @@ export class OAuthManager {
     registrationId: string,
   ): Promise<ProviderOAuthCredential> {
     const entry = await this.usable(profile, registrationId);
-    if (!needsRefresh(entry, this.now(), REFRESH_MARGIN_MS, this.rejected.get(profile)))
+    const key = flightKey(profile, registrationId);
+    if (!needsRefresh(entry, this.now(), REFRESH_MARGIN_MS, this.rejected.get(key)))
       return toCredential(entry);
-    let shared = this.inFlight.get(profile);
+    let shared = this.inFlight.get(key);
     if (!shared) {
-      shared = this.renew(profile, registrationId).finally(() => this.inFlight.delete(profile));
-      this.inFlight.set(profile, shared);
+      shared = this.renew(profile, registrationId).finally(() => this.inFlight.delete(key));
+      this.inFlight.set(key, shared);
     }
     return shared;
   }
@@ -202,7 +206,14 @@ export class OAuthManager {
   ): Promise<ProviderOAuthCredential> {
     // Double check under the lock: another process may have renewed while we waited.
     const entry = await this.usable(profile, registrationId);
-    if (!needsRefresh(entry, this.now(), REFRESH_MARGIN_MS, this.rejected.get(profile)))
+    if (
+      !needsRefresh(
+        entry,
+        this.now(),
+        REFRESH_MARGIN_MS,
+        this.rejected.get(flightKey(profile, registrationId)),
+      )
+    )
       return toCredential(entry);
     const generation = entry.generation;
     const method = this.registry
@@ -251,7 +262,7 @@ export class OAuthManager {
       { expectedGeneration: generation },
     );
     if (written !== false) {
-      this.rejected.delete(profile);
+      this.rejected.delete(flightKey(profile, registrationId));
       return merged;
     }
     // The entry changed while we renewed (deleted, signed in again, marked): drop our result.
@@ -291,6 +302,6 @@ export class OAuthManager {
       await this.store.markOAuthState(profile, "needs_sign_in", entry.generation);
       return;
     }
-    this.rejected.set(profile, entry.access);
+    this.rejected.set(flightKey(profile, registrationId), entry.access);
   }
 }

@@ -17,6 +17,7 @@ import {
   OAuthManager,
   ProviderSettingsStore,
   redactCredentials,
+  redactDeep,
   redactEventData,
   registerSecret,
   SecretRegistry,
@@ -270,5 +271,41 @@ describe("core exit points: run failures and the session journal (OA-AC-56)", ()
       store.close();
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("review round 2 hardening (R2-02, R2-03)", () => {
+  it("R2-02: fails closed past the depth limit instead of returning the raw value", () => {
+    const registry = new SecretRegistry();
+    registry.add(ACCESS);
+    let deep: Record<string, unknown> = { leaf: ACCESS };
+    for (let i = 0; i < 80; i++) deep = { next: deep };
+    const out = JSON.stringify(redactDeep(deep, registry));
+    expect(out).not.toContain(ACCESS);
+    expect(out).toContain("[redacted]");
+  });
+
+  it("R2-02: redacts object keys too, keeping the reference when nothing matched", () => {
+    const registry = new SecretRegistry();
+    registry.add(ACCESS);
+    const out = redactDeep({ [ACCESS]: 1, [JWT]: "x", plain: true }, registry);
+    const keys = Object.keys(out);
+    expect(keys).not.toContain(ACCESS);
+    expect(keys).not.toContain(JWT);
+    expect(keys).toContain("plain");
+    expect(keys).toContain("[redacted]");
+    const clean = { a: 1 };
+    expect(redactDeep(clean, registry)).toBe(clean);
+  });
+
+  it("R2-03: catches a JWT glued to a word character and leaves no trailing piece", () => {
+    const registry = new SecretRegistry();
+    const glued = redactCredentials(`token_${JWT}`, [], registry);
+    expect(glued).not.toContain("eyJ");
+    expect(glued).not.toContain("c2lnbmF0dXJl");
+    const tail = redactCredentials(`${JWT}-extra_tail`, [], registry);
+    expect(tail).not.toContain("c2lnbmF0dXJl");
+    expect(tail).not.toContain("extra_tail");
+    expect(redactCredentials(`a ${JWT}.`, [], registry)).toBe("a [redacted].");
   });
 });

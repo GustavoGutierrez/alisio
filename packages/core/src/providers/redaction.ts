@@ -3,8 +3,12 @@ import { redactSecrets } from "../eval/secrets.ts";
 /** Exact values shorter than this are never registered: they would match ordinary text. */
 const MIN_EXACT_LENGTH = 8;
 
-/** Three base64url segments starting with a JWT header (`eyJ…`). */
-const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\b/g;
+/**
+ * Three base64url segments starting with a JWT header (`eyJ…`). No `\b` anchors: `_` is a word
+ * character, so `token_eyJ…` would slip through, and the greedy last segment already takes every
+ * trailing `-` or `_` piece (R2-03). A prefix glued to the header is redacted along with it.
+ */
+const JWT = /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g;
 
 /**
  * Exact secret values this process has seen: live and rotated access and refresh tokens,
@@ -74,7 +78,9 @@ export function redactDeep<T>(value: T, registry: SecretRegistry = sharedSecrets
     const clean = redactCredentials(value, [], registry);
     return (clean === value ? value : clean) as T;
   }
-  if (!value || typeof value !== "object" || depth > 64) return value;
+  if (!value || typeof value !== "object") return value;
+  // Fail closed: a structure nested deeper than the limit is not scanned, so it is not shown.
+  if (depth > 64) return "[redacted]" as T;
   if (Array.isArray(value)) {
     let changed = false;
     const next = value.map((item) => {
@@ -84,13 +90,19 @@ export function redactDeep<T>(value: T, registry: SecretRegistry = sharedSecrets
     });
     return (changed ? next : value) as T;
   }
-  let copy: Record<string, unknown> | undefined;
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    const clean = redactDeep(item, registry, depth + 1);
-    if (clean !== item) {
-      copy ??= { ...(value as Record<string, unknown>) };
-      copy[key] = clean;
+  const source = value as Record<string, unknown>;
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(source)) {
+    // Keys can carry a secret too (a map keyed by a token); colliding clean keys are numbered.
+    let cleanKey = redactDeep(key, registry, depth + 1);
+    if (cleanKey !== key) {
+      changed = true;
+      for (let n = 2; Object.hasOwn(out, cleanKey); n++) cleanKey = `[redacted]#${n}`;
     }
+    const clean = redactDeep(item, registry, depth + 1);
+    if (clean !== item) changed = true;
+    out[cleanKey] = clean;
   }
-  return (copy ?? value) as T;
+  return (changed ? out : value) as T;
 }

@@ -22,6 +22,7 @@ import type {
   ToolResult,
 } from "@alisio/sdk";
 import { redactOutput } from "../eval/secrets.ts";
+import { redactCredentials } from "../providers/redaction.ts";
 import {
   type CommandTool,
   callFingerprint,
@@ -117,7 +118,7 @@ function jsonObject(text: string): Record<string, unknown> | undefined {
 
 /** The last `EXCERPT_BYTES` bytes of the redacted output (the end holds the summary and errors). */
 export function excerptOf(output: string): string {
-  const redacted = redactOutput(output);
+  const redacted = redactCredentials(redactOutput(output));
   const bytes = Buffer.from(redacted);
   if (bytes.length <= EXCERPT_BYTES) return redacted;
   let start = bytes.length - EXCERPT_BYTES;

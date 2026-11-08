@@ -948,3 +948,116 @@ describe("removal of a registration (OA-AC-58)", () => {
     expect(removed).toEqual(["p"]);
   });
 });
+
+describe("review round 2 hardening (R2-05, R2-06, R2-10)", () => {
+  it("R2-05: cancel() during the commit returns false and cancelProfile does not count it", async () => {
+    const env = await setup();
+    const real = env.store.setOAuth.bind(env.store);
+    const inCommit = gate();
+    const proceed = gate();
+    env.store.setOAuth = (async (name, credential, binding, condition) =>
+      real(name, credential, binding, {
+        ...condition,
+        guard: () => {
+          const ok = condition?.guard?.() ?? true;
+          inCommit.resolve();
+          return ok;
+        },
+      }).then(async (result) => {
+        await proceed.promise;
+        return result;
+      })) as typeof env.store.setOAuth;
+    const flow = begin(
+      env,
+      method(async () => CRED),
+    );
+    await inCommit.promise;
+    expect(flow.cancel()).toBe(false);
+    expect(env.flows.cancelProfile("p")).toBe(0);
+    proceed.resolve();
+    await flow.done;
+    expect(flow.view().status).toBe("succeeded");
+    expect((await env.store.getOAuthEntry("p"))?.access).toBe(CRED.access);
+  });
+
+  it("R2-05: cancel() returns true once for a live flow and false afterwards", async () => {
+    const env = await setup();
+    const flow = begin(
+      env,
+      method((ctx) => never(ctx.signal)),
+    );
+    expect(flow.cancel()).toBe(true);
+    expect(flow.cancel()).toBe(false);
+  });
+
+  it("R2-06: a pasted redirect URL registers its code and state, so a plugin error echoing the code is redacted", async () => {
+    const env = await setup();
+    const flow = begin(
+      env,
+      method(async (ctx) => {
+        await ctx.prompt({ message: "Paste the redirect URL" });
+        throw new Error("exchange failed for code=AUTHCODE12345 state=STATEVALUE9876");
+      }),
+    );
+    const pending = await until(() => flow.view().prompt);
+    flow.input(
+      pending.id,
+      "http://localhost:1455/auth/callback?code=AUTHCODE12345&state=STATEVALUE9876&scope=openid",
+    );
+    await flow.done;
+    const message = JSON.stringify(flow.view());
+    expect(message).not.toContain("AUTHCODE12345");
+    expect(message).not.toContain("STATEVALUE9876");
+    expect(flow.view().status).toBe("failed");
+  });
+
+  it("R2-10: stores the normalized href of an auth_url step", async () => {
+    const env = await setup();
+    const flow = begin(
+      env,
+      method(async (ctx) => {
+        ctx.show({ type: "auth_url", url: "HTTPS://Auth.Example.com/a b" });
+        return never(ctx.signal);
+      }),
+    );
+    const step = await until(() => flow.view().steps[0]);
+    expect(step).toMatchObject({ type: "auth_url", url: "https://auth.example.com/a%20b" });
+    flow.cancel();
+  });
+});
+
+describe("R2-05: settleCommits", () => {
+  it("waits for a committing flow so a following delete removes what it stored", async () => {
+    const env = await setup();
+    const real = env.store.setOAuth.bind(env.store);
+    const inCommit = gate();
+    const proceed = gate();
+    env.store.setOAuth = (async (name, credential, binding, condition) =>
+      real(name, credential, binding, {
+        ...condition,
+        guard: () => {
+          const ok = condition?.guard?.() ?? true;
+          inCommit.resolve();
+          return ok;
+        },
+      }).then(async (result) => {
+        await proceed.promise;
+        return result;
+      })) as typeof env.store.setOAuth;
+    const flow = begin(
+      env,
+      method(async () => CRED),
+    );
+    await inCommit.promise;
+    let settled = false;
+    const waiting = env.flows.settleCommits("p").then(() => {
+      settled = true;
+    });
+    await settle(10);
+    expect(settled).toBe(false);
+    proceed.resolve();
+    await waiting;
+    expect(flow.view().status).toBe("succeeded");
+    expect(await env.flows.settleCommits("p")).toBeUndefined();
+  });
+});

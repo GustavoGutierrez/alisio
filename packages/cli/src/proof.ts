@@ -20,6 +20,7 @@ import {
   verifierCall,
 } from "@alisio/core";
 import type { ArtifactPublisher } from "@alisio/sdk";
+import { jsonLine } from "./json-lines.ts";
 
 export interface ProofFlags {
   proof?: boolean;
@@ -121,13 +122,13 @@ export async function finishProof(
   }
   if (flags.json)
     env.write(
-      `${JSON.stringify({
+      jsonLine({
         type: "proof_ledger",
         schema: PROOF_EXPORT_SCHEMA,
         sessionId,
         exitCode: code,
         ledger: proofExportV1(ledger),
-      })}\n`,
+      }),
     );
   else env.write(`\n${renderProofText(ledger)}\n`);
   return code;

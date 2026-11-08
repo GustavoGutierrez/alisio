@@ -95,22 +95,24 @@ export async function openLoopback(options: OpenLoopbackOptions): Promise<Provid
   // Nobody may be awaiting `wait()` when the listener ends: that is not an unhandled rejection.
   waited.catch(() => {});
 
-  /** Stops listening at once and drops open connections; idempotent. */
-  const shut = (): Promise<void> =>
-    new Promise<void>((resolve) => {
-      if (timer) clearTimeout(timer);
-      if (onAbort) signal?.removeEventListener("abort", onAbort);
-      if (!server.listening) return resolve();
-      server.close(() => resolve());
-      server.closeIdleConnections();
-    });
+  /**
+   * Stops listening at once and drops idle connections; idempotent. It never waits for the close
+   * callback: that fires only when every connection is gone, and a stray socket (an idle
+   * preconnect, a half-sent request) would hold `wait()` pending forever (R2-01).
+   */
+  const shut = (): void => {
+    if (timer) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+    if (!server.listening) return;
+    server.close();
+    server.closeIdleConnections();
+  };
   const fail = (error: unknown) => {
     if (finished) return;
     finished = true;
-    void shut().then(() => {
-      server.closeAllConnections();
-      settle.reject(error);
-    });
+    shut();
+    server.closeAllConnections();
+    settle.reject(error);
   };
 
   await new Promise<void>((resolve, reject) => {
@@ -146,12 +148,13 @@ export async function openLoopback(options: OpenLoopbackOptions): Promise<Provid
       if (used) return void (await reply(res, 410, REJECTED));
       used = true;
       finished = true;
-      const params: Record<string, string> = {};
-      for (const [key, value] of url.searchParams) if (!(key in params)) params[key] = value;
+      // No prototype: a parameter named `constructor` or `toString` must survive (R2-10).
+      const params: Record<string, string> = Object.create(null);
+      for (const [key, value] of url.searchParams)
+        if (!Object.hasOwn(params, key)) params[key] = value;
       // Stop accepting connections before answering: a second callback finds the port closed.
-      const closed = shut();
+      shut();
       await reply(res, 200, SUCCESS);
-      await closed;
       server.closeAllConnections();
       settle.resolve(params);
     })().catch(() => res.destroy());

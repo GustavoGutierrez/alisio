@@ -1,5 +1,5 @@
 import { request } from "node:http";
-import { createServer, type Server } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLoopback } from "../packages/core/src/providers/oauth/loopback.ts";
 
@@ -212,5 +212,77 @@ describe("openLoopback: end of life", () => {
     await expect(openLoopback({ port: 0, path: PATH, state: "" })).rejects.toThrow();
     await expect(openLoopback({ port: -1, path: PATH, state: STATE })).rejects.toThrow();
     await expect(openLoopback({ port: 70_000, path: PATH, state: STATE })).rejects.toThrow();
+  });
+});
+
+describe("openLoopback: stray connections do not hold the listener open (R2-01)", () => {
+  const sockets: Socket[] = [];
+  afterEach(() => {
+    for (const socket of sockets.splice(0)) socket.destroy();
+  });
+  function idle(port: number, send = ""): Promise<Socket> {
+    return new Promise((resolve, reject) => {
+      const socket = connect(port, "127.0.0.1", () => {
+        if (send) socket.write(send);
+        resolve(socket);
+      });
+      socket.on("error", () => {});
+      socket.once("error", reject);
+      sockets.push(socket);
+    });
+  }
+  const within = <T>(promise: Promise<T>, ms = 2_000) =>
+    Promise.race([
+      promise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("still pending")), ms)),
+    ]);
+
+  it("resolves wait() on a valid callback although an idle raw socket stays open", async () => {
+    const { loopback, port } = await start();
+    await idle(port);
+    const waited = loopback.wait();
+    const answer = await call(port, `${PATH}?state=${STATE}&code=abc`);
+    expect(answer.status).toBe(200);
+    await expect(within(waited)).resolves.toMatchObject({ code: "abc" });
+  });
+
+  it("resolves wait() on a valid callback although a half-sent request is open", async () => {
+    const { loopback, port } = await start();
+    await idle(port, "GET /auth/callback?state=x HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n");
+    const waited = loopback.wait();
+    await call(port, `${PATH}?state=${STATE}&code=abc`);
+    await expect(within(waited)).resolves.toMatchObject({ code: "abc" });
+  });
+
+  it("rejects wait() at timeoutMs although an idle raw socket stays open", async () => {
+    const { loopback, port } = await start({ timeoutMs: 100 });
+    await idle(port);
+    await expect(within(loopback.wait())).rejects.toThrow(/timed out/i);
+  });
+
+  it("rejects wait() on close() and on abort although an idle raw socket stays open", async () => {
+    const first = await start();
+    await idle(first.port);
+    const waitedFirst = first.loopback.wait();
+    const assertFirst = expect(within(waitedFirst)).rejects.toThrow(/closed/i);
+    first.loopback.close();
+    await assertFirst;
+
+    const controller = new AbortController();
+    const second = await start({ signal: controller.signal });
+    await idle(second.port, "GET / HT");
+    const assertSecond = expect(within(second.loopback.wait())).rejects.toBeDefined();
+    controller.abort();
+    await assertSecond;
+  });
+
+  it("keeps parameters named like Object.prototype members", async () => {
+    const { loopback, port } = await start();
+    const waited = loopback.wait();
+    await call(port, `${PATH}?state=${STATE}&constructor=a&toString=b&__proto__=c`);
+    const params = await waited;
+    expect(Object.keys(params).sort()).toEqual(["__proto__", "constructor", "state", "toString"]);
+    expect(params.constructor).toBe("a");
+    expect(params.toString).toBe("b");
   });
 });

@@ -269,6 +269,8 @@ export function registerProviderRoutes(
     const name = profileParam(params.profile);
     // Cancel first: a flow that finishes afterwards finds itself cancelled under the lock (D22b).
     const cancelled = flows?.cancelProfile(name) ?? 0;
+    // A flow already committing refuses the cancel: let it store, then delete what it stored.
+    await flows?.settleCommits(name);
     const deleted = await store().deleteCredentials(name);
     if (!deleted && !cancelled)
       throw new HttpError("not_found", "No stored credentials for this profile");

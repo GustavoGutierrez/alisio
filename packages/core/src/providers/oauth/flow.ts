@@ -75,6 +75,23 @@ export function isSafeStepUrl(value: unknown): boolean {
   return url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
 }
 
+/** Values of the query and fragment parameters of a URL-shaped (or bare `a=b&c=d`) answer. */
+function urlParamValues(answer: string): string[] {
+  const text = answer.trim();
+  if (text.length === 0 || text.length > FLOW_MAX_URL * 4) return [];
+  let query: string[] = [];
+  try {
+    const url = new URL(text);
+    query = [url.search, url.hash.replace(/^#/, "")];
+  } catch {
+    if (text.includes("=")) query = [text.slice(text.indexOf("?") + 1)];
+  }
+  const values: string[] = [];
+  for (const part of query)
+    for (const [, value] of new URLSearchParams(part.replace(/^\?/, ""))) values.push(value);
+  return values;
+}
+
 const KNOWN_FAILURES: ReadonlySet<string> = new Set(["loopback_unavailable", "unsupported"]);
 
 export interface RunAuthFlowOptions {
@@ -157,6 +174,10 @@ export class AuthFlow {
   get status(): AuthFlowStatus {
     return this.state;
   }
+  /** Whether the credential is being committed: a cancel is too late (R2-05). */
+  get isCommitting(): boolean {
+    return this.committing && !this.terminal;
+  }
   get terminal(): boolean {
     return TERMINAL.has(this.state);
   }
@@ -194,10 +215,13 @@ export class AuthFlow {
     return "accepted";
   }
 
-  /** Cancels the flow (idempotent). Too late once the credential is being committed. */
-  cancel(): void {
-    if (this.committing) return;
-    this.finish("cancelled", { code: "cancelled", message: "The sign-in was cancelled" });
+  /**
+   * Cancels the flow. True only when this call really cancelled it: false when it was already
+   * over, or too late because the credential is being committed (R2-05).
+   */
+  cancel(): boolean {
+    if (this.committing) return false;
+    return this.finish("cancelled", { code: "cancelled", message: "The sign-in was cancelled" });
   }
 
   private expire(): void {
@@ -233,7 +257,11 @@ export class AuthFlow {
     const index = this.prompts.indexOf(prompt);
     if (index >= 0) this.prompts.splice(index, 1);
     // Every answer of 8 or more characters is redacted from then on, secret or not (D26c).
-    if (value !== undefined) this.secrets.add(value);
+    if (value !== undefined) {
+      this.secrets.add(value);
+      // A pasted redirect URL carries the code and state: each parameter is a secret too (R2-06).
+      for (const param of urlParamValues(value)) this.secrets.add(param);
+    }
     if (!this.terminal) this.move(this.prompts.length ? "awaiting_input" : "running");
     prompt.resolve(value);
   }
@@ -260,7 +288,7 @@ export class AuthFlow {
         if (!isSafeStepUrl(raw.url)) return this.unsafe();
         return {
           type: "auth_url",
-          url: raw.url as string,
+          url: new URL(raw.url as string).href,
           ...(typeof raw.instructions === "string"
             ? { instructions: clip(raw.instructions, this.secrets) }
             : {}),
@@ -528,21 +556,28 @@ export class AuthFlowRegistry {
   cancelProfile(profile: string): number {
     let count = 0;
     for (const flow of this.flows.values())
-      if (flow.profile === profile && !flow.terminal) {
-        flow.cancel();
-        count++;
-      }
+      if (flow.profile === profile && !flow.terminal && flow.cancel()) count++;
     return count;
+  }
+
+  /**
+   * Resolves when the flows of `profile` that are past the point of no return (committing, so
+   * `cancel()` refused) have stored their credential. A caller that then deletes the session
+   * removes it instead of racing the write (R2-05).
+   */
+  async settleCommits(profile: string): Promise<void> {
+    await Promise.all(
+      [...this.flows.values()]
+        .filter((flow) => flow.profile === profile && flow.isCommitting)
+        .map((flow) => flow.done.catch(() => undefined)),
+    );
   }
 
   /** Cancels every active flow started for a registration that was removed (D28a). */
   cancelRegistration(key: unknown): number {
     let count = 0;
     for (const flow of this.flows.values())
-      if (flow.registrationKey === key && !flow.terminal) {
-        flow.cancel();
-        count++;
-      }
+      if (flow.registrationKey === key && !flow.terminal && flow.cancel()) count++;
     return count;
   }
 

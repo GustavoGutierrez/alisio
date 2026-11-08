@@ -17,6 +17,7 @@ import {
   withProofBrief,
 } from "../packages/cli/src/proof.ts";
 import { ProofStore } from "../packages/core/src/proof/store.ts";
+import { registerSecret } from "../packages/core/src/providers/redaction.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
 
 const roots: string[] = [];
@@ -153,6 +154,23 @@ describe("finishProof", () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toContain("verified");
+  });
+
+  it("redacts a registered exact secret and an unknown JWT in the --json ledger line (R2-04)", async () => {
+    const exact = "exact-secret-value-for-proof-0001";
+    const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzNDU2In0.c2lnbmF0dXJlLXZhbHVl";
+    registerSecret(exact);
+    const r = await judge(
+      (h) => {
+        required(h, `Check ${exact} and ${jwt}`, `curl -H ${jwt} ${exact}`);
+      },
+      { proof: true, json: true },
+    );
+    expect(r.out).not.toContain(exact);
+    expect(r.out).not.toContain(jwt);
+    expect(r.out).not.toContain("c2lnbmF0dXJl");
+    const line = JSON.parse(r.out.trim());
+    expect(line.type).toBe("proof_ledger");
   });
 
   it("exits 10 with a failed required criterion and 11 with an unchecked one", async () => {
