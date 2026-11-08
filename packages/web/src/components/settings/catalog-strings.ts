@@ -110,6 +110,7 @@ const en = {
   "install.reinstalled": "{name} reinstalled (v{version}).",
   "install.updatedFrom": "{name} updated from v{from} to v{version}.",
   "install.restartNeeded": "{name} v{version} is installed. Restart Alisio to use it.",
+  "install.alsoUpdated": "Also updated so they stay compatible with each other: {others}.",
   "update.pill": "Update available: v{from} → v{to}",
   "update.button": "Update",
   "update.buttonNamed": "Update {name} to v{to}",
@@ -298,6 +299,8 @@ const es: Record<keyof typeof en, string> = {
   "install.reinstalled": "{name} reinstalado (v{version}).",
   "install.updatedFrom": "{name} se actualizó de v{from} a v{version}.",
   "install.restartNeeded": "{name} v{version} está instalado. Reinicia Alisio para usarlo.",
+  "install.alsoUpdated":
+    "También se actualizaron para que sigan siendo compatibles entre sí: {others}.",
   "update.pill": "Actualización disponible: v{from} → v{to}",
   "update.button": "Actualizar",
   "update.buttonNamed": "Actualizar {name} a v{to}",

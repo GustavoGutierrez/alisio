@@ -279,7 +279,11 @@ it until you reload the page (a downgrade always asks). Installs and uninstalls 
 plugins installed in your global plugins directory. Built-in plugins and project or local plugins
 cannot be uninstalled here and say why. When a newer version exists the card shows **Update
 available: vX → vY** and an **Update** button, and the header counts them (**2 updates available**)
-with an **Update all** button that runs them one after another and ends with a summary. **Check for
+with an **Update all** button that updates them all in one combined npm install (so npm resolves
+every `@alisio/sdk` peer range together) and ends with a summary. If updating a single plugin
+fails because other installed plugins still depend on the older SDK, Alisio retries once as one
+install of that plugin plus the other installed plugins that have a newer release, and tells you
+which ones were updated along with it; it never forces or relaxes the peer rules. **Check for
 updates** refreshes the catalog for both tabs. Updates are known only for plugins in the catalog;
 there is no registry lookup for other npm plugins, and a plugin installed from a file has no remote
 source, so it shows **Local package vX** and **Update from file…**, which opens **Install from file**
@@ -824,6 +828,7 @@ GET  /api/plugin-catalog?refresh=0|1   catalog, cache metadata and installed ver
 GET  /api/plugin-catalog/covers/:slug  a cover through the server cache
 GET  /api/plugins/packages?workspace=<wid>   installed npm packages, update and restart flags
 POST /api/plugins/install {package, version?, confirmed: true}   a catalog package only
+POST /api/plugins/update-all {confirmed: true}   every outdated plugin in one npm install
 DELETE /api/plugins/package/:name      uninstall a global npm plugin (URL-encoded name)
 POST /api/plugins/local/inspect        raw .tgz body (application/gzip) → validation card
 POST /api/plugins/local/install {stagingId, confirmed: true}   202 {jobId}

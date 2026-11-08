@@ -9,6 +9,7 @@ import {
   type InstallResultView,
   installOutcome,
   type UninstallResultView,
+  type UpdateAllResultView,
 } from "./catalog-model.ts";
 import { cs } from "./catalog-strings.ts";
 import { errorMessage } from "./shared.tsx";
@@ -25,13 +26,18 @@ export const installPackage = (name: string, version: string) =>
     confirmed: true,
   });
 
+/** One combined npm install of every outdated plugin (the server decides which). */
+export const updateAllPackages = () =>
+  api.request<UpdateAllResultView>("POST", "/api/plugins/update-all", { confirmed: true });
+
 export const uninstallPackage = (name: string) =>
   api.request<UninstallResultView>("DELETE", `/api/plugins/package/${encodeURIComponent(name)}`);
 
 /** Toast for a finished install; remembers that a restart is needed. */
 export function announceInstall(name: string, result: InstallResultView): void {
   const outcome = installOutcome(name, result);
-  showToast(cs(outcome.key, outcome.params));
+  const note = outcome.note ? ` ${cs(outcome.note.key, outcome.note.params)}` : "";
+  showToast(`${cs(outcome.key, outcome.params)}${note}`);
 }
 
 export const failureText = (

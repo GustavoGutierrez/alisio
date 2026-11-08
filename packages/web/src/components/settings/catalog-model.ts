@@ -77,6 +77,19 @@ export interface InstallResultView {
   previousVersion?: string;
   restartPending: boolean;
   restartRequired: boolean;
+  /** Other plugins updated in the same npm call because this one conflicted with them. */
+  alsoUpdated?: Array<{ package: string; installedVersion: string; previousVersion?: string }>;
+}
+
+/** `POST /api/plugins/update-all`: every outdated plugin updated in one npm call. */
+export interface UpdateAllResultView {
+  updated: Array<{
+    package: string;
+    installedVersion: string;
+    previousVersion?: string;
+    restartRequired: boolean;
+  }>;
+  restartPending: boolean;
 }
 
 /** `DELETE /api/plugins/package/:name`. */
@@ -332,34 +345,46 @@ export interface UpdateAllSummary {
 }
 
 /**
- * Runs `install` for each package one after the other (they share one npm prefix, so the server
- * serializes them anyway) and keeps going after a failure. `onProgress` sees every state change.
+ * Updates every package with ONE call (`update` is `POST /api/plugins/update-all`): plugins share
+ * one npm prefix and peer ranges, and only a single combined install lets npm resolve them
+ * together. A failed call fails every package with the same error; a package the server did not
+ * report as updated is flagged, and extra packages it did update are listed. `onProgress` sees
+ * every state change.
  */
 export async function runUpdateAll(
   packages: string[],
-  install: (name: string) => Promise<{ installedVersion: string; restartRequired: boolean }>,
+  update: (names: string[]) => Promise<UpdateAllResultView>,
   onProgress?: (items: ItemOutcome[]) => void,
 ): Promise<UpdateAllSummary> {
-  const items: ItemOutcome[] = packages.map((name) => ({ package: name, status: "pending" }));
+  let items: ItemOutcome[] = packages.map((name) => ({ package: name, status: "pending" }));
   const publish = () => onProgress?.(items.map((item) => ({ ...item })));
   publish();
-  for (const [index, name] of packages.entries()) {
-    items[index] = { package: name, status: "running" };
+  if (packages.length > 0) {
+    items = packages.map((name) => ({ package: name, status: "running" }));
     publish();
     try {
-      const result = await install(name);
-      items[index] = {
-        package: name,
-        status: "done",
-        version: result.installedVersion,
-        restartRequired: result.restartRequired,
+      const result = await update(packages);
+      const byName = new Map(result.updated.map((entry) => [entry.package, entry]));
+      const outcome = (name: string): ItemOutcome => {
+        const entry = byName.get(name);
+        return entry
+          ? {
+              package: name,
+              status: "done",
+              version: entry.installedVersion,
+              restartRequired: entry.restartRequired,
+            }
+          : { package: name, status: "failed", error: "No update was applied" };
       };
+      items = [
+        ...packages.map(outcome),
+        ...result.updated
+          .filter((entry) => !packages.includes(entry.package))
+          .map((e) => outcome(e.package)),
+      ];
     } catch (error) {
-      items[index] = {
-        package: name,
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      };
+      const message = error instanceof Error ? error.message : String(error);
+      items = packages.map((name) => ({ package: name, status: "failed", error: message }));
     }
     publish();
   }
@@ -386,14 +411,25 @@ export function installOutcome(
     | "install.already"
     | "install.done";
   params: Record<string, string>;
+  /** Extra sentence: which other plugins were updated in the same call. */
+  note?: { key: "install.alsoUpdated"; params: { others: string } };
 } {
   const params = {
     name,
     version: result.installedVersion,
     from: result.previousVersion ?? "",
   };
-  if (result.restartRequired) return { key: "install.restartNeeded", params };
-  if (result.restartPending) return { key: "install.deferred", params };
+  const others = result.alsoUpdated ?? [];
+  const note = others.length
+    ? {
+        note: {
+          key: "install.alsoUpdated" as const,
+          params: { others: others.map((o) => `${o.package} v${o.installedVersion}`).join(", ") },
+        },
+      }
+    : {};
+  if (result.restartRequired) return { key: "install.restartNeeded", params, ...note };
+  if (result.restartPending) return { key: "install.deferred", params, ...note };
   if (result.updated)
     return {
       key:
@@ -401,9 +437,10 @@ export function installOutcome(
           ? "install.reinstalled"
           : "install.updatedFrom",
       params,
+      ...note,
     };
-  if (result.alreadyInstalled) return { key: "install.already", params };
-  return { key: "install.done", params };
+  if (result.alreadyInstalled) return { key: "install.already", params, ...note };
+  return { key: "install.done", params, ...note };
 }
 
 export type InstallMode = "install" | "update" | "reinstall" | "downgrade";

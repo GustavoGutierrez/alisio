@@ -11,6 +11,7 @@ import type {
   PluginCatalogResponse,
   PluginInstallResponse,
   PluginUninstallResponse,
+  PluginUpdateAllResponse,
 } from "../packages/server/src/routes/plugin-catalog.ts";
 import {
   deferred,
@@ -124,6 +125,10 @@ interface NpmState {
   latest: string;
   /** A version npm answers ETARGET for (listed in the catalog, not published yet). */
   unpublished?: string;
+  /** Answers ERESOLVE for an install of these targets (a peer conflict with other plugins). */
+  conflict?: (targets: string[]) => boolean;
+  /** Fails every install with this npm output (a generic failure, not a peer conflict). */
+  fail?: string;
 }
 
 /** Writes (install) or deletes (uninstall) a real, loadable plugin package under the prefix. */
@@ -132,40 +137,57 @@ function fakeNpm(state: NpmState): InstallRunner {
     state.calls.push(args);
     await state.gate;
     const prefix = args[args.indexOf("--prefix") + 1] as string;
-    const target = args.at(-1) as string;
-    const at = target.lastIndexOf("@");
-    const name = at > 0 ? target.slice(0, at) : target;
-    const asked = at > 0 ? target.slice(at + 1) : "latest";
-    const dir = join(prefix, "node_modules", name);
-    if (args[0] === "uninstall") {
-      await rm(dir, { recursive: true, force: true });
-      return { stdout: "removed", stderr: "", exitCode: 0, truncated: false };
-    }
-    if (state.unpublished && asked === state.unpublished)
+    const targets = args.slice(args.indexOf("--prefix") + 2);
+    if (state.fail !== undefined)
+      return { stdout: "", stderr: state.fail, exitCode: 1, truncated: false };
+    if (state.conflict?.(targets))
       return {
         stdout: "",
-        stderr: `npm error code ETARGET\nnpm error notarget No matching version found for ${name}@${asked}.`,
+        stderr:
+          'npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree\nnpm error peer @alisio/sdk@">=0.9.0 <0.12.0" from @alisio/plugin-beta@0.5.0',
         exitCode: 1,
         truncated: false,
       };
-    const version = asked === "latest" ? state.latest : asked;
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "package.json"),
-      JSON.stringify({
-        name,
-        version,
-        type: "module",
-        main: "index.js",
-        keywords: ["alisio-plugin"],
-      }),
-    );
-    const id = name.replace(/^@alisio\/plugin-/, "fake-");
-    await writeFile(
-      join(dir, "index.js"),
-      `export default { id: ${JSON.stringify(id)}, name: ${JSON.stringify(id)}, version: ${JSON.stringify(version)}, apiVersion: 1, setup() {} };\n`,
-    );
-    return { stdout: "added 1 package", stderr: "", exitCode: 0, truncated: false };
+    for (const target of targets) {
+      const at = target.lastIndexOf("@");
+      const name = at > 0 ? target.slice(0, at) : target;
+      const asked = at > 0 ? target.slice(at + 1) : "latest";
+      const dir = join(prefix, "node_modules", name);
+      if (args[0] === "uninstall") {
+        await rm(dir, { recursive: true, force: true });
+        continue;
+      }
+      if (state.unpublished && asked === state.unpublished)
+        return {
+          stdout: "",
+          stderr: `npm error code ETARGET\nnpm error notarget No matching version found for ${name}@${asked}.`,
+          exitCode: 1,
+          truncated: false,
+        };
+      const version = asked === "latest" ? state.latest : asked;
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name,
+          version,
+          type: "module",
+          main: "index.js",
+          keywords: ["alisio-plugin"],
+        }),
+      );
+      const id = name.replace(/^@alisio\/plugin-/, "fake-");
+      await writeFile(
+        join(dir, "index.js"),
+        `export default { id: ${JSON.stringify(id)}, name: ${JSON.stringify(id)}, version: ${JSON.stringify(version)}, apiVersion: 1, setup() {} };\n`,
+      );
+    }
+    return {
+      stdout: args[0] === "uninstall" ? "removed" : "added 1 package",
+      stderr: "",
+      exitCode: 0,
+      truncated: false,
+    };
   };
 }
 
@@ -856,6 +878,245 @@ describe("POST /api/plugins/install", () => {
     const generic = await t.api.post("/api/plugins/install", body);
     expect(generic.status).toBe(502);
     await expect(stat(join(t.root, "config", "config.json"))).rejects.toThrow();
+  });
+});
+
+/** Installs alpha, beta, gamma at 0.5.0, then publishes 0.6.0 of all of them in the catalog. */
+async function startOutdated(npm: Partial<NpmState> = {}) {
+  const { conflict, gate, ...setup } = npm;
+  const started = await start({
+    plugins: (origin) => ["alpha", "beta", "gamma"].map((slug) => plugin(origin, slug)),
+    npm: setup,
+  });
+  for (const slug of ["alpha", "beta", "gamma"])
+    await started.t.api.post("/api/plugins/install", {
+      package: `@alisio/plugin-${slug}`,
+      confirmed: true,
+    });
+  started.npm.calls.length = 0;
+  // Conflicts and gates only apply to what the test does next, not to the setup installs.
+  started.npm.conflict = conflict;
+  started.npm.gate = gate;
+  return started;
+}
+const publish = async (
+  s: Awaited<ReturnType<typeof startOutdated>>,
+  slugs: string[],
+  extra: Record<string, unknown> = {},
+) => {
+  s.catalog.setPlugins(
+    ["alpha", "beta", "gamma"].map((slug) =>
+      plugin(s.catalog.origin, slug, slugs.includes(slug) ? { version: "0.6.0", ...extra } : {}),
+    ),
+    `"v${Math.random()}"`,
+  );
+  await getCatalog(s.t, "?refresh=1");
+};
+
+describe("POST /api/plugins/update-all", () => {
+  const send = { confirmed: true };
+
+  it("updates every outdated plugin in ONE npm call and reports each result", async () => {
+    const s = await startOutdated();
+    await s.t.api.get(`/api/plugins?workspace=${s.wid}`);
+    await publish(s, ["alpha", "beta"]);
+    const res = await s.t.api.post("/api/plugins/update-all", send);
+    expect(res.status).toBe(200);
+    expect(s.npm.calls).toHaveLength(1);
+    expect(s.npm.calls[0]?.slice(3)).toEqual([
+      "@alisio/plugin-alpha@0.6.0",
+      "@alisio/plugin-beta@0.6.0",
+    ]);
+    expect(s.npm.calls.flat()).not.toContain("--force");
+    expect(s.npm.calls.flat()).not.toContain("--legacy-peer-deps");
+    const body = res.json<PluginUpdateAllResponse>();
+    expect(body.updated.map((u) => [u.package, u.installedVersion, u.previousVersion])).toEqual([
+      ["@alisio/plugin-alpha", "0.6.0", "0.5.0"],
+      ["@alisio/plugin-beta", "0.6.0", "0.5.0"],
+    ]);
+    // The workspace was open, so this process imported the old code.
+    expect(body.updated.every((u) => u.restartRequired)).toBe(true);
+    const config = JSON.parse(await readFile(join(s.t.root, "config", "config.json"), "utf8"));
+    expect(config.plugins).toEqual([
+      "@alisio/plugin-alpha",
+      "@alisio/plugin-beta",
+      "@alisio/plugin-gamma",
+    ]);
+  });
+
+  it("is a no-op without npm when nothing is outdated and skips local and unlisted packages", async () => {
+    const s = await startOutdated();
+    const res = await s.t.api.post("/api/plugins/update-all", send);
+    expect(res.status).toBe(200);
+    expect(res.json<PluginUpdateAllResponse>().updated).toEqual([]);
+    expect(s.npm.calls).toEqual([]);
+  });
+
+  it("skips plugins whose newer release needs a newer sdk", async () => {
+    const s = await startOutdated();
+    await publish(s, ["alpha", "beta"]);
+    s.catalog.setPlugins(
+      ["alpha", "beta", "gamma"].map((slug) =>
+        plugin(
+          s.catalog.origin,
+          slug,
+          slug === "alpha"
+            ? { version: "0.6.0" }
+            : slug === "beta"
+              ? { version: "0.6.0", sdk: "^0.10.0" }
+              : {},
+        ),
+      ),
+      '"v-compat"',
+    );
+    await getCatalog(s.t, "?refresh=1");
+    await s.t.api.post("/api/plugins/update-all", send);
+    expect(s.npm.calls[0]?.slice(3)).toEqual(["@alisio/plugin-alpha@0.6.0"]);
+  });
+
+  it("falls back to @latest in the same single call when a catalog version is unpublished", async () => {
+    const s = await startOutdated({ unpublished: "0.6.0", latest: "0.5.5" });
+    await publish(s, ["alpha", "beta"]);
+    const res = await s.t.api.post("/api/plugins/update-all", send);
+    expect(res.json<PluginUpdateAllResponse>().updated.map((u) => u.installedVersion)).toEqual([
+      "0.5.5",
+      "0.5.5",
+    ]);
+    expect(s.npm.calls.map((c) => c.slice(3))).toEqual([
+      ["@alisio/plugin-alpha@0.6.0", "@alisio/plugin-beta@0.6.0"],
+      ["@alisio/plugin-alpha@latest", "@alisio/plugin-beta@latest"],
+    ]);
+  });
+
+  it("requires confirmed: true, authentication, a matching Origin and is refused read-only", async () => {
+    const s = await startOutdated();
+    expect((await s.t.api.post("/api/plugins/update-all", {})).status).toBe(400);
+    const headers = { "Content-Type": "application/json" };
+    expect(
+      (
+        await raw(s.t.server.port, "/api/plugins/update-all", {
+          method: "POST",
+          body: send,
+          headers: { ...headers, Origin: `http://127.0.0.1:${s.t.server.port}` },
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await raw(s.t.server.port, "/api/plugins/update-all", {
+          method: "POST",
+          body: send,
+          headers: { ...headers, Cookie: s.t.cookie, Origin: "http://evil.example" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(s.npm.calls).toEqual([]);
+    await s.t.close();
+    const ro = await start({ readOnly: true });
+    const res = await ro.t.api.post("/api/plugins/update-all", send);
+    expect(res.status).toBe(403);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("capability_ceiling");
+    expect(ro.npm.calls).toEqual([]);
+  });
+
+  it("maps npm failures like the single install and never retries or forces", async () => {
+    const s = await startOutdated({ conflict: () => true });
+    await publish(s, ["alpha", "beta"]);
+    const peer = await s.t.api.post("/api/plugins/update-all", send);
+    expect(peer.status).toBe(400);
+    expect(peer.json<{ error: { code: string; message: string } }>().error).toMatchObject({
+      code: "validation_failed",
+      message: expect.stringContaining("ERESOLVE"),
+    });
+    expect(s.npm.calls).toHaveLength(1);
+    s.npm.conflict = undefined;
+    s.npm.fail = "network down";
+    const generic = await s.t.api.post("/api/plugins/update-all", send);
+    expect(generic.status).toBe(502);
+  });
+
+  it("serializes with other installs: a concurrent update-all gets 409 runs_active", async () => {
+    const gate = deferred();
+    const s = await startOutdated({ gate: gate.promise });
+    await publish(s, ["alpha"]);
+    const first = s.t.api.post("/api/plugins/update-all", send);
+    await until(() => s.npm.calls.length > 0);
+    const second = await s.t.api.post("/api/plugins/update-all", send);
+    expect(second.status).toBe(409);
+    expect(second.json<{ error: { code: string } }>().error.code).toBe("runs_active");
+    gate.resolve();
+    expect((await first).status).toBe(200);
+  });
+});
+
+describe("POST /api/plugins/install peer conflicts", () => {
+  const alpha = { package: "@alisio/plugin-alpha", confirmed: true };
+  const only = (targets: string[]) => targets.length === 1;
+
+  it("retries ONCE as a combined install with the other outdated plugins and reports them", async () => {
+    const s = await startOutdated({ conflict: only });
+    await publish(s, ["alpha", "beta"]);
+    const res = await s.t.api.post("/api/plugins/install", alpha);
+    expect(res.status).toBe(200);
+    expect(s.npm.calls.map((c) => c.slice(3))).toEqual([
+      ["@alisio/plugin-alpha@0.6.0"],
+      ["@alisio/plugin-alpha@0.6.0", "@alisio/plugin-beta@0.6.0"],
+    ]);
+    expect(s.npm.calls.flat()).not.toContain("--force");
+    expect(s.npm.calls.flat()).not.toContain("--legacy-peer-deps");
+    expect(res.json<PluginInstallResponse>()).toMatchObject({
+      installedVersion: "0.6.0",
+      previousVersion: "0.5.0",
+      updated: true,
+      alsoUpdated: [
+        { package: "@alisio/plugin-beta", installedVersion: "0.6.0", previousVersion: "0.5.0" },
+      ],
+    });
+    // gamma (up to date) was not touched.
+    const versions = (await s.t.api.get(`/api/plugins/packages?workspace=${s.wid}`))
+      .json<InstalledPluginPackage[]>()
+      .map((p) => [p.package.split("-").pop(), p.version]);
+    expect(versions).toEqual([
+      ["alpha", "0.6.0"],
+      ["beta", "0.6.0"],
+      ["gamma", "0.5.0"],
+    ]);
+  });
+
+  it("does not retry without other outdated plugins and reports the conflict", async () => {
+    const s = await startOutdated({ conflict: only });
+    await publish(s, ["alpha"]);
+    const res = await s.t.api.post("/api/plugins/install", alpha);
+    expect(res.status).toBe(400);
+    expect(s.npm.calls).toHaveLength(1);
+  });
+
+  it("gives up after the single combined retry when the conflict persists", async () => {
+    const s = await startOutdated({ conflict: () => true });
+    await publish(s, ["alpha", "beta"]);
+    const res = await s.t.api.post("/api/plugins/install", alpha);
+    expect(res.status).toBe(400);
+    expect(res.json<{ error: { message: string } }>().error.message).toContain(
+      "updating them together",
+    );
+    expect(s.npm.calls).toHaveLength(2);
+  });
+
+  it("a plain update without a conflict never co-updates anyone", async () => {
+    const s = await startOutdated();
+    await publish(s, ["alpha", "beta"]);
+    const res = (await s.t.api.post("/api/plugins/install", alpha)).json<PluginInstallResponse>();
+    expect(res.alsoUpdated).toBeUndefined();
+    expect(s.npm.calls).toHaveLength(1);
+  });
+
+  it("does not drag other plugins into a reinstall or a downgrade", async () => {
+    const s = await startOutdated({ conflict: only });
+    await publish(s, ["beta"]);
+    // alpha is at the catalog version: a reinstall, which must not pull beta along.
+    const res = await s.t.api.post("/api/plugins/install", alpha);
+    expect(res.status).toBe(400);
+    expect(s.npm.calls).toHaveLength(1);
   });
 });
 

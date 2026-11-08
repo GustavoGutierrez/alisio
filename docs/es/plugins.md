@@ -831,6 +831,14 @@ alisio install npm:@alisio/plugin-laya
 
 Alisio nunca sugiere `--force` ni `--legacy-peer-deps` para esto.
 
+En la interfaz web (**Ajustes → Plugins → Instalados**) esto es automático. **Actualizar todo**
+ejecuta un único `npm install` combinado de todos los plugins del catálogo con actualización.
+**Actualizar** en un solo plugin prueba primero ese plugin solo; si npm informa `ERESOLVE`, Alisio
+reintenta exactamente una vez como una sola instalación de ese plugin más los demás plugins del
+catálogo instalados que tienen una versión más reciente y compatible (los plugins locales `.tgz` y
+los que ya están al día no se tocan) y lista los plugins que se actualizaron junto con él. Si el
+conflicto persiste, no se intenta nada más y el error nombra los plugins implicados.
+
 ### El agente puede instalar un plugin por ti
 
 En la TUI, el modelo puede instalar un plugin a petición mediante la herramienta del host

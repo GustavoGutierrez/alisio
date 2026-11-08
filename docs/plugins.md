@@ -803,6 +803,13 @@ alisio install npm:@alisio/plugin-laya
 
 Alisio never suggests `--force` or `--legacy-peer-deps` for this.
 
+In the web UI (**Settings → Plugins → Installed**) this is automatic. **Update all** runs one
+combined `npm install` of every outdated catalog plugin. **Update** on a single plugin first tries
+that plugin alone; if npm reports `ERESOLVE`, Alisio retries exactly once as one install of that
+plugin plus the other installed catalog plugins that have a newer compatible release (local `.tgz`
+plugins and up-to-date ones are left alone) and lists the plugins that were updated along with it.
+If the conflict remains, nothing else is attempted and the error names the plugins involved.
+
 ### The agent can install a plugin for you
 
 In the TUI the model can install a plugin on request through the host-owned `plugin_install` tool:

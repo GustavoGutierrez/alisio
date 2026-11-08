@@ -2704,7 +2704,12 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   scripts: `npm install` puede ejecutar scripts de ciclo de vida con tus privilegios y la
   herramienta solo avisa/pide confirmación (headless exige `--yes`/`--trust-plugin`).
   `alisio install --update` sin spec actualiza todos los plugins instalados en una sola llamada
-  de npm, y un fallo `ERESOLVE` indica ese comando (verificado con un npm falso, sin red). No se
+  de npm, y un fallo `ERESOLVE` indica ese comando (verificado con un npm falso, sin red). En la
+  web, `POST /api/plugins/update-all` hace una sola instalación combinada de los plugins del
+  catálogo con actualización, y actualizar un plugin que choca por `ERESOLVE` reintenta una única
+  vez junto con los demás plugins con versión más nueva e informa cuáles (verificado con un npm
+  falso, sin red; los plugins locales `.tgz` no se tocan, y si el conflicto persiste no hay más
+  intentos ni `--force`/`--legacy-peer-deps`). No se
   soportan URLs de registro (`registry:`, `git:`, `file:`), ni resolución de dependencias propia
   de Alisio: el paquete debe declarar la keyword `alisio-plugin` para poder cargarse.
 

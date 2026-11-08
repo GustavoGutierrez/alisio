@@ -28,9 +28,9 @@ import { PluginCatalog } from "./PluginCatalog.tsx";
 import { PluginTabs } from "./PluginTabs.tsx";
 import {
   failureText,
-  installPackage,
   sessionPrefs,
   uninstallPackage,
+  updateAllPackages,
   working,
 } from "./plugin-ops.ts";
 import styles from "./settings.module.css";
@@ -393,13 +393,9 @@ export function PluginsPage() {
     });
     working.value = "batch";
     try {
-      const versions = new Map(list.map((p) => [p.package, p.latestVersion ?? p.version]));
       const summary = await runUpdateAll(
         list.map((p) => p.package),
-        async (name) => {
-          working.value = name;
-          return installPackage(name, versions.get(name) ?? "");
-        },
+        updateAllPackages,
         (items) => setBatch({ items, running: true }),
       );
       setBatch({ items: summary.items, running: false });

@@ -8,6 +8,9 @@ import {
   type InstallRunner,
   installedNpmPlugins,
   installPlugin,
+  installPluginResolvingPeers,
+  installPluginsTogether,
+  NpmInstallError,
   npmInstallTarget,
   parsePluginSpec,
   registerPluginInstallTool,
@@ -627,5 +630,205 @@ describe("peer conflict guidance and bulk update", () => {
     expect(calls).toHaveLength(1);
     expect(error).not.toContain("sky-secret-value-123");
     expect(error).not.toContain("Retry with");
+  });
+});
+
+/** A fake npm whose installs fail with ERESOLVE until `until(targets)` accepts the combined set. */
+function conflictingNpm(
+  calls: NpmCall[],
+  until: (targets: string[]) => boolean,
+  version = "2.0.0",
+): InstallRunner {
+  const ok = fakeNpm(calls, { version });
+  return async (command, args, options) => {
+    const targets = args.slice(args.indexOf("--prefix") + 2);
+    if (!until(targets)) {
+      calls.push({ command, args, cwd: options.cwd });
+      return { stdout: "", stderr: ERESOLVE_OUTPUT, exitCode: 1, truncated: false };
+    }
+    return ok(command, args, options);
+  };
+}
+
+describe("installPluginsTogether (one combined npm call)", () => {
+  it("builds ONE npm call with explicit versions or @latest, persists names and reports versions", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["@alisio/plugin-old"]);
+    const calls: NpmCall[] = [];
+    const result = await installPluginsTogether({
+      configHome: home,
+      packages: [{ name: "@alisio/plugin-old", version: "0.5.1" }, { name: "plugin-new" }],
+      runner: fakeNpm(calls, { version: "2.0.0" }),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args).toEqual([
+      "install",
+      "--prefix",
+      join(home, "plugins"),
+      "@alisio/plugin-old@0.5.1",
+      "plugin-new@latest",
+    ]);
+    expect(calls[0]?.args).not.toContain("--force");
+    expect(calls[0]?.args).not.toContain("--legacy-peer-deps");
+    expect(result.packages).toEqual([
+      { name: "@alisio/plugin-old", version: "2.0.0", previousVersion: "1.2.3" },
+      { name: "plugin-new", version: "2.0.0" },
+    ]);
+    expect((await readGlobalConfig(home)).plugins).toEqual(["@alisio/plugin-old", "plugin-new"]);
+  });
+
+  it("refuses read-only, invalid names and duplicates before npm; an empty list is a no-op", async () => {
+    const { home } = await fixture();
+    const calls: NpmCall[] = [];
+    const runner = fakeNpm(calls);
+    await expect(
+      installPluginsTogether({
+        configHome: home,
+        readOnly: true,
+        packages: [{ name: "a" }],
+        runner,
+      }),
+    ).rejects.toThrow(/--read-only/);
+    await expect(
+      installPluginsTogether({ configHome: home, packages: [{ name: "../evil" }], runner }),
+    ).rejects.toThrow(/package name/);
+    await expect(
+      installPluginsTogether({
+        configHome: home,
+        packages: [{ name: "a", version: "1;x" }],
+        runner,
+      }),
+    ).rejects.toThrow(/version/);
+    await expect(
+      installPluginsTogether({
+        configHome: home,
+        packages: [{ name: "a" }, { name: "a" }],
+        runner,
+      }),
+    ).rejects.toThrow(/more than once/);
+    expect(
+      (await installPluginsTogether({ configHome: home, packages: [], runner })).packages,
+    ).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("fails with a typed, sanitized NpmInstallError that detects ERESOLVE structurally", async () => {
+    const { home } = await fixture();
+    await installOld(home, ["plugin-a"]);
+    const error = await installPluginsTogether({
+      configHome: home,
+      packages: [{ name: "plugin-a" }],
+      runner: fakeNpm([], { failStderr: ERESOLVE_OUTPUT }),
+    }).catch((e) => e);
+    expect(error).toBeInstanceOf(NpmInstallError);
+    expect(error).toMatchObject({ peerConflict: true, npmCode: "ERESOLVE", exitCode: 1 });
+    expect(String(error)).not.toContain("sky-secret-value-123");
+    expect(String(error)).not.toContain("--force");
+    const other = await installPluginsTogether({
+      configHome: home,
+      packages: [{ name: "plugin-a" }],
+      runner: fakeNpm([], { failStderr: "npm error code E404\nnot found" }),
+    }).catch((e) => e);
+    expect(other).toMatchObject({ peerConflict: false, npmCode: "E404" });
+  });
+});
+
+describe("installPluginResolvingPeers (single update, one combined retry)", () => {
+  const OLD = "@alisio/plugin-old";
+
+  it("does not retry when the single install succeeds", async () => {
+    const { home } = await fixture();
+    await installOld(home, [OLD]);
+    const calls: NpmCall[] = [];
+    const result = await installPluginResolvingPeers({
+      configHome: home,
+      target: { name: OLD, version: "0.5.1" },
+      companions: [{ name: "plugin-b", version: "2.0.0" }],
+      runner: fakeNpm(calls, { version: "0.5.1" }),
+    });
+    expect(calls).toHaveLength(1);
+    expect(result.coUpdated).toEqual([]);
+    expect(result).toMatchObject({
+      installedVersion: "0.5.1",
+      previousVersion: "1.2.3",
+      updated: true,
+    });
+  });
+
+  it("on ERESOLVE retries ONCE as target + companions and reports who was updated along", async () => {
+    const { home } = await fixture();
+    await installOld(home, [OLD, "plugin-b"]);
+    const calls: NpmCall[] = [];
+    // The single install conflicts; the combined set resolves.
+    const runner = conflictingNpm(calls, (targets) => targets.length > 1, "9.9.9");
+    const result = await installPluginResolvingPeers({
+      configHome: home,
+      target: { name: OLD, version: "0.5.1" },
+      companions: [{ name: "plugin-b", version: "2.0.0" }],
+      runner,
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.args.slice(3)).toEqual([`${OLD}@0.5.1`]);
+    expect(calls[1]?.args.slice(3)).toEqual([`${OLD}@0.5.1`, "plugin-b@2.0.0"]);
+    expect(calls.flatMap((c) => c.args)).not.toContain("--force");
+    expect(calls.flatMap((c) => c.args)).not.toContain("--legacy-peer-deps");
+    expect(result.packageName).toBe(OLD);
+    expect(result.coUpdated).toEqual([
+      { name: "plugin-b", version: "9.9.9", previousVersion: "1.2.3" },
+    ]);
+  });
+
+  it("retries only once: a second conflict is reported, never a third npm call", async () => {
+    const { home } = await fixture();
+    await installOld(home, [OLD, "plugin-b"]);
+    const calls: NpmCall[] = [];
+    const error = await installPluginResolvingPeers({
+      configHome: home,
+      target: { name: OLD, version: "0.5.1" },
+      companions: [{ name: "plugin-b", version: "2.0.0" }],
+      runner: conflictingNpm(calls, () => false),
+    }).catch((e) => e);
+    expect(calls).toHaveLength(2);
+    expect(error).toBeInstanceOf(NpmInstallError);
+    expect(error.peerConflict).toBe(true);
+    expect(String(error)).toMatch(/updating them together/);
+  });
+
+  it("does not retry without companions or on a non-peer failure", async () => {
+    const { home } = await fixture();
+    await installOld(home, [OLD, "plugin-b"]);
+    const calls: NpmCall[] = [];
+    const conflict = await installPluginResolvingPeers({
+      configHome: home,
+      target: { name: OLD, version: "0.5.1" },
+      companions: [],
+      runner: conflictingNpm(calls, () => false),
+    }).catch((e) => e);
+    expect(conflict).toMatchObject({ peerConflict: true });
+    expect(calls).toHaveLength(1);
+    const failCalls: NpmCall[] = [];
+    const notPeer = await installPluginResolvingPeers({
+      configHome: home,
+      target: { name: OLD, version: "0.5.1" },
+      companions: [{ name: "plugin-b" }],
+      runner: fakeNpm(failCalls, { failStderr: "npm error code E404\nnot found" }),
+    }).catch((e) => e);
+    expect(notPeer).toMatchObject({ peerConflict: false });
+    expect(failCalls).toHaveLength(1);
+  });
+
+  it("refuses under --read-only before running npm", async () => {
+    const { home } = await fixture();
+    const calls: NpmCall[] = [];
+    await expect(
+      installPluginResolvingPeers({
+        configHome: home,
+        readOnly: true,
+        target: { name: OLD },
+        companions: [],
+        runner: fakeNpm(calls),
+      }),
+    ).rejects.toThrow(/--read-only/);
+    expect(calls).toHaveLength(0);
   });
 });

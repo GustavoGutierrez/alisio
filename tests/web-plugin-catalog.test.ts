@@ -261,35 +261,77 @@ describe("updates of installed plugins", () => {
     expect(updatablePackages(undefined)).toEqual([]);
   });
 
-  it("Update all runs one package at a time, keeps going after a failure and summarizes", async () => {
-    let running = 0;
-    let peak = 0;
-    const order: string[] = [];
+  it("Update all calls the combined endpoint ONCE with every package and maps the results", async () => {
+    const calls: string[][] = [];
     const seen: string[][] = [];
     const summary = await runUpdateAll(
       ["a", "b", "c"],
-      async (name) => {
-        running++;
-        peak = Math.max(peak, running);
-        order.push(name);
-        await new Promise((r) => setTimeout(r, 5));
-        running--;
-        if (name === "b") throw new Error("npm exploded");
-        return { installedVersion: "2.0.0", restartRequired: name === "c" };
+      async (names) => {
+        calls.push(names);
+        return {
+          updated: [
+            { package: "a", installedVersion: "2.0.0", restartRequired: false },
+            {
+              package: "b",
+              installedVersion: "2.1.0",
+              previousVersion: "1.0.0",
+              restartRequired: true,
+            },
+            { package: "c", installedVersion: "2.0.0", restartRequired: false },
+          ],
+          restartPending: false,
+        };
       },
       (items) => seen.push(items.map((i) => `${i.package}:${i.status}`)),
     );
-    expect(peak).toBe(1);
-    expect(order).toEqual(["a", "b", "c"]);
-    expect(summary).toMatchObject({ updated: 2, failed: 1, restartRequired: true });
-    expect(summary.items[1]).toEqual({ package: "b", status: "failed", error: "npm exploded" });
+    expect(calls).toEqual([["a", "b", "c"]]);
+    expect(summary).toMatchObject({ updated: 3, failed: 0, restartRequired: true });
+    expect(summary.items[1]).toEqual({
+      package: "b",
+      status: "done",
+      version: "2.1.0",
+      restartRequired: true,
+    });
     expect(seen[0]).toEqual(["a:pending", "b:pending", "c:pending"]);
-    expect(seen[1]).toEqual(["a:running", "b:pending", "c:pending"]);
-    expect(seen.at(-1)).toEqual(["a:done", "b:failed", "c:done"]);
-    expect(
-      (await runUpdateAll([], async () => ({ installedVersion: "1", restartRequired: false })))
-        .updated,
-    ).toBe(0);
+    expect(seen[1]).toEqual(["a:running", "b:running", "c:running"]);
+    expect(seen.at(-1)).toEqual(["a:done", "b:done", "c:done"]);
+  });
+
+  it("Update all marks every package failed with the shared error when the call fails", async () => {
+    const summary = await runUpdateAll(["a", "b"], async () => {
+      throw new Error("npm exploded");
+    });
+    expect(summary).toMatchObject({ updated: 0, failed: 2, restartRequired: false });
+    expect(summary.items).toEqual([
+      { package: "a", status: "failed", error: "npm exploded" },
+      { package: "b", status: "failed", error: "npm exploded" },
+    ]);
+  });
+
+  it("Update all flags a requested package the server did not update and lists extras", async () => {
+    const summary = await runUpdateAll(["a", "b"], async () => ({
+      updated: [
+        { package: "a", installedVersion: "2.0.0", restartRequired: false },
+        { package: "z", installedVersion: "3.0.0", restartRequired: false },
+      ],
+      restartPending: false,
+    }));
+    expect(summary.items.map((i) => `${i.package}:${i.status}`)).toEqual([
+      "a:done",
+      "b:failed",
+      "z:done",
+    ]);
+    expect(summary).toMatchObject({ updated: 2, failed: 1 });
+  });
+
+  it("Update all with nothing to update never calls the server", async () => {
+    let called = 0;
+    const summary = await runUpdateAll([], async () => {
+      called++;
+      return { updated: [], restartPending: false };
+    });
+    expect(called).toBe(0);
+    expect(summary.updated).toBe(0);
   });
 });
 
@@ -322,6 +364,41 @@ describe("install outcome message", () => {
       installOutcome("P", { ...base, updated: true, restartPending: true, restartRequired: true })
         .key,
     ).toBe("install.restartNeeded");
+  });
+});
+
+describe("co-updated plugins after a single update", () => {
+  const base = {
+    package: "@alisio/plugin-alpha",
+    installedVersion: "0.6.0",
+    alreadyInstalled: true,
+    updated: true,
+    previousVersion: "0.5.0",
+    restartPending: false,
+    restartRequired: false,
+  };
+  it("adds a note naming the other updated plugins, whatever the main message is", () => {
+    const alsoUpdated = [
+      { package: "@alisio/plugin-beta", installedVersion: "0.6.0", previousVersion: "0.5.0" },
+      { package: "@alisio/plugin-gamma", installedVersion: "1.2.0" },
+    ];
+    expect(installOutcome("Alpha", { ...base, alsoUpdated })).toMatchObject({
+      key: "install.updatedFrom",
+      note: {
+        key: "install.alsoUpdated",
+        params: { others: "@alisio/plugin-beta v0.6.0, @alisio/plugin-gamma v1.2.0" },
+      },
+    });
+    expect(installOutcome("Alpha", { ...base, restartRequired: true, alsoUpdated }).key).toBe(
+      "install.restartNeeded",
+    );
+    expect(
+      installOutcome("Alpha", { ...base, restartRequired: true, alsoUpdated }).note,
+    ).toBeDefined();
+  });
+  it("has no note when nobody else was updated", () => {
+    expect(installOutcome("Alpha", base).note).toBeUndefined();
+    expect(installOutcome("Alpha", { ...base, alsoUpdated: [] }).note).toBeUndefined();
   });
 });
 

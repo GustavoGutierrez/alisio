@@ -16,9 +16,11 @@ import {
   inspectPluginTarball,
   installedGlobalPlugins,
   installLocalPluginTarball,
-  installPlugin,
+  installPluginResolvingPeers,
+  installPluginsTogether,
   MAX_TARBALL_BYTES,
   NPM_NOT_FOUND_MESSAGE,
+  NpmInstallError,
   type PluginCatalogEntry,
   parsePluginSpec,
   pluginCodeImportedFrom,
@@ -115,6 +117,24 @@ export interface PluginInstallResponse {
    * lifetime: the new version only runs after Alisio restarts.
    */
   restartRequired: boolean;
+  /**
+   * Other installed plugins that were updated in the same npm call because updating this one alone
+   * conflicted with them on the `@alisio/sdk` peer range.
+   */
+  alsoUpdated?: Array<{ package: string; installedVersion: string; previousVersion?: string }>;
+}
+
+/** `POST /api/plugins/update-all`: every outdated npm plugin updated in ONE npm install. */
+export interface PluginUpdateAllResponse {
+  updated: Array<{
+    package: string;
+    installedVersion: string;
+    previousVersion?: string;
+    /** The package's code was already imported: the new version runs after a restart. */
+    restartRequired: boolean;
+  }>;
+  /** The plugins load when the workspace's current runs finish. */
+  restartPending: boolean;
 }
 
 export interface PluginUninstallResponse {
@@ -259,6 +279,41 @@ export function registerPluginCatalogRoutes(
     };
   };
 
+  /** The HTTP error for a failed npm install: validation problems are 400, the rest is upstream. */
+  const installFailure = (error: unknown): HttpError => {
+    const text = errorText(error).slice(0, MAX_ERROR_CHARS);
+    const peer = error instanceof NpmInstallError ? error.peerConflict : PEER_CONFLICT.test(text);
+    return text.includes(NPM_NOT_FOUND_MESSAGE) || peer
+      ? new HttpError("validation_failed", text)
+      : new HttpError("provider_unavailable", text);
+  };
+
+  /**
+   * Installed npm plugins whose catalog release is newer and compatible with this Alisio's SDK.
+   * Local `.tgz` installs have no remote source and are never touched.
+   */
+  const outdatedPlugins = async (): Promise<
+    Array<{ entry: CatalogPlugin; installedVersion: string }>
+  > => {
+    const { catalog } = await loadCatalog(false);
+    const pluginsDir = join(configHome(), "plugins");
+    const result: Array<{ entry: CatalogPlugin; installedVersion: string }> = [];
+    for (const item of await installedGlobalPlugins(configHome())) {
+      const entry = catalog.plugins.find((plugin) => plugin.package === item.name);
+      if (!entry) continue;
+      if ((await pluginDependencySpec(pluginsDir, item.name))?.startsWith("file:")) continue;
+      const state = catalogPluginState({
+        catalogVersion: entry.version,
+        installedVersion: item.version,
+        ...(entry.sdk ? { sdkRange: entry.sdk } : {}),
+        ...(options.sdkVersion ? { sdkVersion: options.sdkVersion } : {}),
+      });
+      if (state.updateAvailable && state.compatible)
+        result.push({ entry, installedVersion: item.version });
+    }
+    return result;
+  };
+
   // ---- Catalog ------------------------------------------------------------------------------
   router.get("/api/plugin-catalog", async ({ url }) => {
     const raw = url.searchParams.get("refresh");
@@ -385,34 +440,47 @@ export function registerPluginCatalogRoutes(
         `${entry.name} needs @alisio/sdk ${entry.sdk}, but this Alisio has ${options.sdkVersion}`,
         { fields: ["package"] },
       );
+    // Updating (or installing) may conflict with other plugins that still peer on the old SDK:
+    // those with a newer catalog release are the only ones npm may update along with it.
+    const alongside =
+      !installed.has(entry.package) || state.updateAvailable
+        ? (await outdatedPlugins()).filter((item) => item.entry.package !== entry.package)
+        : [];
     return exclusive(async () => {
-      let result: Awaited<ReturnType<typeof installPlugin>>;
       const loaded = codeLoaded(entry.package);
-      const attempt = (spec: string) =>
-        installPlugin({
-          spec,
-          // An installed package is replaced at the catalog version: update, reinstall or downgrade.
-          force: installed.has(entry.package),
+      const loadedAlongside = new Set(
+        alongside
+          .filter((item) => codeLoaded(item.entry.package))
+          .map((item) => item.entry.package),
+      );
+      const attempt = (pinned: boolean) =>
+        installPluginResolvingPeers({
+          target: { name: entry.package, ...(pinned ? { version: entry.version } : {}) },
+          companions: alongside.map((item) => ({
+            name: item.entry.package,
+            ...(pinned ? { version: item.entry.version } : {}),
+          })),
           configHome: configHome(),
           ...(options.installRunner ? { runner: options.installRunner } : {}),
         });
+      let result: Awaited<ReturnType<typeof attempt>>;
       try {
         try {
-          result = await attempt(`npm:${entry.package}@${entry.version}`);
+          result = await attempt(true);
         } catch (error) {
           // The catalog can list a version npm does not serve yet (it is generated before the
           // publish finishes): fall back to the registry's latest rather than fail the install.
           if (!NOT_PUBLISHED.test(errorText(error))) throw error;
-          result = await attempt(`npm:${entry.package}`);
+          result = await attempt(false);
         }
       } catch (error) {
-        const text = errorText(error).slice(0, MAX_ERROR_CHARS);
-        if (text.includes(NPM_NOT_FOUND_MESSAGE) || PEER_CONFLICT.test(text))
-          throw new HttpError("validation_failed", text);
-        throw new HttpError("provider_unavailable", text);
+        throw installFailure(error);
       }
-      const restartRequired = loaded;
-      if (restartRequired) pendingRestart.add(result.packageName);
+      const restartRequired =
+        loaded || result.coUpdated.some((item) => loadedAlongside.has(item.name));
+      if (loaded) pendingRestart.add(result.packageName);
+      for (const item of result.coUpdated)
+        if (loadedAlongside.has(item.name)) pendingRestart.add(item.name);
       const deferred = await applyToWorkspaces();
       const body: PluginInstallResponse = {
         package: result.packageName,
@@ -422,6 +490,66 @@ export function registerPluginCatalogRoutes(
         ...(result.previousVersion ? { previousVersion: result.previousVersion } : {}),
         restartPending: deferred,
         restartRequired,
+        ...(result.coUpdated.length
+          ? {
+              alsoUpdated: result.coUpdated.map((item) => ({
+                package: item.name,
+                installedVersion: item.version,
+                ...(item.previousVersion ? { previousVersion: item.previousVersion } : {}),
+              })),
+            }
+          : {}),
+      };
+      return { body };
+    });
+  });
+
+  // ---- Update all ---------------------------------------------------------------------------
+  router.post("/api/plugins/update-all", async ({ req }) => {
+    validate<{ confirmed: boolean }>(await readJson(req), {
+      confirmed: { check: (v) => v === true, required: true },
+    });
+    refuseReadOnly("Updating plugins");
+    const outdated = await outdatedPlugins();
+    return exclusive(async () => {
+      if (outdated.length === 0) {
+        const none: PluginUpdateAllResponse = { updated: [], restartPending: false };
+        return { body: none };
+      }
+      const loaded = new Set(
+        outdated.filter((item) => codeLoaded(item.entry.package)).map((item) => item.entry.package),
+      );
+      // ONE npm call: npm resolves every peer range together, which one-by-one installs cannot.
+      const attempt = (pinned: boolean) =>
+        installPluginsTogether({
+          packages: outdated.map((item) => ({
+            name: item.entry.package,
+            ...(pinned ? { version: item.entry.version } : {}),
+          })),
+          configHome: configHome(),
+          ...(options.installRunner ? { runner: options.installRunner } : {}),
+        });
+      let result: Awaited<ReturnType<typeof attempt>>;
+      try {
+        try {
+          result = await attempt(true);
+        } catch (error) {
+          if (!NOT_PUBLISHED.test(errorText(error))) throw error;
+          result = await attempt(false);
+        }
+      } catch (error) {
+        throw installFailure(error);
+      }
+      for (const item of result.packages) if (loaded.has(item.name)) pendingRestart.add(item.name);
+      const deferred = await applyToWorkspaces();
+      const body: PluginUpdateAllResponse = {
+        updated: result.packages.map((item) => ({
+          package: item.name,
+          installedVersion: item.version,
+          ...(item.previousVersion ? { previousVersion: item.previousVersion } : {}),
+          restartRequired: loaded.has(item.name),
+        })),
+        restartPending: deferred,
       };
       return { body };
     });

@@ -175,6 +175,34 @@ export async function installedGlobalPluginPackages(home: string): Promise<strin
   return names;
 }
 
+/**
+ * A failed `npm install` of plugin packages. `peerConflict` is detected structurally (npm's
+ * `code ERESOLVE` line, with the older phrases as a fallback) so callers can react to it without
+ * matching message text. The message is sanitized (no credentials) and bounded.
+ */
+export class NpmInstallError extends Error {
+  readonly peerConflict: boolean;
+  /** npm's own error code (`ERESOLVE`, `E404`, ...) when its output carried one. */
+  readonly npmCode?: string;
+  readonly exitCode: number | null;
+
+  constructor(
+    message: string,
+    details: { peerConflict: boolean; npmCode?: string; exitCode: number | null },
+  ) {
+    super(message);
+    this.name = "NpmInstallError";
+    this.peerConflict = details.peerConflict;
+    if (details.npmCode) this.npmCode = details.npmCode;
+    this.exitCode = details.exitCode;
+  }
+}
+
+/** The code on npm's `npm error code <CODE>` (or `npm ERR! code <CODE>`) line. */
+function npmErrorCode(output: string): string | undefined {
+  return /^npm (?:error|ERR!) code ([A-Z][A-Z0-9_]*)\s*$/m.exec(output)?.[1];
+}
+
 function npmInstallError(
   label: string,
   targets: string[],
@@ -183,27 +211,34 @@ function npmInstallError(
   installed: string[],
   /** Single-package install the user typed (shows the `alisio install` alternative). */
   single?: string,
-): Error {
+): NpmInstallError {
   const raw = [result.stdout, result.stderr].filter(Boolean).join("\n");
   const detail = sanitizeNpmError(raw);
   const head = `npm install failed for ${label} (exit ${result.exitCode}).\n${detail || "no output"}\n`;
-  if (isPeerConflict(raw)) {
+  const npmCode = npmErrorCode(raw);
+  const peerConflict = npmCode === "ERESOLVE" || isPeerConflict(raw);
+  const details = { peerConflict, ...(npmCode ? { npmCode } : {}), exitCode: result.exitCode };
+  if (peerConflict) {
     const involved = installed.filter((name) => raw.includes(`from ${name}@`));
     const list = involved.length > 0 ? involved : installed;
     const next = single
-      ? `Update them all first, then run the install again:\n  alisio install --update\n  alisio install npm:${single}`
-      : `Remove or pin the conflicting plugin(s) listed above, then run \`alisio install --update\` again.`;
-    return new Error(
+      ? `Update them all first (or uninstall the ones that have no newer release), then run the install again:\n  alisio install --update\n  alisio install npm:${single}`
+      : `Even updating them together did not resolve it: at least one plugin listed above has no ` +
+        `release that works with the newer @alisio/sdk yet. Uninstall it or wait for its update, ` +
+        `then try again.`;
+    return new NpmInstallError(
       `${head}The install failed because plugins you already have installed require an older ` +
         `@alisio/sdk than the one this package needs, so npm cannot satisfy both at once.\n` +
         (list.length > 0 ? `Installed plugins involved: ${list.join(", ")}\n` : "") +
         next,
+      details,
     );
   }
   const retry = `npm install --prefix ${pluginsDir} ${targets.join(" ")}`;
-  return new Error(
+  return new NpmInstallError(
     `${head}Retry with: ${retry}` +
       (single ? `\n(or: alisio install npm:${single})` : "\n(or: alisio install --update)"),
+    details,
   );
 }
 
@@ -464,7 +499,7 @@ export interface UpdateAllPluginsResult {
 /**
  * Refreshes every plugin package installed in the global plugins directory in ONE
  * `npm install --prefix <plugins> <pkg>@latest ...` call, which lets npm resolve all peer ranges
- * together (updating one by one keeps hitting the same peer conflict). The config is untouched.
+ * together (updating one by one keeps hitting the same peer conflict).
  */
 export async function updateAllPlugins(
   input: UpdateAllPluginsInput,
@@ -474,26 +509,171 @@ export async function updateAllPlugins(
       "Updating npm plugins is unavailable under --read-only: it runs npm. Run without --read-only.",
     );
   const home = resolve(input.configHome ?? configHome());
-  const pluginsDir = join(home, "plugins");
   const names = await installedGlobalPluginPackages(home);
-  if (names.length === 0) return { packages: [], pluginsDir };
+  const result = await installPluginsTogether({
+    configHome: home,
+    packages: names.map((name) => ({ name })),
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.runner ? { runner: input.runner } : {}),
+  });
+  return {
+    packages: result.packages.map(({ name, version }) => ({ name, version })),
+    pluginsDir: result.pluginsDir,
+  };
+}
+
+export interface InstallTogetherInput {
+  /** Packages to install in one call; no `version` means `@latest`. */
+  packages: Array<{ name: string; version?: string }>;
+  configHome?: string;
+  readOnly?: boolean;
+  signal?: AbortSignal;
+  runner?: InstallRunner;
+}
+
+export interface InstalledTogether {
+  name: string;
+  /** Version read back from the installed package.json, or "unknown". */
+  version: string;
+  /** Version installed before this call, when there was one. */
+  previousVersion?: string;
+}
+
+export interface InstallTogetherResult {
+  packages: InstalledTogether[];
+  pluginsDir: string;
+}
+
+/**
+ * Installs or updates several plugin packages in ONE `npm install --prefix <plugins> a b ...`
+ * call, so npm resolves every `@alisio/sdk` peer range together. Never forces or relaxes peers
+ * (no `--force`, no `--legacy-peer-deps`). The names are persisted in the global config.
+ */
+export async function installPluginsTogether(
+  input: InstallTogetherInput,
+): Promise<InstallTogetherResult> {
+  if (input.readOnly)
+    throw new Error(
+      "Installing npm plugins is unavailable under --read-only: it runs npm and writes your global configuration. Run without --read-only.",
+    );
+  const home = resolve(input.configHome ?? configHome());
+  const pluginsDir = join(home, "plugins");
+  const seen = new Set<string>();
+  const specs = input.packages.map(({ name, version }) => {
+    const parsed = parsePluginSpec(version ? `${name}@${version}` : name);
+    if (seen.has(parsed.name))
+      throw new Error(`Plugin package "${parsed.name}" is listed more than once`);
+    seen.add(parsed.name);
+    return parsed;
+  });
+  if (specs.length === 0) return { packages: [], pluginsDir };
+  await mkdir(pluginsDir, { recursive: true, mode: 0o700 });
+  const versionOf = async (name: string) =>
+    (
+      (await readJson(join(pluginsDir, "node_modules", name, "package.json"))) as
+        | { version?: string }
+        | undefined
+    )?.version;
+  const previous = new Map<string, string | undefined>();
+  for (const spec of specs) previous.set(spec.name, await versionOf(spec.name));
+  const targets = specs.map((spec) =>
+    spec.version
+      ? npmInstallTarget(spec.name, spec.version)
+      : npmInstallTarget(spec.name, undefined, true),
+  );
   const signal = input.signal ?? AbortSignal.timeout(INSTALL_TIMEOUT_MS);
   const run = input.runner ?? defaultInstallRunner;
-  const targets = names.map((name) => npmInstallTarget(name, undefined, true));
   const npmResult = await run("npm", ["install", "--prefix", pluginsDir, ...targets], {
     cwd: pluginsDir,
     signal,
   });
   if (npmResult.exitCode !== 0)
-    throw npmInstallError("the installed plugins", targets, pluginsDir, npmResult, names);
-  const packages: UpdateAllPluginsResult["packages"] = [];
-  for (const name of names) {
-    const manifest = (await readJson(join(pluginsDir, "node_modules", name, "package.json"))) as
-      | { version?: string }
-      | undefined;
-    packages.push({ name, version: manifest?.version ?? "unknown" });
+    throw npmInstallError(
+      specs.length === 1 ? `plugin "${specs[0]?.name}"` : "the selected plugins",
+      targets,
+      pluginsDir,
+      npmResult,
+      await installedGlobalPluginPackages(home),
+    );
+  const packages: InstalledTogether[] = [];
+  for (const spec of specs) {
+    await persistGlobalPluginEntry(home, spec.name);
+    const before = previous.get(spec.name);
+    packages.push({
+      name: spec.name,
+      version: (await versionOf(spec.name)) ?? "unknown",
+      ...(before ? { previousVersion: before } : {}),
+    });
   }
   return { packages, pluginsDir };
+}
+
+export interface InstallResolvingPeersInput {
+  /** The package the user chose to install or update (`version` absent = `@latest`). */
+  target: { name: string; version?: string };
+  /**
+   * Other installed plugins that have a newer release. Only used when npm reports a peer
+   * conflict: they are then installed in the same single npm call as the target.
+   */
+  companions: Array<{ name: string; version?: string }>;
+  configHome?: string;
+  readOnly?: boolean;
+  signal?: AbortSignal;
+  runner?: InstallRunner;
+}
+
+export interface InstallResolvingPeersResult extends InstallPluginResult {
+  /** Other plugins updated in the same npm call because the single install had a peer conflict. */
+  coUpdated: InstalledTogether[];
+}
+
+/**
+ * Installs `target` at its version, replacing an installed copy. If npm answers with a peer
+ * conflict (ERESOLVE) and there are companions, it retries exactly ONCE as one combined install
+ * of the target plus the companions; any other failure, or a conflict that survives the retry, is
+ * thrown as a `NpmInstallError`. Peers are never forced.
+ */
+export async function installPluginResolvingPeers(
+  input: InstallResolvingPeersInput,
+): Promise<InstallResolvingPeersResult> {
+  const { target } = input;
+  const common = {
+    ...(input.configHome ? { configHome: input.configHome } : {}),
+    ...(input.readOnly ? { readOnly: true } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.runner ? { runner: input.runner } : {}),
+  };
+  try {
+    const single = await installPlugin({
+      ...common,
+      spec: `npm:${target.name}${target.version ? `@${target.version}` : ""}`,
+      force: true,
+    });
+    return { ...single, coUpdated: [] };
+  } catch (error) {
+    const companions = input.companions.filter((item) => item.name !== target.name);
+    if (!(error instanceof NpmInstallError) || !error.peerConflict || companions.length === 0)
+      throw error;
+    const together = await installPluginsTogether({
+      ...common,
+      packages: [target, ...companions],
+    });
+    const home = resolve(input.configHome ?? configHome());
+    const primary = together.packages.find((item) => item.name === target.name);
+    return {
+      packageName: target.name,
+      installedVersion: primary?.version ?? "unknown",
+      path: join(together.pluginsDir, "node_modules", target.name),
+      configEntry: target.name,
+      configFile: join(home, "config.json"),
+      pluginsDir: together.pluginsDir,
+      alreadyInstalled: !!primary?.previousVersion,
+      ...(primary?.previousVersion ? { previousVersion: primary.previousVersion } : {}),
+      updated: !!primary?.previousVersion,
+      trustRemark: pluginTrustRemark(target.name),
+      coUpdated: together.packages.filter((item) => item.name !== target.name),
+    };
+  }
 }
 
 /** Final remark about loading and project trust, printed by the CLI and returned by the tool. */
