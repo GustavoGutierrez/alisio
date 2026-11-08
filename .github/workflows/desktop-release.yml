@@ -1,15 +1,15 @@
 name: Desktop release
 
-# Builds the Alisio Desktop installers (apps/desktop) on each OS and attaches them to the GitHub
-# Release for the tag. Independent from the npm `vX.Y.Z` release: desktop releases use `desktop-vX.Y.Z`
-# tags and are never marked "Latest".
+# One GitHub Release per version: the `vX.Y.Z` tag gets a release titled "Alisio X.Y.Z" with the
+# CHANGELOG notes, the Alisio Desktop installers for every OS and their checksums. A stable version is
+# marked "Latest". The tag version must match apps/desktop/package.json (all packages share it).
 on:
   push:
-    tags: ["desktop-v*"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build and publish, for example desktop-v0.9.0"
+        description: "Existing tag to build and publish, for example v0.11.1"
         required: true
         type: string
 
@@ -37,30 +37,34 @@ jobs:
       - name: Check the tag against apps/desktop/package.json
         id: meta
         run: |
-          case "$TAG" in desktop-v*) ;; *) echo "Tag $TAG must look like desktop-vX.Y.Z"; exit 1 ;; esac
-          version="${TAG#desktop-v}"
+          case "$TAG" in v[0-9]*) ;; *) echo "Tag $TAG must look like vX.Y.Z"; exit 1 ;; esac
+          version="${TAG#v}"
           actual="$(node -p "require('./apps/desktop/package.json').version")"
           if [ "$version" != "$actual" ]; then
             echo "Tag version $version does not match apps/desktop/package.json version $actual"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Create the release if it does not exist
+      - name: Create or complete the release
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"
-            exit 0
-          fi
-          cat > notes.md <<NOTES
-          Alisio Desktop $VERSION: the desktop app for Windows, macOS and Linux.
+          # The version's CHANGELOG section, without its heading.
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > changelog.md
+          cat > desktop.md <<NOTES
+          <!-- alisio-desktop-installers -->
+          ## Alisio Desktop
 
           Pick the file for your system under Assets: \`Alisio-Setup-$VERSION-x64.exe\` (Windows 10/11),
           \`Alisio-$VERSION-arm64.dmg\` (Mac with Apple silicon), \`Alisio-$VERSION-x64.dmg\` (Intel Mac),
-          \`Alisio-$VERSION-x86_64.AppImage\` or \`Alisio-$VERSION-amd64.deb\` (Linux).
+          \`Alisio-$VERSION-x86_64.AppImage\` or \`Alisio-$VERSION-amd64.deb\` (Linux). The terminal and
+          browser UI install from npm: \`npm install -g @alisio/alisio-code@$VERSION\`.
 
-          ## These builds are not code-signed
+          ### These builds are not code-signed
 
           - **Windows (SmartScreen):** when "Windows protected your PC" appears, choose **More info**, then **Run anyway**.
           - **macOS (Gatekeeper):** the app is ad-hoc signed, not notarized. If macOS refuses to open it, go to
@@ -73,8 +77,22 @@ jobs:
 
           Full guide: https://gustavogutierrez.github.io/alisio/desktop
           NOTES
-          gh release create "$TAG" --verify-tag --title "Alisio Desktop $VERSION" \
-            --notes-file notes.md --latest=false
+          case "$VERSION" in
+            *-*) flags=(--prerelease --latest=false) ;;
+            *) flags=(--latest) ;;
+          esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Created by hand first: keep its notes, add the installer section once, fix the title.
+            gh release view "$TAG" --json body --jq .body > notes.md
+            if ! grep -q "alisio-desktop-installers" notes.md; then
+              printf '\n\n' >> notes.md
+              cat desktop.md >> notes.md
+            fi
+            gh release edit "$TAG" --title "Alisio $VERSION" --notes-file notes.md "${flags[@]}"
+          else
+            { cat changelog.md; printf '\n'; cat desktop.md; } > notes.md
+            gh release create "$TAG" --verify-tag --title "Alisio $VERSION" --notes-file notes.md "${flags[@]}"
+          fi
 
   build:
     name: Build (${{ matrix.os }})

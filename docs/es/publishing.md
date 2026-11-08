@@ -88,22 +88,27 @@ el script nunca etiqueta, hace commit ni push.
 
 ## Publicar Alisio Desktop
 
-La aplicación de escritorio (`apps/desktop`, privada) tiene un versionado independiente del de los
-paquetes de npm y se publica en su propia versión de GitHub, nunca con `pnpm publish`.
+Cada versión tiene UNA sola versión de GitHub, `vX.Y.Z`, titulada "Alisio X.Y.Z": las notas del
+CHANGELOG, los instaladores de Alisio Desktop y sus sumas de verificación. La aplicación de
+escritorio (`apps/desktop`, privada) comparte la versión de los paquetes y nunca se publica con
+`pnpm publish`.
 
-1. Cambie `version` en `apps/desktop/package.json` (por ejemplo `0.9.1`).
-2. Cambie `DESKTOP_VERSION` en `docs/.vitepress/theme/desktop-release.ts`, el único lugar del que
-   leen los enlaces de descarga de la página de inicio. Actualice también la versión en los enlaces
-   de `docs/desktop.md` y `docs/es/desktop.md`.
-3. Haga commit y suba la etiqueta: `git tag -a desktop-v0.9.1 -m "Alisio Desktop 0.9.1"` y
-   `git push origin desktop-v0.9.1`.
+1. Cambie `version` en `apps/desktop/package.json` a la versión del lanzamiento (junto con los
+   paquetes).
+2. Después de verificar la publicación en npm, suba la etiqueta: `git tag -a vX.Y.Z -m "Alisio X.Y.Z"`
+   y `git push origin vX.Y.Z`.
+3. Cuando los instaladores estén adjuntos, cambie `DESKTOP_VERSION` en
+   `docs/.vitepress/theme/desktop-release.ts` (los enlaces de descarga de la página de inicio) y la
+   versión en los enlaces de `README.md`, `docs/desktop.md`, `docs/installation.md` y sus páginas de
+   `docs/es/`.
 
-El workflow `Desktop release` (`.github/workflows/desktop-release.yml`) comprueba que la etiqueta
-coincida con `apps/desktop/package.json`, crea la versión (sin marcarla como Latest, que pertenece
-a las versiones `vX.Y.Z` de npm), construye Windows, macOS (arm64 y x64) y Linux, sube los
+El workflow `Desktop release` (`.github/workflows/desktop-release.yml`) se ejecuta con etiquetas
+`v*`. Comprueba que la etiqueta coincida con `apps/desktop/package.json`, crea la versión con la
+sección del CHANGELOG (o, si se creó a mano, conserva sus notas y añade la sección de instaladores),
+marca como Latest una versión estable, construye Windows, macOS (arm64 y x64) y Linux, sube los
 instaladores y al final adjunta `SHA256SUMS-desktop.txt`. Puede ejecutarse de nuevo para una
 etiqueta existente con `workflow_dispatch`. Las compilaciones no están firmadas (macOS solo tiene
-firma ad hoc).
+firma ad hoc). Las versiones hasta la 0.11.1 tienen además una versión `desktop-vX.Y.Z` aparte.
 
 ## Checklist
 

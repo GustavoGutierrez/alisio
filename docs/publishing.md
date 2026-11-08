@@ -83,21 +83,24 @@ script never tags, commits or pushes.
 
 ## Releasing Alisio Desktop
 
-The desktop app (`apps/desktop`, private) is versioned independently of the npm packages and is
-released through its own GitHub Release, never through `pnpm publish`.
+Each version has ONE GitHub Release, `vX.Y.Z`, titled "Alisio X.Y.Z": the CHANGELOG notes, the
+Alisio Desktop installers and their checksums. The desktop app (`apps/desktop`, private) shares the
+packages' version and is never published with `pnpm publish`.
 
-1. Set `version` in `apps/desktop/package.json` (for example `0.9.1`).
-2. Set `DESKTOP_VERSION` in `docs/.vitepress/theme/desktop-release.ts`, the single place the home
-   page download links read. Update the version in the links of `docs/desktop.md` and
-   `docs/es/desktop.md` too.
-3. Commit, then push the tag: `git tag -a desktop-v0.9.1 -m "Alisio Desktop 0.9.1"` and
-   `git push origin desktop-v0.9.1`.
+1. Set `version` in `apps/desktop/package.json` to the release version (with the packages).
+2. After the npm publish is verified, push the tag: `git tag -a vX.Y.Z -m "Alisio X.Y.Z"` and
+   `git push origin vX.Y.Z`.
+3. Once the installers are attached, set `DESKTOP_VERSION` in
+   `docs/.vitepress/theme/desktop-release.ts` (the home page download links) and the version in the
+   links of `README.md`, `docs/desktop.md`, `docs/installation.md` and their `docs/es/` pages.
 
-The `Desktop release` workflow (`.github/workflows/desktop-release.yml`) checks that the tag matches
-`apps/desktop/package.json`, creates the release (not marked Latest, which belongs to the npm
-`vX.Y.Z` releases), builds Windows, macOS (arm64 and x64) and Linux, uploads the installers and
-finally attaches `SHA256SUMS-desktop.txt`. It can be re-run for an existing tag with
-`workflow_dispatch`. The builds are unsigned (macOS is only ad-hoc signed).
+The `Desktop release` workflow (`.github/workflows/desktop-release.yml`) runs on `v*` tags. It checks
+that the tag matches `apps/desktop/package.json`, creates the release with the version's CHANGELOG
+section (or, if the release was created by hand, keeps its notes and adds the installer section),
+marks a stable version "Latest", builds Windows, macOS (arm64 and x64) and Linux, uploads the
+installers and finally attaches `SHA256SUMS-desktop.txt`. It can be re-run for an existing tag with
+`workflow_dispatch`. The builds are unsigned (macOS is only ad-hoc signed). Releases up to 0.11.1
+also have a separate `desktop-vX.Y.Z` release.
 
 ## Checklist
 
