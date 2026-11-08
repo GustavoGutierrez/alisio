@@ -24,6 +24,7 @@ function child(job: Record<string, unknown>): Promise<Record<string, unknown>> {
       process.execPath,
       [
         "--experimental-transform-types",
+        "--conditions=alisio-source",
         "--disable-warning=ExperimentalWarning",
         CHILD,
         JSON.stringify(job),
