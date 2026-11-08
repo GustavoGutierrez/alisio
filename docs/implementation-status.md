@@ -23,7 +23,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `/goal` (fase 4) de la especificación de modos, goal y tareas en segundo plano; Decision
   Intelligence (fases 1 a 5 de `specs/006-decision-intelligence-v1.md`); Smart Dashboard (fases 0 a 7
   de `specs/007-smart-dashboard-v1.md`; pendientes la medición E7, el benchmark B/C y el
-  release); inicio de sesión de proveedores (fases 1 a 3 de `specs/025-provider-oauth-v1.md`).
+  release); inicio de sesión de proveedores (fases 1 a 4 de `specs/025-provider-oauth-v1.md`).
 - Validación.
 - Pendiente para llegar a 1.0.0.
 - Alcance de la verificación: una sección por área (runtime y empaquetado; subagentes, AGENTS.md y
@@ -33,7 +33,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   agente activo y effort; contratos de eventos y bloques UI; persistencia v4, blobs y catálogo de
   comandos; agentes del usuario; servidor web; modos, `/reload` y `/changelog`; pestaña Memory y
   vistas de plugins; tareas en segundo plano; objetivos de sesión; Decision Intelligence; Smart
-  Dashboard; inicio de sesión de proveedores, fases 1 y 2).
+  Dashboard; inicio de sesión de proveedores, fases 1 a 4).
 - Límites conocidos: runtime y empaquetado; subagentes; proveedores, plantillas y licencia; memoria;
   plugins e instalación; portapapeles, pegado y TUI; skills y contexto; compactación y truncamiento;
   permisos, aprobaciones y confianza; preguntas y herramientas de red; persistencia, estadísticas y
@@ -82,12 +82,13 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   proveedor propietario, y cada cambio persistido inicia una sesión nueva para aislar datos de
   continuación por producto, endpoint y protocolo. El proveedor genérico sigue disponible.
 
-### Inicio de sesión de proveedores (Provider OAuth, fases 1 a 3 de `specs/025-provider-oauth-v1.md`)
+### Inicio de sesión de proveedores (Provider OAuth, fases 1 a 4 de `specs/025-provider-oauth-v1.md`)
 
-- **Fases 1 a 3 implementadas (2026-11-07): contrato, núcleo, ejecutor de flujos, loopback, rutas del
-  servidor e interfaz web.** Queda para la fase 4 la TUI (`/connect`) y el cierre de sesión allí, y
-  la fase 5 es el plugin de OpenAI (repo `alisio-plugins`): ningún proveedor ofrece todavía inicio de
-  sesión. La web (Ajustes > Modelos) ya inicia, sondea, responde y cancela un flujo.
+- **Fases 1 a 4 implementadas (2026-11-07): contrato, núcleo, ejecutor de flujos, loopback, rutas del
+  servidor, interfaz web, TUI y preparación del release 0.11.0.** La fase 5 es el plugin de OpenAI
+  (repo `alisio-plugins`, solo tras publicar 0.11.0): ningún proveedor ofrece todavía inicio de
+  sesión. La web (Ajustes > Modelos) y la TUI (`/connect`) inician, responden y cancelan un flujo y
+  cierran la sesión.
 - Contrato aditivo de `@alisio/sdk` (todo opcional): `ProviderRegistration.auth`,
   `ProviderAuthMethod` (con `refresh` opcional y fallo transitorio por `retryable === true`),
   `ProviderAuthContext`, `ProviderAuthStep` (incluido `device_code` con `verificationUriComplete` e
@@ -168,6 +169,19 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   texto; el host no escribe texto de ningún proveedor. Límites: no hay prueba de DOM (se recorre el
   árbol de VNode y el controlador con temporizadores simulados); el bundle inicial quedó en 89,6 KB
   de 90 KB gzip, así que la siguiente adición a Ajustes debe cargarse de forma diferida.
+
+- TUI (fase 4; `packages/cli/src/tui/connect-oauth.ts` y `app.ts`): `/connect` de un proveedor cuya
+  registración declara `auth` abre un selector «Sign in» / «Enter API key» (este último solo si hay
+  un campo secreto) y, con una sesión guardada, «Sign out»; iniciar sesión no pide ni exige la clave
+  (`field.required` ya no bloquea). El conductor ejecuta `runAuthFlow` en proceso, imprime
+  `device_code`, `auth_url` y `progress` como texto plano (sin caracteres de control), rotula el
+  campo del `prompt` solo con el `prompt.message` del plugin (enmascarado si es secreto) y cancela
+  con `Esc` (en el campo o en el selector de espera). Un método `unofficial` muestra el aviso fijo y
+  pide confirmación. El cierre de sesión borra solo `oauth[perfil]` (las claves de API se
+  conservan). El `loopback` se ofrece salvo con `SSH_CONNECTION` o `SSH_TTY` (heurística). `probeProvider`
+  recibe ya el nombre del perfil, así que `request.oauth` existe al validar. Los errores que la TUI
+  imprime tras `probeProvider`, los fallos de los hooks de fin de sesión y los de `/stats` pasan por
+  `redactCredentials` (P-03). `alisio run` no tiene ruta ni comando que inicie un flujo.
 
 ### Núcleo, límites y almacenamiento
 
@@ -2508,7 +2522,7 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   un terminal real; otros navegadores, Windows y macOS; lectores de pantalla; y datasets muy grandes
   en el navegador.
 
-## Inicio de sesión de proveedores (fases 1 y 2): alcance de la verificación
+## Inicio de sesión de proveedores (fases 1 a 4): alcance de la verificación
 
 - Verificado con Vitest (`tests/provider-oauth-*.test.ts`) sobre un directorio de configuración
   temporal real: almacén (claves superiores desconocidas, `oauth` sin `providers`, `generation`
@@ -2530,13 +2544,23 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   registros, líneas `--json` y stdout y stderr de un proceso real del host de Desktop.
 - No verificado: Windows y macOS (`rename` y `open "wx"` sobre otros sistemas de archivos), sistemas de
   archivos de red, un plugin real de proveedor (llega con la fase 5 en `alisio-plugins`), un
-  navegador real contra el listener de loopback, un túnel SSH real, la interfaz web y la TUI (fases 3
-  y 4) y todo comportamiento de OpenAI. La línea `proof_ledger` de `alisio run --json` pasa ya por
+  navegador real contra el listener de loopback, un túnel SSH real, y todo comportamiento de OpenAI. La línea `proof_ledger` de `alisio run --json` pasa ya por
   `redactDeep` y los fragmentos del ledger también por `redactCredentials`.
+- Fase 4, verificado con Vitest (`tests/connect-oauth.test.ts`, sin terminal: el conductor habla con
+  un puerto de UI simulado y un almacén real en un directorio temporal): el selector (sin métodos
+  sigue el flujo de clave; «Sign in» solo; «Enter API key» solo con campo secreto; «Sign out» solo con
+  sesión; etiqueta `unofficial`), que iniciar sesión no deja campos secretos por pedir, el flujo con
+  pasos como texto, el `prompt` rotulado con el mensaje del plugin, la cancelación con `Esc` en el
+  campo y en la espera (con la señal abortada y sin escritura), el aviso `unofficial` con sí y con
+  no, el cierre de sesión (solo `oauth[perfil]`, sin tokens en el texto), el `loopback` según SSH, la
+  redacción de errores (P-03) y que ningún archivo de `packages/cli/src` fuera de `tui/connect-oauth.ts`
+  inicia flujos. No verificado: el `Picker` y el campo de la TUI en un terminal real (las piezas de
+  `app.ts` que los muestran no tienen prueba propia, solo se comprueban con el tipo), Windows y
+  macOS, y cualquier comportamiento de OpenAI.
 
 ## Límites conocidos
 
-### Inicio de sesión de proveedores (fases 1 y 2)
+### Inicio de sesión de proveedores (fases 1 a 4)
 
 - Convención de comodidad, no cifrado ni aislamiento: las sesiones quedan en texto plano en
   `credentials.json` (`0600`), legibles por cualquier proceso del mismo usuario y por cualquier plugin
@@ -2546,13 +2570,13 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   entenderlo). Tras un cierre brusco del titular, los esperadores fallan con
   `CREDENTIAL_LOCK_TIMEOUT` u `OAUTH_REFRESH_BUSY` hasta que se cumplen 30 s. Una retención de más de
   30 s permite que otro proceso robe el bloqueo.
-- Hasta las fases 3 y 4 no hay forma de iniciar ni cerrar sesión desde la interfaz web ni desde la TUI
-  (solo la API del servidor). `alisio eval` entrega a los escaneos de cassettes y exportaciones los tokens vivos y rotados de su
+- Iniciar y cerrar sesión solo es posible desde la interfaz web, la TUI y la API del servidor, nunca
+  desde `alisio run`. `alisio eval` entrega a los escaneos de cassettes y exportaciones los tokens vivos y rotados de su
   propio proceso (`exactSecrets()`) y los guardados en disco (`oauthSecretValues()`); un token ya
   rotado en otro proceso y no guardado no se conoce.
 - `ProviderRegistry.create` solo entrega `request.oauth` cuando el llamador pasa el nombre del perfil:
-  `probeProvider` lo admite como argumento opcional, pero `/connect` de la TUI todavía no lo pasa
-  (fase 4).
+  `/connect` de la TUI lo pasa (el perfil se llama como el id del proveedor); una llamada de un
+  plugin o de un script sin él no recibe sesión.
 - Los flujos de inicio de sesión viven en memoria: reiniciar el servidor los pierde y la consulta da
   404. Un `cancelar` que llega mientras la credencial ya se está guardando llega tarde: el flujo
   termina con éxito y la sesión se cierra con `DELETE .../credentials`. La redacción es de mejor
@@ -2560,6 +2584,37 @@ el 2026-10-01 (D10: retención 30 / 7 días y artefactos sin caducidad).
   se ofrece a un plugin cuando el servidor está enlazado a loopback, aunque el navegador esté en
   otra máquina (túnel SSH): la vista lo marca como `assumed` y la interfaz debe ofrecer también pegar
   la URL. Que un servidor lo declare (`localBrowser: true`) no se verifica: lo fija Alisio Desktop.
+
+- **Vista previa y elegibilidad.** Un inicio de sesión que un proveedor ofrece como vista previa
+  (el primer consumidor previsto es «Sign in with ChatGPT» en el plugin de OpenAI, fase 5) puede
+  cambiar o dejar de funcionar sin aviso, y su elegibilidad (uso comercial, apps alojadas, un
+  servidor en una máquina remota) es del proveedor y su plugin. Los métodos no autorizados
+  oficialmente se marcan «no oficial» en la web y en la TUI.
+- **Sin código de dispositivo para el primer consumidor; uso remoto solo por túnel SSH.** Un Alisio
+  remoto usa un túnel `ssh -L` con el puerto de loopback reenviado, o pegar la URL; copiar la
+  credencial entre máquinas no se soporta (el refresh token rota). «Navegador local» es una
+  suposición: la TUI la hace con `SSH_CONNECTION`/`SSH_TTY` y el servidor con el enlace a loopback;
+  con un túnel SSH el servidor puede estar en loopback sin que el navegador esté en el mismo equipo.
+- **Cerrar sesión borra solo lo local.** El agente «Alisio» sigue listado en los ajustes del
+  proveedor, y un primer inicio de sesión sin `hostId` previo puede crear otro agente; el usuario
+  puede revocarlo allí.
+- **Bajada de versión.** Un core 0.10 o anterior conserva `oauth` en `credentials.json` pero no lo
+  usa, no toma el bloqueo y puede reescribir una copia obsoleta que el core nuevo no detecta; el peor
+  caso es una sesión cerrada que reaparece o un token rotado perdido, que se recupera iniciando
+  sesión de nuevo.
+- **`DELETE /api/providers/:profile/credentials` ignora `--read-only`** (hueco previo, Q1) y ahora
+  también borra sesiones de inicio de sesión y cancela flujos: un cliente con la cookie puede, con
+  `--read-only` activo, cerrar la sesión de un perfil y abortar un inicio en curso. Las rutas de flujo
+  nuevas sí rechazan `--read-only`.
+- **Otros límites aceptados** (spec 025 §10): el espacio de trabajo por defecto de Desktop es el
+  directorio del usuario, así que las herramientas de archivos podrían leer `credentials.json` con
+  aprobación, y la salida de herramientas no se redacta en SQLite; sin TLS en `--allow-remote` la
+  cookie, la URL pegada y el enlace de autorización viajan en claro; la pantalla de consentimiento
+  del proveedor puede mostrar un ícono genérico para «Alisio». Un proceso local con el mismo usuario
+  puede ocupar el puerto fijo del loopback o leer `credentials.json` de todas formas.
+- El comportamiento real de «Sign in with ChatGPT» se midió en vivo en la fase 0 (D-31..D-36); el flujo
+  real no está en la suite por defecto y quedan **no verificados** el puerto aleatorio, la
+  elegibilidad (P0-L8) y el uso remoto por túnel SSH real (P0-L9) hasta PO-AC-19 (fase 5).
 
 ### Runtime y empaquetado
 

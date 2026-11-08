@@ -4,6 +4,32 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.0] - 2026-11-07
+
+Provider sign-in: plugins can offer "Sign in" instead of an API key.
+
+### Added
+
+- **Provider sign-in contract in `@alisio/sdk`** (additive): a provider plugin can declare sign-in
+  methods (`ProviderRegistration.auth`) and receives a per-request token handle (`request.oauth`).
+  Alisio stores the session, renews it before it expires, serializes renewals across processes and
+  redacts tokens; the plugin only talks to its provider. See the plugin guide.
+- Settings → Models: a provider with sign-in methods shows a **Sign in** button per method, the
+  verification code or link to open, progress, a field for what the plugin asks you to paste, and
+  **Cancel**. An expired session shows **Sign in again**, and **Sign out** removes it. Methods the
+  provider has not officially authorized are marked **unofficial** and ask for confirmation first.
+- Terminal `/connect`: the same sign-in with a method picker, plain-text steps, **Esc** to cancel
+  and **Sign out**. A provider that only supports sign-in no longer asks for an API key.
+- Alisio Desktop and `alisio serve` offer a one-time local listener on `127.0.0.1` for the sign-in
+  redirect when the browser is on the same computer, with pasting the URL as the alternative.
+
+### Improved
+
+- Tokens and authorization codes are redacted from server logs, API errors, live event streams,
+  `alisio run --json` output, the session event journal, Alisio Desktop output and the errors the
+  terminal prints.
+- Alisio Desktop uses the new app icons.
+
 ## [0.10.0] - 2026-11-07
 
 Install, update and remove plugins from the web UI.

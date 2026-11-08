@@ -89,7 +89,7 @@ description, and `/resume` suggests matching session IDs.
 | Command | Purpose |
 | --- | --- |
 | `/help` | Commands and keys |
-| `/connect` | Open a focused provider form with paste-friendly URL input, masked secret input, an API key environment-variable field (the connection remembers its name for the environment fallback), cursor editing and explicit submit/cancel help; then show that provider's titled, provider-prefixed model list, persist the choice globally and start a fresh session |
+| `/connect` | Open a focused provider form with paste-friendly URL input, masked secret input, an API key environment-variable field (the connection remembers its name for the environment fallback), cursor editing and explicit submit/cancel help; then show that provider's titled, provider-prefixed model list, persist the choice globally and start a fresh session. A provider whose plugin offers sign-in also gets a method picker and a sign-out entry ([details](#connect)) |
 | `/model`, `/models` | Open the global provider/model selector. Entries are grouped and prefixed by provider title, the active pair is marked, and unavailable catalogs remain visible without hiding healthy profiles. A different pair is persisted and starts a fresh session; the active pair is a no-op. Legacy root provider configuration is not listed |
 | `/compact [focus]` | Summarize older history with the current model, with optional focus instructions |
 | `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context, plugin details and, when decisions happened, a [Decision Intelligence](/decision-intelligence#stats-section) section |
@@ -470,6 +470,40 @@ reason `restart`: it never resumes by itself, run `/goal resume`. `alisio run` (
 backs ("tests pass") appears as a notice. `/goal override <reason>` completes a goal over unmet
 required criteria; only you can. The plan review lists the criteria the plan proposes; approving
 activates all of them (the web review lets you decide each one).
+
+## Connecting a provider and signing in {#connect}
+
+`/connect` asks which provider to configure. When that provider's plugin declares sign-in methods
+(`auth` in its registration), a picker comes first:
+
+- `Sign in · <method>`: one entry per method, marked `(unofficial)` when the provider has not
+  authorized it. After a session expired the entry reads **Sign in again**.
+- **Enter API key**: only when the provider also has a secret field. Signing in never asks for
+  (nor requires) an API key, so a provider that only supports sign-in does not stop on a required
+  secret.
+- **Sign out**: only when a session is stored for the provider. It removes the saved session from
+  this computer (API keys stay) and does not create a separate command. The provider may still list
+  Alisio as an authorized app; revoke it in the provider's own account settings if you want that.
+
+While a sign-in runs, the TUI prints what the plugin shows as plain text: the authorization URL
+(with the plugin's instructions), or the device code with its verification address, and progress
+lines. A question from the plugin (for example to paste the final URL) opens a field labelled
+only with the plugin's own message, masked when the plugin marks it secret. **Esc** cancels the
+sign-in at any moment: on that field, or on the "waiting" selector shown while the browser step is
+pending. Control characters in plugin text are removed before printing. When the sign-in succeeds,
+`/connect` continues with the usual validation and model selection.
+
+A method marked `unofficial` shows a fixed notice first (the provider has not officially
+authorized the method, the service may change and the account could be restricted) and starts only
+after you answer yes.
+
+The terminal offers the plugin a loopback listener on `127.0.0.1` for the redirect unless it runs in
+an SSH session (`SSH_CONNECTION` or `SSH_TTY`), where your browser is probably on another machine;
+then only pasting the URL (or a device code, if the plugin offers one) is available. This is a
+heuristic. The session is stored in plain text in `credentials.json` (`0600`): this is convenience,
+not encryption, and any loaded plugin can read it. Headless `alisio run` never starts a sign-in: it
+uses a saved session and otherwise fails with a message to sign in from the web UI or the TUI. See
+[Limitations](/limitations) and [Plugins](/plugins) for the contract.
 
 ## MCP manager {#mcp}
 

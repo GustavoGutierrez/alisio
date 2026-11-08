@@ -152,6 +152,15 @@ import {
   TreePanel,
 } from "./components.ts";
 import { ConnectInputPrompt } from "./connect-input.ts";
+import {
+  type ConnectOAuthUi,
+  connectFieldsFor,
+  describeFailure,
+  hookFailureLine,
+  pickConnectMethod,
+  runConnectOAuth,
+  signOut,
+} from "./connect-oauth.ts";
 import { bounded, EXIT_PENDING_CAP_MS, EXIT_SESSION_END_CAP_MS } from "./exit.ts";
 import { BRANCH_REFRESH_MS, createBranchCache } from "./git-branch.ts";
 import {
@@ -1898,7 +1907,8 @@ export async function runTui(options: TuiOptions): Promise<void> {
     tui.renderNow?.();
     try {
       const { failures } = await app.endSession(session, reason);
-      for (const f of failures) notice(`Plugin ${f.source} ${f.hook} failed: ${f.error}`);
+      for (const f of failures)
+        notice(`Plugin ${f.source} ${f.hook} failed: ${describeFailure(f.error)}`);
     } catch (e) {
       error(e);
     } finally {
@@ -1970,6 +1980,68 @@ export async function runTui(options: TuiOptions): Promise<void> {
         ),
       );
     });
+  /** The terminal side of the sign-in conductor (`connect-oauth.ts`). */
+  const connectOAuthUi: ConnectOAuthUi = {
+    askChoice,
+    notice,
+    askInput: (input, signal) =>
+      new Promise((resolve) => {
+        const prompt = new ConnectInputPrompt({
+          provider: "Sign in",
+          label: input.label,
+          initial: "",
+          secret: input.secret,
+          placeholder: input.placeholder,
+          ...(input.hint ? { hint: input.hint } : {}),
+          step: 1,
+          steps: 1,
+          title: "Sign in",
+          onSubmit: (value) => {
+            closePicker();
+            resolve(value);
+          },
+          onCancel: () => {
+            closePicker();
+            resolve(undefined);
+          },
+        });
+        // The flow ended on its own (expired, cancelled elsewhere): take the dialog down.
+        signal.addEventListener(
+          "abort",
+          () => {
+            if (picker === prompt) closePicker();
+            resolve(undefined);
+          },
+          { once: true },
+        );
+        showPicker(prompt);
+      }),
+    beginWait() {
+      let resolveCancelled!: () => void;
+      const cancelled = new Promise<void>((resolve) => {
+        resolveCancelled = resolve;
+      });
+      const waiting: Picker = new Picker(
+        "Waiting for the sign-in to finish in your browser · Esc cancels",
+        [{ value: "cancel", label: "Cancel sign-in" }],
+        () => {
+          closePicker();
+          resolveCancelled();
+        },
+        () => {
+          closePicker();
+          resolveCancelled();
+        },
+      );
+      showPicker(waiting);
+      return {
+        cancelled,
+        close: () => {
+          if (picker === waiting) closePicker();
+        },
+      };
+    },
+  };
   const connect = async () => {
     const registrations = app.providers.list();
     if (!registrations.length) return notice("No provider plugins are registered");
@@ -1987,11 +2059,26 @@ export async function runTui(options: TuiOptions): Promise<void> {
     const prior = await app.providerSettings.resolve(providerId);
     const profile: Record<string, string | boolean | number> = { ...(prior?.profile.values ?? {}) };
     const credentials: Record<string, string> = { ...(prior?.credentials ?? {}) };
-    const inputFields = registration.fields.filter(
+    // A provider that declares sign-in methods asks how to connect; signing in never needs a key.
+    const stored = registration.auth?.length
+      ? await app.providerSettings.getOAuth(providerId, registration.id)
+      : undefined;
+    const how = await pickConnectMethod({
+      registration,
+      ...(stored ? { session: { state: stored.state ?? "ok" } } : {}),
+      ui: connectOAuthUi,
+    });
+    if (!how) return;
+    if (how.kind === "sign_out") {
+      await signOut({ store: app.providerSettings, profile: providerId, ui: connectOAuthUi });
+      return;
+    }
+    const fields = connectFieldsFor(registration, how);
+    const inputFields = fields.filter(
       (field) => field.kind !== "select" && field.kind !== "boolean",
     );
     let inputStep = 0;
-    for (const field of registration.fields) {
+    for (const field of fields) {
       if (field.kind === "secret") {
         inputStep++;
         const entered = await askInput({
@@ -2042,6 +2129,18 @@ export async function runTui(options: TuiOptions): Promise<void> {
       if (field.required && !entered.trim()) return error(`${field.label} is required`);
       profile[field.key] = entered.trim();
     }
+    if (how.kind === "sign_in") {
+      const outcome = await runConnectOAuth({
+        store: app.providerSettings,
+        profile: providerId,
+        registration: { id: registration.id, name: registration.name },
+        method: how.method,
+        ui: connectOAuthUi,
+      });
+      if (outcome.status !== "succeeded")
+        return notice(outcome.message ?? "Sign-in did not finish.");
+      notice("Signed in.");
+    }
     flashHint("Validating connection and loading models…", 60_000);
     let discovered: ModelInfo[];
     try {
@@ -2050,9 +2149,10 @@ export async function runTui(options: TuiOptions): Promise<void> {
         profile,
         credentials,
         AbortSignal.timeout(20_000),
+        providerId,
       );
     } catch (cause) {
-      return error(cause);
+      return error(describeFailure(cause, Object.values(credentials)));
     }
     let model: string | undefined;
     if (discovered.length)
@@ -3249,7 +3349,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
       `- mascot: ${app.plugins.extensions.resolve("mascot")?.provider.id ?? "alisio.default"} · startup screen: ${app.plugins.extensions.resolve("startup-screen")?.provider.id ?? "alisio.default"}`,
       ...[...app.plugins.extensions.conflicts(), ...startupDiagnostics].map(
         (d) =>
-          `- ${"winner" in d ? `extension_conflict ${d.point}: ${d.winner} over ${d.losers.join(", ")}` : `${d.type} ${d.source} ${d.hook}: ${d.error}`}`,
+          `- ${"winner" in d ? `extension_conflict ${d.point}: ${d.winner} over ${d.losers.join(", ")}` : hookFailureLine(d)}`,
       ),
       `- prompt templates: ${app.prompts.templates.size}`,
       ...app.prompts.diagnostics.map((d) => `- ${d.type} ${JSON.stringify(d).slice(0, 160)}`),

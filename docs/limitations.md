@@ -384,13 +384,14 @@ needs a restart (the desktop app restarts itself, `alisio serve` does not); inst
 run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
 ranges make npm fail and roll back; update the older plugin first.
 
-### Provider sign-in (contract, core, server API and Web UI, phases 1 to 3)
+### Provider sign-in (contract, core, server API, Web UI and TUI, phases 1 to 4)
 
 Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and
 redacts the session, and the Web UI (Settings → Models) can start, show, answer and cancel a sign-in
-(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect). The
-terminal `/connect` screen does not offer it yet, and no provider offers it yet. Flows live in
-memory: restarting the server loses them, and the page then says the sign-in was interrupted.
+(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect); the
+terminal `/connect` screen offers the same sign-in and a sign-out. No provider offers it yet, and
+headless `alisio run` never starts one. Flows live in memory: restarting the server loses them, and
+the page then says the sign-in was interrupted.
 
 - **Plain text storage.** Sessions are stored in plain text in `credentials.json` (`0600`), readable
   by any process of the same user and by any loaded plugin; this is session convenience, not
@@ -407,8 +408,17 @@ memory: restarting the server loses them, and the page then says the sign-in was
 - The file lock protects only between versions that take it: an older core writes without it and can
   overwrite a newer file with a stale copy.
 - The loopback listener is offered when the server listens on loopback even if the browser is on
-  another machine (an SSH tunnel), so the UI keeps the paste field of the plugin. There is no TLS
-  with `--allow-remote`: the pasted value and the authorization link travel in the clear.
+  another machine (an SSH tunnel), so the UI keeps the paste field of the plugin; the TUI offers it
+  unless `SSH_CONNECTION` or `SSH_TTY` is set (a heuristic). There is no TLS with `--allow-remote`:
+  the pasted value and the authorization link travel in the clear.
+- **No device code for the first planned provider; remote use only through an SSH tunnel.** A remote
+  Alisio needs `ssh -L` with the loopback port forwarded, or pasting the URL; copying the credential
+  to another machine is not supported (the refresh token rotates).
+- **Signing out only removes the local session.** The provider keeps listing the app as authorized
+  until you revoke it in its account settings. `DELETE /api/providers/:profile/credentials`
+  ignores `--read-only` (an earlier gap) and now also deletes sign-in sessions and cancels flows.
+- **Downgrading.** Alisio 0.10 or older keeps the stored session but neither uses it nor takes the
+  lock, and it can rewrite a stale copy of `credentials.json`; signing in again recovers.
 
 ## Verification scope
 
@@ -591,7 +601,7 @@ browser behavior (components are tested as VNode trees and the screenshot is man
 testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
 command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).
 
-**Provider sign-in (phases 1 and 2).** Verified with Vitest on a temporary configuration directory: the
+**Provider sign-in (phases 1 to 4).** Verified with Vitest on a temporary configuration directory: the
 credentials store (unknown keys, `oauth` without `providers`, generation counter, provider binding,
 conditional writes), file locks (stale at 31 s, not at 29 s, owner-only release), the renewal manager
 (single flight, per-caller abort, conditional write after a delete or a new sign-in, permanent and
@@ -599,9 +609,12 @@ transient failures, `invalidate`), redaction and its feed to cassette and export
 child processes, no lost writes, a single holder of a stale lock and one shared renewal. Phase 2 adds
 the flow state machine with an injected clock, URL validation, the real loopback listener, the HTTP
 routes against a real server with a fake provider plugin, and redaction of SSE frames, API errors,
-logs, `--json` lines and the output of a real desktop host process. Not verified: Windows, macOS and
-network file systems, a real provider plugin, a real browser or SSH tunnel against the listener, the
-Web UI and the TUI, and any behavior of a real sign-in service. Details live in
+logs, `--json` lines and the output of a real desktop host process. Phase 4 tests the TUI sign-in
+conductor without a terminal (method picker, prompts, `Esc` cancel, unofficial notice, sign out,
+redaction of printed errors, and that only the TUI drives flows). Not verified: Windows, macOS and
+network file systems, a real provider plugin, a real browser or SSH tunnel against the listener,
+the picker and input dialog in a real terminal, and any behavior of a real sign-in service (the
+random loopback port, eligibility and remote use stay unmeasured). Details live in
 `docs/implementation-status.md`.
 
 ### Desktop app (Electron)

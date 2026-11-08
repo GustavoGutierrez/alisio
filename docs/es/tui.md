@@ -92,7 +92,7 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | Comando | Función |
 | --- | --- |
 | `/help` | Comandos y teclas |
-| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva |
+| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva. Un proveedor cuyo plugin ofrece inicio de sesión muestra además un selector de método y una entrada para cerrar sesión ([detalles](#connect)) |
 | `/model`, `/models` | Abre el selector global de proveedor/modelo. Las entradas se agrupan y prefijan con el título del proveedor, se marca la pareja activa y los catálogos no disponibles siguen visibles sin ocultar perfiles sanos. Una pareja distinta se persiste e inicia una sesión nueva; la pareja activa no hace nada. No se lista la configuración raíz heredada |
 | `/compact [focus]` | Resume la historia antigua con el modelo actual, con instrucciones de foco opcionales |
 | `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto, detalles de plugins y, cuando hubo decisiones, una sección de [Decision Intelligence](/es/decision-intelligence#stats-section) |
@@ -490,6 +490,42 @@ tarjeta web y `alisio run --json`. Tus acciones son `/proof add [required] <text
 evidencia respalda («tests pass») aparece como aviso. `/goal override <motivo>` completa un objetivo
 sobre criterios requeridos sin cumplir; solo tú puedes. La revisión del plan lista los criterios que
 propone; aprobar los activa todos (la revisión web te deja decidir cada uno).
+
+## Conectar un proveedor e iniciar sesión {#connect}
+
+`/connect` pregunta qué proveedor configurar. Cuando el plugin de ese proveedor declara métodos de
+inicio de sesión (`auth` en su registración), primero aparece un selector:
+
+- `Sign in · <método>`: una entrada por método, marcada `(unofficial)` cuando el proveedor no lo
+  ha autorizado. Con una sesión caducada la entrada dice **Sign in again**.
+- **Enter API key**: solo cuando el proveedor tiene además un campo secreto. Iniciar sesión nunca
+  pide (ni exige) una clave de API, así que un proveedor que solo admite inicio de sesión no se
+  detiene en un secreto obligatorio.
+- **Sign out**: solo cuando hay una sesión guardada para el proveedor. Borra la sesión guardada de
+  este equipo (las claves de API se conservan) y no crea un comando aparte. El proveedor puede seguir
+  listando a Alisio como aplicación autorizada; revócala en los ajustes de la cuenta del proveedor si
+  lo quieres.
+
+Mientras corre el inicio de sesión, la TUI imprime como texto plano lo que muestra el plugin: la URL
+de autorización (con las instrucciones del plugin), o el código de dispositivo con su dirección de
+verificación, y las líneas de progreso. Una pregunta del plugin (por ejemplo pegar la URL final)
+abre un campo rotulado solo con el mensaje del propio plugin, enmascarado cuando el plugin lo marca
+como secreto. **Esc** cancela el inicio de sesión en cualquier momento: en ese campo, o en el
+selector de «espera» que se muestra mientras el paso del navegador está pendiente. Los caracteres de
+control del texto del plugin se eliminan antes de imprimir. Si el inicio de sesión tiene éxito,
+`/connect` continúa con la validación y la elección de modelo habituales.
+
+Un método marcado `unofficial` muestra primero un aviso fijo (el proveedor no ha autorizado
+oficialmente el método, el servicio puede cambiar y la cuenta podría ser restringida) y solo empieza
+después de que respondas que sí.
+
+El terminal ofrece al plugin un listener de loopback en `127.0.0.1` para la redirección salvo en una
+sesión SSH (`SSH_CONNECTION` o `SSH_TTY`), donde tu navegador probablemente está en otro equipo; en
+ese caso solo está disponible pegar la URL (o un código de dispositivo, si el plugin lo ofrece). Es
+una heurística. La sesión se guarda en texto plano en `credentials.json` (`0600`): es comodidad, no
+cifrado, y cualquier plugin cargado puede leerla. `alisio run` sin interfaz nunca inicia sesión:
+usa una sesión guardada y, si no hay, falla con un mensaje para iniciar sesión desde la interfaz web
+o la TUI. Consulta [Limitaciones](/es/limitations) y [Plugins](/es/plugins) para el contrato.
 
 ## Gestor MCP {#mcp}
 
