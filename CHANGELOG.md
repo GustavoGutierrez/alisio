@@ -4,6 +4,31 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.1] - 2026-11-08
+
+Projects in the sidebar, project settings and reliable plugin updates.
+
+### Added
+
+- The sidebar lists **Projects** (workspaces) in collapsible **Pinned** and **Recent** groups, with
+  an expand/collapse-all button. Folders you collapse stay collapsed after a restart.
+- Each project's menu offers **Color** (a palette for its folder icon) and **Project settings**: a
+  display name that never renames the folder, the folder path, color, pin, trust and archive.
+- Settings can be maximized, and the plugin catalog shows its covers in two or three columns
+  depending on the width.
+
+### Improved
+
+- A provider with sign-in asks for the model only after you sign in, then lists your account's
+  models.
+- The Spanish interface calls plugins "complementos".
+
+### Fixed
+
+- Updating plugins after an `@alisio/sdk` release no longer fails with an npm peer conflict:
+  **Update all** installs them together, and a single **Update** brings along the other plugins
+  that block it.
+
 ## [0.11.0] - 2026-11-07
 
 Provider sign-in: plugins can offer "Sign in" instead of an API key.

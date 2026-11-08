@@ -6,6 +6,33 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.1",
+      date: "2026-11-08",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "The sidebar lists **Projects** (workspaces) in collapsible **Pinned** and **Recent** groups, with an expand/collapse-all button. Folders you collapse stay collapsed after a restart.",
+            "Each project's menu offers **Color** (a palette for its folder icon) and **Project settings**: a display name that never renames the folder, the folder path, color, pin, trust and archive.",
+            "Settings can be maximized, and the plugin catalog shows its covers in two or three columns depending on the width.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "A provider with sign-in asks for the model only after you sign in, then lists your account's models.",
+            'The Spanish interface calls plugins "complementos".',
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            "Updating plugins after an `@alisio/sdk` release no longer fails with an npm peer conflict: **Update all** installs them together, and a single **Update** brings along the other plugins that block it.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.0",
       date: "2026-11-07",
       sections: [
