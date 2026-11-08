@@ -57,6 +57,10 @@ import type {
   SessionSummary,
   SettingsOverview,
   SideQuestionEntry,
+  SkillCreateRequest,
+  SkillCreateResult,
+  SkillDraftRequest,
+  SkillDraftResult,
   SkillInfo,
   UiBlock,
   WorkspaceInfo,
@@ -461,6 +465,17 @@ export class ApiClient {
     },
     signal?: AbortSignal,
   ) => this.request<AgentDraft>("POST", "/api/agents/draft", body, signal ? { signal } : {});
+  /** The active model drafts a skill; abort `signal` to cancel the model call. */
+  draftSkill = (wid: string, body: SkillDraftRequest, signal?: AbortSignal) =>
+    this.request<SkillDraftResult>(
+      "POST",
+      `/api/workspaces/${enc(wid)}/skills/draft`,
+      body,
+      signal ? { signal } : {},
+    );
+  /** Saves a reviewed skill draft (project or global) and reloads the workspace. */
+  createSkill = (wid: string, body: SkillCreateRequest) =>
+    this.request<SkillCreateResult>("POST", `/api/workspaces/${enc(wid)}/skills`, body);
   /** Sessions started with (or switched to) an agent. */
   agentSessions = (agent: string) =>
     this.request<{ items: SessionSummary[] }>(

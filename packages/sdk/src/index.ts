@@ -2379,6 +2379,8 @@ export type ApiErrorCode =
   | "permission_denied"
   /** The request was cancelled before it finished, e.g. a `/btw` side question (409). */
   | "cancelled"
+  /** A skill with that name already exists in the chosen location (409). */
+  | "skill_exists"
   /** The artifact does not exist or belongs to another session (404). */
   | "artifact_not_found"
   /** The artifact exceeds a size limit for this operation (413). */
@@ -3322,3 +3324,5 @@ export interface EvalReport {
   /** The rates behind every `estimated` figure; absent when none was supplied. */
   rates?: EvalRates;
 }
+
+export * from "./skills.ts";

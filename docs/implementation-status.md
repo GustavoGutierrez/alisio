@@ -16,7 +16,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
-  de razonamiento; agentes del usuario (ventana Agentes y `/agents`); servidor web
+  de razonamiento; agentes del usuario (ventana Agentes y `/agents`); creador de skills (ventana web); servidor web
   (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
   (`specs/archive/004-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
@@ -776,6 +776,37 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   pistas y Esc lo cancela. Tras crear: "▶ Probarlo en una sesión nueva" (por defecto) o seguir en
   el editor. `/agent:<id>` activa un agente (como el selector, a nivel global `agents.active`).
 
+### Creador de skills (ventana web)
+
+- Ventana en la barra lateral (sobre Ajustes) y botón «Nueva skill» en Ajustes → Skills, en un chunk
+  perezoso con sus textos EN/ES propios. Tres pasos: describir, generar (etapas con tiempo
+  transcurrido y Cancelar que aborta la solicitud) y revisar y guardar (editor de nombre, descripción
+  y cuerpo con vista previa, archivos extra editables o removibles, panel de errores y sugerencias,
+  «Pedir cambios» que reenvía el borrador editado). Las etapas previas a la validación son
+  estimaciones por tiempo: el servidor responde en un solo JSON, sin streaming.
+- API: `POST /api/workspaces/:wid/skills/draft` (una llamada sin herramientas del modelo activo, 180 s,
+  8000 tokens de salida; se cancela al cerrar la conexión) y `POST /api/workspaces/:wid/skills`
+  (validación, escritura atómica en carpeta temporal con `rename`, archivos 0644, nunca ejecuta
+  scripts; `skill_exists` salvo `overwrite: true`; el ámbito de proyecto exige un workspace de
+  confianza; recarga el workspace y emite `catalog_changed` de `skills`; con un turno activo guarda y
+  responde `reloaded: false` con el motivo). No disponible con `--read-only`.
+- Formato abierto Agent Skills: el frontmatter se construye desde los campos (YAML con escalares
+  citados), nunca desde texto del modelo. Validación compartida y pura en `@alisio/sdk`
+  (`validateSkillDraft`, `renderSkillMd`), usada por el servidor y por la web: errores duros (nombre,
+  descripción, compatibilidad, metadatos, SKILL.md ≤ 64 KB, ≤ 20 archivos, ≤ 256 KB cada uno y 1 MB
+  en total, rutas bajo `scripts/`, `references/` o `assets/`, referencias del cuerpo presentes) y
+  sugerencias (longitud, cláusula «Use when», persona, nombre vago, índice en referencias largas,
+  fechas, barras invertidas, scripts sin documentar, colisión de nombre). La guía de redacción
+  incluida se reemplaza con una skill `alisio-skill-authoring`.
+- `.agents/skills` y `.claude/skills` cuentan ahora como recursos de proyecto en la confianza
+  (`hasProjectResources`).
+- Alcance de la verificación: pruebas de validación, análisis tolerante del borrador, escritor
+  atómico, rutas del servidor (flujo feliz, error del proveedor, cancelación, ámbitos, confianza,
+  conflicto, recarga diferida, sin rutas absolutas) y lógica pura de la web; verificación visual con
+  Playwright contra `alisio serve` y un proveedor falso. Límites: no se comprueba la calidad de las
+  skills que redacta cada modelo, el revisor no ejecuta ni analiza los scripts y la skill creada no
+  se edita después desde la ventana.
+
 ### Preguntar al usuario (ask_user_question)
 
 - Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
@@ -966,7 +997,10 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   preset, modelo + esfuerzo, anillo de contexto y enviar/detener; panel de aprobaciones e
   interacciones que ocupa el lugar del compositor; temas oscuro/claro/sistema sin parpadeo, EN/ES y
   `prefers-reduced-motion`. `pnpm web:size` (también dentro de `pnpm pack:check`) exige JS inicial ≤
-  90 KB y CSS inicial ≤ 20 KB gzip.
+  95 KB y CSS inicial ≤ 20 KB gzip. El límite subió de 90 a 95 KB con el Creador de skills (2026-11-08):
+  con el modal vacío el JS inicial ya era 90,0 KB, y Rolldown (Vite 8) parte en chunks comunes los módulos
+  del bundle inicial que importa un chunk diferido, aunque ya estén cargados. La validación de skills vive
+  en `packages/sdk/src/skills.ts` para no entrar en el chunk inicial.
 - Fase 4 (renderizadores de desarrollo, explorador y adjuntos):
   - Renderizadores web diferidos por kind (un chunk cada uno, resolución probada en T-17 con
     fallback para kinds desconocidos y cargas fallidas): `diff` (parser de parche unificado propio y

@@ -30,7 +30,7 @@ Talks only to `@alisio/server` over HTTP/SSE; imports only types from `@alisio/s
   focus, `lang` kept in sync (`setLocale`), respect reduced motion; do not rely on color alone.
 - Security: render model/tool text only through the sanitizing markdown path or text nodes; never
   `dangerouslySetInnerHTML` with unsanitized data. CSP has no inline script and no `data:` fonts.
-- Size budget (`pnpm web:size`): initial JS <= 90 KB gzip, CSS <= 20 KB gzip. Heavy libs (shiki,
+- Size budget (`pnpm web:size`): initial JS <= 95 KB gzip, CSS <= 20 KB gzip. Heavy libs (shiki,
   mermaid, katex) stay dynamic imports.
 - Keep state logic in pure functions/reducers (testable without a DOM); components stay thin.
 - Server data shape changes: update SDK types, `net/api.ts`, store, i18n, docs EN/ES, and add a

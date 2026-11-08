@@ -764,6 +764,22 @@ export {
   sideTranscript,
 } from "./sessions/side-questions.ts";
 export {
+  SKILL_AUTHORING_GUIDANCE,
+  SKILL_AUTHORING_SKILL_NAMES,
+  SKILL_DRAFT_INSTRUCTIONS,
+} from "./skills/authoring-guidance.ts";
+export {
+  generateSkillDraft,
+  parseSkillDraft,
+  SKILL_FEEDBACK_MAX,
+  SKILL_IDEA_MAX,
+  type SkillAuthoringGuidance,
+  skillAuthoringGuidance,
+  skillDraftRequest,
+  slugifySkillName,
+} from "./skills/draft.ts";
+export { SkillWriteError, type SkillWriteResult, writeSkill } from "./skills/writer.ts";
+export {
   composeSideBySide,
   DefaultAlisioMascot,
   DefaultStartupScreen,

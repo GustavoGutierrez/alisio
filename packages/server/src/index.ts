@@ -71,6 +71,7 @@ import { registerRestartRoutes } from "./routes/server-restart.ts";
 import { registerSessionViewRoutes } from "./routes/session-views.ts";
 import { registerSessionRoutes } from "./routes/sessions.ts";
 import { registerSideQuestionRoutes } from "./routes/side-questions.ts";
+import { registerSkillBuilderRoutes } from "./routes/skill-builder.ts";
 import { registerTaskRoutes } from "./routes/tasks.ts";
 import { registerWorkspaceRoutes } from "./routes/workspaces.ts";
 import { SseHub } from "./sse/hub.ts";
@@ -609,6 +610,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     });
   }
   registerAgentDefinitionRoutes(router, management, recycler);
+  registerSkillBuilderRoutes(router, management, recycler);
   // Sign-in flows live in memory, per process; a plugin may be offered a loopback listener only
   // when the browser can be assumed local (D16) and the server is not read-only.
   const authFlows = new AuthFlowRegistry({ store: new ProviderSettingsStore() });

@@ -29,6 +29,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
       items: [
         "context",
         "agents",
+        "skill-builder",
         "subagents",
         "plan",
         "proof",
@@ -76,6 +77,7 @@ const en = {
   "tool-validation": "Tool validation",
   context: "Context & AGENTS.md",
   agents: "Agents",
+  "skill-builder": "Skill Builder",
   subagents: "Subagents",
   plan: "Plan mode & review",
   proof: "Proof: acceptance criteria",
@@ -115,6 +117,7 @@ const es = {
   "tool-validation": "Validación de herramientas",
   context: "Contexto y AGENTS.md",
   agents: "Agentes",
+  "skill-builder": "Creador de skills",
   subagents: "Subagentes",
   plan: "Modo plan y revisión",
   proof: "Proof: criterios de aceptación",

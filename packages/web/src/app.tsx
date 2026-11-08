@@ -30,6 +30,7 @@ import {
   proofCount,
   reloadRequired,
   settingsOpen,
+  skillBuilderOpen,
   streamStatus,
   toast,
   visible,
@@ -83,6 +84,8 @@ function Lazy<P extends object>(props: { load: () => Promise<ComponentType<P>> }
 const loadSettings = () =>
   import("./components/settings/SettingsModal.tsx").then((m) => m.SettingsModal);
 const loadAgents = () => import("./components/agents/AgentsModal.tsx").then((m) => m.AgentsModal);
+const loadSkillBuilder = () =>
+  import("./components/skill-builder/SkillBuilderModal.tsx").then((m) => m.SkillBuilderModal);
 const loadPicker = () => import("./components/agents/AgentPicker.tsx").then((m) => m.AgentPicker);
 const loadBtw = () => import("./components/btw/BtwPanel.tsx").then((m) => m.BtwPanel);
 /** Falls back to the generic question panel if the chunk cannot load (it still offers a skip). */
@@ -115,7 +118,8 @@ function RightSlot(props: { expanded: boolean }) {
   const narrow = narrowScreen.value || !bounds.fits;
   const reset = defaultPanelWidth(viewport.value);
   const width = clampPanelWidth(panelWidth.value ?? reset, bounds);
-  const modal = settingsOpen.value || agentsOpen.value || agentPickerOpen.value;
+  const modal =
+    settingsOpen.value || agentsOpen.value || skillBuilderOpen.value || agentPickerOpen.value;
   return (
     <>
       {!narrow && !props.expanded ? (
@@ -240,6 +244,7 @@ export function App() {
       {btw.value && id ? <Lazy load={loadBtw} /> : null}
       {settingsOpen.value ? <Lazy load={loadSettings} /> : null}
       {agentsOpen.value ? <Lazy load={loadAgents} /> : null}
+      {skillBuilderOpen.value ? <Lazy load={loadSkillBuilder} /> : null}
       {agentPickerOpen.value ? <Lazy load={loadPicker} /> : null}
       {changelogRequest.value ? (
         <Lazy load={loadChangelog} version={changelogRequest.value.version} />

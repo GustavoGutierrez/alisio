@@ -2,7 +2,9 @@
 import type { SkillInfo } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { api, showToast } from "../../store/app.ts";
+import { api, settingsOpen, showToast, skillBuilderOpen } from "../../store/app.ts";
+import { Icon } from "../icons.tsx";
+import { sb } from "../skill-builder/strings.ts";
 import styles from "./settings.module.css";
 import {
   errorMessage,
@@ -45,6 +47,20 @@ export function SkillsPage() {
   return (
     <>
       <PageIntro title={t("settings.skills")} body={t("skills.lead")} workspace={workspace?.path} />
+      <div class={styles.actions}>
+        <button
+          type="button"
+          class={styles.primary}
+          disabled={!workspace}
+          onClick={() => {
+            // One window at a time: Settings closes and the Skill Builder opens.
+            settingsOpen.value = false;
+            skillBuilderOpen.value = true;
+          }}
+        >
+          <Icon name="plus" size={14} /> {sb("newSkill")}
+        </button>
+      </div>
       <SearchBox value={query} label={t("skills.search")} onInput={setQuery} />
       <Status
         loading={skills.loading && !skills.data}

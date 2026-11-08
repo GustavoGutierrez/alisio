@@ -215,7 +215,7 @@ resources act on the workspace of the open session (or the first workspace when 
 | **General** | UI language (this browser), then the agent settings: compaction, context, limits, plugin hook timeout and web search provider, saved to your user `config.json` |
 | **Models** | Provider profiles with their non-secret values, credentials and **Activate in this workspace** with a model of that profile; **Add a profile** creates one |
 | **Plugins** | Four tabs: **Plugin configuration** (not sandboxed, how plugins are installed, the project file), **Installed plugins** (search, update pills, switch and **Uninstall**), **Plugin catalog** (browse and install) and **Install from file** (private `.tgz` plugins); see [Plugin catalog, install and updates](#plugin-catalog) |
-| **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette |
+| **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette. **New skill** opens the [Skill Builder](./skill-builder.md) |
 | **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first |
 | **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |
 | **Appearance** | Theme (dark, light or system) and whether tool rows start collapsed or expanded, stored in this browser |
@@ -860,6 +860,7 @@ GET  /api/plugins/jobs/:jobId          {phase, phases, done, error?, result?, lo
 DELETE /api/plugins/local/staged/:stagingId   discard an upload
 GET|POST /api/server/restart           availability, restart (only when supervised)
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
+POST /api/workspaces/:wid/skills/draft {idea, ...}   POST /api/workspaces/:wid/skills {scope, draft, overwrite?}
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}
 GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}

@@ -688,6 +688,7 @@ export const en = {
   "language.es": "Español",
   "error.generic": "{message}",
   "sidebar.agents": "Agents",
+  "sidebar.skillBuilder": "Skill Builder",
   "agentsWin.title": "Agents",
   "agentsWin.maximize": "Maximize",
   "agentsWin.restore": "Restore size",

@@ -47,6 +47,8 @@ const PROJECT_RESOURCE_RELATIVE_PATHS = [
   ".alisio/plugins",
   ".alisio/agents",
   ".agents/agents",
+  ".agents/skills",
+  ".claude/skills",
   ".alisio/skills",
   ".alisio/prompts",
 ];

@@ -229,7 +229,7 @@ ninguna):
 | **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de plugins y proveedor de búsqueda web, guardados en su `config.json` de usuario |
 | **Modelos** | Perfiles de proveedor con sus valores no secretos, credenciales y **Activar en este workspace** con un modelo del perfil; **Añadir un perfil** crea uno |
 | **Plugins** | Cuatro pestañas: **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Plugins instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de plugins** (explorar e instalar) e **Instalar desde archivo** (plugins privados `.tgz`); vea [Catálogo de plugins, instalación y actualizaciones](#plugin-catalog) |
-| **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/` |
+| **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/`. **Nueva skill** abre el [Creador de skills](./skill-builder.md) |
 | **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita |
 | **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
 | **Apariencia** | Tema (oscuro, claro o sistema) y si las filas de herramientas empiezan plegadas o desplegadas, guardado en este navegador |
@@ -912,6 +912,7 @@ GET  /api/plugins/jobs/:jobId          {phase, phases, done, error?, result?, lo
 DELETE /api/plugins/local/staged/:stagingId   discard an upload
 GET|POST /api/server/restart           availability, restart (only when supervised)
 GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled}
+POST /api/workspaces/:wid/skills/draft {idea, ...}   POST /api/workspaces/:wid/skills {scope, draft, overwrite?}
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}
 GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}

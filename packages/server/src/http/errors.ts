@@ -31,6 +31,7 @@ export const STATUS: Record<ApiErrorCode, number> = {
   picker_unavailable: 503,
   permission_denied: 403,
   cancelled: 409,
+  skill_exists: 409,
   artifact_not_found: 404,
   artifact_too_large: 413,
   runtime_unavailable: 503,

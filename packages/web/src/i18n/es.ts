@@ -700,6 +700,7 @@ export const es: Record<MessageKey, string> = {
   "language.es": "Español",
   "error.generic": "{message}",
   "sidebar.agents": "Agentes",
+  "sidebar.skillBuilder": "Creador de skills",
   "agentsWin.title": "Agentes",
   "agentsWin.maximize": "Maximizar",
   "agentsWin.restore": "Restaurar tamaño",

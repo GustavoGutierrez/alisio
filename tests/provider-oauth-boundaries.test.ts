@@ -35,12 +35,20 @@ describe("no provider-specific OAuth knowledge in the host (OA-AC-36)", () => {
   });
 
   it("keeps @alisio/sdk free of runtime imports", async () => {
-    const text = await readFile(join(repo, "packages/sdk/src/index.ts"), "utf8");
-    const runtimeImports = text
-      .split("\n")
-      .filter((line) => /^\s*(?:import|export)\b.*\bfrom\s+["']/.test(line))
-      .filter((line) => !/^\s*(?:import|export)\s+type\b/.test(line));
-    expect(runtimeImports).toEqual([]);
-    expect(text).not.toMatch(/\brequire\(/);
+    // Every SDK source file: only type imports or relative imports of the SDK's own modules
+    // (e.g. `export * from "./skills.ts"`); never a package or Node builtin at runtime.
+    const dir = join(repo, "packages/sdk/src");
+    const files = (await readdir(dir)).filter((name) => name.endsWith(".ts"));
+    expect(files).toContain("index.ts");
+    for (const name of files) {
+      const text = await readFile(join(dir, name), "utf8");
+      const runtimeImports = text
+        .split("\n")
+        .filter((line) => /^\s*(?:import|export)\b.*\bfrom\s+["']/.test(line))
+        .filter((line) => !/^\s*(?:import|export)\s+type\b/.test(line))
+        .filter((line) => !/\bfrom\s+["']\.\/[\w-]+\.ts["']/.test(line));
+      expect(runtimeImports, name).toEqual([]);
+      expect(text, name).not.toMatch(/\brequire\(/);
+    }
   });
 });

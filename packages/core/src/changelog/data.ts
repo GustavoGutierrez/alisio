@@ -6,6 +6,19 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "Unreleased",
+      unreleased: true,
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "**Skill Builder** (sidebar, above Settings, and **New skill** in Settings → Skills): describe a skill, let the active model draft it in the open Agent Skills format, then review, edit and save it to the project (`.agents/skills`) or globally (`~/.agents/skills`). It shows live errors and suggestions, can regenerate with your feedback and activates the skill without a restart.",
+            "`.agents/skills` and `.claude/skills` now count as project resources for project trust.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.2",
       date: "2026-11-08",
       sections: [

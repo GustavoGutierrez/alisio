@@ -102,6 +102,8 @@ export const settingsOpen = signal(false);
 export const settingsPage = signal<string | undefined>(undefined);
 /** The Agents window (list/editor), opened from the sidebar above Settings. */
 export const agentsOpen = signal(false);
+/** The Skill Builder window (describe, review and save a new skill). */
+export const skillBuilderOpen = signal(false);
 /** The `/agents` quick picker of the open chat. */
 export const agentPickerOpen = signal(false);
 /** The main agents of the open chat's workspace, in the server's stable cycle order. */

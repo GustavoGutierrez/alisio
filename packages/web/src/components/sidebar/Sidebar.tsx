@@ -20,6 +20,7 @@ import {
   settingsOpen,
   setWorkspaceTrust,
   sidebar,
+  skillBuilderOpen,
 } from "../../store/app.ts";
 import { allCollapsed, closedFolders, folderOpen, setFoldersOpen } from "../../store/folders.ts";
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
@@ -90,6 +91,13 @@ function SessionRow({ session }: { session: SessionSummary }) {
 }
 
 /** Workspaces and their sessions (RF-11): search, archived filter, open folder, settings. */
+/** The windows opened from the foot of the sidebar, in order (above the version line). */
+const FOOTER = [
+  ["users", "sidebar.agents", agentsOpen],
+  ["sparkle", "sidebar.skillBuilder", skillBuilderOpen],
+  ["settings", "sidebar.settings", settingsOpen],
+] as const;
+
 export function Sidebar() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -300,28 +308,20 @@ export function Sidebar() {
           <Icon name="plusCircle" size={18} />
         </button>
         <span class={styles.spacer} />
-        <button
-          type="button"
-          class="icon-btn"
-          aria-label={t("sidebar.agents")}
-          title={t("sidebar.agents")}
-          onClick={() => {
-            agentsOpen.value = true;
-          }}
-        >
-          <Icon name="users" size={18} />
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          aria-label={t("sidebar.settings")}
-          title={t("sidebar.settings")}
-          onClick={() => {
-            settingsOpen.value = true;
-          }}
-        >
-          <Icon name="settings" size={18} />
-        </button>
+        {FOOTER.map(([icon, label, open]) => (
+          <button
+            key={label}
+            type="button"
+            class="icon-btn"
+            aria-label={t(label)}
+            title={t(label)}
+            onClick={() => {
+              open.value = true;
+            }}
+          >
+            <Icon name={icon} size={18} />
+          </button>
+        ))}
       </nav>
     );
 
@@ -496,26 +496,19 @@ export function Sidebar() {
           );
         })}
       </div>
-      <button
-        type="button"
-        class={styles.settings}
-        onClick={() => {
-          agentsOpen.value = true;
-        }}
-      >
-        <Icon name="users" size={17} />
-        {t("sidebar.agents")}
-      </button>
-      <button
-        type="button"
-        class={`${styles.settings} ${styles.settingsBelow}`}
-        onClick={() => {
-          settingsOpen.value = true;
-        }}
-      >
-        <Icon name="settings" size={17} />
-        {t("sidebar.settings")}
-      </button>
+      {FOOTER.map(([icon, label, open], index) => (
+        <button
+          key={label}
+          type="button"
+          class={index ? `${styles.settings} ${styles.settingsBelow}` : styles.settings}
+          onClick={() => {
+            open.value = true;
+          }}
+        >
+          <Icon name={icon} size={17} />
+          {t(label)}
+        </button>
+      ))}
       {appVersion.value ? (
         <p class={styles.version} title={t("about.versionTitle", { version: appVersion.value })}>
           {t("about.version", { version: appVersion.value })}

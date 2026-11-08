@@ -4,6 +4,16 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [Unreleased]
+
+### Added
+
+- **Skill Builder** (sidebar, above Settings, and **New skill** in Settings → Skills): describe a
+  skill, let the active model draft it in the open Agent Skills format, then review, edit and save
+  it to the project (`.agents/skills`) or globally (`~/.agents/skills`). It shows live errors and
+  suggestions, can regenerate with your feedback and activates the skill without a restart.
+- `.agents/skills` and `.claude/skills` now count as project resources for project trust.
+
 ## [0.11.2] - 2026-11-08
 
 A compact plugin catalog with icons and a detail page.
