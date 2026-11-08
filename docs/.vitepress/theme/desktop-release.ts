@@ -1,14 +1,14 @@
 /**
  * The Alisio Desktop release the docs home page links to. This is the ONE place to change when a
- * new desktop release ships (see "Releasing Alisio Desktop" in docs/publishing.md).
+ * new release ships (see "Releasing Alisio Desktop" in docs/publishing.md).
  *
  * File names must match `artifactName` in apps/desktop/electron-builder.config.mjs.
  */
-export const DESKTOP_VERSION = "0.11.0";
+export const DESKTOP_VERSION = "0.11.2";
 
 const REPOSITORY = "https://github.com/GustavoGutierrez/alisio";
 
-export const DESKTOP_TAG = `desktop-v${DESKTOP_VERSION}`;
+export const DESKTOP_TAG = `v${DESKTOP_VERSION}`;
 export const DESKTOP_RELEASE_URL = `${REPOSITORY}/releases/tag/${DESKTOP_TAG}`;
 
 export type DesktopOs = "windows" | "macos" | "linux";
