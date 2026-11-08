@@ -19,6 +19,8 @@ export interface WorkspaceGroup {
   /** Short parent path that tells apart workspaces sharing `name` (e.g. two `alisio` clones). */
   hint?: string;
   sessions: SessionSummary[];
+  /** Latest of `lastOpenedAt` and the newest session update (all its sessions, not the search). */
+  activity: number;
 }
 
 export const emptySidebar = (): SidebarState => ({
@@ -67,8 +69,12 @@ export function applySessionStatus(
   });
 }
 
+/** The folder's own name (last path segment), whatever the display name is. */
+export const folderName = (path: string): string =>
+  path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+
 export const workspaceName = (workspace: WorkspaceInfo): string =>
-  workspace.label ?? workspace.path.split(/[\\/]/).filter(Boolean).at(-1) ?? workspace.path;
+  workspace.label ?? folderName(workspace.path);
 
 const parentSegments = (path: string): string[] => path.split(/[\\/]/).filter(Boolean).slice(0, -1);
 
@@ -167,14 +173,36 @@ export function groupSessions(
       )
       .sort(bySidebarOrder);
     if (q && !sessions.length && !name.toLowerCase().includes(q)) continue;
-    groups.push({ workspace, name, ...(hint ? { hint } : {}), sessions });
+    const activity = all.reduce(
+      (latest, s) => (s.workspaceId === workspace.id ? Math.max(latest, s.updatedAt ?? 0) : latest),
+      workspace.lastOpenedAt ?? 0,
+    );
+    groups.push({ workspace, name, ...(hint ? { hint } : {}), sessions, activity });
   }
+  // Archived last; pinned by path (the server keeps no pin time, so this order is stable); the
+  // rest, and the archived ones among themselves, by recent activity then path.
   return groups.sort(
     (a, b) =>
       Number(a.workspace.archived) - Number(b.workspace.archived) ||
       Number(b.workspace.pinned) - Number(a.workspace.pinned) ||
+      (a.workspace.pinned ? 0 : b.activity - a.activity) ||
       a.workspace.path.localeCompare(b.workspace.path),
   );
+}
+
+/**
+ * The project list as sections: "Pinned" and "Recent" headings only when something (not archived)
+ * is pinned, else one heading-less list. `groups` come from `groupSessions` (already ordered).
+ */
+export function projectSections(
+  groups: WorkspaceGroup[],
+): Array<{ id: "pinned" | "recent" | "all"; groups: WorkspaceGroup[] }> {
+  const pinned = groups.filter((g) => g.workspace.pinned && !g.workspace.archived);
+  if (!pinned.length) return [{ id: "all", groups }];
+  return [
+    { id: "pinned", groups: pinned },
+    { id: "recent", groups: groups.filter((g) => !pinned.includes(g)) },
+  ].filter((section) => section.groups.length) as ReturnType<typeof projectSections>;
 }
 
 /**

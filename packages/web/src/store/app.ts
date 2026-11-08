@@ -648,12 +648,14 @@ export async function pickWorkspace(): Promise<"added" | "cancelled" | "unavaila
 export async function patchWorkspace(
   id: string,
   patch: Parameters<ApiClient["patchWorkspace"]>[1],
-): Promise<void> {
+): Promise<boolean> {
   try {
     const info = await api.patchWorkspace(id, patch);
     sidebar.value = upsertWorkspace(sidebar.value, info);
+    return true;
   } catch (error) {
     showToast(errorText(error));
+    return false;
   }
 }
 

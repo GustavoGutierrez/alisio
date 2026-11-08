@@ -126,7 +126,7 @@ describe("api client", () => {
       setLocale("en");
       const archived = new ApiRequestError(409, "workspace_archived", "raw", { path: "/w/app" });
       expect(errorText(archived)).toBe(
-        "The workspace /w/app is archived. Unarchive it to start new sessions.",
+        "The project /w/app is archived. Unarchive it to start new sessions.",
       );
       expect(errorText(new ApiRequestError(409, "picker_busy", "raw"))).toContain("dialog");
       setLocale("es");

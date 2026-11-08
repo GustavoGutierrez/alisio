@@ -457,3 +457,129 @@
   display: grid;
   gap: 4px;
 }
+
+/* Project sections ("Pinned" / "Recent") and the project color palette. */
+.group + .group {
+  margin-top: 8px;
+}
+
+.groupTitle {
+  margin: 4px 0 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.groupToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+}
+
+.groupToggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.folder[data-color] .folderIcon,
+.folder[data-color] .folderOpen {
+  color: var(--pc);
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 10px 8px 33px;
+}
+
+.paletteInline {
+  padding: 4px 2px;
+}
+
+.swatch {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--pc, transparent);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.swatch:not([data-color]) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.swatch[aria-checked="true"] {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.swatch:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.folder[data-color="red"],
+.swatch[data-color="red"] {
+  --pc: var(--pc-red);
+}
+
+.folder[data-color="orange"],
+.swatch[data-color="orange"] {
+  --pc: var(--pc-orange);
+}
+
+.folder[data-color="amber"],
+.swatch[data-color="amber"] {
+  --pc: var(--pc-amber);
+}
+
+.folder[data-color="green"],
+.swatch[data-color="green"] {
+  --pc: var(--pc-green);
+}
+
+.folder[data-color="teal"],
+.swatch[data-color="teal"] {
+  --pc: var(--pc-teal);
+}
+
+.folder[data-color="blue"],
+.swatch[data-color="blue"] {
+  --pc: var(--pc-blue);
+}
+
+.folder[data-color="indigo"],
+.swatch[data-color="indigo"] {
+  --pc: var(--pc-indigo);
+}
+
+.folder[data-color="purple"],
+.swatch[data-color="purple"] {
+  --pc: var(--pc-purple);
+}
+
+.folder[data-color="pink"],
+.swatch[data-color="pink"] {
+  --pc: var(--pc-pink);
+}
+
+.folder[data-color="gray"],
+.swatch[data-color="gray"] {
+  --pc: var(--pc-gray);
+}

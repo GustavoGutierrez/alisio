@@ -55,7 +55,7 @@ export type MemoryStringKey = keyof typeof en;
 
 const es: Record<MemoryStringKey, string> = {
   title: "Memoria de este chat",
-  lead: "Vista de solo lectura de lo que el plugin de memoria guarda para este chat. Nada de aquí se puede editar.",
+  lead: "Vista de solo lectura de lo que el complemento de memoria guarda para este chat. Nada de aquí se puede editar.",
   refresh: "Actualizar",
   empty: "Aún no hay memoria guardada para este chat",
   savedTitle: "Guardado en este chat",
@@ -64,7 +64,7 @@ const es: Record<MemoryStringKey, string> = {
   summaryTitle: "Resumen de la sesión",
   summaryEmpty: "Todavía no se guardó un resumen de la sesión para este chat.",
   contextTitle: "Contexto cargado",
-  contextHint: "El contexto de memoria que el plugin añadió cuando empezó este chat.",
+  contextHint: "El contexto de memoria que el complemento añadió cuando empezó este chat.",
   contextEmpty: "No se cargó contexto de memoria cuando empezó este chat.",
   filterType: "Tipo",
   allTypes: "Todos los tipos",

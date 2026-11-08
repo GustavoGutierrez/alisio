@@ -40,6 +40,7 @@ const fakeAuth: BuiltinPlugin = {
         id: "chatgpt",
         name: "ChatGPT",
         fields: [],
+        defaultModel: "default-m",
         auth: [
           {
             id: "browser",
@@ -460,6 +461,8 @@ describe("GET /api/providers with sign-in state (OA-AC-17)", () => {
       { id: "other-method", label: "Other", kind: "oauth", unofficial: true },
     ]);
     expect(overview.types.find((x) => x.id === "plain")?.auth).toBeUndefined();
+    expect(chatgpt?.defaultModel).toBe("default-m");
+    expect(overview.types.find((x) => x.id === "plain")?.defaultModel).toBeUndefined();
     for (const leaked of [ACCESS, REFRESH, "start", "refresh"])
       expect(res.text).not.toContain(`"${leaked}"`);
     expect(res.text).not.toContain(ACCESS);

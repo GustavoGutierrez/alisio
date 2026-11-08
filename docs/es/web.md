@@ -50,16 +50,47 @@ controlar las líneas de log JSON que el servidor escribe en stderr.
 
 La página tiene una barra lateral a la izquierda y la sesión abierta a la derecha.
 
-**Barra lateral.** **Nueva sesión** empieza una sesión en el workspace que está viendo. Bajo
-**Workspaces**, cada carpeta lista sus sesiones, primero las fijadas y luego las usadas más
-recientemente, con un tiempo relativo ("4 min"). Un punto antes del título indica una sesión en
-ejecución, que espera su respuesta, en uso por otro proceso o cuya última ejecución falló. Los
-iconos junto al encabezado buscan sesiones (también `Ctrl+K` / `Cmd+K`), muestran las sesiones y
-los workspaces archivados y abren otro workspace (vea [Abrir un workspace](#abrir-un-workspace)).
-Al pasar sobre una sesión aparecen **Fijar** y **Archivar**, y sobre una carpeta, una nueva sesión
-dentro de ella y su menú de acciones (**Fijar**, **Archivar** / **Desarchivar**). **Ajustes** está abajo; el
-icono de panel contrae la barra a un riel estrecho. Por debajo de 900 px la barra lateral pasa a ser
-un cajón que se abre desde la cabecera.
+**Barra lateral.** **Nueva sesión** empieza una sesión en el proyecto que está viendo. Bajo
+**Proyectos** (un proyecto es una carpeta de workspace), cada carpeta lista sus sesiones, primero las
+fijadas y luego las usadas más recientemente, con un tiempo relativo ("4 min"). Un punto antes del
+título indica una sesión en ejecución, que espera su respuesta, en uso por otro proceso o cuya última
+ejecución falló. En cuanto hay un proyecto fijado, la lista se divide en **Fijados** (los proyectos
+fijados, ordenados por ruta, porque el servidor no guarda cuándo se fijó) y **Recientes** (los demás,
+con la actividad más reciente primero: su última apertura o la última actualización de una sesión);
+sin ninguno fijado es una sola lista ordenada como **Recientes**. Cada encabezado es un botón que
+contrae su grupo (se recuerda por navegador, como las carpetas). Los iconos junto al encabezado
+contraen o expanden todas las carpetas de proyecto a la vez (los grupos **Fijados** / **Recientes** conservan su propio estado), buscan sesiones (también `Ctrl+K` /
+`Cmd+K`), muestran las sesiones y los proyectos archivados y abren otro proyecto (vea
+[Abrir un proyecto](#abrir-un-proyecto)). Las carpetas que contrae siguen contraídas tras recargar
+(se recuerda por navegador; los proyectos nuevos empiezan abiertos y una búsqueda abre las carpetas
+sin cambiar eso). Al pasar sobre una sesión aparecen **Fijar** y **Archivar**, y sobre una carpeta,
+una nueva sesión dentro de ella y su menú de acciones (**Fijar**, **Color**, **Ajustes del proyecto…**, **Archivar** /
+**Desarchivar**). **Color** abre una fila de círculos de colores (o **Predeterminado**) que tiñe el
+icono de carpeta del proyecto; se guarda en el servidor junto con el proyecto y se maneja con el
+teclado (flechas, Intro). **Ajustes del proyecto…** abre un diálogo de ese proyecto (más abajo).
+**Ajustes** está abajo; el icono de panel contrae la barra a un riel
+estrecho. Por debajo de 900 px la barra lateral pasa a ser un cajón que se abre desde la cabecera.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/sidebar_projects_web_ui.webp" alt="La barra lateral con los grupos Fijados y Recientes, una carpeta de proyecto con color y la paleta de colores de proyecto" width="268" height="900" loading="lazy" />
+  <figcaption>Proyectos en la barra lateral: grupos de fijados y recientes, colores de carpeta y paleta de colores.</figcaption>
+</figure>
+
+**Ajustes del proyecto.** El elemento **Ajustes del proyecto…** del menú de un proyecto abre un
+diálogo con un campo **Nombre**, la **Carpeta** (su nombre y la ruta completa, seleccionable y con
+botón de copiar), la paleta de **Color** e interruptores para **Fijado**, **Proyecto de confianza** y
+**Archivado**. El nombre es solo lo que Alisio muestra en la barra lateral: cambia la etiqueta del
+proyecto, nunca renombra la carpeta en el disco, y un nombre vacío vuelve al nombre de la carpeta
+(el texto de ejemplo del campo). El nombre se guarda con **Guardar** o `Intro` (máximo 200
+caracteres); el color, fijado, confianza y archivado se aplican en cuanto los cambia, y dar confianza
+a un proyecto pide la misma confirmación que el elemento del menú. Un proyecto cuya carpeta ya no
+existe lo indica y oculta el interruptor de confianza. El diálogo es el mismo en el navegador y en
+Alisio Desktop. `Escape` o **Cerrar** lo cierra y el foco vuelve al botón de menú del proyecto.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/project_settings_es_web_ui.webp" alt="El diálogo Ajustes del proyecto con el nombre, la ruta de la carpeta, la paleta de colores y los interruptores de fijado, confianza y archivado" width="1000" height="760" loading="lazy" />
+  <figcaption>El diálogo Ajustes del proyecto: nombre, carpeta, color y los interruptores de fijado, confianza y archivado.</figcaption>
+</figure>
 
 **Cabecera.** Haga clic en el título para renombrar la sesión (las sesiones sin título muestran su
 primer prompt). La insignia muestra el agente y el preset de permisos. **Log de sesión** descarga la
@@ -400,9 +431,9 @@ workspace y se rechaza con `409 runs_active` mientras haya una ejecución activa
 en un workspace archivado se rechazan con `409 workspace_archived`; **Desarchívelo**, o vuelva a
 abrir la misma carpeta, para usarlo. Así se oculta también un workspace cuya carpeta ya no existe.
 
-### Abrir un workspace
+### Abrir un proyecto
 
-El botón de carpeta junto a **Workspaces** (y **Nueva sesión** cuando aún no hay ningún workspace)
+El botón de carpeta junto a **Proyectos** (y **Nueva sesión** cuando aún no hay ningún proyecto)
 pide una carpeta de la mejor forma que admita el servidor:
 
 1. **Diálogo nativo de carpetas.** Los navegadores nunca dan a una página la ruta absoluta de una
@@ -424,13 +455,13 @@ pide una carpeta de la mejor forma que admita el servidor:
 
 Un directorio en el que no haya confiado se abre sin sus recursos de proyecto (configuración,
 plugins, agentes, skills, prompts) y se marca como no confiable. Confíe en él desde su menú **⋯** de
-la barra lateral (**Confiar en este workspace…**) o desde el editor de [Agentes](/es/agents), tras
+la barra lateral (**Confiar en este proyecto…**) o desde el editor de [Agentes](/es/agents), tras
 una confirmación que explica lo que desbloquea la confianza; o ejecute `alisio` en ese directorio
 para responder a la pregunta de la terminal. Ambos guardan la misma decisión, ligada al contenido de
 `.alisio/config.json`: si ese archivo cambia, el workspace vuelve a no ser de confianza hasta que lo
 confirme. El workspace se reabre para que el cambio se aplique al momento (se rechaza mientras tenga
 ejecuciones activas, con `--read-only` y cuando `--trust-project`/`--config` fijan la confianza del
-servidor). **Dejar de confiar en este workspace…** la retira.
+servidor). **Dejar de confiar en este proyecto…** la retira.
 
 ## Sesiones, ejecuciones y permisos
 
@@ -802,7 +833,7 @@ pestaña:
 ```text
 GET  /api/health                       unauthenticated: name, version, protocolVersion, capabilities
 GET  /api/workspaces?archived=false|true|all   POST /api/workspaces {path}
-PATCH /api/workspaces/:wid {label?, pinned?, archived?}
+PATCH /api/workspaces/:wid {label?, pinned?, color?, archived?}
 POST /api/workspaces/pick {start?}     diálogo nativo de carpetas → {path} | {cancelled: true} (loopback)
 GET  /api/fs/dirs?path=&hidden=        nombres de carpetas para el explorador integrado (loopback)
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid

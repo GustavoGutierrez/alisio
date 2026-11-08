@@ -407,6 +407,17 @@ export class SQLiteStore implements SessionStore {
           this.db.exec("ALTER TABLE session_goals ADD COLUMN proof_json TEXT");
         this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(13);");
       });
+    if (!has(14))
+      this.db.transaction(() => {
+        // v14 (additive): the folder color a user gave a workspace (a palette id, validated by
+        // the server). Old binaries ignore the column.
+        const columns = this.db.prepare("PRAGMA table_info(workspaces)").all() as {
+          name: string;
+        }[];
+        if (!columns.some((c) => c.name === "color"))
+          this.db.exec("ALTER TABLE workspaces ADD COLUMN color TEXT");
+        this.db.exec("INSERT OR IGNORE INTO schema_migrations VALUES(14);");
+      });
   }
   /**
    * The root of a session (itself for roots), following `parent_id`. Unknown ids are their own
@@ -894,13 +905,14 @@ export class SQLiteStore implements SessionStore {
     path: string;
     label?: string;
     pinned: boolean;
+    color?: string;
     lastOpenedAt?: number;
     archivedAt?: number;
     sessions: number;
   }> {
     const rows = this.db
       .prepare(
-        `SELECT p.path, w.label, COALESCE(w.pinned, 0) AS pinned, w.last_opened_at, w.archived_at,
+        `SELECT p.path, w.label, COALESCE(w.pinned, 0) AS pinned, w.color, w.last_opened_at, w.archived_at,
            (SELECT count(*) FROM sessions s WHERE s.workspace=p.path AND s.parent_id IS NULL) AS sessions
          FROM (SELECT workspace AS path FROM sessions WHERE parent_id IS NULL AND workspace IS NOT NULL
                UNION SELECT path FROM workspaces) p
@@ -912,6 +924,7 @@ export class SQLiteStore implements SessionStore {
       path: String(r.path),
       ...(r.label != null ? { label: String(r.label) } : {}),
       pinned: !!r.pinned,
+      ...(r.color != null ? { color: String(r.color) } : {}),
       ...(r.last_opened_at != null ? { lastOpenedAt: Number(r.last_opened_at) } : {}),
       ...(r.archived_at != null ? { archivedAt: Number(r.archived_at) } : {}),
       sessions: Number(r.sessions ?? 0),
@@ -926,6 +939,8 @@ export class SQLiteStore implements SessionStore {
     patch: {
       label?: string | null;
       pinned?: boolean;
+      /** Palette id; `null` clears it. */
+      color?: string | null;
       lastOpenedAt?: number;
       archived?: boolean;
     } = {},
@@ -938,6 +953,8 @@ export class SQLiteStore implements SessionStore {
         this.db
           .prepare("UPDATE workspaces SET pinned=? WHERE path=?")
           .run(patch.pinned ? 1 : 0, path);
+      if (patch.color !== undefined)
+        this.db.prepare("UPDATE workspaces SET color=? WHERE path=?").run(patch.color, path);
       if (patch.lastOpenedAt !== undefined)
         this.db
           .prepare("UPDATE workspaces SET last_opened_at=? WHERE path=?")

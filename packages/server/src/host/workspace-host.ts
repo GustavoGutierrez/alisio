@@ -11,7 +11,7 @@ import {
   validateReloadConfig,
   workspaceKey,
 } from "@alisio/core";
-import type { ReloadReport, WorkspaceInfo } from "@alisio/sdk";
+import type { ReloadReport, WorkspaceColorId, WorkspaceInfo } from "@alisio/sdk";
 import { HttpError } from "../http/errors.ts";
 
 export type Application = Awaited<ReturnType<typeof createApplication>>;
@@ -338,6 +338,7 @@ export class WorkspaceHost {
       path,
       ...(meta?.label ? { label: meta.label } : {}),
       pinned: meta?.pinned ?? false,
+      ...(meta?.color ? { color: meta.color as WorkspaceColorId } : {}),
       open: !!entry,
       exists,
       trusted,

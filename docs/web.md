@@ -48,15 +48,46 @@ log lines the server writes to stderr.
 
 The page has a sidebar on the left and the open session on the right.
 
-**Sidebar.** **New session** starts a session in the workspace you are looking at. Under
-**Workspaces**, each folder lists its sessions, pinned first and then the most recently used, with a
-relative time ("4 min"). A dot before a title shows a session that is running, waiting for you, in
-use by another process or whose last run failed. The icons next to the heading search sessions
-(also `Ctrl+K` / `Cmd+K`), show archived sessions and workspaces, and open another workspace
-(see [Opening a workspace](#opening-a-workspace)). Hover a session for **Pin** and **Archive**, or a
-folder for a new session inside it and its actions menu (**Pin**, **Archive** / **Unarchive**). **Settings**
-sits at the bottom; the panel icon collapses the sidebar to a narrow rail. Below 900 px the sidebar
-becomes a drawer opened from the header.
+**Sidebar.** **New session** starts a session in the project you are looking at. Under
+**Projects** (a project is a workspace folder), each folder lists its sessions, pinned first and then
+the most recently used, with a relative time ("4 min"). A dot before a title shows a session that is
+running, waiting for you, in use by another process or whose last run failed. As soon as one project
+is pinned, the list splits into **Pinned** (pinned projects, ordered by path, because the server
+stores no pin time) and **Recent** (every other project, newest activity first: its last opened time
+or its latest session update); with nothing pinned it is a single list ordered like **Recent**. Each
+heading is a button that collapses its group (remembered per browser, like folders). The
+icons next to the heading collapse or expand every project folder at once (the **Pinned** / **Recent** groups keep their own state), search sessions (also
+`Ctrl+K` / `Cmd+K`), show archived sessions and projects, and open another project (see
+[Opening a project](#opening-a-project)). Folders you collapse stay collapsed after a reload (it is
+remembered per browser; new projects start open, and a search opens folders without changing that).
+Hover a session for **Pin** and **Archive**, or a folder for a new session inside it and its actions
+menu (**Pin**, **Color**, **Project settings…**, **Archive** / **Unarchive**). **Color** opens a row of colored circles (or
+**Default**) that tints the project's folder icon; it is saved on the server with the project and
+works with the keyboard (arrow keys, Enter). **Project settings…** opens a dialog for that
+project (below). **Settings** sits at the bottom; the panel icon
+collapses the sidebar to a narrow rail. Below 900 px the sidebar becomes a drawer opened from the
+header.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/sidebar_projects_web_ui.webp" alt="The sidebar with the Pinned and Recent project groups, a colored project folder and the palette of project colors" width="268" height="900" loading="lazy" />
+  <figcaption>Projects in the sidebar: pinned and recent groups, folder colors and the color palette.</figcaption>
+</figure>
+
+**Project settings.** The **Project settings…** item of a project's menu opens a dialog with a
+**Name** field, the **Folder** (its name and full path, selectable and with a copy button), the
+**Color** palette, and switches for **Pinned**, **Trusted project** and **Archived**. The name is
+only what Alisio shows in the sidebar: it sets the project's label, never renames the folder on
+disk, and an empty name goes back to the folder name (the field's placeholder). The name is saved
+with **Save** or `Enter` (at most 200 characters); color, pinned, trust and archived apply as soon
+as you change them, and trusting a project asks for the same confirmation as the menu item. A
+project whose folder no longer exists says so and hides the trust switch. The dialog is the same in
+the browser and in Alisio Desktop. `Escape` or **Close** dismisses it and focus returns to the
+project's menu button.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/project_settings_web_ui.webp" alt="The Project settings dialog with the name, folder path, color palette and the pinned, trusted and archived switches" width="1000" height="760" loading="lazy" />
+  <figcaption>The Project settings dialog: name, folder, color and the pinned, trust and archive switches.</figcaption>
+</figure>
 
 **Header.** Click the title to rename the session (untitled sessions show their first prompt). The
 badge shows the agent and the permission preset. **Session log** downloads the session as JSON
@@ -373,9 +404,9 @@ which stays readable, closes the workspace's idle application and is refused wit
 `409 workspace_archived`; **Unarchive** it, or open the same folder again, to use it. This is also
 the way to hide a workspace whose folder no longer exists.
 
-### Opening a workspace
+### Opening a project
 
-The folder button next to **Workspaces** (and **New session** when no workspace exists yet) asks
+The folder button next to **Projects** (and **New session** when no workspace exists yet) asks
 for a folder in the best way the server supports:
 
 1. **Native folder dialog.** Browsers never give a page the absolute path of a folder, so the
@@ -396,12 +427,12 @@ for a folder in the best way the server supports:
 
 A directory you have not trusted opens without its project resources (configuration, plugins,
 agents, skills, prompts) and is marked untrusted. Trust it from its **⋯** menu in the sidebar
-(**Trust this workspace…**) or from the [Agents](/agents) editor, after a confirmation that explains
+(**Trust this project…**) or from the [Agents](/agents) editor, after a confirmation that explains
 what trust unlocks; or run `alisio` in that directory to answer the terminal prompt. Both store the
 same decision, bound to the content of `.alisio/config.json`: if that file changes, the workspace
 is untrusted again until you confirm. The workspace reopens so the change applies at once (it is
 refused while its runs are active, under `--read-only`, and when `--trust-project`/`--config` fix
-trust for the server). **Stop trusting this workspace…** withdraws it.
+trust for the server). **Stop trusting this project…** withdraws it.
 
 ## Sessions, runs and permissions
 
@@ -753,7 +784,7 @@ The browser talks to JSON routes under `/api` and to one Server-Sent Events stre
 ```text
 GET  /api/health                       unauthenticated: name, version, protocolVersion, capabilities
 GET  /api/workspaces?archived=false|true|all   POST /api/workspaces {path}
-PATCH /api/workspaces/:wid {label?, pinned?, archived?}
+PATCH /api/workspaces/:wid {label?, pinned?, color?, archived?}
 POST /api/workspaces/pick {start?}     native folder dialog → {path} | {cancelled: true} (loopback)
 GET  /api/fs/dirs?path=&hidden=        folder names for the in-app browser (loopback)
 GET  /api/sessions                     POST /api/sessions            GET|PATCH /api/sessions/:sid

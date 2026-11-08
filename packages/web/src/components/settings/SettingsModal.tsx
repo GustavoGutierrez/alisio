@@ -12,8 +12,10 @@ import { Icon, type IconName } from "../icons.tsx";
 import { AboutPage } from "./AboutPage.tsx";
 import { AgentsPage } from "./AgentsPage.tsx";
 import { AppearancePage } from "./AppearancePage.tsx";
+import { readMaximized, toggleMaximized } from "./dialog-size.ts";
 import { ForgePage } from "./ForgePage.tsx";
 import { GeneralPage } from "./GeneralPage.tsx";
+import { MaximizeToggle } from "./MaximizeToggle.tsx";
 import { McpPage } from "./McpPage.tsx";
 import { ModelsPage } from "./ModelsPage.tsx";
 import { PluginsPage } from "./PluginsPage.tsx";
@@ -87,6 +89,7 @@ function ConfigFiles(props: { onClose: () => void }) {
 export function SettingsModal() {
   const [page, setPage] = useState<Page>(() => settingsPageFor(settingsPage.peek()));
   const [files, setFiles] = useState(false);
+  const [maximized, setMaximized] = useState(readMaximized);
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -107,6 +110,7 @@ export function SettingsModal() {
       <div
         ref={dialog}
         class={styles.dialog}
+        data-maximized={maximized}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
@@ -156,6 +160,10 @@ export function SettingsModal() {
             >
               {t("config.open")}
             </button>
+            <MaximizeToggle
+              maximized={maximized}
+              onToggle={() => setMaximized(toggleMaximized(maximized))}
+            />
             <button type="button" class="icon-btn" aria-label={t("common.close")} onClick={close}>
               <Icon name="x" size={18} />
             </button>

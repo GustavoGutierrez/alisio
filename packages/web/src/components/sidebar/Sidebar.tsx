@@ -1,4 +1,5 @@
 import type { SessionSummary } from "@alisio/sdk";
+import type { ComponentType } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { locale, t } from "../../i18n/index.ts";
 import {
@@ -20,12 +21,16 @@ import {
   setWorkspaceTrust,
   sidebar,
 } from "../../store/app.ts";
+import { allCollapsed, closedFolders, folderOpen, setFoldersOpen } from "../../store/folders.ts";
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
-import { groupSessions } from "../../store/sessions.ts";
+import { groupSessions, projectSections } from "../../store/sessions.ts";
 import { relativeTime } from "../../util/time.ts";
 import { Icon } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
-import { FolderBrowser } from "./FolderBrowser.tsx";
+import type { ColorPalette } from "./ColorPalette.tsx";
+import type { FolderBrowser } from "./FolderBrowser.tsx";
+import type { ProjectSettings } from "./ProjectSettings.tsx";
+import { projectMenuItems } from "./project-settings.ts";
 import styles from "./sidebar.module.css";
 
 export const searchRequest = { focus: () => {} };
@@ -92,11 +97,19 @@ export function Sidebar() {
   /** How the open-a-workspace UI is shown: nothing, the typed-path form or the folder browser. */
   const [adding, setAdding] = useState<"none" | "manual" | "browser">("none");
   const [path, setPath] = useState("");
-  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  /** The in-app folder browser is a lazy chunk, loaded the first time it is shown. */
+  const [Browser, setBrowser] = useState<{ View: typeof FolderBrowser }>();
+  /** The project whose color palette is open (the palette is a lazy chunk). */
+  const [palette, setPalette] = useState<{ id: string; View: typeof ColorPalette }>();
+  /** The project whose settings dialog is open (a lazy chunk, like the palette). */
+  const [project, setProject] = useState<{ id: string; View: typeof ProjectSettings }>();
   const search = useRef<HTMLInputElement>(null);
   // Plain render-time derivation: it depends on local state (query, archived) as well as the
   // sidebar signal, which a `useComputed` would only track for the signal.
   const groups = { value: groupSessions(sidebar.value, query, archived) };
+  const sections = projectSections(groups.value);
+  const shownIds = groups.value.map((g) => g.workspace.id);
+  const allClosed = allCollapsed(shownIds, closedFolders.value);
   const collapsed = sidebarCollapsed.value && !mobileSidebar.value;
   const workspaceRequest = openWorkspaceRequest.value;
 
@@ -117,12 +130,153 @@ export function Sidebar() {
   }, [workspaceRequest]);
 
   useEffect(() => {
+    if (adding === "browser" && !Browser)
+      void import("./FolderBrowser.tsx").then((m) => setBrowser({ View: m.FolderBrowser }));
+  }, [adding]);
+
+  useEffect(() => {
     searchRequest.focus = () => {
       if (sidebarCollapsed.value) setSidebarCollapsed(false);
       setSearching(true);
       requestAnimationFrame(() => search.current?.focus());
     };
   }, []);
+
+  const renderGroup = (group: (typeof groups.value)[number]) => {
+    const open = folderOpen(group.workspace.id, closedFolders.value, query);
+    const listId = `ws-${group.workspace.id}`;
+    const missing = group.workspace.exists === false;
+    const archivedWs = group.workspace.archived;
+    const blocked = missing || archivedWs;
+    const label = group.hint ? `${group.name} · ${group.hint}` : group.name;
+    return (
+      <section
+        key={group.workspace.id}
+        class={styles.folder}
+        data-missing={missing ? "true" : undefined}
+        data-archived={archivedWs ? "true" : undefined}
+        data-color={group.workspace.color}
+      >
+        <div class={styles.folderHead}>
+          <button
+            type="button"
+            class={styles.folderToggle}
+            aria-expanded={open}
+            aria-controls={listId}
+            title={group.workspace.path}
+            onClick={() => setFoldersOpen([group.workspace.id], !open)}
+          >
+            <Icon name="folder" size={16} class={open ? styles.folderOpen : styles.folderIcon} />
+            <span class={styles.folderLabel}>
+              <span class={styles.folderName}>{group.name}</span>
+              {group.hint || missing || archivedWs ? (
+                <span class={styles.folderMeta}>
+                  {group.hint ? <span class={styles.folderHint}>{group.hint}</span> : null}
+                  {missing ? (
+                    <span class={styles.missing} title={t("sidebar.missingHint")}>
+                      {t("sidebar.missing")}
+                    </span>
+                  ) : null}
+                  {archivedWs ? (
+                    <span class={styles.archivedTag} title={t("workspace.archivedHint")}>
+                      {t("sidebar.archived")}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </span>
+            <span class="sr-only">{t("sidebar.toggleFolder", { name: label })}</span>
+          </button>
+          {!missing && group.workspace.untrustedResources ? (
+            <span class={styles.untrusted} title={t("sidebar.untrustedHint")}>
+              {t("sidebar.untrusted")}
+            </span>
+          ) : null}
+          <Menu
+            label={t("workspace.actions", { name: label })}
+            align="end"
+            fixed
+            class={`icon-btn ${styles.folderMenu}`}
+            groups={[
+              {
+                items: projectMenuItems(group.workspace, t),
+                onSelect: (action) =>
+                  action === "color"
+                    ? void import("./ColorPalette.tsx").then((m) =>
+                        setPalette({ id: group.workspace.id, View: m.ColorPalette }),
+                      )
+                    : action === "settings"
+                      ? void import("./ProjectSettings.tsx").then((m) =>
+                          setProject({ id: group.workspace.id, View: m.ProjectSettings }),
+                        )
+                      : action === "trust"
+                        ? void setWorkspaceTrust(group.workspace, !group.workspace.trusted)
+                        : void patchWorkspace(
+                            group.workspace.id,
+                            action === "pin"
+                              ? { pinned: !group.workspace.pinned }
+                              : { archived: !archivedWs },
+                          ),
+              },
+            ]}
+          >
+            <Icon name="more" size={16} />
+          </Menu>
+          <button
+            type="button"
+            class={`icon-btn ${styles.folderAdd}`}
+            aria-label={t("sidebar.newIn", { name: label })}
+            title={
+              missing
+                ? t("sidebar.missingHint")
+                : archivedWs
+                  ? t("workspace.archivedHint")
+                  : t("sidebar.newIn", { name: label })
+            }
+            disabled={blocked}
+            onClick={() => void newSession(group.workspace.id)}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+        </div>
+        {project?.id === group.workspace.id ? (
+          <project.View
+            workspaceId={group.workspace.id}
+            onClose={() => {
+              setProject(undefined);
+              // The menu button is still in the page: put focus back where the dialog came from.
+              requestAnimationFrame(() =>
+                document
+                  .getElementById(listId)
+                  ?.closest("section")
+                  ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
+                  ?.focus(),
+              );
+            }}
+          />
+        ) : null}
+        {palette?.id === group.workspace.id ? (
+          <palette.View
+            name={group.name}
+            current={group.workspace.color}
+            onPick={(color) => void patchWorkspace(group.workspace.id, { color })}
+            onClose={() => setPalette(undefined)}
+          />
+        ) : null}
+        {open ? (
+          <ul id={listId} class={styles.sessions}>
+            {group.sessions.length ? (
+              group.sessions.map((session) => <SessionRow key={session.id} session={session} />)
+            ) : (
+              <li class={styles.emptyRow}>
+                {query ? t("sidebar.noMatches", { query }) : t("sidebar.noSessions")}
+              </li>
+            )}
+          </ul>
+        ) : null}
+      </section>
+    );
+  };
 
   if (collapsed)
     return (
@@ -198,6 +352,16 @@ export function Sidebar() {
       </button>
       <div class={styles.sectionHead}>
         <h2 class={styles.sectionTitle}>{t("sidebar.workspaces")}</h2>
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label={allClosed ? t("sidebar.expandAll") : t("sidebar.collapseAll")}
+          title={allClosed ? t("sidebar.expandAll") : t("sidebar.collapseAll")}
+          disabled={!!query || !shownIds.length}
+          onClick={() => setFoldersOpen(shownIds, allClosed)}
+        >
+          <Icon name={allClosed ? "expand" : "shrink"} />
+        </button>
         <button
           type="button"
           class="icon-btn"
@@ -301,132 +465,34 @@ export function Sidebar() {
           )}
         </div>
       ) : null}
-      {adding === "browser" ? (
-        <FolderBrowser onClose={() => setAdding("none")} onTypePath={() => setAdding("manual")} />
+      {adding === "browser" && Browser ? (
+        <Browser.View onClose={() => setAdding("none")} onTypePath={() => setAdding("manual")} />
       ) : null}
       <div class={styles.tree}>
-        {groups.value.map((group) => {
-          const open = !closed[group.workspace.id] || !!query;
-          const listId = `ws-${group.workspace.id}`;
-          const missing = group.workspace.exists === false;
-          const archivedWs = group.workspace.archived;
-          const blocked = missing || archivedWs;
-          const label = group.hint ? `${group.name} · ${group.hint}` : group.name;
+        {sections.map((section) => {
+          // Subgroup state shares the folder store under a `group:` key (never a workspace id).
+          const key = `group:${section.id}`;
+          const groupOpen = section.id === "all" || folderOpen(key, closedFolders.value, query);
           return (
-            <section
-              key={group.workspace.id}
-              class={styles.folder}
-              data-missing={missing ? "true" : undefined}
-              data-archived={archivedWs ? "true" : undefined}
-            >
-              <div class={styles.folderHead}>
-                <button
-                  type="button"
-                  class={styles.folderToggle}
-                  aria-expanded={open}
-                  aria-controls={listId}
-                  title={group.workspace.path}
-                  onClick={() => setClosed({ ...closed, [group.workspace.id]: open })}
-                >
-                  <Icon name="folder" size={16} class={open ? styles.folderOpen : undefined} />
-                  <span class={styles.folderLabel}>
-                    <span class={styles.folderName}>{group.name}</span>
-                    {group.hint || missing || archivedWs ? (
-                      <span class={styles.folderMeta}>
-                        {group.hint ? <span class={styles.folderHint}>{group.hint}</span> : null}
-                        {missing ? (
-                          <span class={styles.missing} title={t("sidebar.missingHint")}>
-                            {t("sidebar.missing")}
-                          </span>
-                        ) : null}
-                        {archivedWs ? (
-                          <span class={styles.archivedTag} title={t("workspace.archivedHint")}>
-                            {t("sidebar.archived")}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span class="sr-only">{t("sidebar.toggleFolder", { name: label })}</span>
-                </button>
-                {!missing && group.workspace.untrustedResources ? (
-                  <span class={styles.untrusted} title={t("sidebar.untrustedHint")}>
-                    {t("sidebar.untrusted")}
-                  </span>
-                ) : null}
-                <Menu
-                  label={t("workspace.actions", { name: label })}
-                  align="end"
-                  fixed
-                  class={`icon-btn ${styles.folderMenu}`}
-                  groups={[
-                    {
-                      items: [
-                        {
-                          id: "pin",
-                          label: group.workspace.pinned ? t("workspace.unpin") : t("workspace.pin"),
-                        },
-                        {
-                          id: "archive",
-                          label: archivedWs ? t("workspace.unarchive") : t("workspace.archive"),
-                        },
-                        ...(missing
-                          ? []
-                          : [
-                              {
-                                id: "trust",
-                                label: group.workspace.trusted
-                                  ? t("trust.revoke")
-                                  : t("trust.grant"),
-                                description: t("trust.menuHint"),
-                              },
-                            ]),
-                      ],
-                      onSelect: (action) =>
-                        action === "trust"
-                          ? void setWorkspaceTrust(group.workspace, !group.workspace.trusted)
-                          : void patchWorkspace(
-                              group.workspace.id,
-                              action === "pin"
-                                ? { pinned: !group.workspace.pinned }
-                                : { archived: !archivedWs },
-                            ),
-                    },
-                  ]}
-                >
-                  <Icon name="more" size={16} />
-                </Menu>
-                <button
-                  type="button"
-                  class={`icon-btn ${styles.folderAdd}`}
-                  aria-label={t("sidebar.newIn", { name: label })}
-                  title={
-                    missing
-                      ? t("sidebar.missingHint")
-                      : archivedWs
-                        ? t("workspace.archivedHint")
-                        : t("sidebar.newIn", { name: label })
-                  }
-                  disabled={blocked}
-                  onClick={() => void newSession(group.workspace.id)}
-                >
-                  <Icon name="plus" size={15} />
-                </button>
-              </div>
-              {open ? (
-                <ul id={listId} class={styles.sessions}>
-                  {group.sessions.length ? (
-                    group.sessions.map((session) => (
-                      <SessionRow key={session.id} session={session} />
-                    ))
-                  ) : (
-                    <li class={styles.emptyRow}>
-                      {query ? t("sidebar.noMatches", { query }) : t("sidebar.noSessions")}
-                    </li>
-                  )}
-                </ul>
+            <div key={section.id} class={styles.group}>
+              {section.id === "all" ? null : (
+                <h3 class={styles.groupTitle}>
+                  <button
+                    type="button"
+                    class={styles.groupToggle}
+                    aria-expanded={groupOpen}
+                    aria-controls={`grp-${section.id}`}
+                    onClick={() => setFoldersOpen([key], !groupOpen)}
+                  >
+                    <Icon name={groupOpen ? "chevronDown" : "chevronRight"} size={12} />
+                    {t(section.id === "pinned" ? "sidebar.pinnedGroup" : "sidebar.recentGroup")}
+                  </button>
+                </h3>
+              )}
+              {groupOpen ? (
+                <div id={`grp-${section.id}`}>{section.groups.map(renderGroup)}</div>
               ) : null}
-            </section>
+            </div>
           );
         })}
       </div>

@@ -20,6 +20,12 @@
   overflow: hidden;
 }
 
+/* Maximized: the dialog fills the backdrop (which keeps its 16px margin). */
+.dialog[data-maximized="true"] {
+  width: 100%;
+  height: 100%;
+}
+
 .nav {
   padding: 26px 14px;
   border-right: 1px solid var(--border);
@@ -1065,7 +1071,9 @@
 
 .catalogGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  /* 320px: two columns at the default dialog width, three when it is maximized on a wide window,
+     one on a phone. */
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -1470,7 +1478,8 @@
 /* Flip cards: cover with a short text on the front, details and the action on the back. */
 .flipCard {
   position: relative;
-  aspect-ratio: 6 / 5;
+  /* The catalog covers are 16:9: the same ratio keeps them from being cropped. */
+  aspect-ratio: 16 / 9;
   perspective: 1100px;
   list-style: none;
 }

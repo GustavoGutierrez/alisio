@@ -18,6 +18,7 @@ import { t } from "../../i18n/index.ts";
 import { api, showToast } from "../../store/app.ts";
 import { credentialRows } from "../../store/provider-signin.ts";
 import { Icon } from "../icons.tsx";
+import { activationModelField, formModelField, pickModel } from "./model-field.ts";
 import { ProviderSignIn } from "./ProviderSignIn.tsx";
 import styles from "./settings.module.css";
 import { errorMessage, PageIntro, Pill, Status, settingsWorkspace, useLoad } from "./shared.tsx";
@@ -129,6 +130,11 @@ function ProfileForm(props: {
   );
   const [busy, setBusy] = useState(false);
   const type = props.types.find((x) => x.id === provider);
+  const modelField = formModelField({
+    signIn: !!type?.auth?.length,
+    model,
+    defaultModel: type?.defaultModel,
+  });
   const fields = (type?.fields ?? []).filter((f) => f.kind !== "secret");
   const valueOf = (key: string, fallback?: ProviderConfigurationValue) => values[key] ?? fallback;
   const submit = async () => {
@@ -140,7 +146,11 @@ function ProfileForm(props: {
         if (value !== undefined && value !== "") body[field.key] = value;
       }
       props.onSaved(
-        await api.saveProfile(props.workspace, name.trim(), { provider, values: body, model }),
+        await api.saveProfile(props.workspace, name.trim(), {
+          provider,
+          values: body,
+          model: modelField.value,
+        }),
       );
     } catch (error) {
       showToast(errorMessage(error));
@@ -219,15 +229,21 @@ function ProfileForm(props: {
           )}
         </label>
       ))}
-      <label class={styles.formRow}>
-        <span>{t("models.form.model")}</span>
-        <input
-          class={styles.input}
-          required
-          value={model}
-          onInput={(event) => setModel((event.target as HTMLInputElement).value)}
-        />
-      </label>
+      {modelField.show ? (
+        <label class={styles.formRow}>
+          <span>{t("models.form.model")}</span>
+          <input
+            class={styles.input}
+            required
+            value={model}
+            onInput={(event) => setModel((event.target as HTMLInputElement).value)}
+          />
+        </label>
+      ) : (
+        <p class={styles.note} data-role="signin-hint">
+          {t("models.form.signInHint")}
+        </p>
+      )}
       <p class={styles.note}>{t("models.form.secretsNote")}</p>
       <div class={styles.actions}>
         <button type="button" class={styles.secondary} onClick={props.onCancel}>
@@ -257,10 +273,14 @@ function ProfileCard(props: {
   const [busy, setBusy] = useState(false);
   const type = overview.types.find((x) => x.id === profile.provider);
   const current = overview.current?.profile === profile.name;
+  const models = props.catalog?.models ?? [];
+  const signIn = !!type?.auth?.length;
+  const field = activationModelField({ signIn, status: profile.credentials.oauth, models });
+  const shownModel = pickModel({ current: model, defaultModel: type?.defaultModel, models });
   const activate = async () => {
     setBusy(true);
     try {
-      const { changed } = await api.activateProvider(props.workspace, profile.name, model);
+      const { changed } = await api.activateProvider(props.workspace, profile.name, shownModel);
       showToast(changed ? t("models.activated", { name: profile.name }) : t("models.unchanged"));
       props.onActivated();
     } catch (error) {
@@ -269,7 +289,6 @@ function ProfileCard(props: {
       setBusy(false);
     }
   };
-  const models = props.catalog?.models ?? [];
   return (
     <li class={styles.row} data-current={current}>
       <div class={styles.rowMain}>
@@ -331,42 +350,50 @@ function ProfileCard(props: {
             }
           />
         ))}
-        <form
-          class={styles.credentialForm}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void activate();
-          }}
-        >
-          {models.length ? (
-            <select
-              class={styles.input}
-              aria-label={t("models.form.model")}
-              value={model}
-              onChange={(event) => setModel((event.target as HTMLSelectElement).value)}
-            >
-              {models.some((m) => m.id === model) ? null : <option value={model}>{model}</option>}
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name ?? m.id}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              class={styles.input}
-              aria-label={t("models.form.model")}
-              value={model}
-              onInput={(event) => setModel((event.target as HTMLInputElement).value)}
-            />
-          )}
-          <button type="submit" class={styles.secondary} disabled={busy || !model.trim()}>
-            {t("models.activate")}
-          </button>
-          {props.catalog?.unavailable ? (
-            <span class={styles.meta}>{t("composer.modelsUnavailable")}</span>
-          ) : null}
-        </form>
+        {field === "hidden" ? (
+          <p class={styles.note} data-role="model-hint">
+            {t("models.form.signInFirst")}
+          </p>
+        ) : (
+          <form
+            class={styles.credentialForm}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void activate();
+            }}
+          >
+            {field === "select" ? (
+              <select
+                class={styles.input}
+                aria-label={t("models.form.model")}
+                value={shownModel}
+                onChange={(event) => setModel((event.target as HTMLSelectElement).value)}
+              >
+                {models.some((m) => m.id === shownModel) ? null : (
+                  <option value={shownModel}>{shownModel}</option>
+                )}
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name ?? m.id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                class={styles.input}
+                aria-label={t("models.form.model")}
+                value={model}
+                onInput={(event) => setModel((event.target as HTMLInputElement).value)}
+              />
+            )}
+            <button type="submit" class={styles.secondary} disabled={busy || !shownModel.trim()}>
+              {t("models.activate")}
+            </button>
+            {props.catalog?.unavailable ? (
+              <span class={styles.meta}>{t("composer.modelsUnavailable")}</span>
+            ) : null}
+          </form>
+        )}
       </div>
     </li>
   );

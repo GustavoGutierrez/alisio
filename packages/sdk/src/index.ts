@@ -411,6 +411,12 @@ export interface ProviderRegistration {
   name: string;
   description?: string;
   fields: ProviderConfigurationField[];
+  /**
+   * Model a new profile of this provider starts with when the user has not typed one (a sign-in
+   * provider has no account model list until the user is signed in). Optional; consumers MUST
+   * ignore it when absent.
+   */
+  defaultModel?: string;
   capabilities?: ProviderCapabilities;
   /**
    * Sign-in methods the host can run for this provider. Method ids match `^[a-z0-9_-]{1,40}$`
@@ -2443,6 +2449,21 @@ export interface DirectoryListing {
   /** More than the listing cap: the rest is not shown. */
   truncated?: boolean;
 }
+/** Palette ids a project (workspace) folder icon can be tinted with in the web sidebar. */
+export const WORKSPACE_COLOR_IDS = [
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "gray",
+] as const;
+/** One of `WORKSPACE_COLOR_IDS`. */
+export type WorkspaceColorId = (typeof WORKSPACE_COLOR_IDS)[number];
 /** A workspace known to the server (`GET /api/workspaces`). */
 export interface WorkspaceInfo {
   /** Opaque, stable id: a short sha256 of the canonical path. */
@@ -2451,6 +2472,8 @@ export interface WorkspaceInfo {
   path: string;
   label?: string;
   pinned: boolean;
+  /** Folder icon color in the web sidebar (`PATCH` with `color: null` clears it). */
+  color?: WorkspaceColorId;
   /** An `Application` is open for it in the server right now. */
   open: boolean;
   /**
@@ -2770,6 +2793,8 @@ export interface ProviderTypeInfo {
   name: string;
   description?: string;
   fields: ProviderConfigurationField[];
+  /** The provider's default model (`ProviderRegistration.defaultModel`), when it declares one. */
+  defaultModel?: string;
   /** Sign-in methods of the provider type (serializable form). */
   auth?: ProviderAuthMethodInfo[];
 }

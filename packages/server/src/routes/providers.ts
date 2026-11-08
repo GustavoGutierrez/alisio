@@ -35,6 +35,7 @@ function typesOf(opened: OpenWorkspace | undefined): Registration[] {
       id: r.id,
       name: r.name,
       ...(r.description ? { description: r.description } : {}),
+      ...(r.defaultModel ? { defaultModel: r.defaultModel } : {}),
       // Only the serializable face of each method: never `start` or `refresh` (D18).
       ...(r.auth?.length
         ? {

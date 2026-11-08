@@ -195,6 +195,27 @@ describe("workspace routes (T-18)", () => {
     expect((await t.api.patch("/api/workspaces/ffff", { pinned: true })).status).toBe(404);
   });
 
+  it("persists a palette color, clears it with null and rejects unknown values", async () => {
+    t = await startTestServer();
+    const [info] = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(info?.color).toBeUndefined();
+    const url = `/api/workspaces/${info?.id}`;
+    expect((await t.api.patch(url, { color: "blue" })).json()).toMatchObject({ color: "blue" });
+    const listed = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(listed.find((w) => w.id === info?.id)?.color).toBe("blue");
+    for (const bad of ["#ff0000", "Blue", "", 7, ["blue"]]) {
+      const rejected = await t.api.patch(url, { color: bad });
+      expect(rejected.status).toBe(400);
+      expect(rejected.json()).toMatchObject({
+        error: { code: "validation_failed", details: { fields: ["color"] } },
+      });
+    }
+    const still = (await t.api.get("/api/workspaces")).json<WorkspaceInfo[]>();
+    expect(still.find((w) => w.id === info?.id)?.color).toBe("blue");
+    const cleared = await t.api.patch(url, { color: null });
+    expect(cleared.json<WorkspaceInfo>().color).toBeUndefined();
+  });
+
   it("evicts the least recently used idle workspace when --max-workspaces is reached", async () => {
     t = await startTestServer({ maxOpenWorkspaces: 1 });
     const other = join(t.root, "other");

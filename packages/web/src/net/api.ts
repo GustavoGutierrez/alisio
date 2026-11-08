@@ -174,7 +174,12 @@ export class ApiClient {
   addWorkspace = (path: string) => this.request<WorkspaceInfo>("POST", "/api/workspaces", { path });
   patchWorkspace = (
     id: string,
-    patch: Partial<{ label: string | null; pinned: boolean; archived: boolean }>,
+    patch: Partial<{
+      label: string | null;
+      pinned: boolean;
+      color: string | null;
+      archived: boolean;
+    }>,
   ) => this.request<WorkspaceInfo>("PATCH", `/api/workspaces/${enc(id)}`, patch);
   /** Grants or withdraws project trust (the caller must have asked the user to confirm). */
   trustWorkspace = (id: string, trusted: boolean) =>

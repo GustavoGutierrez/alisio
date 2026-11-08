@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 import type { SQLiteStore } from "@alisio/core";
+import { WORKSPACE_COLOR_IDS } from "@alisio/sdk";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { WorkspaceHost } from "../host/workspace-host.ts";
 import { readJson } from "../http/body.ts";
@@ -37,14 +38,18 @@ export function registerWorkspaceRoutes(
   });
 
   router.patch("/api/workspaces/:wid", async ({ req, params }) => {
-    const patch = validate<{ label?: string | null; pinned?: boolean; archived?: boolean }>(
-      await readJson(req),
-      {
-        label: { check: is.nullableString(200) },
-        pinned: { check: is.boolean() },
-        archived: { check: is.boolean() },
-      },
-    );
+    const patch = validate<{
+      label?: string | null;
+      pinned?: boolean;
+      color?: string | null;
+      archived?: boolean;
+    }>(await readJson(req), {
+      label: { check: is.nullableString(200) },
+      pinned: { check: is.boolean() },
+      // A fixed palette id (or null to clear): the web maps ids to theme-aware CSS colors.
+      color: { check: (v) => v === null || is.oneOf(WORKSPACE_COLOR_IDS)(v) },
+      archived: { check: is.boolean() },
+    });
     const id = params.wid ?? "";
     const path = await ctx.workspaces.pathOf(id);
     if (!path) throw new HttpError("not_found", "Workspace not found");
@@ -61,6 +66,7 @@ export function registerWorkspaceRoutes(
     ctx.catalog.recordWorkspace(path, {
       ...(patch.label !== undefined ? { label: patch.label?.trim() || null } : {}),
       ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
       ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
     });
     return { body: await ctx.workspaces.info(path) };
