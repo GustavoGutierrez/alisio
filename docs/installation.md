@@ -7,13 +7,13 @@ installer for your system:
 
 | System | Download |
 | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.5-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-Setup-0.11.5-x64.exe) (assisted NSIS wizard, per user, no administrator rights) |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.5-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-arm64.dmg) |
-| macOS Intel (x64) | [`Alisio-0.11.5-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-x64.dmg) |
-| Linux, any distribution | [`Alisio-0.11.5-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-x86_64.AppImage) |
-| Debian and Ubuntu | [`Alisio-0.11.5-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-amd64.deb) |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.6-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-Setup-0.11.6-x64.exe) (assisted NSIS wizard, per user, no administrator rights) |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.6-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-arm64.dmg) |
+| macOS Intel (x64) | [`Alisio-0.11.6-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-x64.dmg) |
+| Linux, any distribution | [`Alisio-0.11.6-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-x86_64.AppImage) |
+| Debian and Ubuntu | [`Alisio-0.11.6-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-amd64.deb) |
 
-All files are on the [release page](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.5). The installers are not signed, so Windows SmartScreen and
+All files are on the [release page](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.6). The installers are not signed, so Windows SmartScreen and
 macOS Gatekeeper show a warning the first time. [Desktop app](/desktop) explains each step and how
 to proceed past the warnings.
 
