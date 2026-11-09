@@ -4,7 +4,7 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
-## [Unreleased]
+## [0.11.5] - 2026-11-09
 
 Plugin apps.
 
