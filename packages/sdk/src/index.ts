@@ -1714,6 +1714,100 @@ export interface ViewDefinition {
   /** Returns JSON-serializable data. Throw `ViewParamsError` for a parameter the schema cannot express. */
   handler(params: Record<string, unknown>, context: ViewContext): unknown | Promise<unknown>;
 }
+/** Where a plugin app action runs: the session the web opened the app for (validated by the host). */
+export interface PluginAppContext {
+  sessionId: string;
+  /** Workspace of that session. */
+  workspace: string;
+  /** Aborted when the host timeout for the action expires (30 s) or the request is cancelled. */
+  signal: AbortSignal;
+  /** Caller-chosen key a handler may use to make a retried action idempotent. */
+  idempotencyKey?: string;
+}
+/**
+ * One action a plugin app frame may invoke. The host validates `input` against `inputSchema` and
+ * runs the same effect gate as a tool call with the session's effective capabilities; an effect
+ * that is not already granted is rejected (no ad-hoc approval prompt).
+ */
+export interface PluginAppAction {
+  effect: "read" | "write" | "process";
+  /** JSON Schema of the action input (`$ref`, `$id` and `$async` are not supported). */
+  inputSchema: JsonSchema;
+  /** Returns JSON-serializable data. */
+  handler(input: unknown, context: PluginAppContext): unknown | Promise<unknown>;
+}
+/**
+ * A full-page app a plugin contributes to the workspace (the web UI mounts it in a sandboxed
+ * iframe next to the projects panel). Register with `api.apps?.register(...)`; the host removes it
+ * when the plugin closes or its setup fails. The sandbox is for the browser frame only: backend
+ * plugins remain trusted in-process code, not a Node sandbox.
+ */
+export interface PluginAppDefinition {
+  /** Lowercase letters, digits and dashes, starting with a letter (max 40 characters). */
+  id: string;
+  /** Menu label: a string, or per-locale strings (`en`, `es`; `en` is the fallback). */
+  label: string | Record<string, string>;
+  /**
+   * Self-contained HTML (at most 8 MiB). Every inline `<script>` must carry
+   * `nonce="__ALISIO_NONCE__"`; the server replaces the marker with a fresh nonce per request.
+   */
+  html: () => string | Promise<string>;
+  /** Actions the frame can call, keyed by name (`^[A-Za-z][A-Za-z0-9_.-]{0,63}$`). */
+  actions?: Record<string, PluginAppAction>;
+  /** True while the app has background work: keeps the workspace from idle eviction. */
+  busy?: () => boolean;
+  /** Synchronous and idempotent: starts cancelling owned work and releases resources. */
+  dispose?: () => void;
+}
+/** `GET /api/workspaces/:wid/apps` item: one app of an enabled plugin. Consumers ignore unknown fields. */
+export interface PluginAppInfo {
+  plugin: string;
+  id: string;
+  /** Per-locale labels (`en` always present). */
+  label: Record<string, string>;
+}
+/** Error codes of the app frame transport (`response.error`); never carry inputs or secrets. */
+export type PluginAppErrorCode =
+  | "not_found"
+  | "invalid_input"
+  | "not_permitted"
+  | "timeout"
+  | "failed"
+  | "too_large"
+  | "too_many_requests"
+  | "unauthorized"
+  | "network";
+/** Host -> frame, sent once with the transferred `MessagePort` (`event.ports[0]`). */
+export interface PluginAppConnectMessage {
+  type: "alisio.app.connect";
+  locale: string;
+  visible: boolean;
+}
+/** Frame -> host over the port. */
+export interface PluginAppRequestMessage {
+  type: "request";
+  id: string;
+  action: string;
+  input?: unknown;
+  idempotencyKey?: string;
+}
+/** Host -> frame over the port: `result` on success, `error` (a code) on failure. */
+export type PluginAppResponseMessage =
+  | { type: "response"; id: string; result: unknown }
+  | { type: "response"; id: string; error: PluginAppErrorCode };
+/** Host -> frame updates over the port. */
+export type PluginAppHostMessage =
+  | PluginAppResponseMessage
+  | { type: "locale"; locale: string }
+  | { type: "visibility"; visible: boolean };
+/** Limits of the app routes, shared by the server and the web. */
+export const PLUGIN_APP_LIMITS = {
+  htmlBytes: 8 * 1024 * 1024,
+  requestBytes: 37 * 1024 * 1024,
+  resultBytes: 90 * 1024 * 1024,
+  timeoutMs: 30_000,
+  inFlight: 8,
+} as const;
 /** `ViewDefinition.handler` failure caused by the caller's parameters (becomes a 400). */
 export class ViewParamsError extends Error {
   readonly code = "view_invalid_params";
@@ -2050,6 +2144,11 @@ export interface PluginAPI {
    * feature-detect with `api.views?.register(...)` so the plugin keeps working there.
    */
   views?: { register(view: ViewDefinition): () => void };
+  /**
+   * Full-page apps shown beside the projects panel. Absent on a core that predates them:
+   * feature-detect with `api.apps?.register(...)` and explain that an updated host is needed.
+   */
+  apps?: { register(app: PluginAppDefinition): () => void };
   /**
    * Proof verifiers (specs/011). Absent on a core that predates Proof: feature-detect with
    * `api.proof?.registerVerifier(...)` so the plugin keeps working there.
@@ -2399,6 +2498,14 @@ export type ApiErrorCode =
   | "view_timeout"
   /** A plugin data view answered more than the host response cap (502). */
   | "view_too_large"
+  /** A plugin app action failed or was rejected (the message never carries inputs). */
+  | "app_action_failed"
+  /** The session does not allow the app action's effect (403). */
+  | "app_action_denied"
+  /** A plugin app action exceeded the host timeout (504). */
+  | "app_action_timeout"
+  /** A plugin app answered more than the host response cap (502). */
+  | "app_result_too_large"
   /** The background task does not exist or belongs to another session (404). */
   | "task_not_found"
   /** The session has no goal (404). */

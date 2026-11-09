@@ -4762,3 +4762,28 @@ Añadido: imágenes SVG con un saneador estricto propio (`svg-sanitize.ts`, sin 
 Verificado (Linux x64, Chrome 154, Electron 45.2.3 con `--ozone-platform=headless`, Node 24.16): pruebas unitarias del saneador, del protocolo de impresión, del cliente del host, del enrutado en `launchHost`, del TOC de dos pasadas, de los gráficos, del esquema y del HTML; con navegador (`ALISIO_TEST_CHROMIUM=1`): los números del índice coinciden con la página real de cada encabezado (`pdftotext`), un logotipo SVG y gráficos con solo tipografías incluidas; con Electron real (`ALISIO_TEST_ELECTRON=1`): PDF etiquetado con enlaces, mediciones y cero conexiones a un oyente local; `test:compiled` comprueba que `document_create` encuentra los recursos incrustados en el binario.
 
 Límites conocidos: solo Linux (Windows y macOS sin verificar); el Electron de Alisio Desktop solo se probó con el binario sin empaquetar (no con el instalador); sin encabezados de capítulo corrientes, notas al pie, WeasyPrint ni comprobaciones visuales (fases 3 y 4, con el orden decidido el 2026-11-08: primero comprobaciones visuales); los bloques de un anexo no se miden por desbordamiento; un PDF con caracteres CJK en el cuerpo falla la comprobación `font_not_bundled` (la fuente de reserva no tiene nombre); no se añadieron etiquetas de ajustes porque `documents.*` no es editable desde la web.
+
+## Aplicaciones de plugins
+
+Estado: **hecho, sin commit.** Un plugin registra aplicaciones de página completa con
+`api.apps?.register`: SDK (`PluginAppDefinition`, tipos de catálogo y del protocolo del frame),
+registro en el núcleo por workspace (ids y acciones validados, duplicados rechazados, `dispose`
+síncrono al dar de baja, cerrar el plugin o revertir un `setup` fallido, `busy()` evita la expulsión
+por inactividad), tres rutas del servidor (catálogo, frame HTML con nonce y CSP estricta, y acciones
+con validación de esquema, `decideEffect` con las capacidades de la sesión, 37 MiB de entrada,
+90 MiB de salida y 30 s) y, en la web, el grupo Aplicaciones sobre Proyectos (oculto si no hay
+ninguna, refresco cada 15 s) y el contenedor que sustituye el chat con el frame en sandbox
+(`allow-scripts allow-downloads allow-modals allow-popups`, sin `allow-same-origin`) y un puente
+`MessageChannel` (máximo 8 peticiones por frame).
+
+Verificado: pruebas unitarias del registro, de la puerta de acciones y del protocolo, pruebas HTTP
+(cookie, Host, Origin, 404 uniforme, CSP, nonce, límites, tiempo) y una ejecución real en Chromium
+(Linux) del plugin de ejemplo `hello-app` en español e inglés, con la captura de la documentación.
+
+Límites conocidos: los plugins de backend son código de confianza en proceso y el iframe no es un
+sandbox de Node; los frames visitados permanecen en memoria hasta recargar la página; deshabilitar
+un plugin bloquea de inmediato las acciones nuevas, pero no revoca un puerto ya abierto ni cancela
+los trabajos que el plugin haya iniciado; el timeout de una promesa no detiene un handler que
+consume CPU; las acciones no concedidas se rechazan (sin diálogo de aprobación); no hay API
+genérica de jobs, broker de servicios ni SDK de navegador, y las aplicaciones no tienen enlaces
+profundos ni navegación declarativa. Solo se probó en Linux x64.

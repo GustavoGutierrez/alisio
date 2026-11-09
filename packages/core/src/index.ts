@@ -548,6 +548,7 @@ export {
   settlePlanRun,
   withdrawPendingPlan,
 } from "./plan/state.ts";
+export { APP_ACTION_TIMEOUT_MS, PluginAppError, PluginAppRegistry } from "./plugins/apps.ts";
 export {
   discoverPlugins,
   type PluginEnvironment,

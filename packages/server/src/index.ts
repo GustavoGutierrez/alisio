@@ -60,6 +60,7 @@ import { registerGoalRoutes } from "./routes/goal.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
+import { registerPluginAppRoutes } from "./routes/plugin-apps.ts";
 import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
@@ -159,6 +160,11 @@ export interface ServerOptions {
   folderPicker?: FolderPicker;
   /** Limits of plugin data views (`GET /api/sessions/:sid/views/…`): 5 s and 1 MiB by default. */
   views?: { timeoutMs?: number; maxBytes?: number };
+  /** Limits of plugin apps (tests lower them); defaults are `PLUGIN_APP_LIMITS`. */
+  apps?: {
+    limits?: Partial<{ htmlBytes: number; requestBytes: number; resultBytes: number }>;
+    actionTimeoutMs?: number;
+  };
   /**
    * Restart on request. `supervised` (default: env `ALISIO_SUPERVISED=1`, set by the desktop app)
    * says a supervisor respawns this process when it exits with `RESTART_EXIT_CODE`. `exit`
@@ -426,7 +432,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     onOpen: (entry) => {
       if (interactions) entry.app.plugins.setInteractiveUI(interactions.uiFor(entry.id));
     },
-    busy: (id) => scheduler.busyWorkspace(id) || hub.watchesWorkspace(id) || tasksLive(id),
+    busy: (id) =>
+      scheduler.busyWorkspace(id) ||
+      hub.watchesWorkspace(id) ||
+      tasksLive(id) ||
+      !!workspaces.get(id)?.app.plugins.apps.busy(),
     ...(options.maxOpenWorkspaces ? { maxOpen: options.maxOpenWorkspaces } : {}),
     ...(options.idleEvictMs ? { idleEvictMs: options.idleEvictMs } : {}),
     ...(options.defaultWorkspace ? { defaultWorkspace: options.defaultWorkspace } : {}),
@@ -528,6 +538,13 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     logger,
     ...(options.views?.timeoutMs !== undefined ? { timeoutMs: options.views.timeoutMs } : {}),
     ...(options.views?.maxBytes !== undefined ? { maxBytes: options.views.maxBytes } : {}),
+  });
+  registerPluginAppRoutes(router, {
+    sessions,
+    workspaces,
+    logger,
+    ...(options.apps?.limits ? { limits: options.apps.limits } : {}),
+    ...(options.apps?.actionTimeoutMs ? { actionTimeoutMs: options.apps.actionTimeoutMs } : {}),
   });
   registerFileRoutes(router, { workspaces, catalog, sessions });
   registerScratchRoutes(router, {

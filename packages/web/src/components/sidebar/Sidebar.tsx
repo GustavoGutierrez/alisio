@@ -23,6 +23,8 @@ import {
   skillBuilderOpen,
 } from "../../store/app.ts";
 import { allCollapsed, closedFolders, folderOpen, setFoldersOpen } from "../../store/folders.ts";
+import { activeAppKey, appCatalog, appsWorkspace, openApp } from "../../store/plugin-apps.ts";
+import { appMenuItems } from "../../store/plugin-apps-model.ts";
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
 import { groupSessions, projectSections } from "../../store/sessions.ts";
 import { relativeTime } from "../../util/time.ts";
@@ -36,8 +38,46 @@ import styles from "./sidebar.module.css";
 
 export const searchRequest = { focus: () => {} };
 
+/** The Apps group: listed just above Projects, and not rendered at all without apps. */
+function AppsGroup() {
+  const items = appMenuItems(
+    appCatalog.value,
+    appsWorkspace.value,
+    activeAppKey.value,
+    locale.value,
+  );
+  if (!items.length) return null;
+  return (
+    <section class={styles.appsGroup} aria-labelledby="sidebar-apps-title">
+      <div class={styles.sectionHead}>
+        <h2 id="sidebar-apps-title" class={styles.sectionTitle}>
+          {t("sidebar.apps")}
+        </h2>
+      </div>
+      <ul class={styles.sessions}>
+        {items.map((item) => (
+          <li key={item.key} class={styles.row} data-active={item.active}>
+            <button
+              type="button"
+              class={`${styles.rowLink} ${styles.appLink}`}
+              aria-current={item.active ? "page" : undefined}
+              onClick={() => {
+                void openApp(item.plugin, item.id);
+                mobileSidebar.value = false;
+              }}
+            >
+              <Icon name="layers" size={15} />
+              <span class={styles.rowTitle}>{item.label}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function SessionRow({ session }: { session: SessionSummary }) {
-  const active = session.id === currentId.value;
+  const active = !activeAppKey.value && session.id === currentId.value;
   const title = session.title || t("session.untitled");
   const status = session.status;
   return (
@@ -350,6 +390,7 @@ export function Sidebar() {
         <Icon name="plusCircle" size={17} />
         {t("sidebar.newSession")}
       </button>
+      <AppsGroup />
       <div class={styles.sectionHead}>
         <h2 class={styles.sectionTitle}>{t("sidebar.workspaces")}</h2>
         <button

@@ -45,6 +45,7 @@ import {
   viewport,
 } from "./store/layout.ts";
 import { planReviewOf } from "./store/plan-review.ts";
+import { activeAppKey, appInstances, startAppCatalog } from "./store/plugin-apps.ts";
 import { clampPanelWidth, defaultPanelWidth } from "./util/panel.ts";
 
 function Centered(props: { title: string; body: string; action?: preact.ComponentChildren }) {
@@ -100,6 +101,8 @@ const loadTrajectory = () =>
 const loadMemory = () => import("./components/memory/MemoryTab.tsx").then((m) => m.MemoryTab);
 const loadProofCard = () => import("./components/proof/ProofCard.tsx").then((m) => m.ProofCard);
 const loadGoal = () => import("./components/goal/GoalBar.tsx").then((m) => m.GoalBar);
+const loadAppOutlet = () =>
+  import("./components/apps/PluginAppOutlet.tsx").then((m) => m.PluginAppOutlet);
 const loadArtifacts = () =>
   import("./components/artifacts/ArtifactPanel.tsx").then((m) => m.ArtifactPanel);
 
@@ -147,12 +150,19 @@ function RightSlot(props: { expanded: boolean }) {
 }
 
 export function App() {
+  useEffect(() => startAppCatalog(), []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchRequest.focus();
-      } else if (event.key === "/" && !editable(event.target) && !event.ctrlKey && !event.metaKey) {
+      } else if (
+        !activeAppKey.value &&
+        event.key === "/" &&
+        !editable(event.target) &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
         event.preventDefault();
         focusComposer.value++;
       } else if (event.key === "Escape" && mobileSidebar.value) mobileSidebar.value = false;
@@ -167,7 +177,9 @@ export function App() {
   const { approvals, interactions } = visible.value;
   const id = currentId.value;
   // "Expand panel" hides the chat column, except while an approval or a question waits there.
+  const appOpen = !!activeAppKey.value;
   const expanded =
+    !appOpen &&
     rightPanel.value === "artifact" &&
     panelExpanded.value &&
     !narrowScreen.value &&
@@ -175,7 +187,7 @@ export function App() {
     !interactions.length;
   return (
     <div class={styles.app} data-artifact-expanded={expanded ? "true" : undefined}>
-      <a class="skip" href="#composer-input">
+      <a class="skip" href={appOpen ? "#plugin-app-main" : "#composer-input"}>
         {t("app.skip")}
       </a>
       <Sidebar />
@@ -188,7 +200,7 @@ export function App() {
           }}
         />
       ) : null}
-      <main class={styles.main}>
+      <main class={styles.main} id="plugin-app-main" tabIndex={-1}>
         {reloadRequired.value ? (
           <div class={styles.banner} role="alert">
             <strong>{t("reload.title")}</strong> {t("reload.body")}
@@ -202,46 +214,50 @@ export function App() {
             {t("stream.reconnecting")}
           </div>
         ) : null}
-        <Header />
-        {id ? (
-          <>
-            {activeTab() === "trajectory" ? (
-              <Lazy key="trajectory" load={loadTrajectory} />
-            ) : activeTab() === "memory" ? (
-              <Lazy key="memory" load={loadMemory} />
-            ) : (
-              <Transcript />
-            )}
-            {goalInfo.value ? <Lazy key="goal" load={loadGoal} /> : null}
-            {proofCount.value > 0 ? <Lazy key="proof" load={loadProofCard} /> : null}
-            {approvals.length ? (
-              <ApprovalPanel approvals={approvals} />
-            ) : interactions[0] && planReviewOf(interactions[0]) ? (
-              <Lazy
-                key={interactions[0].interactionId}
-                load={loadPlanReview}
-                interaction={interactions[0]}
-              />
-            ) : interactions[0] ? (
-              <InteractionPanel interaction={interactions[0]} />
-            ) : (
-              <Composer />
-            )}
-            <StatsLine />
-          </>
-        ) : (
-          <div class={styles.none}>
-            <h2>{t("transcript.noSessionTitle")}</h2>
-            <p>{t("transcript.noSessionBody")}</p>
-            <button type="button" class={styles.primary} onClick={() => void newSession()}>
-              <Icon name="plusCircle" size={17} />
-              {t("sidebar.newSession")}
-            </button>
-          </div>
-        )}
+        {appInstances.value.length ? <Lazy load={loadAppOutlet} /> : null}
+        {/* Hidden and inert (not unmounted) while an app is open: draft and attachments survive. */}
+        <div class={styles.chatContent} hidden={appOpen} inert={appOpen}>
+          <Header />
+          {id ? (
+            <>
+              {activeTab() === "trajectory" ? (
+                <Lazy key="trajectory" load={loadTrajectory} />
+              ) : activeTab() === "memory" ? (
+                <Lazy key="memory" load={loadMemory} />
+              ) : (
+                <Transcript />
+              )}
+              {goalInfo.value ? <Lazy key="goal" load={loadGoal} /> : null}
+              {proofCount.value > 0 ? <Lazy key="proof" load={loadProofCard} /> : null}
+              {approvals.length ? (
+                <ApprovalPanel approvals={approvals} />
+              ) : interactions[0] && planReviewOf(interactions[0]) ? (
+                <Lazy
+                  key={interactions[0].interactionId}
+                  load={loadPlanReview}
+                  interaction={interactions[0]}
+                />
+              ) : interactions[0] ? (
+                <InteractionPanel interaction={interactions[0]} />
+              ) : (
+                <Composer />
+              )}
+              <StatsLine />
+            </>
+          ) : (
+            <div class={styles.none}>
+              <h2>{t("transcript.noSessionTitle")}</h2>
+              <p>{t("transcript.noSessionBody")}</p>
+              <button type="button" class={styles.primary} onClick={() => void newSession()}>
+                <Icon name="plusCircle" size={17} />
+                {t("sidebar.newSession")}
+              </button>
+            </div>
+          )}
+        </div>
       </main>
-      {id ? <RightSlot expanded={expanded} /> : null}
-      {btw.value && id ? <Lazy load={loadBtw} /> : null}
+      {id && !appOpen ? <RightSlot expanded={expanded} /> : null}
+      {btw.value && id && !appOpen ? <Lazy load={loadBtw} /> : null}
       {settingsOpen.value ? <Lazy load={loadSettings} /> : null}
       {agentsOpen.value ? <Lazy load={loadAgents} /> : null}
       {skillBuilderOpen.value ? <Lazy load={loadSkillBuilder} /> : null}

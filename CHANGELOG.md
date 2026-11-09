@@ -4,6 +4,17 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [Unreleased]
+
+Plugin apps.
+
+### Added
+
+- Plugins can add full-page apps (a small tool or a complete multi-page UI) with `api.apps`. In the
+  web UI they appear in an **Apps** group above Projects (hidden when there are none) and open in
+  place of the chat, keeping your conversation, draft and unsaved app edits when you switch back
+  and forth. Apps run in a sandboxed frame and reach Alisio only through permission-checked actions.
+
 ## [0.11.4] - 2026-11-08
 
 Images no longer fill the context.

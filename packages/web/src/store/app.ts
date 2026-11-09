@@ -42,6 +42,7 @@ import { errorText } from "./errors.ts";
 import { goalFromFrame } from "./goal-frame.ts";
 import { nextAgentId } from "./modes.ts";
 import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
+import { activeAppKey } from "./plugin-apps-state.ts";
 import {
   effectiveTab,
   emptyPlugins,
@@ -459,6 +460,8 @@ function applyServerFrames(frames: ServerFrame[]): void {
 
 /** Opens a session: resets its transcript, subscribes the stream and loads its side data. */
 export async function openSession(id: string | undefined): Promise<void> {
+  // Opening a chat from the sidebar leaves any plugin app (its frame stays mounted).
+  activeAppKey.value = undefined;
   if (id === currentId.value && id) return;
   batch(() => {
     currentId.value = id;

@@ -110,6 +110,7 @@ removed automatically when it is unloaded.
 | `state.get(key)` / `state.set(key, value)` | Small JSON state per plugin, persisted in the session database |
 | `storage.sqlite(path)` | Opens a private (0600) SQLite file, creating parent directories (0700). Returns the storage port `SqlDatabase` |
 | `views.register(view)` | Registers a named, read-only [data view](#data-views) hosts such as the web UI can read. Absent on a core that predates it: use `api.views?.register(...)` |
+| `apps.register(app)` | Registers a full-page [plugin app](#plugin-apps) shown beside the projects panel. Absent on a core that predates it: use `api.apps?.register(...)` |
 | `proof.registerVerifier(verifier)` | Registers a [Proof verifier](#proof-verifiers) (`{ id, describe, run(input, ctx) }`) that criteria bind to as `<pluginId>:<id>`. Absent on a core that predates Proof: use `api.proof?.registerVerifier(...)` |
 | `decisions.registerProvider(provider)` | Registers a [Decision Intelligence](/decision-intelligence) provider (it does not activate it); also `available()`, `activeProvider()`, `tryDecide(request, options?)` and the optional `activate(providerId, options?)` (`options.recommend` pre-selects Yes after an explicit user action). Absent on a core that predates it: use `api.decisions?.registerProvider(...)` |
 | `paths` | `{ state, config, cache }`: per-plugin directories resolved by the host and created with mode `0700` on first read. Absent on a core that predates it |
@@ -308,6 +309,86 @@ export default definePlugin({
 - **Views are read-only by contract, not by isolation.** The host only controls the method, the
   validated parameters, the time and the size; it cannot stop a plugin's code from writing, and a
   handler that blocks the event loop is not interrupted by the timeout. A plugin is not a sandbox.
+
+### Plugin apps {#plugin-apps}
+
+A plugin can contribute a full-page app: a small tool or a complete multi-page UI that lives next
+to the projects panel and is independent of the chat. Register it during `setup`; the host removes
+it when the plugin closes or when `setup` fails.
+
+```ts
+import { definePlugin } from "@alisio/sdk";
+
+export default definePlugin({
+  id: "acme.notes",
+  version: "1.0.0",
+  apiVersion: 1,
+  setup(api) {
+    // `apps` is absent on an older core: say so instead of failing silently.
+    if (!api.apps) throw new Error("This plugin needs an Alisio host with plugin apps");
+    api.apps.register({
+      id: "notes",
+      label: { en: "Notes", es: "Notas" },
+      html: () => PAGE, // self-contained HTML, at most 8 MiB
+      actions: {
+        save: {
+          effect: "write",
+          inputSchema: { type: "object", properties: { text: { type: "string" } } },
+          handler: async (input, context) => saveNote(context.sessionId, input),
+        },
+      },
+      busy: () => hasBackgroundJobs(), // keeps the workspace from idle eviction
+      dispose: () => cancelOwnedJobs(), // synchronous and idempotent
+    });
+  },
+});
+```
+
+- **Ids and labels.** `id` follows the view rules (`^[a-z][a-z0-9-]{0,39}$`) and is unique per
+  plugin; a duplicate throws. `label` is a string or `{ en, es }`; the web picks the active
+  language. Action names match `^[A-Za-z][A-Za-z0-9_.-]{0,63}$`.
+- **Where it appears.** The web UI lists the apps of the enabled plugins of the open project in an
+  **Apps** group just above **Projects** (the group is not shown when there are none) and refreshes
+  the list every 15 seconds. Opening an app replaces the whole chat area; the projects panel stays,
+  and **Back to chat** returns to the conversation, its draft and pending attachments. The app
+  frame stays mounted while you switch, so unsaved edits survive. Another project is another
+  instance. The app runs in the current session of the project (else its most recent one, else a
+  new one) and keeps it.
+- **The frame.** The page is served by `GET /api/sessions/:sid/apps/:plugin/:app/frame` into a
+  sandboxed `iframe` (`allow-scripts allow-downloads allow-modals allow-popups`, no
+  `allow-same-origin`, so it has no cookies or access to the host DOM). Every inline `<script>` must
+  carry `nonce="__ALISIO_NONCE__"`; the server replaces the marker with a fresh nonce per request.
+  The CSP is `default-src 'none'`, nonce scripts, inline styles, `data:`/`blob:` images, fonts and
+  media, `connect-src blob:`, `worker-src blob:`, `base-uri 'none'`, `form-action 'none'`: the page
+  cannot reach the network, only the host.
+- **Messages.** On load the host transfers a `MessagePort` to the frame with
+  `{ type: "alisio.app.connect", locale, visible }` (accept the first channel that comes from
+  `window.parent`). Over the port the frame sends `{ type: "request", id, action, input }` and gets
+  `{ type: "response", id, result }` or `{ type: "response", id, error: <code> }`; the host also
+  sends `{ type: "locale", locale }` and `{ type: "visibility", visible }`. Error codes are
+  `not_found`, `invalid_input`, `not_permitted`, `timeout`, `failed`, `too_large`,
+  `too_many_requests`, `unauthorized` and `network`; they never carry inputs or secrets. At most 8
+  requests run at once per frame. The wire types (`PluginAppConnectMessage`,
+  `PluginAppRequestMessage`, `PluginAppHostMessage`, `PluginAppErrorCode`) are in `@alisio/sdk`.
+- **Actions.** Each action declares an `effect` (`read`, `write` or `process`) and an
+  `inputSchema` (an object schema; `$ref`, `$id` and `$async` are rejected). Over HTTP an action is
+  `POST /api/sessions/:sid/apps/:plugin/:app/actions/:action` with `{ input, idempotencyKey? }`. The
+  host validates the input, then applies the same effect gate as a tool call with the session's
+  effective capabilities: an effect that is not already granted is rejected
+  (`app_action_denied`, 403); there is no approval prompt and permissions never widen. The session
+  comes from the route, never from the input (`context.sessionId`, `context.workspace`). Whether the
+  plugin is enabled is checked on every call. Limits: 37 MiB request, 90 MiB result (`app_result_too_large`),
+  30 seconds (`app_action_timeout`, 504; `context.signal` aborts). Long work should return a job
+  quickly instead of holding the request. Failures are a generic `app_action_failed` (502); inputs
+  and results are never logged.
+- **Models and agents.** Handlers reuse `api.models`, `api.model.complete` and `api.sessions`; they
+  need no provider SDK or separate keys.
+- **A browser sandbox is not a Node sandbox.** The frame is isolated in the browser, but the
+  plugin's backend is trusted in-process code with the privileges of Alisio, and a promise timeout
+  does not stop CPU-bound code. Disabling a plugin blocks new actions at once, but an already open
+  port is not revoked immediately.
+
+See [`examples/plugins/hello-app`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/hello-app) for a minimal app.
 
 ### Decision Intelligence, paths and options {#decision-intelligence}
 

@@ -40,6 +40,7 @@ import { exists, readJson } from "../runtime/fs.ts";
 import { resolvePluginSpec } from "../runtime/modules.ts";
 import { inside } from "../runtime/paths.ts";
 import { openDatabase } from "../runtime/sqlite.ts";
+import { PluginAppRegistry } from "./apps.ts";
 export const pluginPrefix = (id: string) =>
   `p_${createHash("sha256").update(id).digest("hex").slice(0, 10)}`;
 type StartHandler = (info: SessionInfo) => Promise<string | undefined | void>;
@@ -148,6 +149,8 @@ export class PluginHost implements RunnerExtensions {
       validate: ValidateFunction;
     }
   >();
+  /** Full-page apps contributed by plugins (per workspace host). */
+  readonly apps = new PluginAppRegistry();
   /** Tree panels contributed by plugins, keyed `plugin:id`. */
   panels = new Map<string, { plugin: string; provider: PanelProvider }>();
   private sessionsImpl?: PluginAPI["sessions"];
@@ -501,6 +504,9 @@ export class PluginHost implements RunnerExtensions {
             if (this.views.get(key) === entry) this.views.delete(key);
           });
         },
+      },
+      apps: {
+        register: (app) => track(this.apps.register(plugin.id, app)),
       },
       ...(this.environment
         ? (({ stateRoot, configHome, options }) => {

@@ -1,0 +1,35 @@
+{
+  "name": "alisio-plugin-hello-app",
+  "version": "0.1.0",
+  "description": "Example Alisio plugin: a small full-page app with one action, shown beside the projects panel.",
+  "license": "MIT",
+  "keywords": [
+    "alisio-plugin",
+    "alisio",
+    "app"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@alisio/sdk": "^0.2.0"
+  },
+  "devDependencies": {
+    "@alisio/sdk": "^0.2.0",
+    "typescript": "5.9.3"
+  }
+}

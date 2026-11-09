@@ -45,6 +45,9 @@ connection); writes go through the workspace app (`app.proof`), refuse archived 
 and 404 a criterion of another session. The snapshot carries `proof: {criteria}` only when > 0.
 Tests: `tests/proof-routes.test.ts`.
 
+## Plugin app routes (`routes/plugin-apps.ts`)
+`GET /api/workspaces/:wid/apps` (catalog), `GET /api/sessions/:sid/apps/:plugin/:app/frame` (HTML, fresh CSP nonce, framable by self only) and `POST …/apps/:plugin/:app/actions/:action` (37 MiB body override, 90 MiB result). Enabled plugin re-checked per request; effect gate uses `SessionService.policy`. Tests: `tests/server-plugin-apps.test.ts`.
+
 ## Testing
 
 `tests/server-helpers.ts` starts a real server on a free port with a scripted provider and issues

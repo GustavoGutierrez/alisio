@@ -43,6 +43,9 @@ dock tab, `strings.ts` EN/ES) and `store/proof.ts` are lazy chunks; the initial 
 `store/proof-frame.ts`, `proofCount`/`proofTick` and the `/proof` hook. Tests walk the VNode tree of
 `ProofView` (no DOM) in `tests/web-proof.test.ts`. Plan-review criteria choices: `store/plan-criteria.ts`.
 
+## Plugin apps
+`store/plugin-apps*.ts` (catalog refresh 15 s, instances, active app) and `components/apps/` (lazy `PluginAppOutlet`, DOM-free `bridge.ts` port protocol). The sidebar `AppsGroup` renders nothing without apps; chat stays mounted `hidden` + `inert` while an app is open. Tests: `tests/web-plugin-apps.test.ts`.
+
 ## Testing
 
 Vitest runs in Node (no DOM environment): test pure models, reducers and stores

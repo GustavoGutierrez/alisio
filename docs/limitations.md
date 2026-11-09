@@ -636,3 +636,16 @@ workers inside Electron beyond the inherited environment. Known limits: the app 
 plugin installs (about 17 MB more in the runtime), Git features need `git`, global plugin discovery derives its prefix from
 `process.execPath` (meaningless inside Electron), there is no auto-update, and the installers are
 unsigned, so SmartScreen and Gatekeeper warn. User guide: [Desktop app](/desktop).
+
+## Plugin apps
+
+Plugins register full-page apps with `api.apps?.register` (SDK, core registry, three server routes and
+a web outlet with the Apps group above Projects). Verified: unit tests of the registry, the action
+gate and the frame protocol; server tests of auth, CSP, nonce, size and timeout limits; a real
+browser run of the example `hello-app` (Chromium, Linux) in English and Spanish. Limits: backend
+plugins are trusted in-process code and the sandboxed iframe is not a Node sandbox; mounted frames
+stay in memory until the page is reloaded; disabling a plugin blocks new actions at once but does
+not revoke an already open port or cancel jobs the plugin started; a promise timeout does not stop
+CPU-bound handlers; actions that are not already granted are rejected (no approval prompt); there is
+no generic job API, service broker or browser SDK, and apps have no deep links or declarative
+navigation.

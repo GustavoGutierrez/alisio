@@ -138,3 +138,14 @@
 .app[data-artifact-expanded="true"] > main {
   display: none;
 }
+
+.chatContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.chatContent[hidden] {
+  display: none;
+}

@@ -38,6 +38,7 @@ import type {
   Message,
   PendingApproval,
   PermissionPresetId,
+  PluginAppInfo,
   PluginInfo,
   PromptAccepted,
   ProviderAuthFlowStarted,
@@ -211,6 +212,34 @@ export class ApiClient {
     model?: string;
     agent?: string;
   }) => this.request<SessionDetail>("POST", "/api/sessions", body);
+  /** Apps of the enabled plugins of a workspace (the Apps group of the sidebar). */
+  pluginApps = (workspaceId: string, signal?: AbortSignal) =>
+    this.request<PluginAppInfo[]>(
+      "GET",
+      `/api/workspaces/${enc(workspaceId)}/apps`,
+      undefined,
+      signal ? { signal } : {},
+    );
+  /** Runs one action of a plugin app in a session; resolves with the handler's result. */
+  runPluginAppAction = async (
+    sessionId: string,
+    plugin: string,
+    app: string,
+    action: string,
+    input: unknown,
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ): Promise<unknown> =>
+    (
+      await this.request<{ result: unknown }>(
+        "POST",
+        `/api/sessions/${enc(sessionId)}/apps/${enc(plugin)}/${enc(app)}/actions/${enc(action)}`,
+        { input, ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}) },
+        options.signal ? { signal: options.signal } : {},
+      )
+    ).result;
+  /** URL of the app document the sandboxed iframe loads. */
+  pluginAppFrameUrl = (sessionId: string, plugin: string, app: string) =>
+    `/api/sessions/${enc(sessionId)}/apps/${enc(plugin)}/${enc(app)}/frame`;
   session = (id: string) => this.request<SessionDetail>("GET", `/api/sessions/${enc(id)}`);
   patchSession = (
     id: string,

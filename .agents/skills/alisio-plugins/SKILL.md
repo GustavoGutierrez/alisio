@@ -16,7 +16,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
   Enforced by `tests/plugin-boundaries.test.ts` for every `packages/plugin-*`.
 - Plugins are trusted, in-process code with the full privileges of the Alisio process. A manifest,
   an `effect` label or a subprocess is NOT a sandbox. Never document or imply isolation.
-- New SDK/host capabilities are optional in the contract: feature-detect (`api.views?.register`,
+- New SDK/host capabilities are optional in the contract: feature-detect (`api.views?.register`, `api.apps?.register`,
   `api.decisions?`, `api.paths?`, `api.options?`, `api.proof?`) so a plugin runs on an older core.
 - Use the storage port (`api.storage.sqlite`), never a SQLite driver; no provider SDK or Bun
   global in plugin code except a provider plugin's own client (e.g. `openai` in
@@ -44,6 +44,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 | Compaction, session hooks | `api.compaction.register`, `api.session.onStart/onEnd` (timeouts `pluginHooks.*`) |
 | Small state, private SQLite | `api.state.get/set`, `api.storage.sqlite(path)` (0600, FTS5), `api.paths` |
 | Read-only data for web | `api.views?.register({ id, description, params, handler })` |
+| Full-page app (web) | `api.apps?.register({ id, label, html, actions, busy?, dispose? })`: HTML with `nonce="__ALISIO_NONCE__"` scripts in a sandboxed iframe, actions `{ effect, inputSchema, handler }` gated like tools (ungranted effect = rejected), session from the route; see `docs/plugins.md#plugin-apps` and `examples/plugins/hello-app` |
 | Model access | `api.model.complete`, `api.models.list/resolve`, `api.providers.register` |
 | Child sessions | `api.sessions.*` (narrowed permissions; see `plugin-subagents`) |
 | UI | `api.ui.status/panel/select/askQuestions` (no-op or `undefined` when headless) |
@@ -61,6 +62,7 @@ Config: `pluginOverrides[id].options` is read via `api.options` (global only, <=
   Unknown/undeclared effect = `external`. Declare `read` only for side-effect-free tools.
 - `capability` and `ToolContext.artifacts/approveInstall/emitEvent` are built-in-only.
 - External names are prefixed: tools `p_<10 hex of sha256(id)>_<name>`, commands `<id>:<name>`.
+- Apps: iframe is a browser sandbox, not a Node sandbox; actions <= 37 MiB in, 90 MiB out, 30 s; frame HTML <= 8 MiB; no network from the frame (`connect-src blob:`); no `<form>` submit (no `allow-forms`).
 - Views: read-only by contract (not isolation); <= 1 MiB JSON, 5 s timeout, <= 16 query params.
 - Startup mascot/screen providers: no globals/env/fs, <= 250 ms, 12/60 lines, output sanitized.
 - Hooks run in-process: a timeout cannot stop blocking synchronous code.

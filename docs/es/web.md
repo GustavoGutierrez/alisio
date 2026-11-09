@@ -949,6 +949,25 @@ que aún se está generando, la hora de inicio de la ejecución, aprobaciones pe
 llevan su `eventId` como `id` de SSE, y el texto generado llega agrupado unas 30 veces por segundo.
 La versión del protocolo aparece en `/api/health` y en el primer frame del stream.
 
+## Aplicaciones de plugins
+
+Los plugins pueden registrar aplicaciones de página completa (vea [Aplicaciones de plugins](/es/plugins#plugin-apps)). Cuando
+el proyecto abierto tiene al menos una, aparece un grupo **Aplicaciones** en el panel izquierdo
+justo encima de **Proyectos**; si no hay ninguna, el grupo no se muestra. La lista se refresca cada
+15 segundos. Abrir una aplicación sustituye toda el área del chat: el encabezado, los mensajes, el
+cuadro de escritura, las estadísticas y el panel lateral se ocultan y el panel de proyectos
+permanece. **Volver al chat** devuelve la conversación con su borrador y los adjuntos pendientes, y
+una aplicación que dejó conserva su edición sin guardar hasta que recargue la página. Otro proyecto
+es otra instancia. En pantallas estrechas, el botón **Proyectos** de la barra de la aplicación
+abre el panel habitual. Las aplicaciones siguen el idioma de la interfaz y se ejecutan en un frame
+con sandbox sin acceso a la red: solo llegan a Alisio mediante acciones autenticadas y con
+permisos comprobados.
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/plugin_apps_web_ui_es.webp" alt="La aplicación de ejemplo abierta en lugar del chat: el panel izquierdo muestra un grupo Aplicaciones sobre Proyectos con la aplicación seleccionada, la barra tiene un botón Volver al chat y la aplicación saluda a Marta." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>La aplicación de ejemplo en lugar del chat, con el grupo Aplicaciones sobre Proyectos.</figcaption>
+</figure>
+
 ## Limitaciones
 
 - Un solo host: los bloqueos de sesión dependen de ids de proceso, y la web no ve en vivo los

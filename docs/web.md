@@ -896,6 +896,23 @@ text still streaming, the run's start time, pending approvals) followed by live 
 `eventId` as the SSE `id`, and streamed text arrives coalesced about 30 times per second. The
 protocol version is reported by `/api/health` and in the stream's first frame.
 
+## Plugin apps
+
+Plugins can register full-page apps (see [Plugin apps](/plugins#plugin-apps)). When the open
+project has at least one, an **Apps** group appears in the left panel just above **Projects**; with
+none, the group is not shown at all. The list refreshes every 15 seconds. Opening an app replaces
+the whole chat area: the header, messages, composer, stats and side panel are hidden while the
+projects panel stays. **Back to chat** returns to the conversation with its draft and pending
+attachments, and an app you left keeps its unsaved edits until you reload the page. Another
+project is another instance. On narrow screens the **Projects** button of the app bar opens the
+usual drawer. Apps follow the interface language and run in a sandboxed frame without network
+access: they reach Alisio only through authenticated, permission-checked actions.
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/plugin_apps_web_ui.webp" alt="The example Hello app open in place of the chat: the left panel shows an Apps group above Projects with the app selected, the app bar has a Back to chat button and the app greets Marta." width="1280" height="820" loading="lazy" decoding="async" />
+  <figcaption>The example app in place of the chat, with the Apps group above Projects.</figcaption>
+</figure>
+
 ## Limitations
 
 - Single host: session locks rely on process ids, and the web does not see live changes a TUI makes
