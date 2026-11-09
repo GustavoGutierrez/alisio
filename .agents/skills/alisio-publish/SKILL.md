@@ -135,17 +135,28 @@ npm install -g --prefix "$PREFIX" @alisio/alisio-code@<V> --prefer-online --no-a
 rm -rf "$PREFIX"
 ```
 
-### 5. Tag y release
+### 5. Tag y release (merge de `develop` a `main`)
 
-Solo tras publicar y verificar la instalación:
+Ramas: el trabajo diario va en `develop`; `main` solo recibe merges de release. El bump, el
+CHANGELOG y el commit `chore: release <V>` se hacen en `develop`. Tras publicar en npm y
+verificar la instalación, se integra en `main`:
 
 ```bash
-git tag -a v<V> -m "Alisio <V>"
-git push origin v<V>
+git checkout main && git merge --ff-only develop   # o un PR develop -> main
+git push origin main
+git checkout develop
 ```
 
-Después crea el GitHub Release `v<V>` con las notas (copiadas del CHANGELOG). El script nunca
-etiqueta ni hace push.
+El push a `main` dispara `.github/workflows/desktop-release.yml`: si la versión de
+`apps/desktop/package.json` aún no tiene tag `v<V>`, crea el tag sobre ese commit, el GitHub
+Release "Alisio <V>" con las notas del CHANGELOG, los instaladores de Desktop y
+`SHA256SUMS-desktop.txt`. Si la versión ya está etiquetada, no hace nada (un merge sin bump no
+publica). Empujar un tag `v<V>` a mano o `workflow_dispatch` siguen funcionando para reintentar.
+El script de publish nunca etiqueta ni hace push. El workflow `release.yml` (changesets/npm) está
+deshabilitado: npm se publica en local.
+
+Al terminar el release, actualiza los enlaces de descarga de Desktop (README, `docs/desktop.md`,
+`docs/installation.md`, sus versiones `docs/es/` y `docs/.vitepress/theme/desktop-release.ts`).
 
 ### 6. Aviso al mantenedor de los plugins externos
 

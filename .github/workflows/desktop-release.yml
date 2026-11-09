@@ -3,8 +3,13 @@ name: Desktop release
 # One GitHub Release per version: the `vX.Y.Z` tag gets a release titled "Alisio X.Y.Z" with the
 # CHANGELOG notes, the Alisio Desktop installers for every OS and their checksums. A stable version is
 # marked "Latest". The tag version must match apps/desktop/package.json (all packages share it).
+#
+# Release flow: develop is merged into main. A push to main whose apps/desktop/package.json version has
+# no `vX.Y.Z` tag yet creates that tag and its release; a push whose version is already tagged does nothing.
+# Pushing a `vX.Y.Z` tag by hand (or workflow_dispatch) still builds and publishes that tag.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -21,7 +26,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -30,12 +34,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
+      skip: ${{ steps.tag.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.event.inputs.tag || github.sha }}
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            tag="v$(node -p "require('./apps/desktop/package.json').version")"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "$tag is already tagged: nothing to release."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            tag="${{ github.event.inputs.tag || github.ref_name }}"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
       - name: Check the tag against apps/desktop/package.json
         id: meta
+        if: steps.tag.outputs.skip != 'true'
         run: |
           case "$TAG" in v[0-9]*) ;; *) echo "Tag $TAG must look like vX.Y.Z"; exit 1 ;; esac
           version="${TAG#v}"
@@ -46,6 +70,7 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Create or complete the release
+        if: steps.tag.outputs.skip != 'true'
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
@@ -91,13 +116,18 @@ jobs:
             gh release edit "$TAG" --title "Alisio $VERSION" --notes-file notes.md "${flags[@]}"
           else
             { cat changelog.md; printf '\n'; cat desktop.md; } > notes.md
-            gh release create "$TAG" --verify-tag --title "Alisio $VERSION" --notes-file notes.md "${flags[@]}"
+            # On a push to main the tag does not exist yet: create it on this commit.
+            if [ "$GITHUB_REF_TYPE" = "branch" ]; then target=(--target "$GITHUB_SHA"); else target=(--verify-tag); fi
+            gh release create "$TAG" "${target[@]}" --title "Alisio $VERSION" --notes-file notes.md "${flags[@]}"
           fi
 
   build:
     name: Build (${{ matrix.os }})
     needs: release
+    if: needs.release.outputs.skip != 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -143,8 +173,11 @@ jobs:
 
   checksums:
     name: Checksums
-    needs: build
+    needs: [release, build]
+    if: needs.release.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
     steps:
       - name: Download the installers and publish SHA256SUMS-desktop.txt
         run: |
