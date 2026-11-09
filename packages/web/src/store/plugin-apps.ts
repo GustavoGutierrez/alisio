@@ -12,7 +12,7 @@ import {
   receiveAppCatalog,
   withInstance,
 } from "./plugin-apps-model.ts";
-import { activeAppKey } from "./plugin-apps-state.ts";
+import { activeAppKey, activeAppSession } from "./plugin-apps-state.ts";
 import { newSessionTarget, upsertSession } from "./sessions.ts";
 
 export const APP_CATALOG_REFRESH_MS = 15_000;
@@ -31,6 +31,11 @@ export { activeAppKey };
 export const activeApp = computed(() =>
   appInstances.value.find((instance) => instance.key === activeAppKey.value),
 );
+
+/** While an app is open, the stream also watches the session its actions run in (approvals). */
+effect(() => {
+  activeAppSession.value = activeApp.value?.sessionId;
+});
 
 let refreshing: AbortController | undefined;
 export async function refreshAppCatalog(): Promise<void> {

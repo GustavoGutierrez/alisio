@@ -6,7 +6,7 @@ import type {
 } from "@alisio/sdk";
 import Ajv, { type ValidateFunction } from "ajv";
 import Ajv2020 from "ajv/dist/2020.js";
-import type { Policy } from "../core/contracts.ts";
+import type { ApprovalDecision, Policy } from "../core/contracts.ts";
 import { decideEffect } from "../permissions/decide.ts";
 
 const APP_ID = /^[a-z][a-z0-9-]{0,39}$/;
@@ -15,6 +15,8 @@ const APP_EFFECTS = new Set(["read", "write", "process"]);
 const MAX_ACTIONS = 64;
 const MAX_LABEL = 80;
 export const APP_ACTION_TIMEOUT_MS = 30_000;
+/** Longest wait for the person's answer (the web approval bridge uses the same bound). */
+export const APP_APPROVAL_TIMEOUT_MS = 10 * 60_000;
 
 const ajv = new Ajv({ allErrors: true, strict: true });
 const ajv2020 = new Ajv2020({ allErrors: true, strict: true });
@@ -32,12 +34,28 @@ export class PluginAppError extends Error {
   constructor(
     readonly code: "not_found" | "invalid_input" | "not_permitted" | "timeout" | "failed",
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; effect?: "write" | "process" },
   ) {
     super(message, options);
     this.name = "PluginAppError";
+    if (options?.effect) this.effect = options.effect;
   }
+  /** `not_permitted` only: the effect the session has not granted (never an input or a secret). */
+  readonly effect?: "write" | "process";
 }
+
+/** What an app action asks the host to put to a person (no input, no secret). */
+export interface AppApprovalRequest {
+  plugin: string;
+  app: string;
+  /** Per-locale app label (`en` always present). */
+  label: Record<string, string>;
+  action: string;
+  effect: "write" | "process";
+  /** Aborts when the request is cancelled or the approval wait is capped. */
+  signal: AbortSignal;
+}
+export type AppApprover = (request: AppApprovalRequest) => Promise<ApprovalDecision>;
 
 interface AppEntry {
   plugin: string;
@@ -164,9 +182,47 @@ export class PluginAppRegistry {
     }
   }
 
+  /** Puts one approval to the host; any failure, abort or timeout is a deny. */
+  private async askApproval(
+    entry: AppEntry,
+    action: string,
+    effect: "write" | "process",
+    signal: AbortSignal | undefined,
+    options: { approve?: AppApprover; approvalTimeoutMs?: number },
+  ): Promise<ApprovalDecision> {
+    const approve = options.approve;
+    if (!approve || signal?.aborted) return "deny";
+    const controller = new AbortController();
+    const onAbort = () => controller.abort(signal?.reason);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(
+      () => controller.abort(new Error("Approval timed out")),
+      options.approvalTimeoutMs ?? APP_APPROVAL_TIMEOUT_MS,
+    );
+    try {
+      const answer = await approve({
+        plugin: entry.plugin,
+        app: entry.app.id,
+        label: { ...entry.label },
+        action,
+        effect,
+        signal: controller.signal,
+      });
+      return controller.signal.aborted ? "deny" : answer;
+    } catch {
+      return "deny";
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
   /**
-   * Validates `input`, authorizes the action's effect with the session `policy` (never opens an
-   * approval) and runs it under a timeout. Errors never include the input or handler internals.
+   * Validates `input`, authorizes the action's effect with the session `policy` and runs it under
+   * a timeout. When the policy would ask (`decideEffect`) and `approve` exists, the host puts the
+   * request to a person: "once" runs it, "session" also widens `policy` (the very object the chat
+   * uses), "deny" or a missing answer is `not_permitted`. The action timeout starts after the
+   * approval. Errors never include the input or handler internals.
    */
   async run(
     plugin: string,
@@ -174,17 +230,35 @@ export class PluginAppRegistry {
     name: string,
     input: unknown,
     context: Omit<PluginAppContext, "signal"> & { signal?: AbortSignal },
-    options: { policy: Policy; timeoutMs?: number },
+    options: {
+      policy: Policy;
+      timeoutMs?: number;
+      /** Opens an approval for an "ask" decision; absent means nobody can be asked. */
+      approve?: AppApprover;
+      /** Overrides "can an approval be opened" (false under a read-only session). */
+      approvals?: boolean;
+      approvalTimeoutMs?: number;
+    },
   ): Promise<unknown> {
     const entry = this.entries.get(`${plugin}:${id}`);
     const action = entry?.actions.get(name);
     if (!entry || !action) throw new PluginAppError("not_found", "App action not found");
     if (!action.validate(input)) throw new PluginAppError("invalid_input", "Invalid action input");
-    if (
-      decideEffect(options.policy, action.action, { approvals: false, capabilityGranted: false })
-        .kind !== "allow"
-    )
-      throw new PluginAppError("not_permitted", "The session does not allow this action");
+    const effect = action.action.effect === "write" ? "write" : "process";
+    const decision = decideEffect(options.policy, action.action, {
+      approvals: !!options.approve && options.approvals !== false,
+      capabilityGranted: false,
+    });
+    const denied = () =>
+      new PluginAppError("not_permitted", "The session does not allow this action", {
+        ...(action.action.effect === "read" ? {} : { effect }),
+      });
+    if (decision.kind === "deny") throw denied();
+    if (decision.kind === "ask") {
+      const answer = await this.askApproval(entry, name, effect, context.signal, options);
+      if (answer === "deny") throw denied();
+      if (answer === "session") options.policy[effect] = true;
+    }
     const controller = new AbortController();
     const onAbort = () => controller.abort(context.signal?.reason);
     if (context.signal?.aborted) onAbort();

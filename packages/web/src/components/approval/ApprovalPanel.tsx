@@ -1,7 +1,8 @@
 import type { PendingApproval } from "@alisio/sdk";
 import { useEffect, useRef } from "preact/hooks";
-import { t } from "../../i18n/index.ts";
+import { locale, t } from "../../i18n/index.ts";
 import { decide, detail } from "../../store/app.ts";
+import { appLabel } from "../../store/plugin-apps-model.ts";
 import { formatSize } from "../../util/artifacts.ts";
 import { toolLabel } from "../../util/tools.ts";
 import { Icon } from "../icons.tsx";
@@ -32,8 +33,17 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
   const analysis = approval.capability === "analysis.run";
   // Installing the optional packages: once or deny only (it is never remembered).
   const install = approval.capability === "analysis.install" ? approval.install : undefined;
-  const title =
-    approval.kind === "directory"
+  const fromApp = approval.app;
+  const title = fromApp
+    ? t("approval.app.wants", {
+        app: `${fromApp.pluginName} · ${appLabel(
+          { plugin: fromApp.plugin, id: fromApp.app, label: fromApp.label },
+          locale.value,
+        )}`,
+        effect: t(`approval.effect.${approval.effect ?? "write"}`),
+        action: fromApp.action,
+      })
+    : approval.kind === "directory"
       ? t("approval.directory")
       : install
         ? t("approval.analysisInstall.title")
@@ -86,7 +96,7 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
           ) : null}
         </div>
         <div id={bodyId} class={styles.body}>
-          {approval.label ? (
+          {approval.label && !fromApp ? (
             <p class={styles.meta}>{t("approval.from", { label: approval.label })}</p>
           ) : null}
           {approval.sessionId !== approval.rootSessionId ? (
@@ -120,6 +130,8 @@ export function ApprovalPanel({ approvals }: { approvals: PendingApproval[] }) {
                 <pre class={styles.input}>{approval.preview ?? approval.input}</pre>
               </details>
             </>
+          ) : fromApp ? (
+            <p class={styles.meta}>{t("approval.app.note")}</p>
           ) : (
             <>
               <p class={styles.meta}>{approval.directory ?? detail.value?.workspace}</p>

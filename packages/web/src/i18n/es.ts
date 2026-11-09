@@ -375,6 +375,9 @@ export const es: Record<MessageKey, string> = {
   "approval.effect.process": "ejecutar un proceso",
   "approval.effect.external": "acceder fuera del workspace",
   "approval.wants": "{tool} quiere {effect}",
+  "approval.app.note":
+    "Una app de un plugin pide hacer esto en tu workspace. Aquí no se muestra su contenido.",
+  "approval.app.wants": "{app} quiere {effect} ({action})",
   "approval.directory": "¿Permitir acceso a un directorio fuera del workspace?",
   "approval.from": "Lo pide {label}",
   "approval.child": "Desde una sesión hija",

@@ -374,9 +374,19 @@ export default definePlugin({
   `inputSchema` (an object schema; `$ref`, `$id` and `$async` are rejected). Over HTTP an action is
   `POST /api/sessions/:sid/apps/:plugin/:app/actions/:action` with `{ input, idempotencyKey? }`. The
   host validates the input, then applies the same effect gate as a tool call with the session's
-  effective capabilities: an effect that is not already granted is rejected
-  (`app_action_denied`, 403); there is no approval prompt and permissions never widen. The session
-  comes from the route, never from the input (`context.sessionId`, `context.workspace`). Whether the
+  effective capabilities. An effect the session already grants runs. When the chat would ask for
+  it (a `write` or `process` action in a session that is not read-only), the host raises the same
+  approval as a chat tool call, with the same choices (allow once, allow for the session, deny):
+  the prompt reads "Plugin · App wants to write files (action)", shows over the app (the chat is
+  hidden while an app is open) and never includes the input. "Allow for the session" widens the
+  session policy exactly like the chat, so later app actions and chat tools with that effect stop
+  asking. Deny, no answer, no open web client (the approval is denied after the usual grace) or an
+  effect the session forbids outright (a read-only session) is rejected with `app_action_denied`
+  (403). The 30 second action timeout starts when the handler starts, not while the approval is
+  pending; the wait for the answer is capped at the chat's approval timeout (10 minutes) and
+  closing the request cancels the pending approval. A rejection names the effect so the app can
+  tell the user what to enable: `{ type: "response", id, error: "not_permitted", effect: "write" | "process" }`
+  over the port and `error.details.effect` in the HTTP error body. The session comes from the route, never from the input (`context.sessionId`, `context.workspace`). Whether the
   plugin is enabled is checked on every call. Limits: 37 MiB request, 90 MiB result (`app_result_too_large`),
   30 seconds (`app_action_timeout`, 504; `context.signal` aborts). Long work should return a job
   quickly instead of holding the request. Failures are a generic `app_action_failed` (502); inputs

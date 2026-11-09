@@ -1,8 +1,17 @@
-import type { PluginAppInfo } from "@alisio/sdk";
+import type { PendingApproval, PluginAppInfo } from "@alisio/sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAppBridge, type PortLike } from "../packages/web/src/components/apps/bridge.ts";
 import { ApiRequestError } from "../packages/web/src/net/api.ts";
-import { currentId, detail, openSession, sidebar } from "../packages/web/src/store/app.ts";
+import {
+  appPending,
+  currentId,
+  detail,
+  openSession,
+  pending,
+  sidebar,
+  visible,
+} from "../packages/web/src/store/app.ts";
+import { appApprovals, mergeApprovals } from "../packages/web/src/store/pending.ts";
 import {
   activeAppKey,
   appCatalog,
@@ -124,7 +133,98 @@ function fakePort() {
 }
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+const approval = (
+  id: string,
+  root: string,
+  extra: Partial<PendingApproval> = {},
+): PendingApproval => ({
+  approvalId: id,
+  sessionId: root,
+  rootSessionId: root,
+  kind: "effect",
+  effect: "write",
+  input: "",
+  ...extra,
+});
+
+describe("approvals while an app is open", () => {
+  afterEach(() => {
+    appInstances.value = [];
+    activeAppKey.value = undefined;
+    currentId.value = undefined;
+    detail.value = undefined;
+    pending.value = { approvals: [], interactions: [] };
+    sidebar.value = emptySidebar();
+  });
+
+  it("selects the approvals of the app's session tree, merged with the chat's without duplicates", () => {
+    const state = {
+      approvals: [approval("a", "app-s"), approval("b", "chat-s"), approval("c", "other")],
+      interactions: [],
+    };
+    expect(appApprovals(state, "app-s").map((a) => a.approvalId)).toEqual(["a"]);
+    expect(appApprovals(state, undefined)).toEqual([]);
+    expect(
+      mergeApprovals(
+        [approval("b", "chat-s")],
+        [approval("b", "chat-s"), approval("a", "app-s")],
+      ).map((a) => a.approvalId),
+    ).toEqual(["b", "a"]);
+  });
+
+  it("exposes the approval of the open app even when the open chat is another session", async () => {
+    detail.value = { id: "chat-1", workspaceId: "w1" } as never;
+    currentId.value = "chat-1";
+    await openApp("p", "editor");
+    // The app's session leaves the chat: reopening the same app keeps its session.
+    pending.value = {
+      approvals: [
+        approval("x", "chat-1", {
+          app: {
+            plugin: "p",
+            pluginName: "P",
+            app: "editor",
+            label: { en: "Editor" },
+            action: "save",
+          },
+        }),
+      ],
+      interactions: [],
+    };
+    expect(appPending.value.map((a) => a.approvalId)).toEqual(["x"]);
+    expect(appPending.value[0]?.app?.action).toBe("save");
+    closeApp();
+    expect(appPending.value).toEqual([]);
+    void visible.value;
+  });
+});
+
 describe("app frame port protocol", () => {
+  it("tells the frame which effect a not_permitted answer needs, and nothing else", async () => {
+    const { port, sent } = fakePort();
+    createAppBridge({
+      port,
+      run: async (action) => {
+        if (action === "save")
+          throw new ApiRequestError(403, "app_action_denied", "no", {
+            effect: "write",
+            extra: "x",
+          });
+        throw new ApiRequestError(403, "app_action_denied", "no");
+      },
+    });
+    port.receive({ type: "request", id: "1", action: "save" });
+    port.receive({ type: "request", id: "2", action: "plain" });
+    await settle();
+    expect(sent).toContainEqual({
+      type: "response",
+      id: "1",
+      error: "not_permitted",
+      effect: "write",
+    });
+    expect(sent).toContainEqual({ type: "response", id: "2", error: "not_permitted" });
+  });
+
   it("answers requests with results and maps failures to codes without inputs", async () => {
     const { port, sent } = fakePort();
     createAppBridge({

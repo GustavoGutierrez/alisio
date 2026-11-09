@@ -83,3 +83,20 @@ export const resolveLocal = (state: PendingState, id: string): PendingState => (
   approvals: state.approvals.filter((a) => a.approvalId !== id),
   interactions: state.interactions.filter((i) => i.interactionId !== id),
 });
+
+/**
+ * Approvals to show while a plugin app occupies the main area: those of the app's session tree.
+ * The chat column is hidden then, so the approval renders over the app instead.
+ */
+export function appApprovals(
+  state: PendingState,
+  appSessionId: string | undefined,
+): PendingApproval[] {
+  return appSessionId ? state.approvals.filter((a) => a.rootSessionId === appSessionId) : [];
+}
+
+/** The approvals of the open chat plus those of the open app's session, without duplicates. */
+export function mergeApprovals(chat: PendingApproval[], app: PendingApproval[]): PendingApproval[] {
+  const ids = new Set(chat.map((a) => a.approvalId));
+  return [...chat, ...app.filter((a) => !ids.has(a.approvalId))];
+}

@@ -1794,7 +1794,13 @@ export interface PluginAppRequestMessage {
 /** Host -> frame over the port: `result` on success, `error` (a code) on failure. */
 export type PluginAppResponseMessage =
   | { type: "response"; id: string; result: unknown }
-  | { type: "response"; id: string; error: PluginAppErrorCode };
+  | {
+      type: "response";
+      id: string;
+      error: PluginAppErrorCode;
+      /** `not_permitted` only: the effect the session did not grant, so the app can say what to enable. */
+      effect?: "write" | "process";
+    };
 /** Host -> frame updates over the port. */
 export type PluginAppHostMessage =
   | PluginAppResponseMessage
@@ -2320,7 +2326,7 @@ export interface InflightState {
 }
 /** An approval waiting for a decision from a web client. */
 export interface PendingApproval {
-  /** `<sessionId>:<callId>` for tool effects; `<sessionId>:dir:<uuid>` for directories. */
+  /** `<sessionId>:<callId>` for tool effects; `<sessionId>:dir:<uuid>` for directories; `<sessionId>:app:<uuid>` for plugin apps. */
   approvalId: string;
   sessionId: string;
   /** Root of `sessionId`, so child-session approvals show in the root session view. */
@@ -2346,6 +2352,18 @@ export interface PendingApproval {
   runtime?: "auto" | "managed" | "oci" | "wasm";
   /** `analysis.install` approvals: only `once` and `deny` are offered. */
   install?: InstallPreview;
+  /**
+   * Set when a plugin app action asks (`name` is the action, `input` is empty: inputs never reach
+   * the prompt). Clients that do not know it show the generic effect prompt.
+   */
+  app?: {
+    plugin: string;
+    pluginName: string;
+    app: string;
+    /** Per-locale app label (`en` always present). */
+    label: Record<string, string>;
+    action: string;
+  };
 }
 /** A plugin UI request (`ui.select` / `ui.askQuestions`) waiting for a web client. */
 export interface PendingInteraction {
@@ -3037,6 +3055,7 @@ export interface AgentDraft {
 }
 /** Body of every non-2xx web API response. */
 export interface ApiError {
+  /** `details` is `{ effect: "write" | "process" }` for `app_action_denied`. */
   error: { code: ApiErrorCode; message: string; details?: unknown };
   correlationId: string;
 }

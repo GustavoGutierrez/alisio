@@ -6,6 +6,21 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "Unreleased",
+      unreleased: true,
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "The table of contents of a generated PDF no longer lists slogans, taglines or other text that is not a section heading.",
+            "Table headers and notice labels in generated PDFs stay readable with light brand colors.",
+            "The warning about fonts that are not bundled now says which characters (for example Chinese, Japanese or Korean) are not covered and that a system fallback font was used.",
+            "Plugin app actions that write files or run processes now ask for approval like the chat does instead of failing.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.5",
       date: "2026-11-09",
       sections: [

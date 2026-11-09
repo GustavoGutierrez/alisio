@@ -46,7 +46,7 @@ and 404 a criterion of another session. The snapshot carries `proof: {criteria}`
 Tests: `tests/proof-routes.test.ts`.
 
 ## Plugin app routes (`routes/plugin-apps.ts`)
-`GET /api/workspaces/:wid/apps` (catalog), `GET /api/sessions/:sid/apps/:plugin/:app/frame` (HTML, fresh CSP nonce, framable by self only) and `POST …/apps/:plugin/:app/actions/:action` (37 MiB body override, 90 MiB result). Enabled plugin re-checked per request; effect gate uses `SessionService.policy`. Tests: `tests/server-plugin-apps.test.ts`.
+`GET /api/workspaces/:wid/apps` (catalog), `GET /api/sessions/:sid/apps/:plugin/:app/frame` (HTML, fresh CSP nonce, framable by self only) and `POST …/apps/:plugin/:app/actions/:action` (37 MiB body override, 90 MiB result). Enabled plugin re-checked per request; effect gate uses `SessionService.policy`; an "ask" goes to `ApprovalBridge.askApp` (same approvals as chat). Tests: `tests/server-plugin-apps.test.ts`.
 
 ## Testing
 

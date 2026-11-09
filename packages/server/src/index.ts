@@ -543,6 +543,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     sessions,
     workspaces,
     logger,
+    ...(approvals ? { approvals } : {}),
     ...(options.apps?.limits ? { limits: options.apps.limits } : {}),
     ...(options.apps?.actionTimeoutMs ? { actionTimeoutMs: options.apps.actionTimeoutMs } : {}),
   });

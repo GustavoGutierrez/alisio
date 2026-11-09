@@ -52,6 +52,13 @@ export function appErrorCode(error: unknown): PluginAppErrorCode {
   }
 }
 
+/** The effect a `not_permitted` answer names (`details.effect` of `app_action_denied`), if any. */
+export function appErrorEffect(error: unknown): "write" | "process" | undefined {
+  if (!(error instanceof ApiRequestError) || error.code !== "app_action_denied") return undefined;
+  const effect = (error.details as { effect?: unknown } | undefined)?.effect;
+  return effect === "write" || effect === "process" ? effect : undefined;
+}
+
 export function createAppBridge(options: {
   port: PortLike;
   run: RunAppAction;
@@ -105,7 +112,8 @@ export function createAppBridge(options: {
         (error) => {
           const code = appErrorCode(error);
           if (code === "not_found") options.onNotFound?.();
-          send({ type: "response", id, error: code });
+          const effect = code === "not_permitted" ? appErrorEffect(error) : undefined;
+          send({ type: "response", id, error: code, ...(effect ? { effect } : {}) });
         },
       )
       .finally(() => inflight.delete(controller));

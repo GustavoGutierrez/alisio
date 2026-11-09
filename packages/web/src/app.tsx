@@ -19,6 +19,7 @@ import {
   announceAgent,
   announceAssertive,
   announcePolite,
+  appPending,
   auth,
   btw,
   changelogRequest,
@@ -44,6 +45,7 @@ import {
   setPanelWidth,
   viewport,
 } from "./store/layout.ts";
+import { mergeApprovals } from "./store/pending.ts";
 import { planReviewOf } from "./store/plan-review.ts";
 import { activeAppKey, appInstances, startAppCatalog } from "./store/plugin-apps.ts";
 import { clampPanelWidth, defaultPanelWidth } from "./util/panel.ts";
@@ -178,6 +180,9 @@ export function App() {
   const id = currentId.value;
   // "Expand panel" hides the chat column, except while an approval or a question waits there.
   const appOpen = !!activeAppKey.value;
+  // While an app is open the chat is hidden: its approvals (and the ones of the app's own
+  // session) render over the app instead, so an action never waits unseen.
+  const overApp = appOpen ? mergeApprovals(approvals, appPending.value) : [];
   const expanded =
     !appOpen &&
     rightPanel.value === "artifact" &&
@@ -215,6 +220,11 @@ export function App() {
           </div>
         ) : null}
         {appInstances.value.length ? <Lazy load={loadAppOutlet} /> : null}
+        {overApp.length ? (
+          <div class={styles.appApproval} data-app-approval="">
+            <ApprovalPanel approvals={overApp} />
+          </div>
+        ) : null}
         {/* Hidden and inert (not unmounted) while an app is open: draft and attachments survive. */}
         <div class={styles.chatContent} hidden={appOpen} inert={appOpen}>
           <Header />
@@ -229,7 +239,7 @@ export function App() {
               )}
               {goalInfo.value ? <Lazy key="goal" load={loadGoal} /> : null}
               {proofCount.value > 0 ? <Lazy key="proof" load={loadProofCard} /> : null}
-              {approvals.length ? (
+              {approvals.length && !appOpen ? (
                 <ApprovalPanel approvals={approvals} />
               ) : interactions[0] && planReviewOf(interactions[0]) ? (
                 <Lazy

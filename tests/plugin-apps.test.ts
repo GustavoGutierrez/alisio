@@ -1,7 +1,7 @@
 import { definePlugin, type Plugin, type PluginAppDefinition } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "../packages/core/src/core/registry.ts";
-import { PluginAppError } from "../packages/core/src/plugins/apps.ts";
+import { type AppApprovalRequest, PluginAppError } from "../packages/core/src/plugins/apps.ts";
 import { PluginHost } from "../packages/core/src/plugins/host.ts";
 import { ProviderRegistry } from "../packages/core/src/providers/registry.ts";
 
@@ -274,6 +274,117 @@ describe("plugin apps: actions", () => {
         )
       ).code,
     ).toBe("not_permitted");
+  });
+
+  it("asks through `approve` when the policy would ask, and honors once, session and deny", async () => {
+    const host = await withAction({ effect: "write" });
+    const policy = { ...readOnly };
+    const asked: AppApprovalRequest[] = [];
+    let answer: "once" | "session" | "deny" = "once";
+    const approve = async (request: AppApprovalRequest) => {
+      asked.push(request);
+      return answer;
+    };
+    const run = () =>
+      host.apps.run("demo", "studio", "echo", { n: 424242 }, context, {
+        policy,
+        approve,
+      });
+    expect(await run()).toMatchObject({ session: "s1" });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({
+      plugin: "demo",
+      app: "studio",
+      action: "echo",
+      effect: "write",
+      label: { en: "Studio", es: "Estudio" },
+    });
+    expect(JSON.stringify(asked[0])).not.toContain("424242");
+    expect(policy.write).toBe(false);
+    await run();
+    expect(asked).toHaveLength(2);
+    answer = "session";
+    await run();
+    expect(policy.write).toBe(true);
+    await run();
+    expect(asked).toHaveLength(3);
+    policy.write = false;
+    answer = "deny";
+    const denied = await rejection(run());
+    expect(denied.code).toBe("not_permitted");
+    expect(denied.effect).toBe("write");
+  });
+
+  it("never asks for a hard deny and reports the effect", async () => {
+    const host = await withAction({ effect: "process" });
+    let asked = 0;
+    const denied = await rejection(
+      host.apps.run("demo", "studio", "echo", { n: 1 }, context, {
+        policy: readOnly,
+        approvals: false,
+        approve: async () => {
+          asked++;
+          return "once";
+        },
+      }),
+    );
+    expect(denied).toMatchObject({ code: "not_permitted", effect: "process" });
+    expect(asked).toBe(0);
+  });
+
+  it("does not count the approval wait in the action timeout, and caps it", async () => {
+    const host = await withAction({ effect: "write" });
+    const slowApproval = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return "once" as const;
+    };
+    const ok = await host.apps.run("demo", "studio", "echo", { n: 1 }, context, {
+      policy: { ...readOnly },
+      approve: slowApproval,
+      timeoutMs: 30,
+    });
+    expect(ok).toMatchObject({ session: "s1" });
+    let seen: AbortSignal | undefined;
+    const capped = await rejection(
+      host.apps.run("demo", "studio", "echo", { n: 1 }, context, {
+        policy: { ...readOnly },
+        approvalTimeoutMs: 30,
+        approve: (request) =>
+          new Promise((resolve) => {
+            seen = request.signal;
+            request.signal.addEventListener("abort", () => resolve("deny"));
+          }),
+      }),
+    );
+    expect(capped).toMatchObject({ code: "not_permitted", effect: "write" });
+    expect(seen?.aborted).toBe(true);
+  });
+
+  it("aborts the pending approval when the request is aborted", async () => {
+    const host = await withAction({ effect: "write" });
+    const controller = new AbortController();
+    let seen: AbortSignal | undefined;
+    const pending = rejection(
+      host.apps.run(
+        "demo",
+        "studio",
+        "echo",
+        { n: 1 },
+        { ...context, signal: controller.signal },
+        {
+          policy: { ...readOnly },
+          approve: (request) =>
+            new Promise((resolve) => {
+              seen = request.signal;
+              request.signal.addEventListener("abort", () => resolve("deny"));
+            }),
+        },
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    expect((await pending).code).toBe("not_permitted");
+    expect(seen?.aborted).toBe(true);
   });
 
   it("times out, aborts the signal and hides handler internals on failure", async () => {

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { PluginAppError } from "@alisio/core";
 import { PLUGIN_APP_LIMITS, type PluginAppInfo } from "@alisio/sdk";
+import type { ApprovalBridge } from "../bridges/approval-bridge.ts";
 import type { SessionService } from "../host/sessions.ts";
 import { type WorkspaceHost, workspaceId } from "../host/workspace-host.ts";
 import { readJson } from "../http/body.ts";
@@ -18,6 +19,8 @@ export interface PluginAppRouteContext {
   sessions: SessionService;
   workspaces: WorkspaceHost;
   logger: Logger;
+  /** Where "ask" decisions of app actions are put to the person (same as chat tool approvals). */
+  approvals?: ApprovalBridge;
   /** Lowered in tests. */
   limits?: Partial<{ htmlBytes: number; requestBytes: number; resultBytes: number }>;
   actionTimeoutMs?: number;
@@ -130,6 +133,7 @@ export function registerPluginAppRoutes(router: Router, ctx: PluginAppRouteConte
       res.once("close", () => {
         if (!res.writableFinished) abort.abort(new Error("Client closed the request"));
       });
+      const livePolicy = sessions.policy(session);
       let result: unknown;
       try {
         result = await opened.app.plugins.apps.run(
@@ -144,7 +148,25 @@ export function registerPluginAppRoutes(router: Router, ctx: PluginAppRouteConte
             ...(typeof idempotencyKey === "string" ? { idempotencyKey } : {}),
           },
           {
-            policy: sessions.policy(session).policy,
+            policy: livePolicy.policy,
+            approvals: livePolicy.approvals,
+            ...(ctx.approvals
+              ? {
+                  approve: (request) =>
+                    ctx.approvals?.askApp({
+                      sessionId: session.id,
+                      app: {
+                        plugin,
+                        pluginName: entry.name,
+                        app,
+                        label: request.label,
+                        action: request.action,
+                      },
+                      effect: request.effect,
+                      signal: request.signal,
+                    }) ?? Promise.resolve("deny" as const),
+                }
+              : {}),
             ...(ctx.actionTimeoutMs ? { timeoutMs: ctx.actionTimeoutMs } : {}),
           },
         );
@@ -154,7 +176,11 @@ export function registerPluginAppRoutes(router: Router, ctx: PluginAppRouteConte
         if (error.code === "invalid_input")
           throw new HttpError("validation_failed", "Invalid action input");
         if (error.code === "not_permitted")
-          throw new HttpError("app_action_denied", "The session does not allow this action");
+          throw new HttpError(
+            "app_action_denied",
+            "The session does not allow this action",
+            error.effect ? { effect: error.effect } : undefined,
+          );
         if (error.code === "timeout")
           throw new HttpError("app_action_timeout", "The action took too long");
         // Only the error class is logged: its message may quote the data it was handling.

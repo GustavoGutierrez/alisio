@@ -368,6 +368,9 @@ export const en = {
   "approval.effect.process": "run a process",
   "approval.effect.external": "reach outside the workspace",
   "approval.wants": "{tool} wants to {effect}",
+  "approval.app.note":
+    "A plugin app asks to do this in your workspace. Its input is not shown here.",
+  "approval.app.wants": "{app} wants to {effect} ({action})",
   "approval.directory": "Allow access to a directory outside the workspace?",
   "approval.from": "Requested by {label}",
   "approval.child": "From a child session",

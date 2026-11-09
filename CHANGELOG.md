@@ -4,6 +4,15 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [Unreleased]
+
+### Fixed
+
+- The table of contents of a generated PDF no longer lists slogans, taglines or other text that is not a section heading.
+- Table headers and notice labels in generated PDFs stay readable with light brand colors.
+- The warning about fonts that are not bundled now says which characters (for example Chinese, Japanese or Korean) are not covered and that a system fallback font was used.
+- Plugin app actions that write files or run processes now ask for approval like the chat does instead of failing.
+
 ## [0.11.5] - 2026-11-09
 
 Plugin apps.

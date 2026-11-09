@@ -102,6 +102,33 @@ export class ApprovalBridge {
     );
   };
 
+  /**
+   * A plugin app action asking for its effect: the same pending approval, frames and decisions as
+   * a chat tool. Never carries the action's input.
+   */
+  askApp(request: {
+    sessionId: string;
+    app: NonNullable<PendingApproval["app"]>;
+    effect: "write" | "process";
+    signal: AbortSignal;
+  }): Promise<ApprovalDecision> {
+    const { app } = request;
+    return this.ask(
+      {
+        approvalId: `${request.sessionId}:app:${randomUUID()}`,
+        sessionId: request.sessionId,
+        rootSessionId: this.options.rootOf(request.sessionId),
+        kind: "effect",
+        name: app.action,
+        effect: request.effect,
+        label: `${app.pluginName} · ${app.label.en}`,
+        input: "",
+        app,
+      },
+      request.signal,
+    );
+  }
+
   private ask(base: PendingApproval, signal: AbortSignal): Promise<ApprovalDecision> {
     if (signal.aborted) return Promise.resolve("deny");
     const runId = this.options.runOf?.(base.rootSessionId);

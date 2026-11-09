@@ -4763,9 +4763,17 @@ Verificado (Linux x64, Chrome 154, Electron 45.2.3 con `--ozone-platform=headles
 
 Límites conocidos: solo Linux (Windows y macOS sin verificar); el Electron de Alisio Desktop solo se probó con el binario sin empaquetar (no con el instalador); sin encabezados de capítulo corrientes, notas al pie, WeasyPrint ni comprobaciones visuales (fases 3 y 4, con el orden decidido el 2026-11-08: primero comprobaciones visuales); los bloques de un anexo no se miden por desbordamiento; un PDF con caracteres CJK en el cuerpo falla la comprobación `font_not_bundled` (la fuente de reserva no tiene nombre); no se añadieron etiquetas de ajustes porque `documents.*` no es editable desde la web.
 
+## Motor de documentos: correcciones y aplazamiento de la fase 3 (especificación 026)
+
+Estado: **hecho, sin commit.** Cubre `specs/026-document-engine-v1.md` §14 y mueve la fase 3 (comprobación visual con un modelo) a `specs/backlog/028-document-visual-qa-v1.md` por decisión del propietario del 2026-11-09: la fase 2 ya produce PDF profesionales y personalizables.
+
+Corregido: la tabla de contenido ya no lista texto que no es un encabezado de sección (encabezados antes del bloque `toc`, vacíos, solo en cursiva o negrita, o iguales al título de la portada); el texto de las cabeceras de tabla y de las etiquetas de los avisos mantiene 4,5:1 con cualquier color de acento en los tres temas; el aviso `font_not_bundled` nombra el alfabeto sin cubrir (por ejemplo CJK), dice que se usó una tipografía de respaldo del sistema y usa «a system fallback font» cuando la tipografía no tiene nombre (mismo código y estructura).
+
+Verificado: pruebas unitarias en `tests/documents-render-html.test.ts`, `documents-brand.test.ts` y `documents-qa.test.ts`. Límite: el contraste se garantiza por cálculo sobre los colores del tema; no se midió sobre PDF renderizados con un navegador para cada combinación.
+
 ## Aplicaciones de plugins
 
-Estado: **hecho, sin commit.** Un plugin registra aplicaciones de página completa con
+Estado: **hecho, publicado en 0.11.5.** Un plugin registra aplicaciones de página completa con
 `api.apps?.register`: SDK (`PluginAppDefinition`, tipos de catálogo y del protocolo del frame),
 registro en el núcleo por workspace (ids y acciones validados, duplicados rechazados, `dispose`
 síncrono al dar de baja, cerrar el plugin o revertir un `setup` fallido, `busy()` evita la expulsión
@@ -4784,6 +4792,14 @@ Límites conocidos: los plugins de backend son código de confianza en proceso y
 sandbox de Node; los frames visitados permanecen en memoria hasta recargar la página; deshabilitar
 un plugin bloquea de inmediato las acciones nuevas, pero no revoca un puerto ya abierto ni cancela
 los trabajos que el plugin haya iniciado; el timeout de una promesa no detiene un handler que
-consume CPU; las acciones no concedidas se rechazan (sin diálogo de aprobación); no hay API
+consume CPU; las acciones `write`/`process` que el chat preguntaría usan la misma aprobación (diálogo del chat, también sobre la app abierta) y se rechazan si se deniegan, no hay cliente web que responda o la sesión es de solo lectura; no hay API
 genérica de jobs, broker de servicios ni SDK de navegador, y las aplicaciones no tienen enlaces
 profundos ni navegación declarativa. Solo se probó en Linux x64.
+
+## Aplicaciones de plugins: aprobación de acciones (corrección de 0.11.5)
+
+Estado: **hecho, sin commit.** Las acciones de una app con efecto `write` o `process` se rechazaban siempre con `not_permitted` con las banderas por defecto (el techo del servidor solo se amplía con `--allow-write`/`--allow-process`), mientras que en el chat la misma herramienta mostraba el aviso. Ahora, cuando `decideEffect` devuelve «preguntar», el host abre la misma aprobación que el chat (`ApprovalBridge.askApp`, mismos fotogramas `approval`, mismas decisiones `once`/`session`/`deny`, mismo `POST /api/approvals/:id`). «Permitir para la sesión» ensancha el mismo objeto de política de la sesión (`SessionService.policy`), así que las siguientes acciones y herramientas con ese efecto dejan de preguntar. Una sesión de solo lectura (sin aprobaciones) o una denegación siguen siendo `not_permitted` sin aviso.
+
+Contrato: aviso «Plugin · App quiere escribir archivos (acción)» (campo aditivo `PendingApproval.app`, `input` vacío: nunca aparecen entradas); el tiempo de 30 s de la acción empieza al arrancar el handler; la espera de la aprobación tiene el tope del timeout del chat (10 min) y cancelar la petición la retira; la respuesta de error añade `effect` (`{type:"response", id, error:"not_permitted", effect}` y `error.details.effect` en HTTP). La web muestra el aviso sobre la app abierta (`appApproval`) y el flujo SSE vigila también la sesión de la app.
+
+Verificado: `tests/plugin-apps.test.ts` (núcleo), `tests/server-plugin-apps.test.ts` (aprobar una vez/sesión/denegar, solo lectura, tiempo, cancelación) y `tests/web-plugin-apps.test.ts` (modelo de aprobaciones y campo `effect`). Límite: la sesión de solo lectura de un agente (`plan`) no se consulta para las acciones de apps; sin cliente web abierto la aprobación se deniega tras la gracia de 30 s.

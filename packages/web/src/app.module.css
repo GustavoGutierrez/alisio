@@ -139,6 +139,17 @@
   display: none;
 }
 
+/* An approval raised while an app fills the main area: over the app, above its content. */
+.appApproval {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  padding-top: 24px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 24px);
+}
+
 .chatContent {
   display: flex;
   flex: 1;

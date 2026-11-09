@@ -44,7 +44,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 | Compaction, session hooks | `api.compaction.register`, `api.session.onStart/onEnd` (timeouts `pluginHooks.*`) |
 | Small state, private SQLite | `api.state.get/set`, `api.storage.sqlite(path)` (0600, FTS5), `api.paths` |
 | Read-only data for web | `api.views?.register({ id, description, params, handler })` |
-| Full-page app (web) | `api.apps?.register({ id, label, html, actions, busy?, dispose? })`: HTML with `nonce="__ALISIO_NONCE__"` scripts in a sandboxed iframe, actions `{ effect, inputSchema, handler }` gated like tools (ungranted effect = rejected), session from the route; see `docs/plugins.md#plugin-apps` and `examples/plugins/hello-app` |
+| Full-page app (web) | `api.apps?.register({ id, label, html, actions, busy?, dispose? })`: HTML with `nonce="__ALISIO_NONCE__"` scripts in a sandboxed iframe, actions `{ effect, inputSchema, handler }` gated like tools (an ask in the chat raises the same approval over the app, never the input; denied/unanswered/read-only = `app_action_denied` with `details.effect`), session from the route; see `docs/plugins.md#plugin-apps` and `examples/plugins/hello-app` |
 | Model access | `api.model.complete`, `api.models.list/resolve`, `api.providers.register` |
 | Child sessions | `api.sessions.*` (narrowed permissions; see `plugin-subagents`) |
 | UI | `api.ui.status/panel/select/askQuestions` (no-op or `undefined` when headless) |

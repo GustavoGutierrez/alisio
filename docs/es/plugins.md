@@ -383,9 +383,21 @@ export default definePlugin({
   (esquema de objeto; se rechazan `$ref`, `$id` y `$async`). Por HTTP una acción es
   `POST /api/sessions/:sid/apps/:plugin/:app/actions/:action` con `{ input, idempotencyKey? }`. El
   host valida la entrada y aplica la misma puerta de efectos que una llamada a herramienta con las
-  capacidades efectivas de la sesión: un efecto que no esté ya concedido se rechaza
-  (`app_action_denied`, 403); no hay diálogo de aprobación y los permisos nunca se amplían. La sesión
-  sale de la ruta, nunca de la entrada (`context.sessionId`, `context.workspace`). Se comprueba en
+  capacidades efectivas de la sesión. Un efecto que la sesión ya concede se ejecuta. Cuando el chat
+  lo preguntaría (una acción `write` o `process` en una sesión que no es de solo lectura), el host
+  abre la misma aprobación que una llamada a herramienta del chat, con las mismas opciones (permitir
+  una vez, permitir para la sesión, denegar): el aviso dice «Plugin · App quiere escribir archivos
+  (acción)», se muestra sobre la app (el chat está oculto mientras hay una app abierta) y nunca
+  incluye la entrada. «Permitir para la sesión» amplía la política de la sesión igual que el chat,
+  así que las acciones de apps y las herramientas del chat con ese efecto dejan de preguntar.
+  Denegar, no responder, no tener un cliente web abierto (la aprobación se deniega tras la gracia
+  habitual) o un efecto que la sesión prohíbe de plano (sesión de solo lectura) se rechaza con
+  `app_action_denied` (403). El timeout de 30 segundos de la acción empieza cuando arranca el
+  handler, no mientras la aprobación está pendiente; la espera de la respuesta tiene el tope del
+  timeout de aprobaciones del chat (10 minutos) y cerrar la petición cancela la aprobación
+  pendiente. El rechazo nombra el efecto para que la app pueda decir qué activar:
+  `{ type: "response", id, error: "not_permitted", effect: "write" | "process" }` por el puerto y
+  `error.details.effect` en el cuerpo del error HTTP. La sesión sale de la ruta, nunca de la entrada (`context.sessionId`, `context.workspace`). Se comprueba en
   cada llamada que el plugin esté habilitado. Límites: 37 MiB de petición, 90 MiB de resultado
   (`app_result_too_large`), 30 segundos (`app_action_timeout`, 504; `context.signal` aborta). El
   trabajo largo debe devolver un job enseguida en lugar de retener la petición. Los fallos son un

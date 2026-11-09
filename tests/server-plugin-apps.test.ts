@@ -1,8 +1,22 @@
 import type { BuiltinPlugin } from "@alisio/core";
-import { type ApiError, definePlugin, type PluginAppInfo, type PluginInfo } from "@alisio/sdk";
+import {
+  type ApiError,
+  definePlugin,
+  type PendingApproval,
+  type PluginAppInfo,
+  type PluginInfo,
+  type ServerFrame,
+} from "@alisio/sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLogger } from "../packages/server/src/log.ts";
-import { newSession, raw, startTestServer, type TestServer, until } from "./server-helpers.ts";
+import {
+  newSession,
+  openStream,
+  raw,
+  startTestServer,
+  type TestServer,
+  until,
+} from "./server-helpers.ts";
 
 const events: string[] = [];
 const workspaces: string[] = [];
@@ -38,6 +52,12 @@ const appsPlugin: BuiltinPlugin = {
               },
             },
             save: { effect: "write", inputSchema: schema, handler: () => ({ saved: true }) },
+            run: { effect: "process", inputSchema: schema, handler: () => ({ ran: true }) },
+            slowsave: {
+              effect: "write",
+              inputSchema: schema,
+              handler: () => new Promise((resolve) => setTimeout(() => resolve({ saved: 1 }), 120)),
+            },
             big: {
               effect: "read",
               inputSchema: schema,
@@ -76,12 +96,12 @@ afterEach(async () => {
   workspaces.length = 0;
 });
 
-async function start(extra: Parameters<typeof startTestServer>[0] = {}) {
+async function start(extra: Parameters<typeof startTestServer>[0] = {}, preset?: string) {
   t = await startTestServer({
     ...extra,
     app: { builtins: [appsPlugin], trustProject: true, ...extra.app },
   });
-  const session = await newSession(t);
+  const session = await newSession(t, preset ? { preset } : undefined);
   return { t, sid: session.id, wid: session.workspaceId };
 }
 const frame = (sid: string, plugin = "appsy", app = "studio") =>
@@ -233,15 +253,132 @@ describe("POST /api/sessions/:sid/apps/:plugin/:app/actions/:action", () => {
     expect((await t.api.post(action(sid, "echo"), [1])).status).toBe(400);
   });
 
-  it("rejects an effect the session has not granted, and allows it when granted", async () => {
-    const { t, sid } = await start();
+  it("denies (fail-closed) with the effect when no client can answer the approval", async () => {
+    const { t, sid } = await start({ approvalGraceMs: 40 });
     const denied = await t.api.post(action(sid, "save"), { input: {} });
     expect(denied.status).toBe(403);
     expect(codeOf(denied)).toBe("app_action_denied");
+    expect(denied.json<ApiError>().error.details).toEqual({ effect: "write" });
+    const process = await t.api.post(action(sid, "run"), { input: {} });
+    expect(process.json<ApiError>().error.details).toEqual({ effect: "process" });
     await t.close();
     const granted = await start({ app: { allowWrite: true } });
     const ok = await granted.t.api.post(action(granted.sid, "save"), { input: {} });
     expect(ok.json()).toEqual({ result: { saved: true } });
+  });
+
+  describe("approval flow (same as the chat)", () => {
+    const watch = async (t: TestServer, sid: string) => {
+      const s = openStream(t.server.port, t.cookie, [sid]);
+      await s.next((e) => e.frame.t === "snapshot");
+      return s;
+    };
+    const approvalOf = async (s: ReturnType<typeof openStream>, from = 0) =>
+      (
+        (await s.next((e) => e.frame.t === "approval", from)).frame as Extract<
+          ServerFrame,
+          { t: "approval" }
+        >
+      ).approval;
+    const answer = (t: TestServer, approval: PendingApproval, decision: string) =>
+      t.api.post(`/api/approvals/${encodeURIComponent(approval.approvalId)}`, { decision });
+
+    it("asks with the plugin, app and action, never the input; once runs it", async () => {
+      const { t, sid } = await start();
+      const s = await watch(t, sid);
+      const pending = t.api.post(action(sid, "save"), { input: { text: "top-secret-text" } });
+      const approval = await approvalOf(s);
+      expect(approval).toMatchObject({
+        kind: "effect",
+        sessionId: sid,
+        name: "save",
+        effect: "write",
+        label: "Appsy · Studio",
+        input: "",
+        app: {
+          plugin: "appsy",
+          pluginName: "Appsy",
+          app: "studio",
+          label: { en: "Studio", es: "Estudio" },
+          action: "save",
+        },
+      });
+      expect(JSON.stringify(approval)).not.toContain("top-secret-text");
+      expect((await t.api.get(`/api/approvals?session=${sid}`)).json()).toEqual([approval]);
+      expect((await answer(t, approval, "once")).status).toBe(200);
+      expect((await pending).json()).toEqual({ result: { saved: true } });
+      // "once" does not widen the policy: the next call asks again.
+      const again = t.api.post(action(sid, "save"), { input: {} });
+      const second = await approvalOf(s, s.events.length - 1);
+      await answer(t, second, "deny");
+      const denied = await again;
+      expect(denied.status).toBe(403);
+      expect(denied.json<ApiError>().error.details).toEqual({ effect: "write" });
+      s.close();
+    });
+
+    it("session widens the session policy: later calls and the other app effects stop asking", async () => {
+      const { t, sid } = await start();
+      const s = await watch(t, sid);
+      const first = t.api.post(action(sid, "save"), { input: {} });
+      await answer(t, await approvalOf(s), "session");
+      expect((await first).json()).toEqual({ result: { saved: true } });
+      const before = s.frames().filter((f) => f.t === "approval").length;
+      expect((await t.api.post(action(sid, "save"), { input: {} })).status).toBe(200);
+      expect(s.frames().filter((f) => f.t === "approval")).toHaveLength(before);
+      // Only the effect that was granted: process still asks.
+      const proc = t.api.post(action(sid, "run"), { input: {} });
+      const approval = await approvalOf(s, s.events.length - 1);
+      expect(approval.effect).toBe("process");
+      await answer(t, approval, "deny");
+      expect((await proc).status).toBe(403);
+      s.close();
+    });
+
+    it("never prompts in a read-only session", async () => {
+      const { t, sid } = await start({}, "read-only");
+      const s = await watch(t, sid);
+      const res = await t.api.post(action(sid, "save"), { input: {} });
+      expect(res.status).toBe(403);
+      expect(res.json<ApiError>().error.details).toEqual({ effect: "write" });
+      expect(s.frames().some((f) => f.t === "approval")).toBe(false);
+      s.close();
+    });
+
+    it("does not count the approval wait in the action timeout", async () => {
+      const { t, sid } = await start({ apps: { actionTimeoutMs: 200 } });
+      const s = await watch(t, sid);
+      const pending = t.api.post(action(sid, "slowsave"), { input: {} });
+      const approval = await approvalOf(s);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await answer(t, approval, "once");
+      expect((await pending).json()).toEqual({ result: { saved: 1 } });
+      s.close();
+    });
+
+    it("withdraws the pending approval when the request is closed", async () => {
+      const { t, sid } = await start();
+      const s = await watch(t, sid);
+      const controller = new AbortController();
+      const pending = fetch(`http://127.0.0.1:${t.server.port}${action(sid, "save")}`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Cookie: t.cookie,
+          Origin: `http://127.0.0.1:${t.server.port}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input: {} }),
+      }).catch(() => undefined);
+      const approval = await approvalOf(s);
+      controller.abort();
+      await pending;
+      const withdrawn = await s.next(
+        (e) => e.frame.t === "approval_withdrawn" && e.frame.approvalId === approval.approvalId,
+      );
+      expect(withdrawn.frame).toMatchObject({ reason: "cancelled" });
+      s.close();
+    });
   });
 
   it("answers 404 for unknown actions, plugins and disabled plugins, re-checked per call", async () => {

@@ -646,6 +646,6 @@ browser run of the example `hello-app` (Chromium, Linux) in English and Spanish.
 plugins are trusted in-process code and the sandboxed iframe is not a Node sandbox; mounted frames
 stay in memory until the page is reloaded; disabling a plugin blocks new actions at once but does
 not revoke an already open port or cancel jobs the plugin started; a promise timeout does not stop
-CPU-bound handlers; actions that are not already granted are rejected (no approval prompt); there is
+CPU-bound handlers; actions that ask in the chat (write, process) ask the same way through the approval dialog, and are rejected when denied, unanswered or forbidden by a read-only session; the approval was verified with server and store tests plus one browser run, not on Windows or macOS; there is
 no generic job API, service broker or browser SDK, and apps have no deep links or declarative
 navigation.

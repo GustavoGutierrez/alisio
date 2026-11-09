@@ -19,7 +19,7 @@ import type {
   SessionDetail,
   SessionModels,
 } from "@alisio/sdk";
-import { batch, computed, signal } from "@preact/signals";
+import { batch, computed, effect, signal } from "@preact/signals";
 import { t } from "../i18n/index.ts";
 import { ApiClient, ApiRequestError, newId } from "../net/api.ts";
 import { type EventSourceLike, EventStream, type StreamStatus } from "../net/events.ts";
@@ -41,8 +41,14 @@ import { liveTasks, openContext, openProof, openTasks } from "./dock.ts";
 import { errorText } from "./errors.ts";
 import { goalFromFrame } from "./goal-frame.ts";
 import { nextAgentId } from "./modes.ts";
-import { applyPending, emptyPending, resolveLocal, visiblePending } from "./pending.ts";
-import { activeAppKey } from "./plugin-apps-state.ts";
+import {
+  appApprovals,
+  applyPending,
+  emptyPending,
+  resolveLocal,
+  visiblePending,
+} from "./pending.ts";
+import { activeAppKey, activeAppSession } from "./plugin-apps-state.ts";
 import {
   effectiveTab,
   emptyPlugins,
@@ -188,6 +194,8 @@ export const publishedArtifacts = signal<
 >(undefined);
 
 export const visible = computed(() => visiblePending(pending.value, transcript.value.session));
+/** Approvals of the open plugin app's session (rendered over the app while it is open). */
+export const appPending = computed(() => appApprovals(pending.value, activeAppSession.value));
 export const sessionStatus = computed(
   () => transcript.value.session?.status ?? detail.value?.status ?? "idle",
 );
@@ -382,7 +390,11 @@ function applyServerFrames(frames: ServerFrame[]): void {
     for (const frame of frames) {
       nextPending = applyPending(nextPending, frame);
       if (frame.t === "session_status") nextSidebar = applySessionStatus(nextSidebar, frame);
-      if (frame.t === "approval" && frame.approval.rootSessionId === currentId.value)
+      if (
+        frame.t === "approval" &&
+        (frame.approval.rootSessionId === currentId.value ||
+          frame.approval.rootSessionId === activeAppSession.value)
+      )
         announceAssertive.value = frame.approval.name ?? frame.approval.approvalId;
       if (frame.t === "capabilities_changed" && frame.sessionId === currentId.value)
         capabilitiesTick.value++;
@@ -458,6 +470,12 @@ function applyServerFrames(frames: ServerFrame[]): void {
   }
 }
 
+/** The stream watches the open chat and, while an app is open, the session its actions run in. */
+function watchSessions(): void {
+  const ids = [currentId.value, activeAppSession.value].filter((id): id is string => !!id);
+  stream?.subscribe(ids);
+}
+
 /** Opens a session: resets its transcript, subscribes the stream and loads its side data. */
 export async function openSession(id: string | undefined): Promise<void> {
   // Opening a chat from the sidebar leaves any plugin app (its frame stays mounted).
@@ -480,7 +498,7 @@ export async function openSession(id: string | undefined): Promise<void> {
   });
   const hash = id ? `#/s/${encodeURIComponent(id)}` : "#/";
   if (location.hash !== hash) history_replace(hash);
-  stream?.subscribe(id ? [id] : []);
+  watchSessions();
   if (id) writePref("alisio.lastSession", id);
   void refreshCommands();
   liveTasks.value = 0;
@@ -547,6 +565,10 @@ export async function init(): Promise<void> {
       // The browser gave up: an expired cookie shows as a closed stream, so check.
       void api.workspaces().catch(() => {});
     },
+  });
+  effect(() => {
+    activeAppSession.value;
+    watchSessions();
   });
   window.addEventListener("online", () => stream?.nudge());
   document.addEventListener("visibilitychange", () => {
