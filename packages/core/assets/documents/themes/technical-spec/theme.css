@@ -64,8 +64,8 @@ h3 {
   content: counter(n1) "." counter(n2) "\\2002";
 }
 th {
-  background: var(--accent-tint);
-  color: var(--accent-dark);
+  background: var(--th-tint-bg);
+  color: var(--th-tint-fg);
   border: 0.5pt solid var(--rule);
   border-bottom: 1.5pt solid var(--accent);
   font-size: calc(var(--fs-table) - 0.2pt);

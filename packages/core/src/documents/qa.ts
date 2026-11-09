@@ -80,6 +80,13 @@ function forEachString(value: unknown, fn: (s: string) => void): void {
 export interface TextCheck<T> {
   value: T;
   findings: Finding[];
+  /** Scripts and sample characters the bundled fonts do not cover (feeds `font_not_bundled`). */
+  uncovered?: UncoveredText;
+}
+
+export interface UncoveredText {
+  scripts: string[];
+  sample: string;
 }
 
 /** Substitutes missing symbols, removes emoji (Q2) and reports uncovered codepoints. */
@@ -113,6 +120,7 @@ export async function checkText<T>(input: T): Promise<TextCheck<T>> {
     });
   const ranges = await loadCoverage();
   const missing = new Set<string>();
+  let uncovered: UncoveredText | undefined;
   forEachString(value, (s) => {
     for (const ch of s) {
       const cp = ch.codePointAt(0) as number;
@@ -125,13 +133,14 @@ export async function checkText<T>(input: T): Promise<TextCheck<T>> {
     const scripts = SCRIPTS.filter(([, re]) => [...missing].some((c) => re.test(c))).map(
       ([n]) => n,
     );
+    uncovered = { scripts, sample };
     findings.push({
       code: "glyphs_missing",
       severity: "error",
       message: `${missing.size} character(s) have no glyph in the bundled fonts (${sample})${scripts.length ? `; unsupported script: ${scripts.join(", ")}` : ""}. Remove them or use Latin, Greek or Cyrillic text.`,
     });
   }
-  return { value, findings };
+  return { value, findings, ...(uncovered ? { uncovered } : {}) };
 }
 
 /** A trailing page with (almost) no text operators holds only header and footer. */
@@ -140,7 +149,7 @@ export const BLANK_PAGE_TEXT_OPS = 12;
 export function analyzeOutput(
   scan: PdfScan,
   measurements: DomMeasurements | undefined,
-  opts: { overflowChecked: boolean },
+  opts: { overflowChecked: boolean; uncovered?: UncoveredText },
 ): Finding[] {
   const out: Finding[] = [];
   if (scan.pages > DOCUMENT_LIMITS.pages)
@@ -150,15 +159,22 @@ export function analyzeOutput(
       message: `The document has ${scan.pages} pages; the limit is ${DOCUMENT_LIMITS.pages}.`,
     });
   const foreign = scan.fonts.filter((f) => !isBundledFontName(f.name));
-  if (foreign.length)
+  if (foreign.length) {
+    const named = [
+      ...new Set(foreign.map((f) => f.name.trim()).filter((n) => n !== "" && n !== "(none)")),
+    ].slice(0, 5);
+    const fallback = named.length < foreign.length || named.length === 0;
+    const used = [...named, ...(fallback ? ["a system fallback font"] : [])].join(", ");
+    const u = opts.uncovered;
+    const why = u
+      ? `${u.scripts.length ? `Text in ${u.scripts.join(", ")}` : "Some characters"} (${u.sample}) is not covered by the bundled fonts (Inter, Source Serif 4 and JetBrains Mono cover Latin, Greek and Cyrillic), so a system fallback font was used`
+      : "The bundled fonts (Inter, Source Serif 4 and JetBrains Mono) did not cover some of the text, so a system fallback font was used";
     out.push({
       code: "font_not_bundled",
       severity: "error",
-      message: `The PDF embeds fonts that are not bundled: ${foreign
-        .map((f) => f.name)
-        .slice(0, 5)
-        .join(", ")}.`,
+      message: `${why}. The PDF embeds fonts that are not bundled: ${used}.`,
     });
+  }
   if (scan.pages > 1 && (scan.textOpsPerPage[scan.pages - 1] ?? 99) <= BLANK_PAGE_TEXT_OPS)
     out.push({
       code: "blank_trailing_page",

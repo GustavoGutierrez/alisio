@@ -133,20 +133,47 @@ export interface RenderedBundle {
   files: string[];
   title: string;
   hasCover: boolean;
-  headings: Array<{ block: number; level: number; text: string; id: string }>;
+  headings: Array<{ block: number; level: number; text: string; id: string; toc: boolean }>;
 }
 
-/** Headings of the document (and appendix titles) with the ids the contents link to. */
+/** A heading made only of emphasis (`*Slogan*`) is a styled lead line, not a section title. */
+const EMPHASIS_ONLY = /^(\*{1,3}|_{1,3})(?!\1)[^*_]+\1$/;
+
+/**
+ * Headings of the document (and appendix titles) with the ids the contents link to. `toc` marks
+ * the real section headings: text in the title page region (before the contents block), a heading
+ * that repeats the cover title, an emphasis-only slogan and an empty heading are never entries.
+ */
 export function collectHeadings(spec: DocumentSpec): RenderedBundle["headings"] {
   const out: RenderedBundle["headings"] = [];
+  const first = spec.blocks[0];
+  const coverTitle = first?.type === "cover" ? plain(first.title).trim().toLowerCase() : undefined;
+  const tocAt = spec.blocks.findIndex((b) => b.type === "toc");
+  const isSection = (text: string, raw: string, level: number, index: number) =>
+    plain(text).trim() !== "" &&
+    !EMPHASIS_ONLY.test(raw.trim()) &&
+    !(tocAt >= 0 && index < tocAt) &&
+    !(level === 1 && coverTitle !== undefined && plain(text).trim().toLowerCase() === coverTitle);
   spec.blocks.forEach((b, i) => {
     if (b.type === "heading")
-      out.push({ block: i, level: b.level, text: plain(b.text), id: b.id ?? `h-${i}` });
+      out.push({
+        block: i,
+        level: b.level,
+        text: plain(b.text),
+        id: b.id ?? `h-${i}`,
+        toc: isSection(b.text, b.text, b.level, i),
+      });
     if (b.type === "appendix") {
-      out.push({ block: i, level: 1, text: plain(b.title), id: `appendix-${i}` });
+      out.push({ block: i, level: 1, text: plain(b.title), id: `appendix-${i}`, toc: true });
       b.blocks.forEach((x, j) => {
         if (x.type === "heading")
-          out.push({ block: i, level: x.level, text: plain(x.text), id: x.id ?? `h-${i}-${j}` });
+          out.push({
+            block: i,
+            level: x.level,
+            text: plain(x.text),
+            id: x.id ?? `h-${i}-${j}`,
+            toc: isSection(x.text, x.text, x.level, i),
+          });
       });
     }
   });
@@ -279,7 +306,7 @@ ${b.meta?.length ? `<ul class="cover-meta">${b.meta.map((m) => `<li>${inline(m)}
       case "toc": {
         const depth = b.depth ?? 2;
         const items = headings
-          .filter((h) => h.level <= depth)
+          .filter((h) => h.toc && h.level <= depth)
           .map((h) => {
             const page =
               toc.kind === "placeholder"

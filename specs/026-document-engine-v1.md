@@ -5,10 +5,10 @@
 | Versión | 0.1 |
 | Origen | Owner request and decisions of 2026-11-08 (O1-O9); research summary of 2026-11-08 (§1.5); code mapping of 2026-11-08 (§3) |
 | Proyecto | Alisio |
-| Estado | **Phase 1 committed 2026-11-08 (15da3c4); Phase 2 implemented 2026-11-08 (uncommitted); Phases 3-5 pending.** Phase order changed by the owner on 2026-11-08 (O10): Phase 2 → npm/Desktop release → Phase 3 visual QA → Phase 4 WeasyPrint editorial engine and three more themes → Phase 5 optional print-shop. Phase 0 partial (gate waived by owner 2026-11-08). Owner decisions O1-O10 confirmed. Q1-Q9 (§11) closed on 2026-11-08: the owner accepted every recommendation as written. Phase 0 results in §8.1 and D-21..D-28; unmeasured items are marked "(no medido: skipped for speed)". Phase 1 notes in §12, Phase 2 notes in §13 |
+| Estado | **Phases 1-2 shipped in 0.11.3. Phase 3 (visual QA) is deferred to the backlog spec `specs/backlog/028-document-visual-qa-v1.md` (owner decision of 2026-11-09). Phase 4 (WeasyPrint editorial engine and three more themes) is now the next phase; Phase 5 (optional print-shop) is still pending.** The phase numbers are kept so that §12, §13, the DOC-AC rows and the Release section stay valid. History: phase order changed by the owner on 2026-11-08 (O10): Phase 2 → npm/Desktop release → Phase 3 visual QA → Phase 4 → Phase 5; on 2026-11-09 Phase 3 left this spec. Phase 1 committed 2026-11-08 (15da3c4); Phase 2 implemented 2026-11-08. Phase 0 partial (gate waived by owner 2026-11-08). Owner decisions O1-O10 confirmed. Q1-Q9 (§11) closed on 2026-11-08: the owner accepted every recommendation as written. Phase 0 results in §8.1 and D-21..D-28; unmeasured items are marked "(no medido: skipped for speed)". Phase 1 notes in §12, Phase 2 notes in §13, the 2026-11-09 defect fixes in §14 |
 | Fecha | 2026-11-08 |
-| Paquetes afectados | `@alisio/core` (new domain folder `src/documents/`, new asset folder `assets/documents/`, tools `document_create` and `document_themes`, config keys `documents.*`, routing rule); `@alisio/sdk` (additive: `DocumentResultInfo` wire type; Phase 4: optional `attachments` on `CompletionRequest` messages); `@alisio/server` (additive `ServerOptions.documentEngines`; Phase 3 read-only status route); `apps/desktop` (new `print.ts`, additive host↔main print messages in `host-protocol.ts`); `@alisio/web` (Phase 3 only: read-only engine status card); `@alisio/alisio-code` (`alisio documents status`) |
-| Paquetes nuevos | None. One new runtime dependency in core: `marked` (MIT, zero dependencies, same version as `@alisio/web`), used only as a lexer. Phase 3 vendors a minimal pdf.js build instead (D-26) |
+| Paquetes afectados | `@alisio/core` (new domain folder `src/documents/`, new asset folder `assets/documents/`, tools `document_create` and `document_themes`, config keys `documents.*`, routing rule); `@alisio/sdk` (additive: `DocumentResultInfo` wire type; the optional `attachments` on `CompletionRequest` moved to `specs/backlog/028-document-visual-qa-v1.md`); `@alisio/server` (additive `ServerOptions.documentEngines`; Phase 4 read-only status route); `apps/desktop` (new `print.ts`, additive host↔main print messages in `host-protocol.ts`); `@alisio/web` (Phase 4 only: read-only engine status card); `@alisio/alisio-code` (`alisio documents status`) |
+| Paquetes nuevos | None. One new runtime dependency in core: `marked` (MIT, zero dependencies, same version as `@alisio/web`), used only as a lexer. The vendored pdf.js build (D-26) moved to `specs/backlog/028-document-visual-qa-v1.md` |
 | Relación con otras especificaciones | Independent. Reuses Forja Python backends (`specs/archive/009-forja-v1.md`) for the WeasyPrint engine and the artifact store/viewer. Complements, never replaces, `python_run` |
 | Superficies | Headless (`alisio run`), TUI, web (`alisio serve`), Alisio Desktop. HTTP: no new mutating route |
 | Política de versión | Additive only. `schemaVersion`/`protocolVersion` unchanged. Ships in the next minor npm release (O8) through `alisio-publish` |
@@ -47,7 +47,7 @@ Give every Alisio surface a first-class, fast and reliable way to produce well-d
 - `DocumentSpec` v1 (§5.2) and a Markdown → `DocumentSpec` converter (§5.3).
 - Theme catalog v1: three themes in Phase 1, three more in Phase 4 (§5.4), bundled licensed fonts (§5.5).
 - Engines: Chromium in Alisio Desktop (Electron), Chromium through a system browser (CLI, TUI, `alisio serve`), WeasyPrint as optional editorial engine (§5.6).
-- Security model (§5.7), technical QA and bounded repair (§5.8), visual QA (Phase 3, §5.9).
+- Security model (§5.7), technical QA and bounded repair (§5.8), visual QA (deferred, see `specs/backlog/028-document-visual-qa-v1.md`).
 - Routing rule and plugin coexistence (§5.10), configuration (§5.11), surfaces (§5.12).
 - Quality target: office, laser and copy-shop printing and digital PDF, **RGB** colour.
 
@@ -89,11 +89,11 @@ Give every Alisio surface a first-class, fast and reliable way to produce well-d
 | O3 | One set of print themes (HTML templates + CSS) MUST render correctly on both engines: stay within the CSS Paged Media subset both support; engine-specific enhancements are guarded |
 | O4 | A new npm release follows this work |
 | O5 | The model emits Markdown or a JSON `DocumentSpec` plus a catalog theme id, never free HTML/CSS. Deterministic templates; content/presentation separation; validate before render |
-| O6 | Pipeline: render → technical QA → visual QA (rasterized pages the model can inspect) → bounded repair, at most 2 attempts |
+| O6 | Pipeline: render → technical QA → (visual QA, deferred to `specs/backlog/028-document-visual-qa-v1.md`) → bounded repair, at most 2 attempts |
 | O7 | **Chromium TOC page numbers come from a two-pass render** (render, read each heading's page, inject numbers into the `toc` block, render again). This is the default on Chromium; Paged.js remains an optional, guarded alternative. Running chapter headers (`string-set`) and footnotes are WeasyPrint-only, with a degradation message on Chromium |
 | O8 | The owner-provided reference files are temporary; they are not committed and not referenced by path |
 | O9 | No certified print-shop output in v1 (no CMYK, no PDF/X). Quality target: office/laser/copy-shop printing and digital PDF (RGB). A later optional "print-shop output" phase covers bleed, crop marks, CMYK/PDF-X conversion and a mandatory validator |
-| O10 | **Phase order (2026-11-08):** visual QA (pdf.js vendored per D-26, `attachments` on `CompletionRequest`, rasterization, model inspection, bounded repair) moves BEFORE the WeasyPrint editorial phase. Order: Phase 2 → npm/Desktop release → Phase 3 visual QA → Phase 4 WeasyPrint + three more themes + web engine status card → Phase 5 optional print-shop |
+| O10 | **Phase order (2026-11-08, amended 2026-11-09):** visual QA moved before the WeasyPrint editorial phase on 2026-11-08; on 2026-11-09 the owner deferred it to `specs/backlog/028-document-visual-qa-v1.md`. Order now: Phase 2 (shipped in 0.11.3) → Phase 4 WeasyPrint + three more themes + web engine status card → Phase 5 optional print-shop. Visual QA resumes when users report visual defects that deterministic QA does not catch |
 | O11 | **The engine and the themes are generic (2026-11-08).** No owner- or brand-specific color, name, logo, copy or opinion lives in code, themes, defaults, committed fixtures, docs or examples; the reference brand used for manual visual checks is local test input only. Colors: WHEN the user states colors, those exact values apply (`accent`, `ink`, with contrast correction and a warning); WHEN the user states none, the model chooses an `accent`/`ink` that fit the purpose and audience of the document (stated in the tool schema and the `document_themes` guide), otherwise the neutral default of the theme applies. Theme and fonts are chosen the same way |
 
 ### 2.2 Design decisions (binding unless the code contradicts them; deviations are recorded)
@@ -117,7 +117,7 @@ Give every Alisio surface a first-class, fast and reliable way to produce well-d
 | D15 | Plugins Evalua (`evalua_*`) and Thesis Studio (`thesis_*`) | No name collision: external tools are prefixed `p_<hash>_…`; core names are `document_*`. The `# Documents` rule tells the model to prefer an active plugin tool specialized for the task (exams, theses). Core never names a plugin | Plugin flows win when active |
 | D16 | No engine available | `document_create` returns `DOCUMENT_ENGINE_UNAVAILABLE` with the per-OS action (install a Chromium-family browser, set `documents.chromiumPath`, or set up WeasyPrint) AND publishes the print-ready HTML bundle as an `html` artifact the user can print from a browser (Q7) | The user never gets nothing |
 | D17 | Accessibility/standards | Electron/Chromium: request outline and tagged PDF when supported; WeasyPrint: `pdf_tags=True`, bookmarks. Results report `tagged: boolean`; docs MUST NOT claim PDF/A or PDF/UA | Honest limits |
-| D18 | Repair | Repair is deterministic and keyed by QA finding codes (§5.8), max 2 attempts (O6); the model is never re-invoked inside the tool. Visual QA findings (Phase 3) are returned to the agent as text, which may call the tool again | Bounded cost and time |
+| D18 | Repair | Repair is deterministic and keyed by QA finding codes (§5.8), max 2 attempts (O6); the model is never re-invoked inside the tool. Visual QA findings (deferred, `specs/backlog/028-document-visual-qa-v1.md`) would be returned to the agent as text, which may call the tool again | Bounded cost and time |
 | D19 | Concurrency and reuse | At most 2 concurrent renders per process (queue, `DOCUMENT_BUSY` after 8 queued); the `chromium` adapter keeps one browser alive for 60 s idle, then closes it (values revisited in P0) | Warm renders avoid browser start-up |
 | D20 | Temp files | Each render uses `<state home>/documents/tmp/<renderId>/` (0700), removed in `finally`; a startup janitor removes leftovers older than 1 h (pattern of `analysis/janitor.ts`) | No leaks across crashes |
 
@@ -130,7 +130,7 @@ Give every Alisio surface a first-class, fast and reliable way to produce well-d
 | D-23 | **TOC page map (D11): method (a1), named destinations of the TOC link annotations read from pass 1 by the minimal scanner (D-25).** Works untagged, no new dependency. Pass 2 injects numbers; the pass-2 map is compared with the injected one. `tabular-nums` + fixed `min-width` placeholders kept the TOC length identical | 40-page fixture: (a1) 54/54 headings correct; (a2) outline 53/54 (a `break-before: page` heading resolves one page early; titles are doubled; needs tagged PDF); (b) pdf.js text 54/54 but adds pdfjs + 279 ms; (c) DOM estimate 5/54. Two-pass on 10/40/50 pages: 2 renders, stable, printed numbers equal truth 12/12, 54/54, 69/69; 40 pages total 880 ms, 50 pages 957 ms. Q4 (Paged.js) stays closed |
 | D-24 | **Tagged PDF and outline (D17):** pass `generateTaggedPDF` explicitly (CDP default is `true`, Electron default is `false`). `generateDocumentOutline` only works together with `generateTaggedPDF: true`, on both CDP (Chrome 154) and Electron 45; outline titles come out duplicated ("ContentsContents"), so the outline is not used for TOC and MAY be requested only for bookmarks. `qa.tagged` reports the scanner's `/StructTreeRoot` | 10 pages: tagged 340 KB vs 224 KB untagged (warm p50 138 vs 136 ms; 40 pages 314 vs 257 ms). Electron 45.2.3 = Chromium **156.0.8078.80**, Skia/PDF m156; system Chrome 154.0.8037.97 |
 | D-25 | **`pdf-scan.ts` is feasible with no parser dependency** (`node:zlib` only, ~150 lines): classic xref + XRef streams + object streams + Flate with PNG predictor; page tree, `/BaseFont`, named destinations, Link annotations, outline, `/StructTreeRoot`, per-page text-operator counts. Font names need per-engine normalization (WeasyPrint: `Source-Serif-4,`, `Inter-Semi-Bold`, `JetBrains-Mono`). `blank_trailing_page`: margin-box-only pages have a constant text-operator count (Chromium 29, WeasyPrint 6 for the prototype theme), so the threshold MUST be calibrated per engine and theme in the env-flagged test; a trailing `break-after` alone never creates a blank page | Skia: PDF 1.4, classic xref, no object streams, no XRef streams. WeasyPrint 70.0 (pydyf 0.13): PDF 1.7 with XRef stream + ObjStm (regex scanning is not enough). Scanner agrees with `pdfinfo`/`pdffonts` on pages and font names for 30/30 sample PDFs; 12-14 ms per 40-page PDF |
-| D-26 | **pdf.js for Phase 3 (visual QA): vendor a minimal build under `assets/documents/vendor/pdfjs` (Apache-2.0 + license file), not the `pdfjs-dist` dependency.** The full package fails Q3 (≤ 5 MB packed); the vendored subset passes. **Owner approved on 2026-11-08** (replaces the Q3 "dependency" wording) | `pdfjs-dist` 6.5.438 tarball 9.1 MB; `pdf.min.mjs` + `pdf.worker.min.mjs` 1.74 MB raw, 0.52 MB gzip (0.67 MB with the three wasm decoders, brotli of the two files 0.42 MB). Raster, 12 thumbnails (long side 1000 px): system Chrome 517 ms wall, Electron 434 ms; per page render 24/22 ms p50 + PNG encode 9/8 ms; all 40 pages 1.17 s / 1.07 s. Module worker is served through the virtual origin without extra config |
+| D-26 | **pdf.js for visual QA (moved to `specs/backlog/028-document-visual-qa-v1.md` on 2026-11-09, text and measurements there).** Vendor a minimal build under `assets/documents/vendor/pdfjs`, not the `pdfjs-dist` dependency. Owner approved on 2026-11-08 | Not used by Phases 1-2 or 4 |
 | D-27 | **Measurements run in an isolated world under a CSP without `script-src`**: `Page.createIsolatedWorld` + `Runtime.evaluate` (CDP) and `executeJavaScriptInIsolatedWorld` (Electron). Viewport MUST be set to the page content width before measuring: Electron under `--ozone-platform=headless` reports `innerWidth = 1` until `win.setContentSize(w, h)` is called (the constructor size is ignored); CDP needs the viewport emulation (not tested: `Emulation.setDeviceMetricsOverride`; default `innerWidth` was 780, content width 658) | `default-src 'none'` blocks the page's inline script (violation logged, `window.__pwned` undefined) while CDP/Electron evaluation works in main and isolated worlds; isolated world sees no page globals and the page sees none of the world's; `eval`/`new Function` work in the world (CDP is exempt); `fetch` to an outside URL is blocked; same result with the CSP as meta or as header; `addScriptToEvaluateOnNewDocument` with `worldName` works. Measurement script 1.5-2.6 ms; it detected the 12-column table (1756 px) and the 260-char unbreakable line, and 134-148 dpi images |
 | D-28 | **Standalone Bun binary: embed fonts (Q5 holds).** `bun build --compile`: base 99.87 MB; +0.71 MB with the 44 faces as `with {type:"file"}`, +0.93 MB as a generated base64 TS module, +2.45 MB with fonts and the vendored pdfjs | Q5 threshold 4 MB |
 
@@ -149,7 +149,7 @@ Branch `feat/electron-desktop`, HEAD `10bc847`, working tree with uncommitted ow
 | `python_run` | `tools/analysis.ts:376`, `effect: "process"`; files in `$ALISIO_OUTPUT_DIR` are published as artifacts via `context.artifacts.publishOutputs` |
 | Effects | `dashboard_generate` (`tools/dashboard.ts:178`) is `internal`; `permissions/decide.ts`: `read` and `internal` run without asking; no declared effect = `external`. `ToolContext.artifacts` is built-in-only |
 | Artifacts | `artifacts/kinds.ts:41`: `pdf` → kind `document`, `application/pdf`, magic `pdf`, `previewMax` 50 MB. Server `routes/artifact-view.ts` serves the PDF entry with a signed view token; web `components/artifacts/PdfFrame.tsx` previews; TUI `tui/artifact-preview.ts` does not preview PDFs |
-| Tool results with images | `ToolResult.content` allows `{type:"image"}` (`sdk/src/index.ts:242-248`), but `plugin-openai-compatible/src/provider.ts:88-89` sends tool results as `JSON.stringify(m.result)`: an image part reaches the model as base64 text, not a vision part. **Known gap**: visual QA cannot rely on image tool results (§5.9) |
+| Tool results with images | `ToolResult.content` allows `{type:"image"}` (`sdk/src/index.ts:242-248`), but `plugin-openai-compatible/src/provider.ts:88-89` sends tool results as `JSON.stringify(m.result)`: an image part reaches the model as base64 text, not a vision part. **Known gap**: visual QA cannot rely on image tool results (see `specs/backlog/028-document-visual-qa-v1.md`) |
 | Model completion | `CompletionRequest` (`sdk/src/index.ts:1069`) carries text messages only (no attachments). User-message `Attachment` images are sent as vision parts (`provider.ts:85`, `:194`). `ModelInfo.inputModalities` exists (`:318`) |
 | Markdown | Core has no Markdown parser (`turndown` is HTML→MD). `@alisio/web` uses `marked` 18.0.14 and `dompurify` 3.4.16. Core has `@mixmark-io/domino` 2.2.0 (DOM for SVG sanitizing) |
 | Skills | No bundled skills ship with core (`resources/skills.ts`: project, configured, user and plugin roots only) |
@@ -248,7 +248,7 @@ Input schema (JSON Schema, `additionalProperties: false`; exactly one of `markdo
 | `spec` | `DocumentSpec` | §5.2 |
 | `theme` | enum of catalog ids | Default `executive-clean` |
 | `page` | `{ size?: "A4"\|"Letter"\|"Legal"\|"A5", orientation?: "portrait"\|"landscape" }` | Default from `documents.defaultPageSize` (default `A4`) |
-| `quality` | `"fast"\|"professional"` | Default `professional`. `fast`: technical QA only, 0 repairs, no visual QA |
+| `quality` | `"fast"\|"professional"` | Default `professional`. `fast`: technical QA only, 0 repairs |
 | `title` | string ≤ 200 | Document metadata; defaults to cover/first heading |
 | `outputName` | string ≤ 80, `^[\w .-]+$` | File name without extension; default slug of the title |
 | `assets` | array ≤ 50 of `{ id: ^[a-z0-9_-]{1,40}$, path?: string, artifactId?: string, alt?: string }` | Exactly one of `path`/`artifactId` |
@@ -268,7 +268,7 @@ interface DocumentResultInfo {
     tagged: boolean;
     warnings: Array<{ code: string; message: string; blockIndex?: number }>;
     repairs: Array<{ code: string; action: string }>;   // ≤ 2 attempts
-    visual?: { status: "passed" | "findings" | "skipped"; reason?: string; findings?: string[] };
+    // visual?: reserved for `specs/backlog/028-document-visual-qa-v1.md` (not emitted in v1)
   };
   degraded: Array<{ feature: string; reason: string }>;
   durationMs: number;
@@ -406,11 +406,9 @@ interface RenderOutput { pdf: Uint8Array; measurements?: DomMeasurements; engine
 
 `qa.passed` is true when no error remains. With `quality: "professional"`, up to 2 repair attempts run, each a full re-render; `fast` runs none. Repairs never change content, only presentation hints. The PDF is published even with warnings; with an unrepaired error it is published and `qa.passed: false` explains why.
 
-### 5.9 Visual QA (Phase 3)
+### 5.9 Visual QA (deferred)
 
-- **Rasterization without Poppler** (works on Windows): render each PDF page to PNG inside the same headless Chromium (or the Electron offscreen window) with a bundled pdf.js build served from the virtual origin and captured by `Page.captureScreenshot` / `capturePage` (Q3). For WeasyPrint-only machines: `pypdfium2` from the `documents` extras set. Thumbnails: long side 1 000 px, at most 12 pages (cover, TOC, then evenly sampled).
-- Because image tool results reach the model as text today (§3), visual review is an **internal model call**: additive `attachments?: Attachment[]` on `CompletionRequest` messages (SDK, optional; providers that ignore it keep working) and the core completion path forwards them as vision parts. The reviewer uses the session model WHEN its `inputModalities` includes `image`, otherwise `documents.qa.visualModel` (Q6), otherwise `visual.status: "skipped"` with the reason.
-- The reviewer gets a fixed rubric (alignment, overlaps, clipped text, empty areas, broken tables, legibility) and returns JSON `{findings: [{page, code, note}]}` (≤ 10). Findings mapped to known codes trigger the §5.8 repairs within the same 2-attempt budget; others are returned to the agent as text.
+Moved to `specs/backlog/028-document-visual-qa-v1.md` (§3.1-§3.5) on 2026-11-09: rasterization, the reviewer call, `attachments?` on `CompletionRequest` and the bounded repair budget. v1 runs technical QA (§5.8) only.
 
 ### 5.10 Routing and plugin coexistence (D14, D15)
 
@@ -426,14 +424,14 @@ interface RenderOutput { pdf: Uint8Array; measurements?: DomMeasurements; engine
 
 ### 5.11 Configuration (zod in `config.ts`; settings labels EN/ES)
 
+The keys `documents.qa.visual` and `documents.qa.visualModel` moved to `specs/backlog/028-document-visual-qa-v1.md`.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `documents.enabled` | `true` | Register the tools |
 | `documents.engine` | `"auto"` | `auto` \| `chromium` \| `weasyprint` (`electron` is implied by `auto`/`chromium` in Desktop) |
 | `documents.chromiumPath` | unset | Explicit browser path (also env `ALISIO_CHROME_PATH`, then `CHROME_PATH`, `PUPPETEER_EXECUTABLE_PATH`) |
 | `documents.defaultPageSize` | `"A4"` | `A4` \| `Letter` \| `Legal` \| `A5` |
-| `documents.qa.visual` | `"auto"` | `off` \| `auto` (Phase 3) |
-| `documents.qa.visualModel` | unset | Model reference for visual QA (Phase 3, Q6) |
 
 ### 5.12 Surfaces
 
@@ -472,7 +470,7 @@ Red → Green → Refactor per `alisio-coding-standards`. Tests live in root `te
 | DOC-AC-13 | `pdf-scan.ts` on fixed sample PDFs from each engine | Correct page count and embedded font names |
 | DOC-AC-14 | Uncovered codepoint | `glyphs_missing` with sample characters; behavior per Q2 |
 | DOC-AC-15 | Wide-table fixture, `quality: professional` | `overflow` detected, ≤ 2 repairs applied and listed, final `overflow` absent or `qa.passed:false` with reason |
-| DOC-AC-16 | `quality: fast` | Zero repairs, no visual QA |
+| DOC-AC-16 | `quality: fast` | Zero repairs |
 | DOC-AC-17 | Render exceeds timeout / abort signal | `DOCUMENT_RENDER_TIMEOUT` / cancelled; browser process gone; render dir removed |
 | DOC-AC-18 | Startup janitor | Render dirs older than 1 h removed, newer kept |
 | DOC-AC-19 | Concurrency | Third concurrent call waits; 9th queued call → `DOCUMENT_BUSY` |
@@ -488,9 +486,7 @@ Red → Green → Refactor per `alisio-coding-standards`. Tests live in root `te
 | DOC-AC-29 | `weasyprint` adapter (env flag): corpus on all 6 themes | QA passes; running headers, `target-counter` TOC and footnotes present (checked through `pdf-scan` text of sample pages); fetcher rejects non-virtual URLs and redirects |
 | DOC-AC-30 | Same corpus on Chromium for `editorial-modern` | Renders without QA errors; `degraded[]` lists running headers and footnotes with the §5.6.3 messages |
 | DOC-AC-31 | `alisio documents status` | Lists each engine with ready/version or reason/fix; exit code 0 |
-| DOC-AC-32 | Rasterization (env flag) | ≤ 12 PNG thumbnails, long side 1 000 px, on Linux and Windows CI runners without Poppler |
-| DOC-AC-33 | Visual QA routing | Image-capable model → attachments sent; non-image model and no `visualModel` → `visual.status:"skipped"` with reason; provider ignoring attachments still works |
-| DOC-AC-34 | Visual findings | Known codes consume the shared 2-attempt budget; unknown codes returned as text |
+| DOC-AC-32..34 | Moved | Rasterization, visual QA routing and visual findings: see `specs/backlog/028-document-visual-qa-v1.md` §4 (not part of v1) |
 | DOC-AC-35 | i18n | New settings labels and degradation messages exist in EN and ES (`tests/web-i18n.test.ts`) |
 
 ### 6.4 Traceability
@@ -500,7 +496,7 @@ Red → Green → Refactor per `alisio-coding-standards`. Tests live in root `te
 | O1, O5, D4 | 01, 02, 06, 07, 20, 22 |
 | O2, D2, D3, D16 | 09, 10, 22, 30 |
 | O3, D5 | 11, 29, 30 |
-| O6, D18 | 15, 16, 34 |
+| O6, D18 | 15, 16 (34 moved to `specs/backlog/028-document-visual-qa-v1.md`) |
 | O7, D11 | 25, 30 |
 | D6 | 11, 12, 17 |
 | D7 | 23, 24 |
@@ -510,7 +506,7 @@ Red → Green → Refactor per `alisio-coding-standards`. Tests live in root `te
 | D13 | 20 |
 | D14, D15 | 21 |
 | D19, D20 | 17, 18, 19 |
-| Phase 3 | 32, 33, 34 |
+| Phase 3 (deferred) | 32, 33, 34 in `specs/backlog/028-document-visual-qa-v1.md` |
 | Phase 4 | 28, 29, 30 |
 
 Test files: `documents-spec.test.ts` (01), `documents-markdown.test.ts` (02, 03, 06, 07), `documents-assets.test.ts` (04, 05), `documents-render-html.test.ts` (08), `documents-engine-select.test.ts` (09), `documents-tool.test.ts` (10, 15, 16, 19, 20, 22 with fake engine), `documents-pdf-scan.test.ts` (13), `documents-qa.test.ts` (14), `documents-janitor.test.ts` (17, 18), `documents-rule.test.ts` + update of `forge-kernel-pure.test.ts` (21), `desktop-host-protocol.test.ts` extension (23), `documents-chromium.test.ts` (11, 12, 25; env flag), `desktop-print.test.ts` (24; env flag), `documents-chart.test.ts` (26), `documents-svg-sanitize.test.ts` (27), `documents-weasyprint.test.ts` (28 fast, 29 env flag), `documents-degradation.test.ts` (30), `cli-documents-status.test.ts` (31), `documents-raster.test.ts` (32; env flag), `documents-visual-qa.test.ts` (33, 34), `web-i18n.test.ts` (35).
@@ -586,9 +582,9 @@ Files: `documents/{ports,spec,limits,markdown,assets,themes,render-html,engine-s
 
 Files: `apps/desktop/src/{print.ts, print-protocol.ts, print-client.ts, print-measure.ts}`, `host-process.ts`, `host.ts`, `main.ts`, `spawn-plan.ts`, `AppOptions.documentEngines` (core), `documents/{toc-two-pass,chart-svg,svg-sanitize,embedded,embedded-assets}.ts`, blocks `chart`, `svg`, `appendix`, cover `logoAsset`, ink/accent roles, binary embedding (`scripts/binary-build.ts`). Closes DOC-AC-23..27. Ends green. Notes in §13.
 
-### Phase 3: visual QA (O6)
+### Phase 3: visual QA (deferred)
 
-Files: `documents/raster.ts` (pdf.js in Chromium/Electron; pypdfium2 for WeasyPrint-only), `documents/visual-qa.ts`, additive `CompletionRequest` attachments in SDK + core completion path + `plugin-openai-compatible` mapping. Closes DOC-AC-32..34. Ends green.
+Moved to `specs/backlog/028-document-visual-qa-v1.md` on 2026-11-09 (owner decision: Phase 2 already produces professional, customizable PDFs; the three known defects were fixed deterministically, §14). Nothing in Phase 4 depends on it.
 
 ### Phase 4: WeasyPrint editorial engine and three more themes (O2, O3, D8, D17)
 
@@ -629,7 +625,7 @@ Release notes (CHANGELOG + `packages/core/src/changelog/data.ts`) are drafted pe
 | CJK/emoji text | Q2; never silent: `glyphs_missing` |
 | Core package size growth | Q1 budget enforced by `pack:check` |
 | Standalone binary lacks loose assets | Q5 |
-| Visual QA cost and provider support for image inputs | Off for `fast`; skipped with reason when no image-capable model; bounded to 12 thumbnails |
+| Visual QA cost and provider support for image inputs | Deferred; risk tracked in `specs/backlog/028-document-visual-qa-v1.md` §7 |
 | Reviewer model hallucinated findings | Only known codes trigger repairs; repairs never change content |
 | Hyphenation/locale differences across OS Chromium builds | Documented; `lang` set; verified per OS in P0 |
 | Output is RGB, not print-shop CMYK | Non-goal v1 (O9); Phase 5 |
@@ -642,13 +638,13 @@ Release notes (CHANGELOG + `packages/core/src/changelog/data.ts`) are drafted pe
 |---|---|---|
 | Q1 | Font set and size budget | Inter, Source Serif 4, JetBrains Mono (OFL), WOFF2, Latin/Latin-Ext/Greek/Cyrillic subsets, total ≤ 3 MB in `@alisio/core` (confirm with P0-8) |
 | Q2 | CJK and emoji | No bundled CJK; uncovered text → `glyphs_missing` error that names the unsupported script, with an opt-in `documents.fonts.allowSystemFallback` (machine-dependent, flagged in `qa.warnings`). Emoji: removed from output with a warning; themes use SVG icons |
-| Q3 | `pdfjs-dist` for rasterization (Phase 3) | Superseded by D-26 (owner approved 2026-11-08): vendored minimal pdf.js build (0.52 MB gzip) under `assets/documents/vendor/pdfjs`, lazily loaded; no `pdfjs-dist` dependency |
+| Q3 | `pdfjs-dist` for rasterization | Moved to `specs/backlog/028-document-visual-qa-v1.md` (D-26, owner approved 2026-11-08) |
 | Q4 | Paged.js on Chromium | Not in v1; two-pass is the default (O7). Revisit only if P0-5 shows two-pass is unreliable |
 | Q5 | Fonts and themes in the standalone Bun binary | Generated embedded module only if binary growth ≤ 4 MB (P0-8); otherwise document "npm install or Desktop required for documents" |
-| Q6 | Visual QA model | Session model when image-capable; optional `documents.qa.visualModel`; on by default only for `professional` |
+| Q6 | Visual QA model | Moved to `specs/backlog/028-document-visual-qa-v1.md` §2.2 |
 | Q7 | Fallback HTML artifact when no engine (D16) and the Phase 4 web status card | Yes to both |
 | Q8 | WeasyPrint via managed backend | New hash-locked extras set `documents` (`alisio analysis setup --documents`), installed through the `analysis.install` approval; Pango stays a documented OS prerequisite |
-| Q9 | Which phase triggers the npm release (O4) | Release after Phase 2 (Desktop + system Chromium + TOC numbers); visual QA (Phase 3) and then WeasyPrint (Phase 4) in later minors |
+| Q9 | Which phase triggers the npm release (O4) | Released after Phase 2 (0.11.3: Desktop + system Chromium + TOC numbers); WeasyPrint (Phase 4) in a later minor; visual QA is deferred to `specs/backlog/028-document-visual-qa-v1.md` |
 
 ---
 
@@ -691,4 +687,14 @@ Deviations and decisions:
 - **Settings labels**: the web Settings page has no `documents.*` section (the keys are not web-settable), so there are no new labels; a Documents card arrives with the Phase 4 engine status card.
 - **Genericity (O11)**: the tool schema and `document_themes` guide tell the model to use exactly the user's colors, otherwise to choose `accent`/`ink` for the purpose and audience, or to omit them for the neutral theme default.
 
-Left for Phase 3 (visual QA): everything in §5.9, the vendored pdf.js (D-26), `attachments`, rasterization and the shared repair budget. Also pending: Windows and macOS verification, orphan-heading detection, `blank_trailing_page` calibration per engine and theme, `font_not_bundled` message when a fallback font has no name.
+Left over: everything in the old §5.9 (vendored pdf.js, `attachments`, rasterization, shared repair budget) moved to `specs/backlog/028-document-visual-qa-v1.md`. Still pending: Windows and macOS verification, orphan-heading detection and `blank_trailing_page` calibration per engine and theme. The `font_not_bundled` message for nameless fallback fonts was fixed in §14.
+
+---
+
+## 14. Known-defect fixes (2026-11-09)
+
+Three defects found after the 0.11.3 release were fixed deterministically (strict TDD, tests at the module boundary), instead of adding visual QA (`specs/backlog/028-document-visual-qa-v1.md`). Everything stays generic (O11): no brand-specific values.
+
+1. **TOC picked up text that is not a heading.** Root cause: `collectHeadings` listed every `heading` block, so a slogan or lead line written as a heading, text of the title page region and a heading repeating the cover title all became entries. Fix: `collectHeadings` marks each heading with `toc`; headings before the `toc` block, empty headings, emphasis-only headings (`*Slogan*`) and an h1 equal to the cover title are not entries (`packages/core/src/documents/render-html.ts`; the `toc` block still honors `depth`). Tests: `tests/documents-render-html.test.ts` ("table of contents entries").
+2. **Low-contrast table heads.** Root cause: `data-report` painted white text on the raw accent and the other themes dark text on an accent tint, with no contrast check for those pairs; tone labels used the tone bar color on the tone background. Fix: `tokensCss` derives readable pairs (`--th-solid-bg/fg`, `--th-tint-bg/fg`, `--info|success|warning|danger-text`) at 4.5:1 for every accent (white text, else dark ink, else a darkened fill); the three theme stylesheets and `print-base.css` use them (`packages/core/src/documents/themes.ts`, `assets/documents/**`). Tests: `tests/documents-brand.test.ts` ("readable pairs").
+3. **Unclear `font_not_bundled` message.** Root cause: the message only listed raw font names, which are empty or `(none)` for nameless fallbacks and never said which text was uncovered. Fix: `checkText` returns the uncovered scripts and sample (`uncovered`), `analyzeOutput` takes it and the message names the script (for example CJK), says a system fallback font was used and prints "a system fallback font" for nameless fonts. Code, severity and field structure are unchanged (`packages/core/src/documents/qa.ts`, `create.ts`). Tests: `tests/documents-qa.test.ts`.

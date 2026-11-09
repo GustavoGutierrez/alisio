@@ -251,7 +251,7 @@ col.wide {
 .callout .t {
   font-weight: 700;
   margin: 0 0 3pt;
-  color: var(--tone-bar);
+  color: var(--tone-text, var(--tone-bar));
   font-size: 0.86em;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -266,18 +266,22 @@ col.wide {
 .tone-info {
   --tone-bg: var(--info-bg);
   --tone-bar: var(--info-bar);
+  --tone-text: var(--info-text);
 }
 .tone-success {
   --tone-bg: var(--success-bg);
   --tone-bar: var(--success-bar);
+  --tone-text: var(--success-text);
 }
 .tone-warning {
   --tone-bg: var(--warning-bg);
   --tone-bar: var(--warning-bar);
+  --tone-text: var(--warning-text);
 }
 .tone-danger {
   --tone-bg: var(--danger-bg);
   --tone-bar: var(--danger-bar);
+  --tone-text: var(--danger-text);
 }
 figure.img {
   margin: calc(var(--u) * 2) 0 calc(var(--u) * 4);
@@ -347,7 +351,7 @@ figcaption {
   font-size: var(--fs-small);
   font-weight: 600;
   margin-top: 3pt;
-  color: var(--tone-bar, var(--muted));
+  color: var(--tone-text, var(--muted));
 }
 
 /* Table of contents (links in v1) */

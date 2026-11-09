@@ -157,6 +157,27 @@ export function pageDimensions(page: PageSetup): { w: number; h: number } {
   return page.orientation === "landscape" ? { w: p.h, h: p.w } : p;
 }
 
+/**
+ * Text color on a filled background: white, else the dark ink, else (both fail on a mid tone)
+ * the background darkened until white reads at the minimum contrast.
+ */
+export function readablePair(bg: string, dark: string): { bg: string; fg: string } {
+  if (contrast("#ffffff", bg) >= MIN_CONTRAST) return { bg, fg: "#ffffff" };
+  if (contrast(dark, bg) >= MIN_CONTRAST) return { bg, fg: dark };
+  let fill = bg;
+  for (let i = 0; i < 40 && contrast("#ffffff", fill) < MIN_CONTRAST; i++)
+    fill = mix(fill, "#000000", 0.06);
+  return { bg: fill, fg: "#ffffff" };
+}
+
+/** Darkens `color` until it reads at the minimum contrast on every given background. */
+function readableOn(color: string, ...backgrounds: string[]): string {
+  let out = color;
+  for (let i = 0; i < 40 && backgrounds.some((b) => contrast(out, b) < MIN_CONTRAST); i++)
+    out = mix(out, "#000000", 0.06);
+  return out;
+}
+
 /** CSS custom properties of a theme. */
 export function tokensCss(manifest: ThemeManifest, page: PageSetup, brand?: Brand): string {
   const { colors: c, type: t, grid: g } = manifest.tokens;
@@ -212,6 +233,16 @@ export function tokensCss(manifest: ThemeManifest, page: PageSetup, brand?: Bran
   vars["accent-dark"] = mix(vars["accent-text"] as string, "#000000", 0.3);
   vars["accent-tint"] = mix(accent, "#ffffff", 0.9);
   vars["accent-soft"] = mix(accent, "#ffffff", 0.75);
+  // Readable pairs: solid accent table heads, tinted table heads and tone labels (spec 026 §14).
+  const darkInk = brand?.ink ?? c.heading;
+  const solid = readablePair(
+    accent,
+    contrast(darkInk, accent) >= MIN_CONTRAST ? darkInk : "#000000",
+  );
+  vars["th-solid-bg"] = solid.bg;
+  vars["th-solid-fg"] = solid.fg;
+  vars["th-tint-bg"] = vars["accent-tint"] as string;
+  vars["th-tint-fg"] = readableOn(vars["accent-dark"] as string, vars["accent-tint"] as string);
   const chartInk = brand?.ink ?? c.heading;
   const palette = [
     accent,
@@ -252,6 +283,13 @@ export function tokensCss(manifest: ThemeManifest, page: PageSetup, brand?: Bran
     vars["cover-kicker"] = kicker;
     vars["cover-deco"] = mix(brand.ink, onInk, 0.12);
   }
+  for (const tone of ["info", "success", "warning", "danger"])
+    vars[`${tone}-text`] = readableOn(
+      vars[`${tone}-bar`] as string,
+      vars[`${tone}-bg`] as string,
+      vars.surface as string,
+      vars.paper as string,
+    );
   return `:root {\n${Object.entries(vars)
     .map(([k, v]) => `  --${k}: ${v};`)
     .join("\n")}\n}\n`;

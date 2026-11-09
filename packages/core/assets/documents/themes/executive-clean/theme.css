@@ -35,8 +35,8 @@ main > p:first-of-type {
   font-size: 1.06em;
 }
 th {
-  background: var(--accent-tint);
-  color: var(--accent-dark);
+  background: var(--th-tint-bg);
+  color: var(--th-tint-fg);
   border-bottom: 1.5pt solid var(--accent);
   font-size: calc(var(--fs-table) - 0.4pt);
   letter-spacing: 0.03em;

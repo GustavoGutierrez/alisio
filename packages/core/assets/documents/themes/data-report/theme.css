@@ -28,8 +28,8 @@ h3 {
   letter-spacing: 0.07em;
 }
 th {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--th-solid-bg);
+  color: var(--th-solid-fg);
   padding-top: calc(var(--cell-y) + 1pt);
   padding-bottom: calc(var(--cell-y) + 1pt);
   font-size: calc(var(--fs-table) - 0.3pt);

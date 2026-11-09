@@ -344,6 +344,7 @@ export async function createDocument(input: CreateInput, deps: CreateDeps): Prom
       tagged = scanned.tagged;
       findings = analyzeOutput(scanned, out.measurements, {
         overflowChecked: engine.capabilities.domMeasurements,
+        ...(normalized.uncovered ? { uncovered: normalized.uncovered } : {}),
       });
       const repairable = findings.some((f) => f.severity !== "info" && f.code !== "glyphs_missing");
       if (quality !== "professional" || !repairable || attempt >= MAX_REPAIRS) break;

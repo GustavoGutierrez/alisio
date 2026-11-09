@@ -89,6 +89,50 @@ describe("render bundle (DOC-AC-02, DOC-AC-08)", () => {
   });
 });
 
+describe("table of contents entries", () => {
+  const page = { size: "A4", orientation: "portrait" } as const;
+  const tocOf = async (spec: DocumentSpec) => {
+    await writeBundle(spec, new Map(), dir, { theme: "executive-clean", page });
+    const html = await readFile(join(dir, "index.html"), "utf8");
+    return /<nav class="toc"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+  };
+
+  it("lists only real body section headings, not title-page text, slogans or duplicate titles", async () => {
+    const toc = await tocOf({
+      version: 1,
+      blocks: [
+        { type: "cover", title: "Annual Report", subtitle: "A line under the title" },
+        { type: "heading", level: 1, text: "Building things that last" },
+        { type: "toc" },
+        { type: "heading", level: 1, text: "Annual Report" },
+        { type: "heading", level: 2, text: "*Quality is our promise*" },
+        { type: "heading", level: 2, text: "   " },
+        { type: "heading", level: 1, text: "Results" },
+        { type: "heading", level: 2, text: "Revenue" },
+        { type: "heading", level: 3, text: "Deep detail" },
+        { type: "appendix", title: "Annex", blocks: [{ type: "heading", level: 2, text: "Data" }] },
+      ],
+    });
+    const entries = [...toc.matchAll(/<li class="l(\d)"><a [^>]*>(.*?)<\/a>/g)].map((m) => m[2]);
+    expect(entries).toEqual(["Results", "Revenue", "Annex", "Data"]);
+    expect(toc).not.toContain("Building things");
+    expect(toc).not.toContain("Quality is our promise");
+  });
+
+  it("keeps the body headings of a document whose contents sit before them", async () => {
+    const toc = await tocOf({
+      version: 1,
+      blocks: [
+        { type: "toc", depth: 3 },
+        { type: "heading", level: 1, text: "One" },
+        { type: "heading", level: 3, text: "Three" },
+      ],
+    });
+    expect(toc).toContain(">One<");
+    expect(toc).toContain(">Three<");
+  });
+});
+
 describe("numbering, placeholders and brand colors", () => {
   const page = { size: "A4", orientation: "portrait" } as const;
   const doc = (headings: string[]): DocumentSpec => ({
