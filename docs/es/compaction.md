@@ -81,6 +81,8 @@ activo de `/connect`, o de `GET /models`. El consumo de tokens de
 la compactación no se descuenta de `limits.maxTokens`, y las estimaciones antes/después son
 aproximadas (unos 4 caracteres por token).
 
+Las imágenes (adjuntos y partes de imagen de resultados de herramientas) se miden por su tamaño en tokens (teselas de 512 px estilo OpenAI según ancho y alto, unos 1.000 tokens si se desconoce), nunca por sus bytes en base64. Si una ejecución sigue sobre el límite tras recortar, las imágenes de mensajes anteriores se reemplazan primero por una nota de texto corta (nunca la del último mensaje del usuario). Las peticiones al proveedor siguen enviando la imagen real.
+
 ## Resúmenes truncados
 
 El resumidor tiene su propio presupuesto de salida (`compaction.maxOutputTokens`, por defecto 16000 —

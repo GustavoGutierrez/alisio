@@ -6,6 +6,18 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.4",
+      date: "2026-11-08",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            'Attaching an image no longer fills the context or makes every following message compact and fail with "Context budget exceeded": images count by their size in tokens, not by their encoded bytes, and older images are dropped before a run would fail. Affected sessions work again.',
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.3",
       date: "2026-11-08",
       sections: [

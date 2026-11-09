@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Message, RunEvent } from "@alisio/sdk";
 import { textResult } from "@alisio/sdk";
 import { describe, expect, it } from "vitest";
+import { imageTokens, measureChars } from "../packages/core/src/core/compaction.ts";
 import { ToolRegistry } from "../packages/core/src/core/registry.ts";
 import { AgentRunner } from "../packages/core/src/core/runner.ts";
 import { ProjectContext } from "../packages/core/src/resources/context.ts";
@@ -279,5 +280,74 @@ describe("automatic compaction respects the character budget", () => {
         await fx.close();
       }
     });
+  });
+});
+
+const png = (data = big(1_159_316)) => ({
+  kind: "image" as const,
+  mimeType: "image/png",
+  data,
+  bytes: 869_487,
+  width: 1254,
+  height: 1254,
+});
+
+describe("images count by size in tokens, not by encoded bytes", () => {
+  it("costs an image from its dimensions, with a fallback", () => {
+    expect(imageTokens(1254, 1254)).toBe(85 + 170 * 4);
+    expect(imageTokens()).toBe(1_000);
+    const m: Message = { role: "user", text: "hola", attachments: [png()] };
+    expect(measureChars([m])).toBeLessThan(10_000);
+    const tool: Message = {
+      role: "tool",
+      callId: "c",
+      result: { content: [{ type: "image", mimeType: "image/png", data: big(900_000) }] },
+    };
+    expect(measureChars([tool])).toBeLessThan(5_000);
+  });
+
+  it("does not compact or fail on one huge image plus hola", async () => {
+    const fx = await setup({
+      messages: [{ role: "user", text: "mira", attachments: [png()] }, done("ok")],
+      runner: { maxContextChars: 800_000 },
+    });
+    try {
+      const result = await fx.runner.run(fx.session.id, "hola");
+      expect(result.status).toBe("completed");
+      expect(fx.events.some((e) => e.type === "compaction_started")).toBe(false);
+      expect(fx.events.some((e) => e.type === "run_failed")).toBe(false);
+      const stored = fx.store.messages(fx.session.id)[0];
+      expect(stored?.role === "user" && stored.attachments?.[0]?.data.length).toBe(1_159_316);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("drops older images instead of failing when many images pile up", async () => {
+    const many: Message[] = Array.from({ length: 12 }, (_, i): Message[] => [
+      { role: "user", text: `img ${i}`, attachments: [png(big(5_000))] },
+      done("seen"),
+    ]).flat();
+    const fx = await setup({
+      messages: many,
+      runner: { maxContextChars: 30_000, compaction: { auto: false } },
+    });
+    try {
+      const result = await fx.runner.run(fx.session.id, "hola");
+      expect(result.status).toBe("completed");
+      const reduced = fx.events.find((e) => e.type === "context_reduced");
+      expect(reduced).toBeDefined();
+      const texts = fx.store.messages(fx.session.id).map((m) => (m.role === "user" ? m.text : ""));
+      expect(
+        texts.some((t) => t.includes("[image omitted to fit the context: image/png, 1254x1254]")),
+      ).toBe(true);
+      const last = fx.store
+        .messages(fx.session.id)
+        .filter((m) => m.role === "user")
+        .at(-1);
+      expect(last?.role === "user" && last.text).toBe("hola");
+    } finally {
+      await fx.close();
+    }
   });
 });

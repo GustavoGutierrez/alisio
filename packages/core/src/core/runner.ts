@@ -44,6 +44,8 @@ import {
   estimateTokens,
   INVARIANTS_FIELD,
   MAX_TRUSTED_WINDOW,
+  measureChars,
+  omitOldImages,
   parseCheckpointOutput,
   planCompaction,
   reduceMessagesToBudget,
@@ -1577,7 +1579,7 @@ export class AgentRunner {
         };
         const blockChars = () => (o.contextGovernor?.mode === "on" ? invariants().text.length : 0);
         const chars = () =>
-          instructions.length + blockChars() + JSON.stringify(messages).length + toolsText.length;
+          instructions.length + blockChars() + measureChars(messages) + toolsText.length;
         // REDUCIBLE content only (instructions + transcript). The fixed tool catalog
         // (`toolsText`) is a deployment reality — a huge MCP catalog with dozens of tools is
         // part of every request regardless of history, so it is deliberately excluded from the
@@ -1585,8 +1587,7 @@ export class AgentRunner {
         // and still fake-fail. Oversized catalogs are a `/plugins` decision, not session growth;
         // auto-compaction above still measures the FULL request (`chars()`), because window
         // thresholds protect what the model really sees, tools included.
-        const charsConversation = () =>
-          instructions.length + blockChars() + JSON.stringify(messages).length;
+        const charsConversation = () => instructions.length + blockChars() + measureChars(messages);
         const used = () => {
           const last = this.reported.get(sessionId);
           return last && last.count <= messages.length
@@ -1634,6 +1635,25 @@ export class AgentRunner {
               MIN_MESSAGE_BUDGET_FLOOR,
               limit - instructions.length - blockChars(),
             );
+            // Older images go first (never the latest user message): they are the cheapest loss.
+            const protectFrom = Math.max(
+              0,
+              messages.findLastIndex((m) => m.role === "user" && !m.summary),
+            );
+            const dropped = omitOldImages(messages, targetChars, protectFrom);
+            if (dropped.omitted > 0) {
+              o.store.overwrite(sessionId, dropped.messages);
+              const saved = Math.max(
+                0,
+                estimateTokens(messages) - estimateTokens(dropped.messages),
+              );
+              messages = dropped.messages;
+              emit("context_reduced", {
+                messages: dropped.omitted,
+                reason: "budget",
+                tokensSaved: saved,
+              });
+            }
             const reduction = reduceMessagesToBudget(messages, targetChars);
             if (reduction.truncated > 0) {
               o.store.overwrite(sessionId, reduction.messages);

@@ -1,10 +1,106 @@
 import type { CompactionCheckpoint, CompletionRequest, Message, ModelProvider } from "@alisio/sdk";
 import { z } from "zod";
 
-/** Rough provider-agnostic estimate: ~4 characters per token. */
+/** Tokens charged for an image whose dimensions are unknown. */
+export const UNKNOWN_IMAGE_TOKENS = 1_000;
+
+/**
+ * Provider-like token cost of an image from its size, never from its encoded bytes: OpenAI-style
+ * 512px tiles (85 + 170 per tile) after fitting the image in 2048x2048 and scaling the short side
+ * to 768. Unknown or invalid dimensions cost `UNKNOWN_IMAGE_TOKENS`.
+ */
+export function imageTokens(width?: number, height?: number): number {
+  if (
+    !width ||
+    !height ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  )
+    return UNKNOWN_IMAGE_TOKENS;
+  let w = width,
+    h = height;
+  const fit = Math.min(1, 2048 / Math.max(w, h));
+  w *= fit;
+  h *= fit;
+  const shrink = Math.min(1, 768 / Math.min(w, h));
+  w *= shrink;
+  h *= shrink;
+  return 85 + 170 * Math.ceil(w / 512) * Math.ceil(h / 512);
+}
+
+/**
+ * Characters a value counts for context budgeting: its JSON length with every base64 image
+ * payload (user attachments and tool-result image parts) replaced by `imageTokens * 4`. Only the
+ * measurement changes; the wire format and the stored data are untouched.
+ */
+export function measureChars(value: unknown): number {
+  let extra = 0;
+  const json = JSON.stringify(value, function (this: Record<string, unknown>, key, v) {
+    if (
+      key === "data" &&
+      typeof v === "string" &&
+      (this.kind === "image" || this.type === "image")
+    ) {
+      const w = typeof this.width === "number" ? this.width : undefined;
+      const h = typeof this.height === "number" ? this.height : undefined;
+      extra += imageTokens(w, h) * 4;
+      return "";
+    }
+    return v;
+  });
+  return (json?.length ?? 0) + extra;
+}
+
+/** Rough provider-agnostic estimate: ~4 characters per token (images by size, see `measureChars`). */
 export function estimateTokens(value: string | Message[]): number {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  return Math.ceil(text.length / 4);
+  return Math.ceil((typeof value === "string" ? value.length : measureChars(value)) / 4);
+}
+
+const imageNote = (mimeType: string, w?: number, h?: number) =>
+  `[image omitted to fit the context: ${mimeType}${w && h ? `, ${w}x${h}` : ""}]`;
+
+/**
+ * Replaces image payloads with a short text note, oldest message first, until `measureChars`
+ * of the transcript is <= `targetChars`. Messages from index `protectFrom` on are never touched;
+ * roles and call ids stay valid. Returns the same array when nothing was dropped.
+ */
+export function omitOldImages(
+  messages: Message[],
+  targetChars: number,
+  protectFrom: number,
+): { messages: Message[]; omitted: number } {
+  let size = measureChars(messages);
+  if (size <= targetChars) return { messages, omitted: 0 };
+  const out = [...messages];
+  let omitted = 0;
+  for (let i = 0; i < Math.min(protectFrom, out.length) && size > targetChars; i++) {
+    const m = out[i];
+    if (!m) continue;
+    const before = measureChars(m);
+    let next: Message | undefined;
+    if (m.role === "user" && m.attachments?.some((a) => a.kind === "image")) {
+      const notes = m.attachments.map((a) => imageNote(a.mimeType, a.width, a.height));
+      const { attachments: _drop, ...rest } = m;
+      next = { ...rest, text: `${m.text}\n${notes.join("\n")}` };
+    } else if (m.role === "tool" && m.result.content.some((p) => p.type === "image")) {
+      next = {
+        ...m,
+        result: {
+          ...m.result,
+          content: m.result.content.map((p) =>
+            p.type === "image" ? { type: "text" as const, text: imageNote(p.mimeType) } : p,
+          ),
+        },
+      };
+    }
+    if (!next) continue;
+    out[i] = next;
+    omitted++;
+    size -= before - measureChars(next);
+  }
+  return omitted ? { messages: out, omitted } : { messages, omitted: 0 };
 }
 
 export function shouldCompact(used: number, window: number | undefined, threshold: number) {
@@ -254,7 +350,7 @@ export function reduceMessagesToBudget(
   const rounds = Math.max(toolCapRounds.length, textCapRounds.length);
   // Working transcript; `messages` keeps the untouched originals for re-clipping each round.
   const working = [...messages];
-  const sizeOf = (m: Message) => JSON.stringify(m).length;
+  const sizeOf = (m: Message) => measureChars(m);
   const sizes = working.map(sizeOf);
   // Serialized array length == sum of message lengths + n-1 commas + 2 brackets (+n+1 total).
   let size = sizes.reduce((a, b) => a + b, 0) + working.length + 1;

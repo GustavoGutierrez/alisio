@@ -187,6 +187,10 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
 
 - Núcleo propio: streaming, tool loop, validación de entradas, límites de turnos/tiempo/contexto,
   presupuesto de tokens reportados, cancelación y eventos versionados.
+- Medición de contexto: las imágenes (adjuntos y partes de imagen de herramientas) cuestan por sus
+  dimensiones (teselas de 512 px; ~1.000 tokens sin dimensiones), no por su base64; es una estimación
+  tipo OpenAI, no el conteo real de cada proveedor. Si aun así se excede el límite, se omiten primero
+  las imágenes de mensajes antiguos (nunca la del último mensaje del usuario).
 - Límite de turnos SUAVE (`limits.maxTurns`, por defecto `100`): al alcanzar el tope, la ejecución
   termina con `status: "turns-exceeded"` y evento `run_turns_exceeded` (datos con el tope) en lugar
   de fallar: el transcript hasta ese punto se conserva íntegro, la TUI muestra un aviso amable (no

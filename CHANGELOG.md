@@ -4,6 +4,16 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.4] - 2026-11-08
+
+Images no longer fill the context.
+
+### Fixed
+
+- Attaching an image no longer fills the context or makes every following message compact and
+  fail with "Context budget exceeded": images count by their size in tokens, not by their encoded
+  bytes, and older images are dropped before a run would fail. Affected sessions work again.
+
 ## [0.11.3] - 2026-11-08
 
 Designed PDFs from a request and a Skill Builder.

@@ -78,6 +78,8 @@ The context window comes from `provider.contextWindow`, the active `/connect` pr
 not counted against `limits.maxTokens`, and before/after estimates are approximate (about 4
 characters per token).
 
+Images (attachments and tool-result image parts) are measured by their size in tokens (OpenAI-style 512px tiles from width and height, about 1,000 tokens when unknown), never by their base64 bytes. If a run is still over the limit after clipping, images of older messages are replaced by a short text note first (never the latest user message). Provider requests still carry the real image.
+
 ## Truncated summaries
 
 The summarizer has its own output budget (`compaction.maxOutputTokens`, default 16000 — larger
