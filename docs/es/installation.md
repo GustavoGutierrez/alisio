@@ -7,13 +7,13 @@ Node.js. Elija el instalador de su sistema:
 
 | Sistema | Descarga |
 | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.4-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.4/Alisio-Setup-0.11.4-x64.exe) (asistente NSIS, por usuario, sin derechos de administrador) |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.4-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.4/Alisio-0.11.4-arm64.dmg) |
-| macOS Intel (x64) | [`Alisio-0.11.4-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.4/Alisio-0.11.4-x64.dmg) |
-| Linux, cualquier distribución | [`Alisio-0.11.4-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.4/Alisio-0.11.4-x86_64.AppImage) |
-| Debian y Ubuntu | [`Alisio-0.11.4-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.4/Alisio-0.11.4-amd64.deb) |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.5-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-Setup-0.11.5-x64.exe) (asistente NSIS, por usuario, sin derechos de administrador) |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.5-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-arm64.dmg) |
+| macOS Intel (x64) | [`Alisio-0.11.5-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-x64.dmg) |
+| Linux, cualquier distribución | [`Alisio-0.11.5-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-x86_64.AppImage) |
+| Debian y Ubuntu | [`Alisio-0.11.5-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.5/Alisio-0.11.5-amd64.deb) |
 
-Todos los archivos están en la [página de la versión](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.4). Los instaladores no están firmados, así
+Todos los archivos están en la [página de la versión](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.5). Los instaladores no están firmados, así
 que Windows SmartScreen y macOS Gatekeeper muestran un aviso la primera vez.
 [Aplicación de escritorio](/es/desktop) explica cada paso y cómo continuar tras los avisos.
 
