@@ -8,6 +8,7 @@ import { DEFAULT_DECISIONS_CONFIG } from "./decisions/service.ts";
 import { DEFAULT_FORGE_LIMITS, type ForgeLimitKey, MAX_FORGE_LIMITS } from "./forge/limits.ts";
 import { exists, readJson } from "./runtime/fs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
+import { DEFAULT_SEMANTIC_CONFIG } from "./semantic/service.ts";
 
 const providerSchema = z
   .object({
@@ -129,6 +130,8 @@ const FORGE_DEFAULTS = {
 };
 /** Decision Intelligence keys only the user (global) layer decides: the provider and telemetry. */
 const GLOBAL_ONLY_DECISIONS = ["provider", "telemetry"] as const;
+/** Semantic search keys only the user (global) layer decides: which providers run (spec 029). */
+const GLOBAL_ONLY_SEMANTIC = ["embedding", "store"] as const;
 /** Web UI keys only the user (global) layer decides: the server picks which theme it serves. */
 const GLOBAL_ONLY_WEB = ["iconTheme"] as const;
 /** Document engine keys only the user (global) layer decides: which browser binary runs (spec 026). */
@@ -235,6 +238,38 @@ const configObjectSchema = z
       })
       .strict()
       .default(() => ({ ...DEFAULT_DECISIONS_CONFIG })),
+    /**
+     * Semantic search ports (spec 029): the active providers are chosen here and only here;
+     * `embedding` and `store` are global-only (a repository cannot pick where text is sent).
+     */
+    semantic: z
+      .object({
+        enabled: z.boolean().default(true),
+        embedding: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9.-]{0,63}$/)
+          .nullable()
+          .default(null),
+        store: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9.-]{0,63}$/)
+          .nullable()
+          .default(null),
+        embedTimeoutMs: z
+          .number()
+          .int()
+          .min(1_000)
+          .max(300_000)
+          .default(DEFAULT_SEMANTIC_CONFIG.embedTimeoutMs),
+        queryTimeoutMs: z
+          .number()
+          .int()
+          .min(100)
+          .max(60_000)
+          .default(DEFAULT_SEMANTIC_CONFIG.queryTimeoutMs),
+      })
+      .strict()
+      .default(() => ({ ...DEFAULT_SEMANTIC_CONFIG })),
     context: z
       .object({
         /** Use CLAUDE.md where a directory has no AGENTS.md (off by default). */
@@ -948,6 +983,10 @@ export async function loadConfigWithProvenance(
       object.decisions && typeof object.decisions === "object" && !Array.isArray(object.decisions)
         ? (object.decisions as Record<string, unknown>)
         : {};
+    const semanticRaw =
+      object.semantic && typeof object.semantic === "object" && !Array.isArray(object.semantic)
+        ? (object.semantic as Record<string, unknown>)
+        : {};
     const webRaw =
       object.web && typeof object.web === "object" && !Array.isArray(object.web)
         ? (object.web as Record<string, unknown>)
@@ -970,6 +1009,7 @@ export async function loadConfigWithProvenance(
       ...GLOBAL_ONLY_DECISIONS.filter((key) => key in decisionsRaw).map(
         (key) => `decisions.${key}`,
       ),
+      ...GLOBAL_ONLY_SEMANTIC.filter((key) => key in semanticRaw).map((key) => `semantic.${key}`),
       ...GLOBAL_ONLY_WEB.filter((key) => key in webRaw).map((key) => `web.${key}`),
       ...GLOBAL_ONLY_DOCUMENTS.filter((key) => key in documentsRaw).map(
         (key) => `documents.${key}`,
@@ -1089,6 +1129,16 @@ export async function loadConfigWithProvenance(
           ...selected.config.decisions,
           provider: global.config.decisions.provider,
           telemetry: global.config.decisions.telemetry,
+        };
+        continue;
+      }
+      if (key === "semantic") {
+        // `embedding` and `store` are global-only: a repository cannot choose which providers
+        // receive the text it indexes; the rest follows the selected layer.
+        overlaid.semantic = {
+          ...selected.config.semantic,
+          embedding: global.config.semantic.embedding,
+          store: global.config.semantic.store,
         };
         continue;
       }
@@ -1276,6 +1326,7 @@ const SETTABLE_SECTIONS = {
   limits: configObjectSchema.shape.limits.removeDefault(),
   pluginHooks: configObjectSchema.shape.pluginHooks.removeDefault(),
   decisions: configObjectSchema.shape.decisions.removeDefault(),
+  semantic: configObjectSchema.shape.semantic.removeDefault(),
   tui: configObjectSchema.shape.tui.removeDefault(),
   websearch: configObjectSchema.shape.websearch.removeDefault(),
   agents: configObjectSchema.shape.agents.removeDefault(),
@@ -1340,6 +1391,15 @@ const SETTABLE_KEYS = {
   "forge.javascript.enabled": FORGE_JAVASCRIPT.shape.enabled,
   "forge.guides.enabled": FORGE_GUIDES.shape.enabled,
 } as const satisfies Record<string, z.ZodTypeAny>;
+/**
+ * Keys the host persists on behalf of a plugin's confirmed activation (spec 029). They are NOT
+ * user-settable through the settings surfaces: only `setConfigValue` writes them.
+ */
+const ACTIVATION_KEYS = {
+  "semantic.embedding": SETTABLE_SECTIONS.semantic.shape.embedding,
+  "semantic.store": SETTABLE_SECTIONS.semantic.shape.store,
+} as const;
+export type ActivationConfigKey = keyof typeof ACTIVATION_KEYS;
 export type SettableSettingKey = keyof typeof SETTABLE_KEYS;
 export function isSettableSettingKey(key: string): key is SettableSettingKey {
   return Object.prototype.hasOwnProperty.call(SETTABLE_KEYS, key);
@@ -1389,10 +1449,13 @@ export function settableSettings(): SettableSettingInfo[] {
  * caller is responsible for applying the change to the running process (see `application.ts`).
  */
 export async function setConfigValue(input: {
-  key: SettableSettingKey;
+  key: SettableSettingKey | ActivationConfigKey;
   value: unknown;
 }): Promise<string> {
-  const validator = SETTABLE_KEYS[input.key];
+  const validator =
+    input.key in SETTABLE_KEYS
+      ? SETTABLE_KEYS[input.key as SettableSettingKey]
+      : ACTIVATION_KEYS[input.key as ActivationConfigKey];
   if (!validator) throw new Error(`Unknown setting key: ${input.key}`);
   const parsed = validator.safeParse(input.value);
   if (!parsed.success) {

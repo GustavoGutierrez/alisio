@@ -442,6 +442,66 @@ setup(api) {
   global, de como máximo 8 KB, y una instantánea tomada en `setup`: cambiarlo requiere reiniciar. No
   guarde secretos ahí.
 
+### Proveedores y consumidores de búsqueda semántica {#semantic-search}
+
+`api.semantic` y `context.semantic` son **opcionales**: un núcleo anterior los omite, así que
+detéctelos por presencia y siga funcionando sin ellos. El núcleo define dos puertos independientes y
+un servicio que los compone; **no incluye ningún motor** (ni base de datos vectorial, ni runtime de
+inferencia, ni modelo). La búsqueda semántica existe solo cuando el usuario instala un plugin que la
+ofrece.
+
+```ts
+// Consumer: index and search text without knowing the engine.
+async execute(input, context) {
+  const semantic = context.semantic;
+  if (!semantic?.available()) return fallbackToFullTextSearch(input); // e.g. SQLite FTS5
+  await semantic.index("notes", [{ id: "n1", text: "Quarterly budget review" }]);
+  const matches = await semantic.trySearch("notes", input.query, { topK: 5, minScore: 0.3 });
+  return matches ?? fallbackToFullTextSearch(input); // null: infrastructure problem
+}
+
+// Provider: register the ports (registering never activates them).
+setup(api) {
+  api.semantic?.registerEmbedding({
+    id: "my-embed",
+    name: "My embeddings",
+    modelId: () => "my-org/my-model@q8", // changes whenever the vectors stop being comparable
+    dimensions: () => 384,
+    async embed(texts, { kind, signal }) {
+      // `kind` is "query" or "document": apply the model's own prefixes here.
+      return runModel(texts, kind, signal); // one Float32Array per text, same order
+    },
+  });
+  api.semantic?.registerStore(myVectorStore); // a `VectorStoreProvider`
+}
+```
+
+- **La activación es del usuario.** `semantic.embedding` y `semantic.store` en la configuración
+  **global** eligen los proveedores activos (vea [`semantic`](/es/configuration#semantic)); una
+  configuración de proyecto no puede. Un proveedor puede ofrecer un paso de configuración iniciado por
+  el usuario que llame a `api.semantic?.activate?.({ embedding, store })`: el host pregunta una vez,
+  guarda los ids globalmente, nunca sobrescribe otro proveedor configurado y devuelve
+  `needs_confirmation` cuando no hay a quién preguntar (headless).
+- **Las colecciones tienen espacio de nombres por plugin.** El host guarda
+  `<pluginId>/<collection>` y `collections()` lista solo las suyas, sin el prefijo. Evita colisiones
+  accidentales; **no es aislamiento**: los plugins son código de confianza en proceso.
+- **Los modelos se vigilan.** Cada colección recuerda el `modelId` y las `dimensions` con que se
+  creó. Si el usuario cambia de modelo, `index` y `search` rechazan con `model_mismatch` o
+  `dimension_mismatch`: borre la colección e indexe de nuevo desde su propio texto fuente, porque solo
+  usted lo conserva. `trySearch` devuelve `null` en ese caso para que pueda recurrir a otra vía.
+- **Los límites se comprueban antes de llamar a ningún proveedor** y fallan con `invalid_request`:
+  1..256 textos por `embed` (hasta 32768 caracteres cada uno), hasta 1000 documentos por `index`,
+  `topK` 1..100, ids de registro `^[A-Za-z0-9._:-]{1,128}$`, nombres de colección
+  `^[a-z0-9][a-z0-9_-]{0,63}$`, metadatos de hasta 8 KiB con valores escalares y filtros de igualdad
+  sobre hasta 16 claves de primer nivel.
+- **Las llamadas al proveedor están acotadas.** Cada llamada recibe un `AbortSignal` y un tiempo límite
+  (`semantic.embedTimeoutMs`, `semantic.queryTimeoutMs`); un agotamiento es `timeout`, el aborto del
+  llamador se propaga como aborto y cualquier fallo del proveedor es un `provider_error` cuyo mensaje
+  no contiene rutas ni texto del usuario.
+- `minScore` depende del modelo: las puntuaciones coseno no son comparables entre modelos.
+- `/semantic` (solo lectura, en todas las superficies) muestra los proveedores registrados y activos,
+  el modelo, las dimensiones y el `health()` de cada proveedor (límite de 1 segundo).
+
 ### Verificadores de Proof {#proof-verifiers}
 
 Un plugin puede aportar un verificador para los criterios de aceptación de [Proof](/proof). El

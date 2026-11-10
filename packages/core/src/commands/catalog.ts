@@ -32,6 +32,11 @@ import type { McpServerInfo } from "../mcp/connector.ts";
 import type { PromptTemplate } from "../resources/prompts.ts";
 import type { SkillCatalogEntry } from "../resources/skills.ts";
 import {
+  formatSemanticReport,
+  type SemanticConfig,
+  type SemanticService,
+} from "../semantic/index.ts";
+import {
   formatSideQuestion,
   SIDE_QUESTION_DESCRIPTION,
   SIDE_QUESTION_USAGE,
@@ -70,7 +75,10 @@ export interface CommandHost {
   config?: {
     agents: { active?: string; effort?: string };
     decisions?: Pick<DecisionsConfig, "timeoutMs" | "minConfidence" | "telemetry">;
+    semantic?: Pick<SemanticConfig, "embedTimeoutMs" | "queryTimeoutMs">;
   };
+  /** Semantic search ports (`/semantic`). */
+  semantic?: { service: Pick<SemanticService, "status"> };
   /** Decision Intelligence (`/decisions`, and the `/stats` section). */
   decisions?: {
     service: Pick<DecisionService, "status">;
@@ -168,6 +176,18 @@ const HANDLERS: Record<string, Handler> = {
         process: processView,
       }),
       data: { status, session, process: processView },
+    };
+  },
+  async semantic(_args, ctx, host) {
+    const semantic = host.semantic;
+    if (!semantic) return { text: "Semantic search is unavailable here", tone: "notice" };
+    const status = await semantic.service.status(ctx.signal);
+    return {
+      text: formatSemanticReport(
+        status,
+        host.config?.semantic ?? { embedTimeoutMs: 0, queryTimeoutMs: 0 },
+      ),
+      data: { status },
     };
   },
   async tools(_args, _ctx, host) {

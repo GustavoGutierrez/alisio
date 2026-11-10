@@ -4803,3 +4803,34 @@ Estado: **hecho, sin commit.** Las acciones de una app con efecto `write` o `pro
 Contrato: aviso «Plugin · App quiere escribir archivos (acción)» (campo aditivo `PendingApproval.app`, `input` vacío: nunca aparecen entradas); el tiempo de 30 s de la acción empieza al arrancar el handler; la espera de la aprobación tiene el tope del timeout del chat (10 min) y cancelar la petición la retira; la respuesta de error añade `effect` (`{type:"response", id, error:"not_permitted", effect}` y `error.details.effect` en HTTP). La web muestra el aviso sobre la app abierta (`appApproval`) y el flujo SSE vigila también la sesión de la app.
 
 Verificado: `tests/plugin-apps.test.ts` (núcleo), `tests/server-plugin-apps.test.ts` (aprobar una vez/sesión/denegar, solo lectura, tiempo, cancelación) y `tests/web-plugin-apps.test.ts` (modelo de aprobaciones y campo `effect`). Límite: la sesión de solo lectura de un agente (`plan`) no se consulta para las acciones de apps; sin cliente web abierto la aprobación se deniega tras la gracia de 30 s.
+
+## Semantic Ports (especificación 029)
+
+Estado: **hecho, sin commit ni publicar.** Contrato y servicio de búsqueda semántica compartida; el
+motor no se incluye (D2). SDK, todo aditivo y opcional: `EmbeddingProvider`, `VectorStoreProvider`,
+`SemanticApi`, `ToolSemantic`, `SemanticError` y sus códigos, `PluginAPI.semantic?` y
+`ToolContext.semantic?`. Núcleo (`packages/core/src/semantic/`): registro de dos catálogos (registrar no
+activa), validación de límites y filtros antes de llamar a cualquier proveedor, espacio de nombres
+`<pluginId>/<colección>`, servicio que compone embeddings y almacén (modelo y dimensiones por
+colección, tiempos límite con `AbortSignal`, aborto del llamador propagado, errores del proveedor
+envueltos en `provider_error` sin rutas ni causa), `activate()` mediado por el host con una pregunta,
+bloque de configuración global `semantic` (`embedding` y `store` solo globales; las capas de proyecto se
+ignoran con diagnóstico) y el comando de solo lectura `/semantic` (salud de cada proveedor con límite de
+1 s). `ToolContext.semantic` lo enlaza el host al plugin dueño de la herramienta y descarta el que
+traiga el contexto. La guardia D2 de `pnpm pack:check` falla, nombrando el paquete, si un paquete
+publicado del host declara `@lancedb/*`, `onnxruntime-*` o `@huggingface/transformers` en
+`dependencies`; el mismo script acepta ahora `README.es.md`, `cover.svg` e `icon.svg` en la raíz de
+los plugins y exige `cover.svg` e `icon.svg` en ellos.
+
+Verificado: pruebas de comportamiento con un doble en memoria de ambos puertos (`tests/fixtures/memory-semantic.ts`)
+en `tests/semantic-*.test.ts`, `tests/plugin-host-semantic.test.ts` (incluye la activación persistida
+en el archivo global) y `tests/pack-check-guard.test.ts`. Sin captura de la Web: `/semantic` muestra
+texto en el cuadro de mensaje existente, sin cambio visual propio.
+
+Límites conocidos: sin un plugin proveedor la capacidad no existe (los consumidores recurren a otra vía
+con `available()` y `trySearch`); los espacios de nombres evitan colisiones accidentales y no son
+aislamiento entre plugins (código de confianza en proceso); cambiar de modelo invalida las colecciones
+y reindexar es tarea del consumidor, que es quien conserva el texto fuente (el host solo detecta
+`model_mismatch` / `dimension_mismatch`); `minScore` depende del modelo; el texto de `/semantic` es solo
+en inglés (como `/decisions`); `embedTimeoutMs` también acota las escrituras masivas (`upsert`); no se
+probó ningún proveedor real (LanceDB, ONNX): eso es el Anexo A, en `alisio-plugins`.

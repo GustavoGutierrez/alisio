@@ -91,6 +91,7 @@ import { BlobStore } from "./runtime/blobs.ts";
 import { isPathSpec } from "./runtime/modules.ts";
 import { findWorkspace, workspaceKey } from "./runtime/paths.ts";
 import { SQLiteStore } from "./runtime/store.ts";
+import { SemanticRegistry, SemanticService } from "./semantic/index.ts";
 import { ChildSessions } from "./sessions/children.ts";
 import { SideQuestions } from "./sessions/side-questions.ts";
 import { registerGoalTools } from "./tools/goal.ts";
@@ -381,6 +382,12 @@ export async function createApplication(options: AppOptions = {}) {
       // `lastLifecycleError` in the service status.
       lifecycle: { timeoutMs: () => config.pluginHooks.timeoutMs },
     }),
+    semanticRegistry = new SemanticRegistry(),
+    // Read per call: `updateSetting("semantic.*")` mutates `config.semantic`.
+    semanticService = new SemanticService({
+      registry: semanticRegistry,
+      config: () => config.semantic,
+    }),
     mcp = new McpConnector(
       config.mcp.servers,
       registry,
@@ -409,6 +416,24 @@ export async function createApplication(options: AppOptions = {}) {
         await setConfigValue({ key: "decisions.provider", value: providerId });
         config.decisions = { ...config.decisions, provider: providerId };
         decisionService.syncActive();
+      },
+    },
+  });
+  // Semantic search ports (spec 029): providers register here, the global config activates them.
+  plugins.setSemantic({
+    registry: semanticRegistry,
+    service: semanticService,
+    activation: {
+      config: () => config.semantic,
+      persist: async (ids) => {
+        if (options.readOnly) throw new Error("Settings changes are unavailable under --read-only");
+        // One atomic global write per key; the live config only changes after each succeeded.
+        for (const kind of ["embedding", "store"] as const) {
+          const id = ids[kind];
+          if (!id) continue;
+          await setConfigValue({ key: `semantic.${kind}`, value: id });
+          config.semantic = { ...config.semantic, [kind]: id };
+        }
       },
     },
   });
@@ -1552,6 +1577,8 @@ export async function createApplication(options: AppOptions = {}) {
       registry,
       /** Decision Intelligence: the provider catalog, the service and in-memory metrics. */
       decisions: { registry: decisionRegistry, service: decisionService, metrics: decisionMetrics },
+      /** Semantic search ports (spec 029): the provider catalogs and the composing service. */
+      semantic: { registry: semanticRegistry, service: semanticService },
       context,
       skills,
       /** Path- and content-safe metadata for the interactive skills manager. */

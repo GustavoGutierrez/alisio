@@ -769,6 +769,14 @@ export {
 export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
 export { crc32, writeZip, type ZipEntry, type ZipSink } from "./runtime/zip.ts";
+export {
+  DEFAULT_SEMANTIC_CONFIG,
+  formatSemanticReport,
+  type SemanticConfig,
+  SemanticRegistry,
+  SemanticService,
+  type SemanticStatus,
+} from "./semantic/index.ts";
 export { ChildSessions, type ChildSessionsOptions } from "./sessions/children.ts";
 export {
   formatSideQuestion,

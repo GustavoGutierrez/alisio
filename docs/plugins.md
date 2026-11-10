@@ -430,6 +430,64 @@ setup(api) {
   global configuration (see [`pluginOverrides`](/configuration#plugins)). It is global only, at most
   8 KB, and a snapshot taken at `setup`: changing it needs a restart. Do not keep secrets there.
 
+### Semantic search providers and consumers {#semantic-search}
+
+`api.semantic` and `context.semantic` are **optional**: a core that predates them leaves them out,
+so feature-detect and keep working without them. The core defines two independent ports and a
+service that composes them; it ships **no engine** (no vector database, no inference runtime, no
+model). Semantic search exists only when the user installs a plugin that provides one.
+
+```ts
+// Consumer: index and search text without knowing the engine.
+async execute(input, context) {
+  const semantic = context.semantic;
+  if (!semantic?.available()) return fallbackToFullTextSearch(input); // e.g. SQLite FTS5
+  await semantic.index("notes", [{ id: "n1", text: "Quarterly budget review" }]);
+  const matches = await semantic.trySearch("notes", input.query, { topK: 5, minScore: 0.3 });
+  return matches ?? fallbackToFullTextSearch(input); // null: infrastructure problem
+}
+
+// Provider: register the ports (registering never activates them).
+setup(api) {
+  api.semantic?.registerEmbedding({
+    id: "my-embed",
+    name: "My embeddings",
+    modelId: () => "my-org/my-model@q8", // changes whenever the vectors stop being comparable
+    dimensions: () => 384,
+    async embed(texts, { kind, signal }) {
+      // `kind` is "query" or "document": apply the model's own prefixes here.
+      return runModel(texts, kind, signal); // one Float32Array per text, same order
+    },
+  });
+  api.semantic?.registerStore(myVectorStore); // a `VectorStoreProvider`
+}
+```
+
+- **Activation is the user's.** `semantic.embedding` and `semantic.store` in the **global**
+  configuration pick the active providers (see [`semantic`](/configuration#semantic)); a project
+  config cannot. A provider may offer a user-initiated setup step that calls
+  `api.semantic?.activate?.({ embedding, store })`: the host asks once, saves the ids globally,
+  never overwrites another configured provider, and resolves `needs_confirmation` when nobody can
+  be asked (headless).
+- **Collections are namespaced per plugin.** The host stores `<pluginId>/<collection>`, and
+  `collections()` lists only your own, without the prefix. This prevents accidental collisions; it
+  is **not isolation**: plugins are trusted in-process code.
+- **Models are tracked.** Each collection remembers the `modelId` and `dimensions` it was built
+  with. After the user changes the model, `index` and `search` reject with `model_mismatch` or
+  `dimension_mismatch`: drop the collection and index again from your own source text, because only
+  you still have it. `trySearch` resolves `null` in that case so you can fall back.
+- **Limits are checked before any provider runs** and fail with `invalid_request`: 1..256 texts per
+  `embed` (at most 32768 characters each), up to 1000 documents per `index`, `topK` 1..100, record
+  ids `^[A-Za-z0-9._:-]{1,128}$`, collection names `^[a-z0-9][a-z0-9_-]{0,63}$`, metadata of at most
+  8 KiB with scalar values, and filters that are equality on at most 16 top-level keys.
+- **Provider calls are bounded.** Each call gets an `AbortSignal` and a time limit
+  (`semantic.embedTimeoutMs`, `semantic.queryTimeoutMs`); a timeout is `timeout`, an abort by the
+  caller is propagated as the abort, and any provider failure is a `provider_error` whose message
+  contains no paths and no user text.
+- `minScore` depends on the model: cosine scores are not comparable across models.
+- `/semantic` (read-only, every surface) shows the registered and active providers, the model,
+  the dimensions and each provider's `health()` (1 second limit).
+
 ### Proof verifiers {#proof-verifiers}
 
 A plugin can contribute a verifier for [Proof](/proof) acceptance criteria. The member is

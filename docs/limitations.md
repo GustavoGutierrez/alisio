@@ -649,3 +649,17 @@ not revoke an already open port or cancel jobs the plugin started; a promise tim
 CPU-bound handlers; actions that ask in the chat (write, process) ask the same way through the approval dialog, and are rejected when denied, unanswered or forbidden by a read-only session; the approval was verified with server and store tests plus one browser run, not on Windows or macOS; there is
 no generic job API, service broker or browser SDK, and apps have no deep links or declarative
 navigation.
+
+## Semantic Ports (spec 029)
+
+The SDK defines two optional ports (`EmbeddingProvider`, `VectorStoreProvider`) and the core a
+service that composes them (`api.semantic`, `context.semantic`, the global `semantic` key and the
+read-only `/semantic` command). Verified: unit and boundary tests with an in-memory double of both
+ports (namespacing, model and dimension checks, limits, timeouts, abort, error wrapping, activation,
+global-only configuration, `/semantic` health timeout) and a `pack:check` guard that fails when a
+published host package lists `@lancedb/*`, `onnxruntime-*` or `@huggingface/transformers` in
+`dependencies`. Limits: Alisio ships no engine, so without a provider plugin semantic search does not
+exist (consumers fall back through `available()` and `trySearch`); namespaces prevent accidental
+collisions and are not isolation between plugins; changing the model invalidates existing
+collections and reindexing is the consumer's task because only it keeps the source text; `minScore`
+is not comparable across models; no real provider (LanceDB, ONNX) was exercised in this repository.

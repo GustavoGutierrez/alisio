@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { hostDependencyViolation } from "./pack-guards.ts";
 
 // The web UI ships inside @alisio/server: enforce its size budgets first (spec §10.7).
 execFileSync(
@@ -51,10 +52,13 @@ try {
         ? /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts)|dist\/web\/.+)$/
         : name === "core"
           ? /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts)|assets\/documents\/.+\.(woff2|css|json|txt))$/
-          : /^package\/(package\.json|README\.md|LICENSE|dist\/.+\.(js|d\.ts))$/;
+          : /^package\/(package\.json|README\.md|README\.es\.md|LICENSE|cover\.svg|icon\.svg|dist\/.+\.(js|d\.ts))$/;
     for (const file of files) assert.match(file, allowed, `${name}: unexpected file ${file}`);
     for (const required of ["package/package.json", "package/README.md", "package/LICENSE"])
       assert.ok(files.includes(required), `${name}: missing ${required}`);
+    // D2 (spec 029): the host never ships a vector store or an inference runtime.
+    if (!name.startsWith("plugin-"))
+      assert.equal(hostDependencyViolation(manifest.name, manifest), undefined);
     const text = JSON.stringify(manifest);
     assert.doesNotMatch(text, /workspace:/, `${name}: workspace protocol leaked`);
     assert.doesNotMatch(text, /alisio-source|\.\/src\//, `${name}: source export leaked`);
@@ -72,6 +76,9 @@ try {
       ])
         assert.ok(files.includes(required), `core: missing ${required}`);
     }
+    if (name.startsWith("plugin-"))
+      for (const required of ["package/cover.svg", "package/icon.svg"])
+        assert.ok(files.includes(required), `${name}: missing ${required}`);
     if (name === "cli") assert.equal(manifest.bin?.alisio, "./dist/main.js");
     const size = statSync(path).size;
     const unpacked = execFileSync("tar", ["-tzvf", path])

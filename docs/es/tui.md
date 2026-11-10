@@ -98,6 +98,7 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto, detalles de plugins y, cuando hubo decisiones, una sección de [Decision Intelligence](/es/decision-intelligence#stats-section) |
 | `/context` | El [informe de contexto](/es/context#context-report): qué lleva la siguiente petición, los segmentos que el Context Governor fija o elide y por qué, y los recuentos de invariantes; con el governor en `off` dice que no se mide nada |
 | `/decisions` | Estado de [Decision Intelligence](/es/decision-intelligence#decisions-command): proveedor y salud, circuito, tiempo límite y métricas de la sesión y del proceso |
+| `/semantic` | Estado de la búsqueda semántica (solo lectura): proveedores registrados y activos, modelo, dimensiones y salud del proveedor. Vea [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search) |
 | `/clear` (`/new`) | Inicia una sesión nueva con el modelo actual |
 | `/sessions` | Sesiones recientes del workspace |
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |

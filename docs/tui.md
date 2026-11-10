@@ -95,6 +95,7 @@ description, and `/resume` suggests matching session IDs.
 | `/stats` | Tokens (input, output, cached), turns, calls and errors per tool, duration, models, context, plugin details and, when decisions happened, a [Decision Intelligence](/decision-intelligence#stats-section) section |
 | `/context` | The [context report](/context#context-report): what the next request carries, the segments the Context Governor pins or elides and why, and the invariant counts; with the governor `off` it says nothing is measured |
 | `/decisions` | [Decision Intelligence](/decision-intelligence#decisions-command) status: provider and health, circuit, timeout, and metrics of the session and the process |
+| `/semantic` | Semantic search status (read-only): registered and active providers, model, dimensions and provider health. See [Semantic search providers and consumers](/plugins#semantic-search) |
 | `/clear` (`/new`) | Start a new session with the current model |
 | `/sessions` | Recent sessions of the workspace |
 | `/resume <id>` | Resume by ID or prefix; without an argument, shows a picker |

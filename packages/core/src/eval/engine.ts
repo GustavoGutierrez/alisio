@@ -168,6 +168,8 @@ export const CONFIG_HASH_COVERAGE = {
   agents: "excluded",
   web: "excluded",
   documents: "excluded",
+  // Which semantic providers run is a machine choice, not an eval variable.
+  semantic: "excluded",
 } as const satisfies Record<keyof Config, "hashed" | "excluded">;
 
 export interface ConfigHashExtras {

@@ -179,6 +179,12 @@ export const BUILTIN_COMMANDS: readonly BuiltinCommand[] = [
     execution: "core",
   },
   {
+    name: "semantic",
+    description: "Show semantic search status: providers, active model and provider health",
+    surfaces: ALL,
+    execution: "core",
+  },
+  {
     name: "exit",
     description: "Exit Alisio",
     aliases: ["quit"],

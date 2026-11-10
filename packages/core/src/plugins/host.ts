@@ -40,6 +40,9 @@ import { exists, readJson } from "../runtime/fs.ts";
 import { resolvePluginSpec } from "../runtime/modules.ts";
 import { inside } from "../runtime/paths.ts";
 import { openDatabase } from "../runtime/sqlite.ts";
+import { requestSemanticActivation } from "../semantic/activation.ts";
+import type { SemanticRegistry } from "../semantic/registry.ts";
+import type { SemanticConfig, SemanticService } from "../semantic/service.ts";
 import { PluginAppRegistry } from "./apps.ts";
 export const pluginPrefix = (id: string) =>
   `p_${createHash("sha256").update(id).digest("hex").slice(0, 10)}`;
@@ -260,6 +263,29 @@ export class PluginHost implements RunnerExtensions {
   }) {
     this.decisionsImpl = decisions;
   }
+  /**
+   * Binds semantic search (spec 029). Plugins activated afterwards see `api.semantic` and
+   * `ToolContext.semantic`; without it both are absent, like on a core that predates it.
+   */
+  setSemantic(semantic: {
+    registry: SemanticRegistry;
+    service: SemanticService;
+    /** Enables the optional `api.semantic.activate`: live config and global atomic persistence. */
+    activation?: {
+      config: () => SemanticConfig;
+      persist: (ids: { embedding?: string; store?: string }) => Promise<void>;
+    };
+  }) {
+    this.semanticImpl = semantic;
+  }
+  private semanticImpl?: {
+    registry: SemanticRegistry;
+    service: SemanticService;
+    activation?: {
+      config: () => SemanticConfig;
+      persist: (ids: { embedding?: string; store?: string }) => Promise<void>;
+    };
+  };
   private decisionsImpl?: {
     registry: DecisionRegistry;
     service: DecisionService;
@@ -388,9 +414,16 @@ export class PluginHost implements RunnerExtensions {
                     const {
                       artifacts: _artifacts,
                       approveInstall: _install,
+                      semantic: _semantic,
                       ...narrowed
                     } = context;
-                    return tool.execute(input, narrowed);
+                    // Semantic collections are namespaced by the plugin that owns the tool.
+                    return tool.execute(input, {
+                      ...narrowed,
+                      ...(this.semanticImpl
+                        ? { semantic: this.semanticImpl.service.forPlugin(plugin.id) }
+                        : {}),
+                    });
                   },
                 };
               })();
@@ -569,6 +602,39 @@ export class PluginHost implements RunnerExtensions {
                   }
                 : {}),
             }))(this.decisionsImpl) satisfies PluginAPI["decisions"],
+          }
+        : {}),
+      ...(this.semanticImpl
+        ? {
+            semantic: (({ registry, service, activation }) => ({
+              ...service.forPlugin(plugin.id),
+              // Registering never activates: `semantic.embedding` / `semantic.store` do.
+              registerEmbedding: (provider) =>
+                track(registry.registerEmbedding(plugin.id, provider)),
+              registerStore: (provider) => track(registry.registerStore(plugin.id, provider)),
+              ...(activation
+                ? {
+                    // Only providers THIS plugin registered; the user confirms once.
+                    activate: (
+                      ids: { embedding?: string; store?: string },
+                      options?: DecisionActivationOptions,
+                    ) =>
+                      requestSemanticActivation(
+                        plugin.id,
+                        ids,
+                        {
+                          registry,
+                          config: activation.config,
+                          interactive: () => !!this.uiImpl,
+                          ask: (request) =>
+                            this.uiImpl ? this.uiImpl.askQuestions(request) : Promise.resolve({}),
+                          persist: activation.persist,
+                        },
+                        options,
+                      ),
+                  }
+                : {}),
+            }))(this.semanticImpl) satisfies PluginAPI["semantic"],
           }
         : {}),
       compaction: {

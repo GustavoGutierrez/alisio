@@ -97,6 +97,7 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000, "disposeTimeoutMs": 2000 },
   "decisions": { "enabled": true, "provider": null, "timeoutMs": 1500, "minConfidence": 0.6, "telemetry": true },
+  "semantic": { "enabled": true, "embedding": null, "store": null, "embedTimeoutMs": 60000, "queryTimeoutMs": 5000 },
   "plugins": [],
   "skills": [],
   "additionalDirectories": [],
@@ -264,6 +265,29 @@ con un aviso (`alisio doctor` lista lo ignorado).
 Las cinco claves se pueden cambiar desde **Ajustes → General** en [`alisio serve`](/es/web) (etiquetas
 en inglés y español) y se leen en vivo: la siguiente decisión usa el nuevo valor. No figuran en el
 menú `/settings` de la terminal; allí edite el archivo.
+## `semantic` {#semantic}
+
+Puertos de búsqueda semántica (vea [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search)):
+los plugins pueden registrar un proveedor de embeddings y un almacén vectorial, y otros plugins
+indexan y buscan texto a través de ellos. Alisio no incluye ningún motor. `embedding` y `store` son
+**solo globales**: se leen de `<config home>/config.json`, y una capa de proyecto o `--config` que las
+defina se ignora con un aviso (`alisio doctor` lista lo ignorado).
+
+| Campo | Por defecto | Descripción |
+| --- | --- | --- |
+| `enabled` | `true` | `false` desactiva la búsqueda semántica: las operaciones fallan con `unavailable` y `trySearch` devuelve `null` |
+| `embedding` | `null` | ID del proveedor de embeddings que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un plugin nunca lo activa. Solo global |
+| `store` | `null` | ID del almacén vectorial que se usa, mismo patrón; `null` significa ninguno. Solo global |
+| `embedTimeoutMs` | `60000` | Límite de una llamada de embeddings o de una escritura masiva (1000–300000 ms); el primer embedding local puede cargar un modelo |
+| `queryTimeoutMs` | `5000` | Límite de una consulta o de una llamada sobre colecciones (100–60000 ms) |
+
+```json
+{ "semantic": { "embedding": "my-embed", "store": "my-store" } }
+```
+
+`embedding` y `store` también los puede guardar el paso de configuración de un plugin tras confirmar
+una pregunta. No aparecen en los menús de ajustes; edite el archivo o confirme la pregunta del plugin.
+
 ## `plugins`
 
 Lista de plugins de confianza: rutas (resueltas respecto al archivo de configuración) o nombres de

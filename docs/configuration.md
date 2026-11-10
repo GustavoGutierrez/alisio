@@ -102,6 +102,7 @@ the file that defined the value.
   "builtinPlugins": { "memory": { "enabled": true } },
   "pluginHooks": { "timeoutMs": 15000, "sessionEndTimeoutMs": 10000, "disposeTimeoutMs": 2000 },
   "decisions": { "enabled": true, "provider": null, "timeoutMs": 1500, "minConfidence": 0.6, "telemetry": true },
+  "semantic": { "enabled": true, "embedding": null, "store": null, "embedTimeoutMs": 60000, "queryTimeoutMs": 5000 },
   "plugins": [],
   "skills": [],
   "additionalDirectories": [],
@@ -263,6 +264,29 @@ notice (`alisio doctor` lists what was ignored).
 All five keys are settable from **Settings → General** in [`alisio serve`](/web) (labels in English
 and Spanish) and are read live: the next decision uses the new value. They are not listed in the
 terminal `/settings` menu; edit the file there.
+## `semantic` {#semantic}
+
+Semantic search ports (see [Semantic search providers and consumers](/plugins#semantic-search)):
+plugins can register an embedding provider and a vector store, and other plugins index and search
+text through them. Alisio ships no engine. `embedding` and `store` are **global only**: they are
+read from `<config home>/config.json`, and a project or `--config` layer that sets them is ignored
+with a notice (`alisio doctor` lists what was ignored).
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | `false` turns semantic search off: operations fail with `unavailable` and `trySearch` resolves `null` |
+| `embedding` | `null` | ID of the embedding provider to use (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` means none. Installing a plugin never activates it. Global only |
+| `store` | `null` | ID of the vector store to use, same pattern; `null` means none. Global only |
+| `embedTimeoutMs` | `60000` | Limit of one embedding call or bulk write (1000–300000 ms); the first local embedding may load a model |
+| `queryTimeoutMs` | `5000` | Limit of one query or collection call (100–60000 ms) |
+
+```json
+{ "semantic": { "embedding": "my-embed", "store": "my-store" } }
+```
+
+`embedding` and `store` can also be saved by a plugin's setup step after you confirm one question.
+They are not listed in the settings menus; edit the file or confirm the plugin's question.
+
 ## `plugins`
 
 A list of trusted plugins: paths (resolved relative to the configuration file) or npm package names.

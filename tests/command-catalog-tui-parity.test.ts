@@ -101,6 +101,11 @@ const LEGACY_COMMANDS = [
     name: "decisions",
     description: "Show Decision Intelligence status, provider health and session metrics",
   },
+  // Added with Semantic Ports (specs/029).
+  {
+    name: "semantic",
+    description: "Show semantic search status: providers, active model and provider health",
+  },
   { name: "exit", description: "Exit Alisio", aliases: ["quit"] },
 ];
 const legacyResolve = (name: string) => {

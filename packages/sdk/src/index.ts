@@ -589,6 +589,11 @@ export interface ToolContext {
    * host does not offer it: feature-detect with `context.decisions?.tryDecide(...)`.
    */
   decisions?: ToolDecisions;
+  /**
+   * Semantic search (specs/029), bound by the host to the plugin that owns the tool. Absent when
+   * the host does not offer it: feature-detect `context.semantic?.available()`.
+   */
+  semantic?: ToolSemantic;
 }
 export interface ToolDefinition {
   name: string;
@@ -2050,6 +2055,175 @@ export class DecisionRequestError extends TypeError {
     this.name = "DecisionRequestError";
   }
 }
+// ---- Semantic Ports (spec 029). Additive; feature-detect `api.semantic`. ----
+/**
+ * Why a semantic operation failed. Hosts match on `code`/`name` (not `instanceof`), because a
+ * plugin may bundle its own copy of this package.
+ * - `unavailable`: disabled, no active provider, or the configured id is not registered.
+ * - `invalid_request`: a limit or shape rule was violated (no provider was called).
+ * - `model_mismatch` / `dimension_mismatch`: the collection was built with another model or size.
+ * - `timeout`: a provider call exceeded the host limit.
+ * - `provider_error`: the provider threw or returned malformed data (the cause is not exposed).
+ */
+export type SemanticErrorCode =
+  | "unavailable"
+  | "invalid_request"
+  | "model_mismatch"
+  | "dimension_mismatch"
+  | "timeout"
+  | "provider_error";
+export class SemanticError extends Error {
+  constructor(
+    readonly code: SemanticErrorCode,
+    message?: string,
+  ) {
+    super(message ?? code);
+    this.name = "SemanticError";
+  }
+}
+export type EmbeddingKind = "query" | "document";
+export type SemanticHealth = {
+  status: "ready" | "starting" | "unavailable";
+  detail?: string;
+};
+export type SemanticMetadata = Record<string, string | number | boolean>;
+/** Port 1: turns text into vectors. Registered by a plugin; activated by `semantic.embedding`. */
+export interface EmbeddingProvider {
+  /** `^[a-z0-9][a-z0-9.-]{0,63}$` */
+  id: string;
+  name: string;
+  /** Stable model identity, e.g. `intfloat/multilingual-e5-small@onnx-q8`. A change means reindex. */
+  modelId(): string;
+  /** 1..4096. */
+  dimensions(): number;
+  /** Applies the model's own prefixes for `kind`; one vector per input, same order. */
+  embed(
+    texts: string[],
+    options: { kind: EmbeddingKind; signal: AbortSignal },
+  ): Promise<Float32Array[]>;
+  /** Only called by `/semantic` (own 1 s timeout). `starting` covers model download/first load. */
+  health?(signal?: AbortSignal): Promise<SemanticHealth>;
+}
+export interface VectorRecord {
+  id: string;
+  vector: Float32Array;
+  text?: string;
+  metadata?: SemanticMetadata;
+}
+export interface VectorMatch {
+  id: string;
+  /** Cosine similarity in [-1, 1]; higher is closer. */
+  score: number;
+  text?: string;
+  metadata?: SemanticMetadata;
+}
+export interface CollectionInfo {
+  name: string;
+  modelId: string;
+  dimensions: number;
+  count: number;
+}
+/** Port 2: stores and searches vectors. The host passes already-namespaced collection names. */
+export interface VectorStoreProvider {
+  id: string;
+  name: string;
+  ensureCollection(
+    name: string,
+    spec: { modelId: string; dimensions: number },
+    signal: AbortSignal,
+  ): Promise<CollectionInfo>;
+  getCollection(name: string, signal: AbortSignal): Promise<CollectionInfo | null>;
+  listCollections(prefix: string, signal: AbortSignal): Promise<CollectionInfo[]>;
+  dropCollection(name: string, signal: AbortSignal): Promise<void>;
+  upsert(name: string, records: VectorRecord[], signal: AbortSignal): Promise<void>;
+  delete(name: string, ids: string[], signal: AbortSignal): Promise<void>;
+  query(
+    name: string,
+    vector: Float32Array,
+    options: { topK: number; filter?: SemanticMetadata; signal: AbortSignal },
+  ): Promise<VectorMatch[]>;
+  health?(signal?: AbortSignal): Promise<SemanticHealth>;
+}
+export interface SemanticDocument {
+  id: string;
+  text: string;
+  metadata?: SemanticMetadata;
+  /** Store the text so `search` returns it. Default true. */
+  keepText?: boolean;
+}
+export interface SemanticSearchOptions {
+  /** 1..100, default 8. */
+  topK?: number;
+  /** Equality on top-level metadata keys (logical AND, at most 16 keys). */
+  filter?: SemanticMetadata;
+  /** Results below this score are dropped (the scale depends on the model). */
+  minScore?: number;
+  signal?: AbortSignal;
+}
+/**
+ * Consumer side of semantic search, bound by the host to the calling plugin: collection names
+ * are namespaced per plugin. Absent on a host that predates it: feature-detect `ctx.semantic?`.
+ */
+export interface ToolSemantic {
+  /** True when semantic is enabled and both configured providers are registered. */
+  available(): boolean;
+  active(): {
+    embedding: { id: string; modelId: string; dimensions: number } | null;
+    store: { id: string } | null;
+  };
+  embed(
+    texts: string[],
+    options: { kind: EmbeddingKind; signal?: AbortSignal },
+  ): Promise<Float32Array[]>;
+  /** Embeds as `document` and upserts; creates the collection bound to the active model. */
+  index(
+    collection: string,
+    documents: SemanticDocument[],
+    options?: { signal?: AbortSignal },
+  ): Promise<void>;
+  /** Embeds as `query` and queries; an unknown collection yields no matches. */
+  search(
+    collection: string,
+    query: string,
+    options?: SemanticSearchOptions,
+  ): Promise<VectorMatch[]>;
+  /**
+   * Like `search` but resolves null for every infrastructure problem (unavailable, timeout,
+   * provider error, model/dimension mismatch). Still throws `invalid_request` and rethrows an
+   * abort requested by the caller.
+   */
+  trySearch(
+    collection: string,
+    query: string,
+    options?: SemanticSearchOptions,
+  ): Promise<VectorMatch[] | null>;
+  remove(collection: string, ids: string[], options?: { signal?: AbortSignal }): Promise<void>;
+  /** Collections of this plugin, names without the namespace prefix. */
+  collections(options?: { signal?: AbortSignal }): Promise<CollectionInfo[]>;
+  drop(collection: string, options?: { signal?: AbortSignal }): Promise<void>;
+}
+/** Same states as `DecisionActivationStatus`; `active` lists the configured ids of the request. */
+export interface SemanticActivationResult {
+  status: DecisionActivationStatus;
+  active?: { embedding?: string; store?: string };
+  /** Short, path-free explanation for `unavailable`. */
+  message?: string;
+}
+export interface SemanticApi extends ToolSemantic {
+  /** Registers a provider (does NOT activate it; `semantic.embedding` in config does). */
+  registerEmbedding(provider: EmbeddingProvider): () => void;
+  registerStore(provider: VectorStoreProvider): () => void;
+  /**
+   * Optional, feature-detected. Asks the HOST to make providers THIS plugin registered the active
+   * ones: one confirmation question, global config only, never overwrites another configured
+   * provider. Resolves `needs_confirmation` where nobody can be asked. Never throws for expected
+   * outcomes.
+   */
+  activate?(
+    ids: { embedding?: string; store?: string },
+    options?: DecisionActivationOptions,
+  ): Promise<SemanticActivationResult>;
+}
 export interface DecisionStats {
   requests: number;
   completed: number;
@@ -2165,6 +2339,11 @@ export interface PluginAPI {
    * that predates it: feature-detect with `api.decisions?.registerProvider(...)`.
    */
   decisions?: DecisionsApi;
+  /**
+   * Semantic search (specs/029): register an `EmbeddingProvider` / `VectorStoreProvider` or
+   * consume. Absent on a core that predates it: feature-detect `api.semantic?.registerStore(...)`.
+   */
+  semantic?: SemanticApi;
   /**
    * Per-plugin directories resolved by the host and created with mode 0700. Absent on a core that
    * predates it.

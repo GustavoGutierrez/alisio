@@ -3513,6 +3513,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
         case "tools":
         case "context":
         case "decisions":
+        case "semantic":
         case "sessions": {
           // Text-identical core handlers (parity-tested): output comes from the CommandCatalog.
           const result = await commandCatalog.execute(name, parsed.args, { sessionId: session });
