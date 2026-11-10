@@ -1,8 +1,13 @@
 name: CI
-# Runs once per push to main only (no develop or pull request runs).
+# Runs once per push to main only (no develop or pull request runs). Docs-only and spec-only pushes
+# skip it (the Docs site workflow builds and checks the docs), and a newer push cancels an older run.
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "specs/**", "*.md"]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
