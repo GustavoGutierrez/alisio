@@ -6,6 +6,24 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.7",
+      date: "2026-11-10",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "Plugins can offer semantic search (embeddings and a vector store) through `api.semantic`, and other plugins and their tools can use it to index and search text by meaning. Alisio ships no search engine itself: install a provider plugin to enable it. `/semantic` shows the registered and active providers and their health.",
+          ],
+        },
+        {
+          title: "Improved",
+          items: [
+            "The built-in plugins (memory, subagents and OpenAI compatible) now ship an icon, a cover image and a README in Spanish.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.6",
       date: "2026-11-09",
       sections: [

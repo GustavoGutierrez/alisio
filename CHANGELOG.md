@@ -4,6 +4,22 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.7] - 2026-11-10
+
+Semantic search for plugins.
+
+### Added
+
+- Plugins can offer semantic search (embeddings and a vector store) through `api.semantic`, and
+  other plugins and their tools can use it to index and search text by meaning. Alisio ships no
+  search engine itself: install a provider plugin to enable it. `/semantic` shows the registered
+  and active providers and their health.
+
+### Improved
+
+- The built-in plugins (memory, subagents and OpenAI compatible) now ship an icon, a cover image and
+  a README in Spanish.
+
 ## [0.11.6] - 2026-11-09
 
 Plugin apps can write and run processes after approval; cleaner PDFs.
