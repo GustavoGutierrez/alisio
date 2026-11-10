@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="img" aria-label="Subagents delegation for Alisio">
+<defs><linearGradient id="subagents-grad-1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60e0f9"/><stop offset="1" stop-color="#01a5f7"/></linearGradient></defs>
+<rect width="1600" height="900" fill="#0b1220"/>
+<path d="M880 0v900M1120 0v900M1360 0v900M800 180h800M800 420h800M800 660h800" stroke="#192e43" stroke-width="2"/>
+<path d="M190 190v30M190 220 130 290M190 220l60 70" stroke="#01a5f7" stroke-width="14" stroke-linecap="round" fill="none"/>
+<circle cx="190" cy="165" r="34" fill="url(#subagents-grad-1)"/>
+<circle cx="125" cy="315" r="28" fill="#60e0f9"/>
+<circle cx="255" cy="315" r="28" fill="#60e0f9"/>
+<text x="95" y="475" font-family="Arial,sans-serif" font-size="122" font-weight="700" fill="#e7eef7">Subagents</text>
+<text x="103" y="550" font-family="Arial,sans-serif" font-size="31" fill="#a8b7c8">Delegate work to focused child agents.</text>
+<text x="103" y="675" font-family="Arial,sans-serif" font-size="26" fill="#60e0f9">A built-in plugin for Alisio</text>
+<path d="M1160 270v110M1160 380 960 540M1160 380v160M1160 380l200 160M960 540v70M1360 540v70" stroke="#01a5f7" stroke-width="20" stroke-linecap="round" fill="none"/>
+<circle cx="1160" cy="215" r="75" fill="url(#subagents-grad-1)"/>
+<circle cx="960" cy="570" r="60" fill="#60e0f9"/>
+<circle cx="1160" cy="570" r="60" fill="#60e0f9"/>
+<circle cx="1360" cy="570" r="60" fill="#60e0f9"/>
+<circle cx="960" cy="690" r="34" fill="#263c52"/><circle cx="1360" cy="690" r="34" fill="#263c52"/>
+</svg>

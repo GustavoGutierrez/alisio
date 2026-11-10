@@ -15,7 +15,10 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "cover.svg",
+    "icon.svg",
+    "README.es.md"
   ],
   "sideEffects": false,
   "engines": {
@@ -42,5 +45,8 @@
       }
     },
     "registry": "https://registry.npmjs.com/"
+  },
+  "alisio": {
+    "icon": "icon.svg"
   }
 }

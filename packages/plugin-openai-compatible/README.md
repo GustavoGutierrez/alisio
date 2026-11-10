@@ -1,3 +1,5 @@
+> Spanish version: [README.es.md](README.es.md). Both files must be updated together.
+
 # @alisio/plugin-openai-compatible
 
 **The built-in OpenAI-compatible model provider for [Alisio](https://github.com/GustavoGutierrez/alisio).**

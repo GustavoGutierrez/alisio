@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="OpenAI-compatible endpoint">
+<defs><linearGradient id="openai-compatible-grad-1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60e0f9"/><stop offset="1" stop-color="#01a5f7"/></linearGradient></defs>
+<rect width="512" height="512" rx="112" fill="#0b1220"/>
+<path d="M176 80v110M336 80v110" stroke="#60e0f9" stroke-width="44" stroke-linecap="round"/>
+<path d="M112 176h288v76a144 144 0 0 1-288 0z" fill="url(#openai-compatible-grad-1)"/>
+<path d="M256 340v92" stroke="#01a5f7" stroke-width="44" stroke-linecap="round"/>
+</svg>

@@ -1,3 +1,5 @@
+> Spanish version: [README.es.md](README.es.md). Both files must be updated together.
+
 # @alisio/plugin-subagents
 
 **Subagents for [Alisio](https://github.com/GustavoGutierrez/alisio).** The parent agent delegates

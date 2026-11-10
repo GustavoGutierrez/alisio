@@ -1,3 +1,5 @@
+> Spanish version: [README.es.md](README.es.md). Both files must be updated together.
+
 # @alisio/plugin-memory
 
 **Engram-style persistent memory for [Alisio](https://github.com/GustavoGutierrez/alisio).** The
