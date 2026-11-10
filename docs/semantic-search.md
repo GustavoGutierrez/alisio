@@ -34,11 +34,11 @@ Semantic search is a building block. Plugins that use it can offer:
 
 ## Current status {#status}
 
-::: warning Alisio 0.11.7 ships the capability, not an engine
-No semantic search provider is bundled, so out of the box semantic search is not available. The
-first provider, `@alisio/plugin-semantic`, is planned in the alisio-plugins repository and is not
-published yet. It is intended to use a local LanceDB store with the multilingual-e5-small model and
-to include a Notebook app to chat with your sources. Until a provider exists and you activate it,
+::: tip Install a provider to turn it on
+Alisio 0.11.7 ships the capability, not the engine, so the app stays small. The provider is
+`@alisio/plugin-semantic` from the alisio-plugins catalog: it runs a local LanceDB store with the
+multilingual-e5-small model and includes a Notebook app to chat with your sources, with cited
+answers. Install it like any other plugin and activate it when it asks. Without an active provider,
 plugins fall back to their own behavior, for example keyword search.
 :::
 

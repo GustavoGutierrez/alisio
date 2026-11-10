@@ -37,12 +37,12 @@ La búsqueda semántica es un bloque de construcción. Los plugins que la usan p
 
 ## Estado actual {#status}
 
-::: warning Alisio 0.11.7 incluye la capacidad, no un motor
-No se incluye ningún proveedor de búsqueda semántica, así que de fábrica la búsqueda semántica no
-está disponible. El primer proveedor, `@alisio/plugin-semantic`, está planificado en el repositorio
-alisio-plugins y aún no está publicado. Está pensado para usar un almacén local LanceDB con el modelo
-multilingual-e5-small e incluir una app Notebook para conversar con tus fuentes. Hasta que exista un
-proveedor y lo actives, los plugins recurren a su propio comportamiento, por ejemplo la búsqueda por
+::: tip Instala un proveedor para activarla
+Alisio 0.11.7 incluye la capacidad, no el motor, para que la aplicación siga siendo ligera. El
+proveedor es `@alisio/plugin-semantic`, del catálogo de alisio-plugins: usa un almacén local LanceDB
+con el modelo multilingual-e5-small e incluye una app Notebook para conversar con tus fuentes, con
+respuestas citadas. Instálalo como cualquier otro plugin y actívalo cuando te lo pida. Sin un
+proveedor activo, los plugins recurren a su propio comportamiento, por ejemplo la búsqueda por
 palabras clave.
 :::
 
