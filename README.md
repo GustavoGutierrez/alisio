@@ -97,11 +97,11 @@ yet**. See the [desktop app guide](docs/desktop.md).
 ## Install
 
 The main way to install Alisio is the **desktop app**. Download it from the
-[Alisio 0.11.6 release](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.6):
+[Alisio 0.11.7 release](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.7):
 
-- Windows 10/11 (x64): [`Alisio-Setup-0.11.6-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-Setup-0.11.6-x64.exe)
-- macOS Apple Silicon: [`Alisio-0.11.6-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-arm64.dmg) · Intel: [`Alisio-0.11.6-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-x64.dmg)
-- Linux: [`Alisio-0.11.6-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.6-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.6/Alisio-0.11.6-amd64.deb)
+- Windows 10/11 (x64): [`Alisio-Setup-0.11.7-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.7/Alisio-Setup-0.11.7-x64.exe)
+- macOS Apple Silicon: [`Alisio-0.11.7-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.7/Alisio-0.11.7-arm64.dmg) · Intel: [`Alisio-0.11.7-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.7/Alisio-0.11.7-x64.dmg)
+- Linux: [`Alisio-0.11.7-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.7/Alisio-0.11.7-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.7-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.7/Alisio-0.11.7-amd64.deb)
 
 The installers are not signed, so Windows SmartScreen and macOS Gatekeeper ask for one extra step the
 first time (see [docs/desktop.md](docs/desktop.md)).
