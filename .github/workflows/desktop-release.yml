@@ -10,6 +10,8 @@ name: Desktop release
 on:
   push:
     branches: [main]
+    # Only a version bump can create a new release, so other pushes to main start no run.
+    paths: ["apps/desktop/package.json"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:

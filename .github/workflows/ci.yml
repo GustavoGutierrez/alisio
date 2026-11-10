@@ -1,8 +1,8 @@
 name: CI
+# Runs once per push to main only (no develop or pull request runs).
 on:
   push:
-    branches: [main, develop]
-  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
