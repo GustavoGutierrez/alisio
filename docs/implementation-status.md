@@ -861,6 +861,32 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   ahora incluye el motivo saneado (sin rutas absolutas, acotado). Límites: el hijo NO es un sandbox
   (privilegios del usuario, puede usar la red); la verificación tras instalar se omite cuando el
   código ya estaba cargado en el proceso (requiere reinicio) o no hay espacio abierto.
+- Aplicaciones de plugin en el creador (0.11.x): la skill incluida explica cuándo una petición pide
+  una pantalla en el menú Aplicaciones (`api.apps.register`, nunca `api.views`), con un ejemplo
+  completo (HTML autocontenido con `nonce="__ALISIO_NONCE__"`, protocolo `alisio.app.connect` por
+  `MessagePort`, acciones con `inputSchema`, tema claro/oscuro, idioma del mensaje de conexión,
+  datos en `api.state`); el arnés de pruebas de la plantilla añade `apps`, `appHtml` y
+  `callAppAction`. `plugin_project` exige `needsApp` (booleano) al marcar `plan` como hecho y lo
+  guarda en el registro. La puerta en el proceso hijo, por cada aplicación: carga `html()` (falla si
+  lanza, está vacío o supera 8 MiB), revisa de forma estática que todo `<script>` ejecutable lleve
+  la marca del nonce, que no haya `<script src>` ni hojas de estilo enlazadas ni manejadores en
+  línea (`onclick=`, `javascript:`), llama una vez a cada acción `read`/`write` por el camino real
+  del host (`PluginAppRegistry.run`, política con escritura concedida, estado temporal; se omiten
+  las `process` y las que no admiten entrada mínima) y falla si lanza, agota el tiempo o devuelve
+  datos no JSON; tras cerrar, no puede quedar ninguna aplicación registrada. La build exige una
+  prueba que nombre cada acción y falla con `app_missing` si `needsApp` es `true` y no hay
+  aplicación; los registros antiguos sin el campo no fallan. Códigos nuevos: `app_missing`,
+  `app_html_failed`, `app_html_too_large`, `app_script_nonce_missing`, `app_external_resource`,
+  `app_inline_handler`, `app_action_failed`, `app_action_untested`, `app_dispose_failed`, con
+  mensajes EN/ES en la web. El menú Aplicaciones de la barra lateral se vuelve a leer en cuanto
+  llega `catalog_changed` con alcance `plugins` (instalar, actualizar, desinstalar, activar o
+  desactivar desde el creador, Ajustes → Plugins o el catálogo), además del sondeo de 15 s; el
+  servidor ya recicla los espacios abiertos tras cada instalación, verificado con
+  `GET /api/workspaces/:wid/apps` justo después de instalar desde archivo y desde el creador
+  (`tests/server-plugin-local.test.ts`, `tests/server-plugin-creator.test.ts`). Límites: la
+  revisión del HTML es estática y conservadora (no ejecuta la página ni prueba el protocolo en un
+  navegador); que la petición pida una pantalla lo decide el modelo, no Alisio; si el código del
+  plugin ya estaba cargado, la aplicación nueva aparece tras reiniciar.
 
 ### Preguntar al usuario (ask_user_question)
 
@@ -4800,6 +4826,29 @@ Verificado (Linux x64): pruebas unitarias de protocolo, plan de spawn, navegaci�
 No verificado: Windows y macOS (`nsis`, `dmg`; en Windows los enlaces simbólicos del árbol `node_modules` copiado), ejecución del `AppImage` y la instalación del `deb`, el diálogo de reintento, el comportamiento bajo Wayland frente a X11 y el trabajo real de los workers (Python, Forja) dentro de Electron más allá del entorno heredado.
 
 Límites conocidos: instalar plugins npm desde la aplicación requiere `npm` en el `PATH`; las funciones de Git requieren `git`; el selector de carpetas es el nativo del servidor (herramienta del sistema), no un diálogo de Electron; `defaultGlobalRoots()` (`runtime/modules.ts`) deriva un prefijo de `process.execPath`, que dentro de Electron no corresponde a ningún gestor de paquetes, así que los plugins globales no se descubren; no hay actualización automática ni firma de código (Windows SmartScreen y macOS Gatekeeper avisan). Icono: se reutiliza `docs/assets/logo.png` (360 px) ampliado a 512 px; conviene un icono vectorial propio.
+
+## Aplicación de escritorio: puerto estable y host que no queda huérfano
+
+Puerto: el host guardaba sus preferencias por visor en el `localStorage` del origen
+`http://127.0.0.1:<puerto>`, y con `port: 0` cada inicio usaba un origen nuevo y vacío (se perdían
+las carpetas plegadas y las demás preferencias). Ahora el proceso principal pasa
+`ALISIO_DESKTOP_PORT_FILE` (`<userData>/host-port.json`) y el host (`src/port-state.ts`) prueba
+primero el puerto guardado en `127.0.0.1`; con `EADDRINUSE`/`EACCES` usa el puerto 0 solo para ese
+inicio y conserva el guardado; escribe el puerto solo cuando no había uno válido (primer inicio,
+archivo ausente, corrupto o fuera de rango; escritura atómica 0600; un fallo al escribir no impide
+arrancar). El token de lanzamiento y las comprobaciones de Host y Origin no cambian (se calculan con
+el puerto enlazado). Límite: si el puerto guardado está ocupado, las preferencias del origen anterior
+no se ven durante ese inicio; vuelven cuando un inicio posterior recupera el puerto.
+
+Huérfanos: un host con `ALISIO_SUPERVISED=1` sin canal IPC (por ejemplo lanzado por un script con
+`ELECTRON_RUN_AS_NODE=1`) nunca recibía `disconnect` y seguía escuchando en loopback. Ahora se niega a
+arrancar (mensaje de error y salida 1); un host sin supervisión y sin IPC (inicio manual) se detiene
+cuando su proceso padre original desaparece (sondeo de `process.ppid` cada 3 s con un temporizador
+`unref`). Verificado: `tests/desktop-host-lifecycle.test.ts` (reutilizar, puerto ocupado con
+respaldo sin sobrescribir, archivo ausente/corrupto, cambio de padre) y
+`tests/desktop-host-integration.test.ts` (mismo puerto en dos inicios del host real, negativa sin
+IPC). No verificado: la aplicación gráfica real y el instalador con el puerto estable; Windows y
+macOS.
 
 ## Aplicación de escritorio: flujo de publicación y árbol sin enlaces simbólicos
 

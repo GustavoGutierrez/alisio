@@ -103,11 +103,14 @@ de confianza. Consulte [Escribir plugins](/es/plugins).
 ## Cómo funciona
 
 El proceso principal de Electron inicia un host en segundo plano: el servidor de Alisio ejecutándose
-sobre el binario de Electron como Node simple (`ELECTRON_RUN_AS_NODE=1`), enlazado a `127.0.0.1` en
-un puerto libre. El host comunica su URL de lanzamiento al proceso principal, que la abre en un
+sobre el binario de Electron como Node simple (`ELECTRON_RUN_AS_NODE=1`), enlazado a `127.0.0.1`. El
+primer inicio toma un puerto libre y lo guarda (`host-port.json` en la carpeta de datos de usuario de
+la aplicación); los siguientes lo reutilizan, así que la ventana conserva la misma dirección y tus
+preferencias de la interfaz (carpetas plegadas, paneles, «Mostrar todo») sobreviven a un reinicio. El host comunica su URL de lanzamiento al proceso principal, que la abre en un
 `BrowserWindow` aislado (aislamiento de contexto activado, integración de Node desactivada, sin
 script de precarga). Los enlaces que salen de la aplicación se abren en el navegador
-predeterminado. Al cerrar, el host se detiene.
+predeterminado. Al cerrar, el host se detiene; un host que pierde la aplicación (su canal IPC) se
+detiene solo, y uno iniciado para la aplicación sin ese canal se niega a arrancar.
 
 Nada más cambia: Alisio sigue usando `node:sqlite`, sin módulos nativos, y las mismas comprobaciones
 de Host, Origin y token de lanzamiento que `alisio serve`.
@@ -169,3 +172,5 @@ los instaladores no pueden depender de ellos.
   aplicación de macOS solo tiene firma ad hoc y no está notarizada.
 - La aplicación no se ha verificado en Windows ni en macOS; solo se probaron compilaciones de
   Linux.
+- Si otro programa ocupa el puerto guardado, ese inicio usa otro puerto y tus preferencias de la
+  interfaz no se ven hasta que un inicio posterior recupere el puerto guardado (no se pierden).

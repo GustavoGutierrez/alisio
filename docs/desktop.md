@@ -95,10 +95,14 @@ with your user privileges and are not sandboxed, so install only code you trust.
 ## How it works
 
 The Electron main process starts a background host: the Alisio server running on the Electron binary
-as plain Node (`ELECTRON_RUN_AS_NODE=1`), bound to `127.0.0.1` on a free port. The host reports its
+as plain Node (`ELECTRON_RUN_AS_NODE=1`), bound to `127.0.0.1`. The first launch takes a free port
+and saves it (`host-port.json` in the app's user data folder); later launches reuse it, so the
+window keeps the same address and your interface preferences (collapsed folders, panels, "Show
+all") survive a restart. The host reports its
 launch URL to the main process, which opens it in a sandboxed `BrowserWindow` (context isolation on,
 Node integration off, no preload script). Links that leave the app are opened in your default
-browser. When you quit, the host is stopped.
+browser. When you quit, the host is stopped; a host that loses the app (its IPC channel) stops on its
+own, and one started for the app without that channel refuses to start.
 
 Nothing else changes: Alisio still uses `node:sqlite`, with no native addons, and the same Host,
 Origin and launch-token checks as `alisio serve`.
@@ -156,3 +160,5 @@ that tree contains any symlink, because installers cannot rely on them.
 - The installers are not signed: Windows SmartScreen and macOS Gatekeeper show warnings. The macOS
   app is only ad-hoc signed and not notarized.
 - The app has not been verified on Windows or macOS; only Linux builds were exercised.
+- If another program holds the saved port, that launch uses a different port and your interface
+  preferences are not visible until a later launch gets the saved port back (they are not lost).

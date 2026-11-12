@@ -15,6 +15,11 @@ export interface HostSpawnInput {
   npmCli?: string;
   /** Printing offered by main (spec 026 D7): the root of its jobs and the engine version. */
   print?: { root: string; version: string };
+  /**
+   * File under the app's user data where the host keeps its loopback port, so every launch has
+   * the same origin and the web UI keeps its per-viewer preferences (see `port-state.ts`).
+   */
+  portFile?: string;
 }
 
 /**
@@ -46,12 +51,14 @@ export interface HostSpawn {
  * How to start the host. The Electron binary only behaves as Node when `ELECTRON_RUN_AS_NODE=1`,
  * so that variable is always forced; the rest of the environment is inherited so the host sees the
  * same config homes, PATH and credentials as the CLI would. `ALISIO_SUPERVISED=1` lets the UI
- * restart the host, and `ALISIO_NPM_CLI` points plugin installs at the bundled npm.
+ * restart the host, `ALISIO_NPM_CLI` points plugin installs at the bundled npm and
+ * `ALISIO_DESKTOP_PORT_FILE` keeps the loopback port stable across launches.
  */
 export function buildHostSpawn(input: HostSpawnInput): HostSpawn {
   const {
     ALISIO_PRINT_ROOT: _root,
     ALISIO_PRINT_VERSION: _version,
+    ALISIO_DESKTOP_PORT_FILE: _portFile,
     ...inherited
   } = input.parentEnv;
   return {
@@ -67,6 +74,7 @@ export function buildHostSpawn(input: HostSpawnInput): HostSpawn {
       // A supervisor (this app) respawns the host when it exits asking for a restart.
       ALISIO_SUPERVISED: "1",
       ...(input.npmCli ? { ALISIO_NPM_CLI: input.npmCli } : {}),
+      ...(input.portFile ? { ALISIO_DESKTOP_PORT_FILE: input.portFile } : {}),
       ...(input.print
         ? { ALISIO_PRINT_ROOT: input.print.root, ALISIO_PRINT_VERSION: input.print.version }
         : {}),

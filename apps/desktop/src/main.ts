@@ -43,6 +43,8 @@ async function startHost(): Promise<RunningHost> {
     execPath: process.execPath,
     hostEntry: paths.hostEntry,
     parentEnv: process.env,
+    // The same loopback port every launch: the web UI keeps its preferences (same origin).
+    portFile: join(app.getPath("userData"), "host-port.json"),
     // Packaged builds bundle npm: the app installs plugins without a system Node.js.
     ...(existsSync(resolveNpmCli(paths.runtimeDir))
       ? { npmCli: resolveNpmCli(paths.runtimeDir) }

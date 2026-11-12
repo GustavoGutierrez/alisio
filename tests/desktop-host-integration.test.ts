@@ -186,6 +186,46 @@ describe("desktop host process", () => {
     ).rejects.toThrow(/exited/);
   });
 
+  it("keeps the same loopback port across launches when the app gives it a port file", async () => {
+    const env = hermeticEnv();
+    const portFile = join(env.HOME as string, "user-data", "host-port.json");
+    const plan = buildHostSpawn({
+      execPath: process.execPath,
+      hostEntry: HOST_SOURCE,
+      parentEnv: env,
+      nodeArgs: NODE_ARGS,
+      portFile,
+    });
+    running = await launchHost({ ...plan, timeoutMs: 20_000 });
+    const first = new URL(running.launchUrl).port;
+    expect(await running.stop()).toBe(0);
+    running = await launchHost({ ...plan, timeoutMs: 20_000 });
+    expect(new URL(running.launchUrl).port).toBe(first);
+  });
+
+  it("refuses to start supervised without an IPC channel instead of becoming an orphan", async () => {
+    const plan = buildHostSpawn({
+      execPath: process.execPath,
+      hostEntry: HOST_SOURCE,
+      parentEnv: hermeticEnv(),
+      nodeArgs: NODE_ARGS,
+    });
+    const child = spawn(plan.command, plan.args, {
+      env: plan.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    const code = await new Promise<number | null>((r) => child.once("exit", (c) => r(c)));
+    expect(code).toBe(1);
+    expect(JSON.parse(out.trim().split("\n").at(-1) ?? "{}")).toMatchObject({
+      type: "error",
+      message: expect.stringMatching(/IPC/),
+    });
+  });
+
   it("falls back to a JSON stdout line when there is no IPC channel", async () => {
     const child = spawn(process.execPath, [...NODE_ARGS, HOST_SOURCE], {
       env: hermeticEnv(),
@@ -243,12 +283,13 @@ describe("desktop host output redaction (OA-AC-57)", () => {
     });
     const child = spawn(plan.command, plan.args, {
       env: plan.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      // Supervised hosts need the app's IPC channel (or they refuse to start).
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
     try {
       const out: string[] = [];
-      child.stdout.on("data", (chunk: Buffer) => out.push(chunk.toString()));
-      child.stderr.on("data", (chunk: Buffer) => lines.push(chunk.toString()));
+      child.stdout?.on("data", (chunk: Buffer) => out.push(chunk.toString()));
+      child.stderr?.on("data", (chunk: Buffer) => lines.push(chunk.toString()));
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("no leak lines")), 20_000);
         const check = setInterval(() => {

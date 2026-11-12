@@ -27,6 +27,22 @@ describe("desktop spawn plan", () => {
     });
   });
 
+  it("passes the app's port file to the host only when given, never the parent's", () => {
+    const plan = buildHostSpawn({
+      execPath: "e",
+      hostEntry: "h.js",
+      parentEnv: { ALISIO_DESKTOP_PORT_FILE: "/elsewhere" },
+      portFile: "/u/Alisio/host-port.json",
+    });
+    expect(plan.env.ALISIO_DESKTOP_PORT_FILE).toBe("/u/Alisio/host-port.json");
+    const without = buildHostSpawn({
+      execPath: "e",
+      hostEntry: "h.js",
+      parentEnv: { ALISIO_DESKTOP_PORT_FILE: "/elsewhere" },
+    });
+    expect(without.env.ALISIO_DESKTOP_PORT_FILE).toBeUndefined();
+  });
+
   it("forces ELECTRON_RUN_AS_NODE even when the parent set another value, and does not mutate it", () => {
     const parentEnv = { ELECTRON_RUN_AS_NODE: "0" };
     const plan = buildHostSpawn({ execPath: "e", hostEntry: "h.js", parentEnv });

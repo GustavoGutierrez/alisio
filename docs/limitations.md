@@ -402,6 +402,14 @@ SQL. Verified with Vitest and a visual run against `alisio serve` with a scripte
 verified live: a real-model build with its progress and approvals, the install job end to end,
 deleting a plugin and read-only mode. Plugins have no dependencies and no build step, and their
 quality depends on the model you choose.
+When the plan declares that the request needs a screen in the Apps menu, the build fails if the
+plugin registers no app; each app's page is checked statically (nonce scripts, no inline handlers,
+no outside scripts or stylesheets, at most 8 MiB), not run in a browser, and each `read`/`write`
+action is called once. Whether a request needs a screen is the model's judgment.
+
+On Alisio Desktop, interface preferences live in the browser storage of the host's loopback origin;
+the host reuses its saved port, but when another program holds it that launch uses another port and
+those preferences are not visible until a later launch gets the saved port back.
 
 ### Provider sign-in (contract, core, server API, Web UI and TUI, phases 1 to 4)
 

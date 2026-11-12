@@ -5,6 +5,8 @@
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { channelProblem, watchParent } from "./host-lifecycle.ts";
+import { listenOnPreferredPort } from "./port-state.ts";
 import { installOutputRedaction } from "./redact-output.ts";
 import { parseHostArgs } from "./spawn-plan.ts";
 
@@ -26,6 +28,9 @@ function desktopVersion(): string {
 const EARLY_JWT = /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g;
 
 async function main(): Promise<void> {
+  // Without the app's IPC channel a supervised host would never hear that the app quit.
+  const problem = channelProblem(process.env, !!process.send && process.connected);
+  if (problem) throw new Error(problem);
   // Nothing the host prints (server logs, plugins, libraries) may carry a token (specs/025 D26a).
   // The wrapper goes in before the slow imports so that nothing printed while they load escapes it;
   // no exact secret can be registered yet, so the JWT rule is all the early window needs.
@@ -53,21 +58,28 @@ async function main(): Promise<void> {
         })
       : undefined;
   const { webRoot } = parseHostArgs(process.argv.slice(2));
-  const server = await startServer({
-    host: "127.0.0.1",
-    port: 0,
-    // The window and this process share one machine by construction: sign-in methods may use a
-    // loopback listener without the "only if your browser is on this computer" caveat (D16).
-    localBrowser: true,
-    version: desktopVersion(),
-    defaultWorkspace: homedir(),
-    app: {
-      ...(await cliDefaults()),
-      // Alisio Desktop prints documents through Electron's Chromium (spec 026 D7).
-      ...(printEngine ? { documentEngines: () => [printEngine] } : {}),
-    },
-    ...(webRoot ? { webRoot } : {}),
-  });
+  const portFile = process.env.ALISIO_DESKTOP_PORT_FILE;
+  const defaults = await cliDefaults();
+  const start = (port: number) =>
+    startServer({
+      host: "127.0.0.1",
+      port,
+      // The window and this process share one machine by construction: sign-in methods may use a
+      // loopback listener without the "only if your browser is on this computer" caveat (D16).
+      localBrowser: true,
+      version: desktopVersion(),
+      defaultWorkspace: homedir(),
+      app: {
+        ...defaults,
+        // Alisio Desktop prints documents through Electron's Chromium (spec 026 D7).
+        ...(printEngine ? { documentEngines: () => [printEngine] } : {}),
+      },
+      ...(webRoot ? { webRoot } : {}),
+    });
+  // One stable origin across launches keeps the web UI's per-viewer preferences.
+  const server = portFile
+    ? await listenOnPreferredPort(portFile, start, (s) => s.port)
+    : await start(0);
   let stopping = false;
   const stop = () => {
     if (stopping) return;
@@ -83,6 +95,8 @@ async function main(): Promise<void> {
   process.on("SIGINT", stop);
   // The parent is gone (crash or quit): nobody can reach this server any more.
   process.on("disconnect", stop);
+  // Started without a channel (by hand or a script): stop when that parent goes away.
+  if (!process.send) watchParent({ ppid: () => process.ppid, onGone: stop });
   report({ type: "ready", launchUrl: server.launchUrl });
 }
 
