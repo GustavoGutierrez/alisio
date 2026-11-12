@@ -72,8 +72,75 @@ describe("plugin creator guidance on what the host enforces", () => {
       "tool_untested",
       "tests_too_few",
       "gate_unavailable",
+      "app_missing",
+      "app_html_failed",
+      "app_html_too_large",
+      "app_script_nonce_missing",
+      "app_external_resource",
+      "app_inline_handler",
+      "app_action_failed",
+      "app_action_untested",
+      "app_dispose_failed",
     ])
       expect(checklist).toContain(code);
+  });
+
+  it("routes a screen in the Apps menu to api.apps.register with the frame protocol", () => {
+    const apps = PLUGIN_CREATOR_SKILL_FILES["references/apps.md"] ?? "";
+    expect(skillMd).toContain("references/apps.md");
+    expect(skillMd).toMatch(/needsApp/);
+    expect(skillMd).toMatch(/api\.apps\.register/);
+    expect(apps).toMatch(/api\.views.*api\.apps|views.*apps/is);
+    for (const needle of [
+      'nonce="__ALISIO_NONCE__"',
+      "alisio.app.connect",
+      "event.ports[0]",
+      'type: "request"',
+      '"response"',
+      "inputSchema",
+      "prefers-color-scheme",
+      "api.state",
+      "callAppAction",
+    ])
+      expect(apps).toContain(needle);
+    expect(PLUGIN_CREATOR_SKILL_FILES["references/workflow.md"]).toMatch(/needsApp/);
+    const agent = resolveActiveAgent(activeAgentCatalog([]), PLUGIN_CREATOR_AGENT_ID);
+    const text = agentRunOptions(agent).instructions ?? "";
+    expect(text).toMatch(/api\.apps\.register/);
+    expect(text).toMatch(/needsApp/);
+  });
+
+  it("gives the template harness plugin apps: page, actions and their schema rules", async () => {
+    const home = await mkdtemp(join(tmpdir(), "alisio-creator-harness-apps-"));
+    const projects = new PluginCreatorProjects({ home, sdkRange: "^0.11.0" });
+    const project = await projects.create({ request: "A shopping list screen" });
+    const dir = projects.dir(project.id);
+    await writeFile(
+      join(dir, "test", "app.test.js"),
+      [
+        'import assert from "node:assert/strict";',
+        'import { test } from "node:test";',
+        'import { createFakeApi } from "./harness.js";',
+        "const plugin = { id: 'x', setup(api) { api.apps.register({ id: 'list', label: { en: 'List', es: 'Lista' }, html: () => '<p>hi</p>', actions: { add: { effect: 'write', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'], additionalProperties: false }, handler: (input) => ({ saved: input.name }) } } }); } };",
+        'test("app action runs through the harness", async () => {',
+        "  const fake = createFakeApi();",
+        "  await plugin.setup(fake.api);",
+        "  assert.deepEqual([...fake.apps.keys()], ['list']);",
+        "  assert.equal(await fake.appHtml('list'), '<p>hi</p>');",
+        "  assert.deepEqual(await fake.callAppAction('list', 'add', { name: 'milk' }), { saved: 'milk' });",
+        "  await assert.rejects(fake.callAppAction('list', 'missing', {}), /No action/);",
+        "});",
+        'test("app action schemas follow the host rules", () => {',
+        "  const fake = createFakeApi();",
+        "  assert.throws(() => fake.api.apps.register({ id: 'Bad', label: 'x', html: () => '' }), /app id/);",
+        "  assert.throws(() => fake.api.apps.register({ id: 'ok', label: 'x', html: () => '', actions: { a: { effect: 'read', inputSchema: { type: 'object', properties: { n: { type: ['string', 'number'] } } }, handler() {} } } }), /type arrays/);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    const run = await projects.runTests(project.id);
+    expect(run.output).not.toMatch(/not ok/);
+    expect(run.ok).toBe(true);
   });
 
   it("forbids the agent to call a failing plugin ready", () => {

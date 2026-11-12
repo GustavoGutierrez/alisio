@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type InstallRunner, inspectPluginTarball } from "@alisio/core";
 import type {
+  PluginAppInfo,
   PluginCreatorBuildResponse,
   PluginCreatorFile,
   PluginCreatorFileList,
@@ -18,6 +19,8 @@ interface NpmState {
   calls: string[][];
   /** Installs a plugin with this id whose tool schema the host rejects. */
   broken?: string;
+  /** Installs a loadable plugin with this id that registers an app. */
+  app?: string;
 }
 
 /** A fake npm: "installs" a tarball by writing its manifest and a loadable plugin. */
@@ -53,7 +56,12 @@ function fakeNpm(state: NpmState): InstallRunner {
     );
     manifest.dependencies[name] = `file:${relative(prefix, target).split("\\").join("/")}`;
     await writeFile(manifestPath, JSON.stringify(manifest));
-    if (state.broken)
+    if (state.app)
+      await writeFile(
+        join(dir, "index.js"),
+        `export default { id: ${JSON.stringify(state.app)}, version: ${JSON.stringify(info.version)}, apiVersion: 1, setup(api) { api.apps.register({ id: "shopping-list", label: { en: "Shopping list", es: "Lista de compras" }, html: () => "<p>ok</p>" }); } };\n`,
+      );
+    if (state.broken || state.app)
       await writeFile(
         join(dir, "package.json"),
         JSON.stringify({
@@ -332,6 +340,31 @@ describe("plugin creator routes: files, build, package, install, delete", () => 
     expect(res.status).toBe(409);
     expect(errorCode(res)).toBe("plugin_not_built");
     expect(npm.calls).toEqual([]);
+  });
+
+  it("lists the installed plugin's app in an open workspace right after the creator install", async () => {
+    const { t, npm } = await start();
+    const project = await create(t);
+    const wid = (await t.api.get("/api/workspaces")).json<Array<{ id: string }>>()[0]?.id ?? "";
+    expect((await t.api.get(`/api/workspaces/${wid}/apps`)).json<PluginAppInfo[]>()).toEqual([]);
+    expect((await t.api.post(`${BASE}/${project.id}/build`, {})).status).toBe(200);
+    npm.app = (
+      await t.api.get(`${BASE}/${project.id}`)
+    ).json<PluginCreatorProjectEntry>().project.pluginId;
+    const install = await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true });
+    const { jobId } = install.json<{ jobId: string }>();
+    const job = await until(async () => {
+      const view = (await t?.api.get(`/api/plugins/jobs/${jobId}`))?.json<JobView>();
+      return view?.done ? view : undefined;
+    }, 15_000);
+    expect(job?.error).toBeUndefined();
+    expect((await t.api.get(`/api/workspaces/${wid}/apps`)).json<PluginAppInfo[]>()).toEqual([
+      {
+        plugin: npm.app,
+        id: "shopping-list",
+        label: { en: "Shopping list", es: "Lista de compras" },
+      },
+    ]);
   });
 
   it("rolls back an install whose plugin does not start and reports why", async () => {

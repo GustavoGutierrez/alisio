@@ -41,7 +41,10 @@ export function registerPluginProjectTools(
       "(manifest, imports, size, tests present) with stable issue codes. action 'stats': files, " +
       "size, version, last build and detected tables. action 'progress': report a step to the " +
       `person (step: ${PLUGIN_CREATOR_STEPS.join(", ")}; status: ${STATUSES.join(", ")}; note: ` +
-      "one short plain sentence).",
+      "one short plain sentence). Marking step 'plan' done needs needsApp: true when the request " +
+      "asks for its own screen, window, page or panel in the Apps menu (the plugin must then " +
+      "register it with api.apps.register), false otherwise; a build fails when a declared app " +
+      "is missing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -49,6 +52,7 @@ export function registerPluginProjectTools(
         step: { type: "string", enum: [...PLUGIN_CREATOR_STEPS] },
         status: { type: "string", enum: [...STATUSES] },
         note: { type: "string", maxLength: 200 },
+        needsApp: { type: "boolean" },
       },
       required: ["action"],
       additionalProperties: false,
@@ -78,6 +82,7 @@ export function registerPluginProjectTools(
               bytes: files.bytes,
               lastBuild: project.lastBuild ?? null,
               tables: project.schema?.tables.map((t) => t.name) ?? [],
+              ...(typeof project.needsApp === "boolean" ? { needsApp: project.needsApp } : {}),
             }),
           );
         }
@@ -89,13 +94,30 @@ export function registerPluginProjectTools(
               `progress needs step (${PLUGIN_CREATOR_STEPS.join(", ")}) and status (${STATUSES.join(", ")})`,
               true,
             );
+          if (step === "plan" && status === "done") {
+            if (typeof input.needsApp !== "boolean")
+              return textResult(
+                "Marking the plan done needs needsApp: true when the request asks for its own screen in the Apps menu (register it with api.apps.register), false otherwise",
+                true,
+              );
+            await projects.declarePlan(projectId, { needsApp: input.needsApp });
+          }
           await projects.recordProgress(
             projectId,
             step,
             status,
             typeof input.note === "string" ? input.note : undefined,
           );
-          return textResult(JSON.stringify({ ok: true, step, status }));
+          return textResult(
+            JSON.stringify({
+              ok: true,
+              step,
+              status,
+              ...(typeof input.needsApp === "boolean" && step === "plan"
+                ? { needsApp: input.needsApp }
+                : {}),
+            }),
+          );
         }
         return textResult("action must be validate, stats or progress", true);
       } catch (error) {
@@ -110,7 +132,8 @@ export function registerPluginProjectTools(
       "Runs this plugin project's code. action 'test': node --test on test/*.test.js (scrubbed " +
       "environment, time limit, no install). action 'build': every delivery gate (validation, " +
       "syntax, tests, packaging, then Alisio's real host on an installed copy: activation, strict " +
-      "tool schemas, one smoke call per tool, dispose and reactivation, a test per tool) and the " +
+      "tool schemas, one smoke call per tool, each app's page and one call per app action, " +
+      "dispose and reactivation, a test per tool and per app action, the app the plan declared) and the " +
       "package (.tgz). A failed build lists the issues to fix. Not a sandbox: the code runs with " +
       "the user's privileges.",
     inputSchema: {

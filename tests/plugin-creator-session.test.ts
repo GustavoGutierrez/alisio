@@ -108,6 +108,33 @@ describe("creator workspace wiring", () => {
     expect(bad?.isError).toBe(true);
   });
 
+  it("plugin_project requires the plan to declare whether the request needs an app, and keeps it", async () => {
+    const { projects, project, open } = await setup();
+    const dir = projects.dir(project.id);
+    const tool = (await open(dir)).registry.get("plugin_project");
+    const undeclared = await tool?.execute(
+      { action: "progress", step: "plan", status: "done" },
+      context(dir),
+    );
+    expect(undeclared?.isError).toBe(true);
+    expect(undeclared?.content[0]).toMatchObject({ text: expect.stringContaining("needsApp") });
+    expect((await projects.get(project.id)).progress?.steps[0]?.status).not.toBe("done");
+    const declared = await tool?.execute(
+      { action: "progress", step: "plan", status: "done", needsApp: true },
+      context(dir),
+    );
+    expect(declared?.isError).toBeUndefined();
+    const record = await projects.get(project.id);
+    expect(record.needsApp).toBe(true);
+    expect(record.progress?.steps[0]?.status).toBe("done");
+    // A running plan step needs no declaration yet.
+    const running = await tool?.execute(
+      { action: "progress", step: "plan", status: "running" },
+      context(dir),
+    );
+    expect(running?.isError).toBeUndefined();
+  });
+
   it("plugin_project_run builds the package", async () => {
     const { projects, project, open } = await setup();
     const dir = projects.dir(project.id);

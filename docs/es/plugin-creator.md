@@ -44,6 +44,16 @@ ejecución: **Permitir** si confías en la petición; **Denegar** detiene ese pa
 solo mientras la página del creador está abierta; si sales de la página, la creación espera por ti.
 Ejecutar un complemento usa los permisos de tu usuario y no es un sandbox.
 
+### Una pantalla en el menú Aplicaciones
+
+Pide «su propia pantalla», «una ventana», «una página» o «una sección en el menú» y el complemento
+tendrá una aplicación de plugin: una entrada en el menú **Aplicaciones** de la barra lateral que abre
+una página completa (consulta [Aplicaciones de plugins](/es/plugins#plugin-apps)). El plan de Alisio
+registra que la petición necesita una pantalla, y la preparación falla con «Pediste una pantalla
+propia en el menú Aplicaciones, pero aún no la tiene» cuando el complemento no la añade. Justo
+después de **Instalar y activar**, **Actualizar**, desinstalar, o activar o desactivar el
+complemento, el menú **Aplicaciones** se actualiza sin recargar la página.
+
 ## Tu complemento
 
 Abre un complemento en **Mis complementos** para ver su estado (**Sin instalar**, **Instalado** o
@@ -150,7 +160,12 @@ Cada preparación comprueba el complemento empaquetado tal como Alisio lo usará
 una carpeta temporal y lo inicia con el host de complementos real de Alisio (con carpetas de ajustes
 y datos temporales), comprueba que se acepta cada herramienta, llama una vez a cada herramienta con
 una entrada mínima válida, lo cierra y lo vuelve a iniciar, y verifica que cada herramienta tenga
-una comprobación automática. **Instalar** y **Actualizar** siguen desactivados hasta que la última
+una comprobación automática. Cuando el complemento tiene una pantalla en el menú **Aplicaciones**, la
+preparación también abre su página una vez (debe cargar, ocupar menos de 8 MiB y usar solo lo que
+permite el marco de la aplicación: scripts con la marca del nonce, sin manejadores `onclick=` en
+línea ni archivos de fuera), pulsa una vez cada una de sus acciones con una entrada mínima válida, y
+verifica que cada acción tenga una comprobación automática y que la pantalla desaparezca al cerrar
+el complemento. **Instalar** y **Actualizar** siguen desactivados hasta que la última
 preparación pase todas las comprobaciones con los archivos tal como están ahora. Cuando una
 comprobación falla durante una preparación, Alisio lee los problemas y los corrige por su cuenta;
 tras unos pocos intentos fallidos se detiene y la página muestra **Intentar de nuevo**.
@@ -163,6 +178,12 @@ tras unos pocos intentos fallidos se detiene y la página muestra **Intentar de 
 | Una de sus herramientas falló cuando Alisio la probó | Una herramienta lanzó un error en lugar de responder |
 | Falla cuando Alisio lo cierra / No se puede iniciar una segunda vez | Cerrar o reiniciar el complemento falla |
 | Una de sus herramientas no tiene comprobación automática | Cada herramienta necesita su propia comprobación |
+| Pediste una pantalla propia en el menú Aplicaciones, pero aún no la tiene | El plan dijo que la petición necesita una pantalla y el complemento no añade ninguna |
+| Su pantalla del menú Aplicaciones no se abre / es demasiado grande para abrirse | Su página falló, estaba vacía o ocupa más de 8 MiB |
+| Una parte de su pantalla no funcionaría / Algunos botones de su pantalla no harían nada | Un script sin la marca del nonce, o un manejador `onclick=` en línea, que el marco de la aplicación bloquea |
+| Su pantalla intenta cargar archivos de fuera del complemento | La página carga un script o una hoja de estilos desde un archivo o una dirección en lugar de incluirlos |
+| Su pantalla falló cuando Alisio probó uno de sus botones / Algo que hace su pantalla no tiene comprobación automática | Una acción de la aplicación lanzó un error o no respondió con datos JSON, o no tiene su propia comprobación |
+| Su pantalla sigue abierta después de que Alisio cierra el complemento | La aplicación seguía registrada después de cerrar el complemento |
 | Alisio no pudo ejecutar sus comprobaciones de seguridad en este equipo | No es el complemento: actualiza o reinstala Alisio. Nada se instala sin las comprobaciones |
 
 ### Instalado, pero no pudo iniciarse

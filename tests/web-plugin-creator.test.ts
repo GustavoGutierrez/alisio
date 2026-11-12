@@ -199,6 +199,15 @@ describe("issueKey", () => {
       "tool_untested",
       "tests_too_few",
       "gate_unavailable",
+      "app_missing",
+      "app_html_failed",
+      "app_html_too_large",
+      "app_script_nonce_missing",
+      "app_external_resource",
+      "app_inline_handler",
+      "app_action_failed",
+      "app_action_untested",
+      "app_dispose_failed",
     ])
       expect(issueKey(code), code).toBe(code);
     expect(issueKey("brand_new_code")).toBeUndefined();

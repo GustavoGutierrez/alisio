@@ -154,6 +154,11 @@ export class PluginAppRegistry {
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
+  /** The registered definition of an app (the creator's gate reads its action names). */
+  definition(plugin: string, id: string): PluginAppDefinition | undefined {
+    return this.entries.get(`${plugin}:${id}`)?.app;
+  }
+
   has(plugin: string, id: string): boolean {
     return this.entries.has(`${plugin}:${id}`);
   }

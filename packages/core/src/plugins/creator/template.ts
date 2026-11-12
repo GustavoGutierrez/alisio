@@ -146,7 +146,7 @@ export default plugin;
 `;
 }
 
-const HARNESS_JS = `/**
+export const PLUGIN_HARNESS_JS = `/**
  * A tiny fake of the Alisio PluginAPI for node:test. It records what the plugin registers and
  * lets a test call a tool the way Alisio would. \`storage.sqlite()\` is a real in-memory SQLite
  * database (node:sqlite), so storage code is tested for real. Not part of the published package.
@@ -226,6 +226,7 @@ export function createFakeApi(init = {}) {
   const tools = new Map();
   const commands = new Map();
   const views = new Map();
+  const apps = new Map();
   const state = new Map();
   const databases = [];
   const noop = () => () => {};
@@ -250,6 +251,28 @@ export function createFakeApi(init = {}) {
       register(view) {
         views.set(view.id, view);
         return () => views.delete(view.id);
+      },
+    },
+    // A screen in the Apps menu. Checked like Alisio's host does (id, html, action schemas).
+    apps: {
+      register(app) {
+        if (!/^[a-z][a-z0-9-]{0,39}$/.test(app?.id ?? "")) throw new Error(\`Invalid app id: \${app?.id}\`);
+        if (apps.has(app.id)) throw new Error(\`App registered twice: \${app.id}\`);
+        if (typeof app.html !== "function") throw new Error("An app needs an html function");
+        for (const [name, action] of Object.entries(app.actions ?? {})) {
+          if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(name)) throw new Error(\`Invalid app action name: \${name}\`);
+          if (!["read", "write", "process"].includes(action?.effect))
+            throw new Error(\`App action \${name} needs an effect of read, write or process\`);
+          if (typeof action.handler !== "function") throw new Error(\`App action \${name} needs a handler\`);
+          if (action.inputSchema?.type !== "object")
+            throw new Error(\`App action \${name} inputSchema must be { type: "object" }\`);
+          checkSchema(action.inputSchema);
+        }
+        apps.set(app.id, app);
+        return () => {
+          if (apps.get(app.id) === app) apps.delete(app.id);
+          app.dispose?.();
+        };
       },
     },
     events: { on: noop },
@@ -283,7 +306,25 @@ export function createFakeApi(init = {}) {
     tools,
     commands,
     views,
+    apps,
     state,
+    /** The page of a registered app (what \`html()\` returns). */
+    async appHtml(id) {
+      const app = apps.get(id);
+      if (!app) throw new Error(\`No app named \${id}\`);
+      return app.html();
+    },
+    /** Runs an action of a registered app the way the app's page calls it through Alisio. */
+    async callAppAction(id, name, input = {}, context = {}) {
+      const action = apps.get(id)?.actions?.[name];
+      if (!action) throw new Error(\`No action \${name} in the app \${id}\`);
+      return action.handler(input, {
+        sessionId: "test-session",
+        workspace: process.cwd(),
+        signal: new AbortController().signal,
+        ...context,
+      });
+    },
     /** Runs a registered tool like Alisio does. */
     async callTool(name, input = {}, context = {}) {
       const tool = tools.get(name);
@@ -380,7 +421,7 @@ export function pluginTemplateFiles(input: TemplateInput): Record<string, string
     [ICON_PATH]: ICON_SVG,
     [COVER_PATH]: coverSvg(input.displayName),
     "src/index.js": indexJs(input),
-    "test/harness.js": HARNESS_JS,
+    "test/harness.js": PLUGIN_HARNESS_JS,
     "test/plugin.test.js": pluginTestJs(),
   };
 }

@@ -151,7 +151,9 @@ Rules:
 - Strict TDD: write a failing node:test test first, then the minimum code. Keep tests few but
   meaningful (each tool's main case and one bad-input case).
 - Report progress with the plugin_project tool (action "progress") for the steps plan, tests, code,
-  run_tests and package. Run the tests and the build with plugin_project_run.
+  run_tests and package. Marking plan done declares needsApp: true when the person asks for its own
+  screen, window, page, section or panel in the menu (or "an app"), false otherwise. A screen is a
+  plugin app registered with api.apps.register (never api.views, which shows nothing in the menu). Run the tests and the build with plugin_project_run.
 - Talk in the person's language, in short plain sentences, without technical jargon. Never paste
   raw errors or code unless asked.
 - If the request is ambiguous about WHAT the plugin must do, ask one short question with two or

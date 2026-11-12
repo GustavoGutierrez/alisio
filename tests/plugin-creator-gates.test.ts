@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   gateCommand,
   gateEnvironment,
+  PLUGIN_CREATOR_SKILL_FILES,
   PluginCreatorProjects,
   sampleInput,
   sanitizePluginDiagnostic,
@@ -322,5 +323,130 @@ describe("plugin creator gates: how each runtime starts the gate", () => {
     expect(desktop.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
     expect(desktop.args).toEqual([desktop.entry]);
     expect(desktop.entry).toMatch(/resources\/runtime\/.*\/creator\/gate-entry\.js$/);
+  });
+});
+
+describe("plugin creator gates: plugin apps", () => {
+  const page = (script: string, extra = "") =>
+    JSON.stringify(
+      `<!doctype html><html><head><meta charset="utf-8"><style>:root{color-scheme:light dark}</style></head><body>${extra}${script}</body></html>`,
+    );
+  const nonced = '<script nonce="__ALISIO_NONCE__">document.body.dataset.ready = "1";</script>';
+  /** `api.apps.register` of an app `id` whose html() returns `html` (an expression). */
+  const app = (id: string, html: string, actions = "{}") =>
+    `api.apps.register({ id: ${JSON.stringify(id)}, label: { en: "List", es: "Lista" }, html: () => ${html}, actions: ${actions} });`;
+  const action = (effect: string, schema: string, body: string) =>
+    `{ effect: ${JSON.stringify(effect)}, inputSchema: ${schema}, handler(input) { ${body} } }`;
+  const empty = '{ type: "object", properties: {}, additionalProperties: false }';
+
+  it("passes a correct app: nonce scripts, data script blocks, actions that answer JSON", async () => {
+    const actions = `{ list_items: ${action("read", empty, "return { items: [] };")}, add_item: ${action(
+      "write",
+      '{ type: "object", properties: { name: { type: "string", minLength: 1 } }, required: ["name"], additionalProperties: false }',
+      "return { ok: true, name: input.name };",
+    )}, run_report: ${action("process", empty, 'throw new Error("never called by the gate");')} }`;
+    const html = page(`<script type="application/json" id="seed">{"items":[]}</script>${nonced}`);
+    const id = await pluginProject(`setup(api) { ${app("shopping-list", html, actions)} }`, [
+      "list_items",
+      "add_item",
+      "run_report",
+    ]);
+    const build = await projects.build(id);
+    expect(build.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(build.ok).toBe(true);
+  });
+
+  it("fails app pages the frame could not run: throw, empty, too large, scripts without nonce, inline handlers, outside files", async () => {
+    const id = await pluginProject(
+      `setup(api) {
+        ${app("throws", '(() => { throw new Error("no page"); })()')}
+        ${app("blank", '"   "')}
+        ${app("huge", '"<p>" + "x".repeat(8 * 1024 * 1024 + 1) + "</p>"')}
+        ${app("bare", page("<script>document.title = 'x';</script>"))}
+        ${app("handler", page(nonced, '<button onclick="go()">Go</button>'))}
+        ${app("remote", page(nonced, '<script nonce="__ALISIO_NONCE__" src="https://cdn.example.com/x.js"></script>'))}
+      }`,
+    );
+    const build = await projects.build(id);
+    expect(build.ok).toBe(false);
+    const byCode = (code: string) =>
+      build.issues
+        .filter((i) => i.code === code)
+        .map((i) => i.message)
+        .join("\n");
+    expect(byCode("app_html_failed")).toMatch(/throws/);
+    expect(byCode("app_html_failed")).toMatch(/blank/);
+    expect(byCode("app_html_too_large")).toMatch(/huge/);
+    expect(byCode("app_script_nonce_missing")).toMatch(/bare/);
+    expect(byCode("app_inline_handler")).toMatch(/handler/);
+    expect(byCode("app_external_resource")).toMatch(/remote/);
+    expect(await projects.packagePath(id)).toBeUndefined();
+  });
+
+  it("calls every app action once: a throw or data that is not JSON fails, and each action needs a test", async () => {
+    const id = await pluginProject(
+      `setup(api) { ${app(
+        "notes",
+        page(nonced),
+        `{ crash: ${action("write", empty, 'throw new Error("no table");')}, big: ${action(
+          "read",
+          empty,
+          "return { n: 1n };",
+        )}, fine: ${action("read", empty, "return { ok: false, error: 'empty' };")}, lonely: ${action("read", empty, "return 1;")} }`,
+      )} }`,
+      ["crash", "big", "fine"],
+    );
+    const build = await projects.build(id);
+    expect(build.ok).toBe(false);
+    const failed = build.issues
+      .filter((i) => i.code === "app_action_failed")
+      .map((i) => i.message)
+      .join("\n");
+    expect(failed).toMatch(/crash/);
+    expect(failed).toMatch(/big/);
+    expect(failed).not.toMatch(/fine/);
+    const untested = build.issues.filter((i) => i.code === "app_action_untested");
+    expect(untested.map((i) => i.message).join(" ")).toContain("lonely");
+    expect(untested.map((i) => i.message).join(" ")).not.toContain("fine");
+  });
+
+  it("passes the skill's own app example (page, protocol, actions and its tests) through every gate", async () => {
+    const apps = PLUGIN_CREATOR_SKILL_FILES["references/apps.md"] ?? "";
+    const [code, testCode] = [...apps.matchAll(/```js\n([\s\S]*?)```/g)].map((m) => m[1] ?? "");
+    const id = await pluginProject(
+      "setup(api) { registerListApp(api); }",
+      [],
+      'import { registerListApp } from "./app.js";',
+    );
+    await edit(id, "src/app.js", code ?? "");
+    await edit(
+      id,
+      "test/app.test.js",
+      [
+        'import assert from "node:assert/strict";',
+        'import { test } from "node:test";',
+        'import plugin from "../src/index.js";',
+        'import { createFakeApi } from "./harness.js";',
+        testCode,
+      ].join("\n"),
+    );
+    await projects.declarePlan(id, { needsApp: true });
+    const build = await projects.build(id);
+    expect(build.issues.filter((i) => i.severity === "error")).toEqual([]);
+    expect(build.ok).toBe(true);
+  });
+
+  it("fails a plan that declared an app when the plugin registers none; legacy records pass", async () => {
+    const body = `setup(api) { ${tool("note", '{ type: "object", properties: {}, additionalProperties: false }', 'return text("ok");')} }`;
+    const declared = await pluginProject(body, ["note"]);
+    await projects.declarePlan(declared, { needsApp: true });
+    expect((await projects.get(declared)).needsApp).toBe(true);
+    const build = await projects.build(declared);
+    expect(build.ok).toBe(false);
+    expect(codes(build.issues)).toContain("app_missing");
+
+    const legacy = await pluginProject(body, ["note"]);
+    expect((await projects.get(legacy)).needsApp).toBeUndefined();
+    expect((await projects.build(legacy)).ok).toBe(true);
   });
 });

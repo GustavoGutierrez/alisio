@@ -434,6 +434,13 @@ export class PluginCreatorProjects {
     });
   }
 
+  /** Records what the agent's plan declared about the request (see `needsApp`). */
+  async declarePlan(id: string, plan: { needsApp: boolean }): Promise<PluginCreatorProjectInfo> {
+    return this.update(id, (record) => {
+      record.needsApp = plan.needsApp;
+    });
+  }
+
   async recordInstall(id: string, version: string): Promise<void> {
     await this.update(id, (record) => {
       record.installedVersion = version;
@@ -682,6 +689,29 @@ export class PluginCreatorProjects {
               message: `No test uses the tool ${tool}: add a test that calls it`,
               file: "test",
             });
+        const actions = (gate.apps ?? []).flatMap((app) =>
+          app.actions.map((action) => ({ app: app.id, action })),
+        );
+        for (const { app, action } of actions)
+          if (
+            !new RegExp(`(^|[^A-Za-z0-9_.-])${escapeRegExp(action)}([^A-Za-z0-9_.-]|$)`).test(
+              testText,
+            )
+          )
+            issues.push({
+              code: "app_action_untested",
+              severity: "error",
+              message: `No test uses the action ${action} of the app ${app}: add a test that calls it`,
+              file: "test",
+            });
+        if (record.needsApp === true && !(gate.apps ?? []).length)
+          issues.push({
+            code: "app_missing",
+            severity: "error",
+            message:
+              "The plan says this request needs a screen in the Apps menu, but the plugin registers no app: register it with api.apps.register (not api.views)",
+            file: validation.entry,
+          });
         if (gate.tools.length > tests.passed)
           issues.push({
             code: "tests_too_few",
@@ -752,6 +782,8 @@ export class PluginCreatorProjects {
     };
   }
 }
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** `alisio.icon` of a manifest as a clean project-relative path, or undefined. */
 function iconPath(pkg: unknown): string | undefined {

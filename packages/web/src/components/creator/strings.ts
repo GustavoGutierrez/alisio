@@ -547,6 +547,23 @@ const issuesEn = {
   reactivate_failed: "It cannot be started a second time.",
   tool_untested: "One of its tools has no automatic check.",
   tests_too_few: "It needs at least one automatic check per tool.",
+  app_missing:
+    "You asked for its own screen in the Apps menu, but it does not have one yet. Press Try again so Alisio adds it.",
+  app_html_failed: "Its screen in the Apps menu does not open. Press Try again so Alisio fixes it.",
+  app_html_too_large:
+    "Its screen in the Apps menu is too large to open. Press Try again so Alisio makes it smaller.",
+  app_script_nonce_missing:
+    "Part of its screen would not work, because Alisio blocks it for safety. Press Try again so Alisio fixes it.",
+  app_external_resource:
+    "Its screen tries to load files from outside the plugin, which Alisio does not allow. Press Try again so Alisio fixes it.",
+  app_inline_handler:
+    "Some buttons on its screen would do nothing, because Alisio blocks them for safety. Press Try again so Alisio fixes it.",
+  app_action_failed:
+    "Its screen failed when Alisio tried one of its buttons. Press Try again so Alisio fixes it.",
+  app_action_untested:
+    "Something its screen does has no automatic check. Press Try again so Alisio adds one.",
+  app_dispose_failed:
+    "Its screen stays open after Alisio closes the plugin. Press Try again so Alisio fixes it.",
   gate_unavailable:
     "Alisio could not run its safety checks on this computer, so it cannot install the plugin yet.",
   genericIssue: "There is a problem that needs fixing.",
@@ -605,6 +622,24 @@ const issuesEs: typeof issuesEn = {
   reactivate_failed: "No se puede iniciar una segunda vez.",
   tool_untested: "Una de sus herramientas no tiene comprobación automática.",
   tests_too_few: "Necesita al menos una comprobación automática por herramienta.",
+  app_missing:
+    "Pediste una pantalla propia en el menú Aplicaciones, pero aún no la tiene. Pulsa Intentar de nuevo para que Alisio la añada.",
+  app_html_failed:
+    "Su pantalla del menú Aplicaciones no se abre. Pulsa Intentar de nuevo para que Alisio lo corrija.",
+  app_html_too_large:
+    "Su pantalla del menú Aplicaciones es demasiado grande para abrirse. Pulsa Intentar de nuevo para que Alisio la reduzca.",
+  app_script_nonce_missing:
+    "Una parte de su pantalla no funcionaría, porque Alisio la bloquea por seguridad. Pulsa Intentar de nuevo para que Alisio lo corrija.",
+  app_external_resource:
+    "Su pantalla intenta cargar archivos de fuera del complemento, y Alisio no lo permite. Pulsa Intentar de nuevo para que Alisio lo corrija.",
+  app_inline_handler:
+    "Algunos botones de su pantalla no harían nada, porque Alisio los bloquea por seguridad. Pulsa Intentar de nuevo para que Alisio lo corrija.",
+  app_action_failed:
+    "Su pantalla falló cuando Alisio probó uno de sus botones. Pulsa Intentar de nuevo para que Alisio lo corrija.",
+  app_action_untested:
+    "Algo que hace su pantalla no tiene comprobación automática. Pulsa Intentar de nuevo para que Alisio la añada.",
+  app_dispose_failed:
+    "Su pantalla sigue abierta después de que Alisio cierra el complemento. Pulsa Intentar de nuevo para que Alisio lo corrija.",
   gate_unavailable:
     "Alisio no pudo ejecutar sus comprobaciones de seguridad en este equipo, así que aún no puede instalar el complemento.",
   genericIssue: "Hay un problema que hay que corregir.",

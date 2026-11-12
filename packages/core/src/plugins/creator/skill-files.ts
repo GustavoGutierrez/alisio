@@ -5,6 +5,8 @@
  * config home for creator sessions (`skill.ts`). Edit the Markdown here directly.
  */
 
+import { PLUGIN_HARNESS_JS } from "./template.ts";
+
 export const PLUGIN_CREATOR_SKILL_NAME = "alisio-plugin-creator";
 
 /** Skill-relative path -> file text. */
@@ -22,7 +24,10 @@ person asking is not a programmer: they describe a need; you deliver a plugin th
 ## Workflow (report each step with \`plugin_project\` action \`progress\`)
 
 1. **plan**: restate the need in one or two plain sentences; decide the tools/commands. If the
-   request is ambiguous, ask ONE short question and stop. Details: references/workflow.md
+   request is ambiguous, ask ONE short question and stop. Mark \`plan\` done with \`needsApp\`:
+   \`true\` when the person wants its own screen/window/page/section/panel in the menu or "apps"
+   (build it with \`api.apps.register\`, never \`api.views\`: references/apps.md), else
+   \`false\`. Details: references/workflow.md
 2. **tests**: write failing \`node:test\` tests first in \`test/*.test.js\` using \`test/harness.js\`.
    Recipe: references/testing.md
 3. **code**: write the smallest code that passes, in \`src/\`. API: references/sdk-cheatsheet.md
@@ -40,7 +45,7 @@ Then tell the person, in plain words, what the plugin does and that they can pre
 - The version lives only in \`package.json\`; on a change request bump the patch (1.0.0 -> 1.0.1).
 - Keep \`name\`, \`alisio.pluginId\`, \`exports\` and \`files\` as created. No install scripts.
 - Work only inside this folder. Never touch files outside it.
-- At least one meaningful test per tool or command; tests never use the network.
+- At least one meaningful test per tool, command and app action; tests never use the network.
 - Minimal: the scaffold has only the core (manifest, entry with one example tool, tests, README,
   icon, cover). Add storage, commands, views, hooks, EN/ES strings or settings ONLY when the request
   needs them, from the templates below. No unused code, files, effects/permissions or manifest
@@ -57,6 +62,7 @@ Then tell the person, in plain words, what the plugin does and that they can pre
 |---|---|
 | references/workflow.md | Steps, progress reports, asking questions, change requests |
 | references/sdk-cheatsheet.md | Plugin object, tools, commands, views, state, storage, options |
+| references/apps.md | A screen in the Apps menu: api.apps.register, page rules, frame protocol, tests |
 | references/testing.md | TDD with \`test/harness.js\`, what to test, common failures |
 | references/quality-checklist.md | Check before running the build |
 | references/ux-copy.md | Messages for non-technical people, EN/ES |
@@ -67,7 +73,159 @@ Then tell the person, in plain words, what the plugin does and that they can pre
 | templates/storage.test.js | Tests for that tool with the in-memory database |
 | templates/command.js | A slash command with a friendly answer |
 | templates/i18n.js | EN/ES strings, only when the plugin talks to people in both languages |
+| templates/harness.js | The current test harness (replace an older test/harness.js without apps) |
 `,
+  "references/apps.md": `# Plugin apps (a screen in the Apps menu)
+
+**Views or apps?** \`api.views?.register\` only serves read-only data to Alisio's own screens and
+shows NOTHING in the menu; \`api.apps?.register\` adds a full screen the person opens from the
+sidebar **Apps** menu. When the person asks for "a screen", "a window", "a page", "a section", "a
+panel", "its own place in the menu" or "an app", use \`api.apps.register\`, never a view.
+
+Declare it in the plan: \`plugin_project\` \`{action: "progress", step: "plan", status: "done",
+needsApp: true}\`. The build then fails with \`app_missing\` if the plugin registers no app.
+
+## Rules the build checks (on the installed package, with Alisio's real host)
+
+- \`id\`: lowercase letters, digits and dashes, starting with a letter (\`shopping-list\`).
+- \`label\`: \`{ en: "Shopping list", es: "Lista de compras" }\` (short: it is the menu entry).
+- \`html()\`: returns ONE self-contained HTML string (at most 8 MiB), never empty, never throwing.
+  Inline \`<style>\` and inline \`<script nonce="__ALISIO_NONCE__">\` only: Alisio replaces the marker
+  with a fresh nonce; a script without it does not run (\`app_script_nonce_missing\`). No
+  \`<script src>\` or \`<link rel="stylesheet" href>\` (\`app_external_resource\`): there is no network
+  and no file server. No \`onclick=\` attributes or \`javascript:\` links (\`app_inline_handler\`): use
+  \`addEventListener\` inside the nonce script. No \`<form>\` submit: use buttons with click handlers.
+- \`actions\`: what the page may ask the plugin to do. Each one has an honest \`effect\` (\`read\`,
+  \`write\`, \`process\`), an \`inputSchema\` with the same rules as a tool (one \`type\` string per
+  property, no type arrays, no \`format\`, strict Ajv) and a \`handler(input, context)\` that returns
+  JSON data (plain objects, arrays, strings, numbers; no BigInt, no class instances). The build
+  calls every \`read\` and \`write\` action once with a minimal valid input: it must answer, not throw
+  (\`app_action_failed\`). For a bad input return \`{ ok: false, error: "..." }\`.
+- Every action needs a test that calls it by name (\`app_action_untested\`), with
+  \`fake.callAppAction(appId, action, input)\`. Test the page too: \`await fake.appHtml(appId)\`
+  contains the nonce marker and the main elements.
+- Theme: \`:root { color-scheme: light dark; }\` plus \`@media (prefers-color-scheme: dark)\` colors.
+- Language: the connect message carries \`locale\`; a later \`{type: "locale"}\` message changes it.
+- Data: keep it in \`api.state\` (\`get\`/\`set\` of JSON values) for a simple list; use SQLite
+  (references/storage.md) only for many records or real queries.
+
+## The page <-> plugin protocol (MessagePort)
+
+1. Alisio posts \`{ type: "alisio.app.connect", locale, visible }\` to the frame window with a
+   \`MessagePort\` in \`event.ports[0]\`. Accept only the first one, only from \`window.parent\`.
+2. The page sends \`{ type: "request", id, action, input }\` on the port.
+3. Alisio answers \`{ type: "response", id, result }\` or \`{ type: "response", id, error }\` (\`error\`
+   is a code: \`invalid_input\`, \`not_permitted\`, \`timeout\`, \`failed\`...). Show a friendly sentence,
+   never the code alone.
+4. Alisio may also send \`{ type: "locale", locale }\` and \`{ type: "visibility", visible }\`.
+
+## Minimal example (src/app.js, registered from setup)
+
+\`\`\`js
+/** @param {import("@alisio/sdk").PluginAPI} api */
+export function registerListApp(api) {
+  if (!api.apps) return; // older Alisio without apps
+  const items = () => /** @type {string[]} */ (api.state.get("items") ?? []);
+  api.apps.register({
+    id: "shopping-list",
+    label: { en: "Shopping list", es: "Lista de compras" },
+    html: () => PAGE,
+    actions: {
+      list: {
+        effect: "read",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        handler: () => ({ items: items() }),
+      },
+      add: {
+        effect: "write",
+        inputSchema: {
+          type: "object",
+          properties: { name: { type: "string", minLength: 1, maxLength: 120 } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        handler(input) {
+          const name = String(input.name ?? "").trim();
+          if (!name) return { ok: false, error: "empty" };
+          api.state.set("items", [...items(), name].slice(-200));
+          return { ok: true, items: items() };
+        },
+      },
+    },
+  });
+}
+
+const PAGE = \`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; --bg: #fff; --fg: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d1d1f; --fg: #f5f5f7; } }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg); }
+</style></head>
+<body>
+<h1 id="title"></h1>
+<input id="name" aria-labelledby="title"> <button id="add" type="button"></button>
+<ul id="list"></ul><p id="status" role="status"></p>
+<script nonce="__ALISIO_NONCE__">
+const TEXT = { en: { title: "Shopping list", add: "Add", failed: "That did not work, try again." },
+  es: { title: "Lista de compras", add: "Añadir", failed: "No funcionó, inténtalo de nuevo." } };
+let port, locale = "en", seq = 0;
+const pending = new Map();
+const $ = (id) => document.getElementById(id);
+const t = () => TEXT[locale] || TEXT.en;
+function call(action, input = {}) {
+  return new Promise((resolve, reject) => {
+    const id = String(++seq);
+    pending.set(id, { resolve, reject });
+    port.postMessage({ type: "request", id, action, input });
+  });
+}
+function render(items) {
+  document.documentElement.lang = locale;
+  $("title").textContent = t().title;
+  $("add").textContent = t().add;
+  if (items) $("list").replaceChildren(...items.map((name) => {
+    const li = document.createElement("li"); li.textContent = name; return li; }));
+}
+window.addEventListener("message", (event) => {
+  if (port || event.source !== window.parent || event.data?.type !== "alisio.app.connect") return;
+  port = event.ports[0];
+  locale = event.data.locale === "es" ? "es" : "en";
+  port.onmessage = ({ data }) => {
+    if (data.type === "locale") { locale = data.locale === "es" ? "es" : "en"; render(); return; }
+    if (data.type !== "response") return;
+    const waiting = pending.get(data.id); pending.delete(data.id);
+    if (!waiting) return;
+    if ("error" in data) waiting.reject(new Error(data.error)); else waiting.resolve(data.result);
+  };
+  render();
+  call("list").then((r) => render(r.items), () => ($("status").textContent = t().failed));
+});
+$("add").addEventListener("click", async () => {
+  try {
+    const r = await call("add", { name: $("name").value });
+    if (r.ok) { $("name").value = ""; render(r.items); } else $("status").textContent = t().failed;
+  } catch { $("status").textContent = t().failed; }
+});
+</script></body></html>\`;
+\`\`\`
+
+Tests (test/app.test.js):
+
+\`\`\`js
+test("add saves an item that list returns", async () => {
+  const fake = createFakeApi();
+  await plugin.setup(fake.api);
+  await fake.callAppAction("shopping-list", "add", { name: "Milk" });
+  assert.deepEqual((await fake.callAppAction("shopping-list", "list", {})).items, ["Milk"]);
+  assert.match(await fake.appHtml("shopping-list"), /nonce="__ALISIO_NONCE__"/);
+});
+\`\`\`
+
+Older projects: if \`test/harness.js\` has no \`callAppAction\`, replace it with templates/harness.js.
+`,
+  "templates/harness.js": PLUGIN_HARNESS_JS,
   "references/patterns.md": `# Patterns that keep plugins small, robust and fast to build
 
 - **Pure core, thin tool.** Put the logic in pure functions (\`src/logic.js\`: parse, calculate,
@@ -120,6 +278,14 @@ loaded by Alisio's real host; the person can only install a build that passed al
 | \`dispose_failed\` | \`dispose()\` must not throw: close what is open and ignore what is not |
 | \`reactivate_failed\` | \`setup\` must work again after \`dispose\` (no module-level "already started" state) |
 | \`tool_untested\`, \`tests_too_few\` | Every tool needs at least one test that calls it by name; at least one passing test per tool |
+| \`app_missing\` | The plan declared \`needsApp: true\` but no app is registered: add it with \`api.apps.register\` (references/apps.md), not \`api.views\` |
+| \`app_html_failed\`, \`app_html_too_large\` | \`html()\` must return a non-empty HTML string of at most 8 MiB without throwing |
+| \`app_script_nonce_missing\` | Every inline \`<script>\` needs \`nonce="__ALISIO_NONCE__"\` |
+| \`app_external_resource\` | No \`<script src>\` or stylesheet \`<link href>\`: inline the script and the style |
+| \`app_inline_handler\` | No \`onclick=\` attributes or \`javascript:\` links: use \`addEventListener\` in the nonce script |
+| \`app_action_failed\` | Alisio called the action once with a minimal valid input and it threw, timed out or returned data that is not JSON: return \`{ ok: false, error }\` instead of throwing |
+| \`app_action_untested\` | Every app action needs a test that calls it by name (\`fake.callAppAction\`) |
+| \`app_dispose_failed\` | An app stayed registered after the plugin closed: keep the unregister function \`api.apps.register\` returns |
 | \`gate_unavailable\` | Not the plugin's fault: this Alisio could not run its check. Do not change the plugin for it; tell the person to update or reinstall Alisio |
 
 A failed build returns these issues: fix them all and build again. After a few failed builds in a
@@ -224,7 +390,8 @@ Shown as \`/<plugin-id>:summary\`. The handler returns the text to show.
 | A private SQLite database | \`api.storage.sqlite(join(api.paths.state, "data.sqlite"))\` -> \`{ exec, prepare(sql).run/get/all, transaction(fn), close }\` |
 | Per-plugin folders | \`api.paths?.state\`, \`api.paths?.config\`, \`api.paths?.cache\` (absent on old hosts) |
 | User options | \`api.options?.myKey\` (read-only, set by the person in config) |
-| Read-only data for the web | \`api.views?.register({ id, description, params?, handler })\` |
+| Read-only data for the web (NOT shown in any menu) | \`api.views?.register({ id, description, params?, handler })\` |
+| A screen in the Apps menu | \`api.apps?.register({ id, label: { en, es }, html, actions })\`: see references/apps.md |
 | Extra model context | \`api.context.register(async () => "text")\` (keep it tiny) |
 | Ask the person | \`api.ui.select(...)\`, \`api.ui.askQuestions(...)\` (resolve \`undefined\` when headless) |
 | Run events | \`api.events.on((event) => {})\` (ignore unknown types) |
@@ -383,7 +550,7 @@ Run \`plugin_project\` \`{action: "validate"}\` after changing an image.
 
 | Tool | Effect | What it does |
 |---|---|---|
-| \`plugin_project\` \`{action: "progress", step, status, note?}\` | internal | Shows the person where you are. Steps: \`plan\`, \`tests\`, \`code\`, \`run_tests\`, \`package\`; status \`running\`, \`done\` or \`failed\`. \`note\`: one short plain sentence. |
+| \`plugin_project\` \`{action: "progress", step, status, note?, needsApp?}\` | internal | Shows the person where you are. Steps: \`plan\`, \`tests\`, \`code\`, \`run_tests\`, \`package\`; status \`running\`, \`done\` or \`failed\`. \`note\`: one short plain sentence. |
 | \`plugin_project\` \`{action: "validate"}\` | internal | Static checks (manifest, imports, size, tests present). Returns issues with stable codes. |
 | \`plugin_project\` \`{action: "stats"}\` | internal | Files, size, version, last build, detected tables. |
 | \`plugin_project_run\` \`{action: "test"}\` | process | Runs \`node --test\` on \`test/*.test.js\` (scrubbed env, time limit). |
@@ -395,7 +562,11 @@ Writing files goes through the normal approval of each change: that is expected.
 
 1. Mark \`plan\` running. Read \`package.json\`, \`src/index.js\`, \`test/plugin.test.js\`.
 2. Decide the smallest set of tools/commands that meets the need. One tool per user action is
-   usually right. Prefer \`effect: "read"\` when the tool changes nothing.
+   usually right. Prefer \`effect: "read"\` when the tool changes nothing. If the person asks for
+   a screen, window, page, section or panel in the menu (or "an app"), the plugin needs an app
+   (\`api.apps.register\`, references/apps.md). Mark \`plan\` done with \`needsApp: true\` or
+   \`false\`: the tool refuses a done plan without it, and a build fails when a declared app is
+   missing.
 3. Ambiguity: if you cannot tell WHAT the plugin must do (not how), ask one short question in the
    person's language, offering 2-3 concrete options, and stop. Do not ask about technical choices.
 4. Mark \`tests\` running; write the tests (they fail). Mark \`code\`; implement. Mark \`run_tests\`;

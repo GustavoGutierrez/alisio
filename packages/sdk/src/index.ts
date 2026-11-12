@@ -2818,6 +2818,12 @@ export interface PluginCreatorProjectInfo {
   lastModel?: string;
   /** Failed builds in a row since the last request (the creator agent stops after a few). */
   failedBuilds?: number;
+  /**
+   * The creator agent's plan says the request needs a plugin app (a screen in the Apps menu). A
+   * build then fails with `app_missing` when the plugin registers no app. Absent (older records)
+   * means not declared: no such check.
+   */
+  needsApp?: boolean;
   /** Absolute path of the project's source folder (derived, for "open/publish from here"). */
   dir?: string;
   /** Project-relative path of `package.json` `alisio.icon`; the image is `GET …/:id/icon`. */

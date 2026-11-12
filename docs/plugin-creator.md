@@ -42,6 +42,15 @@ the request, **Deny** stops that step. The card appears only while the creator p
 leave the page, the build waits for you. Running a plugin uses your user's permissions and it is not
 a sandbox.
 
+### A screen in the Apps menu
+
+Ask for "its own screen", "a window", "a page" or "a section in the menu" and the plugin gets a
+plugin app: an entry in the sidebar **Apps** menu that opens a full page (see
+[Plugin apps](/plugins#plugin-apps)). Alisio's plan records that the request needs a screen, and
+the build fails with "You asked for its own screen in the Apps menu, but it does not have one yet"
+when the plugin does not add one. Right after **Install & enable**, **Update**, an uninstall, or
+turning the plugin on or off, the **Apps** menu updates without reloading the page.
+
 ## Your plugin
 
 Open a plugin in **My plugins** to see its status (**Not installed**, **Installed** or **Update
@@ -141,7 +150,11 @@ configured anymore** means you should pick another model.
 Every build checks the packaged plugin the way Alisio will use it: it unpacks it into a throwaway
 folder and starts it with Alisio's real plugin host (with throwaway settings and data folders),
 checks that every tool is accepted, calls each tool once with a minimal valid input, closes it and
-starts it again, and makes sure each tool has an automatic check. **Install** and **Update** stay
+starts it again, and makes sure each tool has an automatic check. When the plugin has a screen in the
+**Apps** menu, the build also opens its page once (it must load, stay under 8 MiB and use only what
+the app frame allows: scripts with the nonce marker, no inline `onclick=` handlers, no files from
+outside), presses each of its actions once with a minimal valid input, and makes sure each action
+has an automatic check and that the screen goes away when the plugin closes. **Install** and **Update** stay
 disabled until the latest build passed every check for the files as they are now. When a check
 fails during a build, Alisio reads the problems and fixes them on its own; after a few failed
 attempts it stops and the page shows **Try again**.
@@ -154,6 +167,12 @@ attempts it stops and the page shows **Try again**.
 | One of its tools failed when Alisio tried it | A tool threw an error instead of answering |
 | It fails when Alisio closes it / It cannot be started a second time | Closing or restarting the plugin breaks |
 | One of its tools has no automatic check | Each tool needs a check of its own |
+| You asked for its own screen in the Apps menu, but it does not have one yet | The plan said the request needs a screen and the plugin adds none |
+| Its screen in the Apps menu does not open / is too large to open | Its page failed, was empty or is larger than 8 MiB |
+| Part of its screen would not work / Some buttons on its screen would do nothing | A script without the nonce marker, or an inline `onclick=` handler, which the app frame blocks |
+| Its screen tries to load files from outside the plugin | The page loads a script or stylesheet from a file or address instead of including it |
+| Its screen failed when Alisio tried one of its buttons / Something its screen does has no automatic check | An app action threw or did not answer with JSON data, or has no check of its own |
+| Its screen stays open after Alisio closes the plugin | The app was still registered after the plugin closed |
 | Alisio could not run its safety checks on this computer | Not the plugin: update or reinstall Alisio. Nothing is installed without the checks |
 
 ### Installed but it could not start
