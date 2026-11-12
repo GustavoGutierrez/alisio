@@ -4,6 +4,24 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.9] - 2026-11-12
+
+A plugin creator that never hands over a broken plugin.
+
+### Fixed
+
+- The plugin creator now checks every plugin the way Alisio really loads it before it can be
+  installed: it starts the packaged plugin, checks each tool's settings, runs each tool once and
+  requires a test per tool. A plugin that fails any check cannot be installed, and the assistant
+  is told what to fix.
+- If an installed plugin still does not start, the install is undone and the creator shows
+  "Installed but it could not start" with a button to ask Alisio to fix it. Plugins that already
+  failed show the same option.
+- The plugins list now says why a plugin could not start instead of a generic message.
+- Creator steps no longer keep spinning after the work is done, and a new plugin takes its own
+  name instead of a cut-off sentence.
+- Cancelling a document while it is being prepared now always stops it.
+
 ## [0.11.8] - 2026-11-12
 
 Plugin creator and a tidier sidebar.

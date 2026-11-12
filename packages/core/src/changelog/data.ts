@@ -6,6 +6,22 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.9",
+      date: "2026-11-12",
+      sections: [
+        {
+          title: "Fixed",
+          items: [
+            "The plugin creator now checks every plugin the way Alisio really loads it before it can be installed: it starts the packaged plugin, checks each tool's settings, runs each tool once and requires a test per tool. A plugin that fails any check cannot be installed, and the assistant is told what to fix.",
+            'If an installed plugin still does not start, the install is undone and the creator shows "Installed but it could not start" with a button to ask Alisio to fix it. Plugins that already failed show the same option.',
+            "The plugins list now says why a plugin could not start instead of a generic message.",
+            "Creator steps no longer keep spinning after the work is done, and a new plugin takes its own name instead of a cut-off sentence.",
+            "Cancelling a document while it is being prepared now always stops it.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.8",
       date: "2026-11-12",
       sections: [
