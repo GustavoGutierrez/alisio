@@ -307,6 +307,10 @@ export async function createDocument(input: CreateInput, deps: CreateDeps): Prom
           ...(lang ? { lang } : {}),
           ...(title ? { title } : {}),
         });
+        // A cancel that fired during the work above was never seen by any listener: check it
+        // here, so a cancelled render never starts (and never "succeeds" after the cancel).
+        if (deps.signal.aborted)
+          throw Object.assign(new Error("Cancelled"), { name: "AbortError" });
         const result = await engine.render(
           {
             bundleDir,

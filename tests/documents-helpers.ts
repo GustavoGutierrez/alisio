@@ -87,11 +87,14 @@ export class FakeEngine implements DocumentEngine {
     try {
       if (this.options.delayMs)
         await new Promise<void>((resolve, reject) => {
-          const t = setTimeout(resolve, this.options.delayMs);
-          signal.addEventListener("abort", () => {
+          const cancel = () => {
             clearTimeout(t);
             reject(Object.assign(new Error("Cancelled"), { name: "AbortError" }));
-          });
+          };
+          const t = setTimeout(resolve, this.options.delayMs);
+          // Like a real engine: an already aborted signal never fires "abort" again.
+          if (signal.aborted) cancel();
+          else signal.addEventListener("abort", cancel, { once: true });
         });
       const list = this.options.measurements ?? [];
       return {

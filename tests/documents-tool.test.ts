@@ -229,6 +229,43 @@ describe("document_create with a fake engine", () => {
     );
   });
 
+  it("honors a cancel that lands before the engine starts (the race behind DOC-AC-17)", async () => {
+    // Under load the work before the render can outlast the caller's cancel: the abort has then
+    // already fired and only an explicit check sees it.
+    const engine = new FakeEngine({ delayMs: 5000 });
+    const controller = new AbortController();
+    controller.abort();
+    const { call, context } = setup(engine);
+    const started = Date.now();
+    await expect(
+      call("document_create", { markdown: "# a" }, context(controller.signal)),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(engine.jobs).toHaveLength(0);
+    // Nothing left behind (the work folder may not even have been created).
+    expect(await readdir(tmp).catch(() => [])).toEqual([]);
+  });
+
+  it("honors a cancel during the work before the render, deterministically", async () => {
+    const engine = new FakeEngine({ delayMs: 5000 });
+    const controller = new AbortController();
+    const { call, context } = setup(engine);
+    // Cancel exactly while the tool prepares the render (it reports "Rendering…" first).
+    const ctx = {
+      ...context(controller.signal),
+      emit: (line: unknown) => {
+        if (String(line).startsWith("Rendering")) controller.abort();
+      },
+    } as ReturnType<typeof context>;
+    const started = Date.now();
+    await expect(call("document_create", { markdown: "# a" }, ctx)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(engine.jobs).toHaveLength(0);
+    expect(await readdir(tmp).catch(() => [])).toEqual([]);
+  });
+
   it("answers DOCUMENT_RENDER_FAILED when the engine throws and cancels cleanly (DOC-AC-17)", async () => {
     const broken = new FakeEngine({ delayMs: 5000 });
     const controller = new AbortController();

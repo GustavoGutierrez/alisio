@@ -15,6 +15,9 @@ export class RenderQueue {
   }
 
   async run<T>(job: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const cancelled = () => Object.assign(new Error("Cancelled"), { name: "AbortError" });
+    // An abort listener added to an already aborted signal never fires: check first.
+    if (signal?.aborted) throw cancelled();
     if (this.running >= this.concurrency) {
       if (this.waiting.length >= this.maxQueued)
         throw new DocumentError(
@@ -30,7 +33,7 @@ export class RenderQueue {
             const i = this.waiting.indexOf(entry);
             if (i >= 0) {
               this.waiting.splice(i, 1);
-              reject(Object.assign(new Error("Cancelled"), { name: "AbortError" }));
+              reject(cancelled());
             }
           },
           { once: true },
