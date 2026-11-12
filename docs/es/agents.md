@@ -54,7 +54,7 @@ herramienta, todas las demás claves y comentarios se conservan tal cual.
 
 ## Web: la ventana Agentes
 
-Abre **Agentes** en la barra lateral, justo encima de **Ajustes**.
+Abre **Agentes** en el menú **Ajustes y herramientas** al pie de la barra lateral.
 
 - **Tus agentes** lista los agentes de proyecto y globales; haz clic en uno para editarlo, o
   elimínalo.

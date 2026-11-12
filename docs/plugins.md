@@ -349,7 +349,7 @@ export default definePlugin({
   language. Action names match `^[A-Za-z][A-Za-z0-9_.-]{0,63}$`.
 - **Where it appears.** The web UI lists the apps of the enabled plugins of the open project in an
   **Apps** group just above **Projects** (the group is not shown when there are none) and refreshes
-  the list every 15 seconds. Opening an app replaces the whole chat area; the projects panel stays,
+  the list every 15 seconds. A long list shows five apps and a **Show all (N)** button. Opening an app replaces the whole chat area; the projects panel stays,
   and **Back to chat** returns to the conversation, its draft and pending attachments. The app
   frame stays mounted while you switch, so unsaved edits survive. Another project is another
   instance. The app runs in the current session of the project (else its most recent one, else a
@@ -1000,7 +1000,8 @@ Plugins**, with the same security warning as the CLI. See
   reinstall or downgrade) and keeps a single entry in the `plugins` array. A failed update restores
   the previous version.
 - **From a file (private plugins).** A plugin that is never published is distributed as a tarball.
-  Make it from the plugin's folder:
+  Make it from the plugin's folder (or let the [plugin creator](/plugin-creator) build and package it
+  for you):
 
 ```sh
 pnpm pack
@@ -1030,6 +1031,76 @@ npm pack
 - **Uninstall.** `DELETE /api/plugins/package/:name` (the **Uninstall** button) removes an npm
   plugin from the global plugins directory and its name from the configuration; built-in plugins and
   project or local plugins cannot be uninstalled from the web.
+
+## Plugin creator {#plugin-creator}
+
+The [plugin creator](/plugin-creator) of the Web UI builds plugins from a plain-language request.
+It is a tool for non-technical users; this section is the reference for what it generates and
+exposes.
+
+### Projects and the creator agent
+
+Projects live under `<config home>/plugin-creator/projects/<id>/` (`<id>` is 12 hex characters); the
+metadata record, the last package and the bundled skill are kept next to them in `records/`,
+`builds/` and `skills/`. Each project is also the workspace of its creator session, which runs the
+`plugin-creator` agent with the `ask` permission preset and the bundled `alisio-plugin-creator`
+skill. The agent has two narrow tools instead of a shell: `plugin_project` (`internal`: static
+validation, stats and progress steps) and `plugin_project_run` (`process`, so it goes through the
+normal approval: the project's `node --test` suite or the full build, with a scrubbed environment and
+a time limit). Approvals of a creator session show in its page only while it is open.
+
+### Generated plugin layout
+
+```text
+package.json          name, version, type: module, alisio.pluginId / icon / cover
+src/index.js          plain ESM + JSDoc, default export is the Plugin object
+test/harness.js       a fake PluginAPI with a real in-memory node:sqlite database
+test/*.test.js        node:test suites (npm test = node --test test/)
+assets/icon.svg       64x64 placeholder icon
+assets/cover.svg      1280x720 placeholder cover with the plugin name
+README.md
+```
+
+The contract: plain ESM JavaScript, no build step, no runtime dependencies, `@alisio/sdk` as an
+optional peer only (nothing imports it at runtime), the `alisio-plugin` keyword, a `local.` plugin
+id, and the version only in `package.json` (`src/index.js` reads it). Packages are named
+`alisio-plugin-local-<slug>-<id>` and are private (`UNLICENSED`) until you publish them.
+
+### Icon and cover
+
+`package.json` points `alisio.icon` and `alisio.cover` at files inside the package (and inside
+`files`). The scaffold writes an SVG icon and a cover with the XML-escaped display name, shortened
+past 40 characters. The model may replace them with an optimized SVG (or a PNG, WebP or JPEG); the
+validation sniffs the content, caps the size (icon 256 KB, cover 512 KB) and rejects unsafe SVG:
+scripts, event handler attributes, `foreignObject`, embedded images, outside `href` or `url(...)`
+targets, `@import` and XML entities.
+
+### Validation and compatibility
+
+A build validates statically, runs the tests and a probe that imports the plugin, then packs a
+deterministic `.tgz`. Findings have stable codes (for example `sdk_incompatible`,
+`api_member_unknown`, `forbidden_import`, `template_example`, `svg_unsafe`, `tests_missing`). The
+`peerDependencies["@alisio/sdk"]` range must accept the installed SDK (new projects use the caret
+range of its minor, such as `^0.11.0`), and the `PluginAPI` members the sources use are checked
+against that version. Limits: 500 files, 5 MB per project, 1 MB per file, 8000 characters per
+request, 120 s per test run. Building runs the project's code with the user's privileges; it is not
+a sandbox, and `node --test` is not one either.
+
+### HTTP routes
+
+All routes are under `/api/plugin-creator/projects` and every mutation is refused with `--read-only`.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /` and `POST /` | List projects; create one from `request`, optional `displayName` and `model` |
+| `GET /:id` and `GET /:id/status` | A project with its status; install state and whether an update or package is ready |
+| `DELETE /:id` | Delete (`uninstall: true` also uninstalls the package) |
+| `POST /:id/session` | Open or resume the creator session, optionally with a new `request` and `model` |
+| `GET /:id/files` and `GET /:id/files/*` | File list and a text file (read-only, bounded) |
+| `GET /:id/icon` | The project's icon |
+| `POST /:id/build` | Validate, test and package; a failure is `422` with the build response |
+| `GET /:id/package` | Download the `.tgz` (`plugin_not_built` when it is stale) |
+| `POST /:id/install` | Rebuild, then install through the local-file install job; needs `confirmed: true` |
 
 ## TypeScript plugins
 

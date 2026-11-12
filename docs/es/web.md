@@ -70,6 +70,14 @@ icono de carpeta del proyecto; se guarda en el servidor junto con el proyecto y 
 teclado (flechas, Intro). **Ajustes del proyecto…** abre un diálogo de ese proyecto (más abajo).
 **Ajustes** está abajo; el icono de panel contrae la barra a un riel
 estrecho. Por debajo de 900 px la barra lateral pasa a ser un cajón que se abre desde la cabecera.
+Con muchas aplicaciones de plugins, **Aplicaciones** muestra las cinco primeras (más la abierta) y
+un botón **Mostrar todas (N)**; la lista completa se desplaza dentro de su propia zona, así que
+**Nueva sesión**, **Complementos**, **Proyectos** y **Ajustes y herramientas** quedan siempre a la
+vista (la elección se recuerda en cada navegador). En el riel, los iconos de las aplicaciones se
+desplazan entre el botón **Complementos** y el engranaje. Las barras de desplazamiento de toda la
+interfaz son finas y superpuestas: aparecen al desplazarte, al mover el puntero sobre un panel o al
+usar el teclado, y se ocultan al poco; los bloques de código y las tablas conservan una barra fina
+propia.
 
 <figure class="doc-shot">
   <img src="../assets/web-ui/sidebar_projects_web_ui.webp" alt="La barra lateral con los grupos Fijados y Recientes, una carpeta de proyecto con color y la paleta de colores de proyecto" width="268" height="900" loading="lazy" />
@@ -220,15 +228,20 @@ compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Resp
 primeros 300 ms se ignoran para que un `Enter` accidental no apruebe. Las preguntas de plugins (por
 ejemplo `ask_user_question`) aparecen del mismo modo.
 
-**Ajustes.** El engranaje al pie de la barra lateral abre Ajustes. Las páginas que gestionan
+**Ajustes.** El menú **Ajustes y herramientas** al pie de la barra lateral agrupa Agentes, Creador de skills y Ajustes; **Ajustes** abre esta ventana. Las páginas que gestionan
 recursos del agente actúan sobre el workspace de la sesión abierta (o el primer workspace si no hay
 ninguna):
+
+<figure class="doc-shot">
+  <img src="../assets/web-ui/sidebar_settings_menu_web_ui_es.webp" alt="El menú Ajustes y herramientas al pie de la barra lateral, abierto, con Agentes, Creador de skills y Ajustes." width="520" height="340" loading="lazy" decoding="async" />
+  <figcaption>El menú Ajustes y herramientas: Agentes, Creador de skills y Ajustes.</figcaption>
+</figure>
 
 | Página | Qué hace |
 | --- | --- |
 | **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de plugins y proveedor de búsqueda web, guardados en su `config.json` de usuario |
 | **Modelos** | Perfiles de proveedor con sus valores no secretos, credenciales y **Activar en este workspace** con un modelo del perfil; **Añadir un perfil** crea uno |
-| **Plugins** | Cuatro pestañas: **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Plugins instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de plugins** (explorar e instalar) e **Instalar desde archivo** (plugins privados `.tgz`); vea [Catálogo de plugins, instalación y actualizaciones](#plugin-catalog) |
+| **Plugins** | Cuatro pestañas: **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Plugins instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de plugins** (explorar e instalar) e **Instalar desde archivo** (plugins privados `.tgz`); vea [Catálogo de plugins, instalación y actualizaciones](#plugin-catalog). El menú **Complementos** de la barra lateral también abre el [Creador de plugins](./plugin-creator.md) |
 | **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/`. **Nueva skill** abre el [Creador de skills](./skill-builder.md) |
 | **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita |
 | **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |

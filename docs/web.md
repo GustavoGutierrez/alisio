@@ -66,7 +66,12 @@ menu (**Pin**, **Color**, **Project settings…**, **Archive** / **Unarchive**).
 works with the keyboard (arrow keys, Enter). **Project settings…** opens a dialog for that
 project (below). **Settings** sits at the bottom; the panel icon
 collapses the sidebar to a narrow rail. Below 900 px the sidebar becomes a drawer opened from the
-header.
+header. With many plugin apps, **Apps** shows the first five (plus the open one) and a
+**Show all (N)** button; the full list scrolls inside its own area, so **New session**, **Plugins**,
+**Projects** and **Settings & tools** always stay on screen (the choice is remembered per browser).
+In the rail, the app icons scroll between the **Plugins** button and the gear. Scrollbars across
+the interface are thin overlays: they appear when you scroll, move the pointer over a panel or use
+the keyboard, and fade after a moment; code blocks and tables keep a thin scrollbar of their own.
 
 <figure class="doc-shot">
   <img src="./assets/web-ui/sidebar_projects_web_ui.webp" alt="The sidebar with the Pinned and Recent project groups, a colored project folder and the palette of project colors" width="268" height="900" loading="lazy" />
@@ -207,14 +212,19 @@ receives focus: it names the tool, the effect and its input. Answer with **Deny*
 once** (`O`) or **Allow for session** (`S`); keys pressed in the first 300 ms are ignored so a stray
 `Enter` cannot approve. Plugin questions (for example `ask_user_question`) appear the same way.
 
-**Settings.** The gear at the bottom of the sidebar opens Settings. Pages that manage agent
+**Settings.** The **Settings & tools** menu at the bottom of the sidebar groups Agents, Skill Builder and Settings; **Settings** opens this window. Pages that manage agent
 resources act on the workspace of the open session (or the first workspace when none is open):
+
+<figure class="doc-shot">
+  <img src="./assets/web-ui/sidebar_settings_menu_web_ui.webp" alt="The Settings & tools menu at the bottom of the sidebar, open, with Agents, Skill Builder and Settings." width="520" height="340" loading="lazy" decoding="async" />
+  <figcaption>The Settings &amp; tools menu: Agents, Skill Builder and Settings.</figcaption>
+</figure>
 
 | Page | What it does |
 | --- | --- |
 | **General** | UI language (this browser), then the agent settings: compaction, context, limits, plugin hook timeout and web search provider, saved to your user `config.json` |
 | **Models** | Provider profiles with their non-secret values, credentials and **Activate in this workspace** with a model of that profile; **Add a profile** creates one |
-| **Plugins** | Four tabs: **Plugin configuration** (not sandboxed, how plugins are installed, the project file), **Installed plugins** (search, update pills, switch and **Uninstall**), **Plugin catalog** (browse and install) and **Install from file** (private `.tgz` plugins); see [Plugin catalog, install and updates](#plugin-catalog) |
+| **Plugins** | Four tabs: **Plugin configuration** (not sandboxed, how plugins are installed, the project file), **Installed plugins** (search, update pills, switch and **Uninstall**), **Plugin catalog** (browse and install) and **Install from file** (private `.tgz` plugins); see [Plugin catalog, install and updates](#plugin-catalog). The sidebar **Plugins** menu also opens the [Plugin creator](./plugin-creator.md) |
 | **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette. **New skill** opens the [Skill Builder](./skill-builder.md) |
 | **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first |
 | **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |

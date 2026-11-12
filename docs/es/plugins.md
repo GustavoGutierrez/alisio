@@ -358,7 +358,8 @@ export default definePlugin({
   activo. Los nombres de acción cumplen `^[A-Za-z][A-Za-z0-9_.-]{0,63}$`.
 - **Dónde aparece.** La web lista las aplicaciones de los plugins habilitados del proyecto abierto
   en un grupo **Aplicaciones** justo encima de **Proyectos** (el grupo no se muestra si no hay
-  ninguna) y refresca la lista cada 15 segundos. Abrir una aplicación sustituye toda el área del
+  ninguna) y refresca la lista cada 15 segundos. Una lista larga muestra cinco aplicaciones y un
+  botón **Mostrar todas (N)**. Abrir una aplicación sustituye toda el área del
   chat; el panel de proyectos permanece y **Volver al chat** devuelve la conversación, su borrador y
   los adjuntos pendientes. El frame sigue montado al alternar, así que la edición sin guardar se
   conserva. Otro proyecto es otra instancia. La aplicación usa la sesión actual del proyecto (o la
@@ -1034,7 +1035,8 @@ en **Ajustes → Plugins**, con la misma advertencia de seguridad que la CLI. La
   reinstalación o versión anterior) y conserva una sola entrada en el array `plugins`. Una
   actualización fallida restaura la versión anterior.
 - **Desde un archivo (plugins privados).** Un plugin que nunca se publica se distribuye como tarball.
-  Se genera desde la carpeta del plugin:
+  Se genera desde la carpeta del plugin (o deja que el [creador de plugins](/es/plugin-creator) lo
+  cree y lo empaquete por ti):
 
 ```sh
 pnpm pack
@@ -1065,6 +1067,79 @@ npm pack
 - **Desinstalar.** `DELETE /api/plugins/package/:name` (el botón **Desinstalar**) elimina un plugin
   de npm del directorio global de plugins y su nombre de la configuración; los plugins integrados y
   los de proyecto o locales no se pueden desinstalar desde la web.
+
+## Creador de plugins {#plugin-creator}
+
+El [creador de plugins](/es/plugin-creator) de la interfaz web construye plugins a partir de una
+petición en lenguaje natural. Es una herramienta para usuarios no técnicos; esta sección es la
+referencia de lo que genera y expone.
+
+### Proyectos y el agente creador
+
+Los proyectos viven en `<config home>/plugin-creator/projects/<id>/` (`<id>` son 12 caracteres
+hexadecimales); el registro de metadatos, el último paquete y la skill incluida se guardan junto a
+ellos en `records/`, `builds/` y `skills/`. Cada proyecto es además el workspace de su sesión
+creadora, que ejecuta el agente `plugin-creator` con el preset de permisos `ask` y la skill incluida
+`alisio-plugin-creator`. El agente tiene dos herramientas acotadas en lugar de un shell:
+`plugin_project` (`internal`: validación estática, estadísticas y pasos de progreso) y
+`plugin_project_run` (`process`, así que pasa por la aprobación normal: la suite `node --test` del
+proyecto o la preparación completa, con entorno depurado y límite de tiempo). Las aprobaciones de una
+sesión creadora solo se muestran en su página mientras está abierta.
+
+### Estructura del plugin generado
+
+```text
+package.json          name, version, type: module, alisio.pluginId / icon / cover
+src/index.js          ESM simple + JSDoc, el export por defecto es el objeto Plugin
+test/harness.js       un PluginAPI falso con una base node:sqlite real en memoria
+test/*.test.js        suites de node:test (npm test = node --test test/)
+assets/icon.svg       icono provisional de 64x64
+assets/cover.svg      portada provisional de 1280x720 con el nombre del plugin
+README.md
+```
+
+El contrato: JavaScript ESM simple, sin paso de compilación, sin dependencias en tiempo de ejecución,
+`@alisio/sdk` solo como peer opcional (nada lo importa en ejecución), la palabra clave
+`alisio-plugin`, un id de plugin con prefijo `local.` y la versión solo en `package.json`
+(`src/index.js` la lee). Los paquetes se llaman `alisio-plugin-local-<slug>-<id>` y son privados
+(`UNLICENSED`) hasta que los publiques.
+
+### Icono y portada
+
+`package.json` apunta `alisio.icon` y `alisio.cover` a archivos dentro del paquete (y dentro de
+`files`). La plantilla escribe un icono SVG y una portada con el nombre visible escapado en XML,
+acortado a partir de 40 caracteres. El modelo puede reemplazarlos por un SVG optimizado (o un PNG,
+WebP o JPEG); la validación detecta el contenido, limita el tamaño (icono 256 KB, portada 512 KB) y
+rechaza SVG inseguro: scripts, atributos de manejadores de eventos, `foreignObject`, imágenes
+incrustadas, destinos externos en `href` o `url(...)`, `@import` y entidades XML.
+
+### Validación y compatibilidad
+
+Una preparación valida de forma estática, ejecuta las pruebas y una sonda que importa el plugin, y
+luego empaqueta un `.tgz` determinista. Los hallazgos tienen códigos estables (por ejemplo
+`sdk_incompatible`, `api_member_unknown`, `forbidden_import`, `template_example`, `svg_unsafe`,
+`tests_missing`). El rango de `peerDependencies["@alisio/sdk"]` debe aceptar el SDK instalado (los
+proyectos nuevos usan el rango con acento circunflejo de su minor, como `^0.11.0`) y los miembros de
+`PluginAPI` que usan las fuentes se comprueban contra esa versión. Límites: 500 archivos, 5 MB por
+proyecto, 1 MB por archivo, 8000 caracteres por petición, 120 s por ejecución de pruebas. Preparar
+ejecuta el código del proyecto con los privilegios del usuario; no es un sandbox, y `node --test`
+tampoco lo es.
+
+### Rutas HTTP
+
+Todas las rutas cuelgan de `/api/plugin-creator/projects` y toda mutación se rechaza con `--read-only`.
+
+| Método y ruta | Propósito |
+| --- | --- |
+| `GET /` y `POST /` | Lista los proyectos; crea uno desde `request`, con `displayName` y `model` opcionales |
+| `GET /:id` y `GET /:id/status` | Un proyecto con su estado; estado de instalación y si hay una actualización o un paquete listo |
+| `DELETE /:id` | Elimina (`uninstall: true` también desinstala el paquete) |
+| `POST /:id/session` | Abre o reanuda la sesión creadora, opcionalmente con una `request` y un `model` nuevos |
+| `GET /:id/files` y `GET /:id/files/*` | Lista de archivos y un archivo de texto (solo lectura, acotado) |
+| `GET /:id/icon` | El icono del proyecto |
+| `POST /:id/build` | Valida, prueba y empaqueta; un fallo es `422` con la respuesta de la preparación |
+| `GET /:id/package` | Descarga el `.tgz` (`plugin_not_built` si está desactualizado) |
+| `POST /:id/install` | Vuelve a preparar y luego instala con el trabajo de instalación de archivo local; requiere `confirmed: true` |
 
 ## Plugins TypeScript
 

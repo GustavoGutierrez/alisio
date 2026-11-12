@@ -392,6 +392,17 @@ needs a restart (the desktop app restarts itself, `alisio serve` does not); inst
 run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
 ranges make npm fail and roll back; update the older plugin first.
 
+### Plugin creator (Web UI)
+
+The [plugin creator](/plugin-creator) builds a plain-ESM plugin from a plain-language request, with
+`node:test` checks, validation against the installed `@alisio/sdk` and a `.tgz` package. Building
+runs the plugin's code with your privileges and `node --test` is not a sandbox. Approvals of a creator
+session only show while its page is open. The data diagram is read heuristically from the plugin's
+SQL. Verified with Vitest and a visual run against `alisio serve` with a scripted provider; not
+verified live: a real-model build with its progress and approvals, the install job end to end,
+deleting a plugin and read-only mode. Plugins have no dependencies and no build step, and their
+quality depends on the model you choose.
+
 ### Provider sign-in (contract, core, server API, Web UI and TUI, phases 1 to 4)
 
 Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and
@@ -649,6 +660,16 @@ not revoke an already open port or cancel jobs the plugin started; a promise tim
 CPU-bound handlers; actions that ask in the chat (write, process) ask the same way through the approval dialog, and are rejected when denied, unanswered or forbidden by a read-only session; the approval was verified with server and store tests plus one browser run, not on Windows or macOS; there is
 no generic job API, service broker or browser SDK, and apps have no deep links or declarative
 navigation.
+
+## Web scrollbars
+
+Overlay scrollbars (OverlayScrollbars, MIT) load as a lazy chunk after the first paint. Until then,
+if it fails, and in containers that keep native scrolling on purpose (code blocks, tables, diffs,
+terminal, the composer, menus), thin CSS-only native scrollbars apply; where the OS does not overlay
+native scrollbars they take ~10 px, so a panel can widen slightly when the overlay takes over.
+Devices with overlaid native scrollbars (phones, macOS) keep the native ones. Verified with
+Playwright on Chromium (Linux) in light and dark, desktop and 390 px; not verified on Firefox,
+Safari, Windows, macOS or real touch screens.
 
 ## Semantic Ports (spec 029)
 

@@ -52,7 +52,7 @@ and comment is kept as it was.
 
 ## Web: the Agents window
 
-Open **Agents** in the sidebar, right above **Settings**.
+Open **Agents** in the **Settings & tools** menu at the bottom of the sidebar.
 
 - **Your agents** lists project and global agents; click one to edit it, or delete it.
 - **Templates** start a new agent prefilled: Code Reviewer, Test Writer, Refactoring Assistant,

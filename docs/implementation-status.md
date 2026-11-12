@@ -16,7 +16,7 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   y skills; subagentes; plugins, extensiones y MCP; CLI, runtime y empaquetado; plantillas, pantalla
   de inicio y TUI; compactación, plugins y memoria; modelo y enrutamiento por sesión; preguntar al
   usuario; herramientas de red y CLI; confianza de proyecto y diagnóstico; agente activo y effort
-  de razonamiento; agentes del usuario (ventana Agentes y `/agents`); creador de skills (ventana web); servidor web
+  de razonamiento; agentes del usuario (ventana Agentes y `/agents`); creador de skills (ventana web); creador de plugins (ventana web); servidor web
   (`alisio serve`); modos de permisos, `/reload` y `/changelog` (fase 1 de la especificación de
   modos, goal y tareas en segundo plano); pestaña Memory de la web y vistas de datos de plugins
   (`specs/archive/004-web-memory-tab-v1.md`); tareas en segundo plano (fase 3) y objetivos de sesión
@@ -811,6 +811,40 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   skills que redacta cada modelo, el revisor no ejecuta ni analiza los scripts y la skill creada no
   se edita después desde la ventana.
 
+### Creador de plugins (ventana web)
+
+- Página completa en la web, abierta desde el menú «Plugins» (Complementos) de la barra lateral, que
+  también lleva al catálogo de Ajustes → Plugins. El usuario describe una tarea con palabras simples,
+  elige un modelo configurado y un agente `plugin-creator` (preset `ask`, aprobaciones) construye un
+  plugin ESM simple desde una plantilla: icono y portada SVG provisionales (con el nombre del plugin;
+  el modelo puede reemplazarlos por un SVG saneado y optimizado), pruebas `node:test` (TDD), pasos de
+  progreso con comprobaciones, validación estática con compatibilidad con el `@alisio/sdk` instalado y
+  empaquetado `.tgz` determinista. El usuario lo instala y lo activa (plugin privado local), lo
+  actualiza cuando hay una versión nueva, lo modifica con peticiones nuevas, lo descarga (se instala
+  desde Ajustes → Plugins → Instalar desde archivo), ve estadísticas, archivos y el diagrama del
+  esquema de base de datos, lo elimina (con desinstalación opcional) y recibe un tutorial para
+  compartirlo (en privado, en npm y contactando al desarrollador con la URL de npm para el catálogo).
+- Los proyectos viven en `<configHome>/plugin-creator/projects/<id>/`; el registro, el último paquete
+  y la skill incluida `alisio-plugin-creator` están en `records/`, `builds/` y `skills/`. El agente
+  usa dos herramientas acotadas, `plugin_project` (`internal`) y `plugin_project_run` (`process`, con
+  la aprobación normal), en lugar de un shell.
+- API: `/api/plugin-creator/projects` (lista, creación, detalle, estado, sesión, archivos, icono,
+  `build`, `package`, `install`, borrado); toda mutación se rechaza con `--read-only` y la instalación
+  exige `confirmed: true` y reutiliza el trabajo de instalación de archivo local. Documentación de
+  usuario y referencia: `docs/plugin-creator.md` y la sección «Plugin creator» de `docs/plugins.md`.
+- Alcance de la verificación: pruebas del núcleo (proyectos, plantilla, validación, SVG, esquema,
+  herramientas, sesión, skill, escritor de tarball), de las rutas del servidor y de la lógica pura de
+  la web (`tests/plugin-creator-*.test.ts`, `tests/plugin-tarball-writer.test.ts`,
+  `tests/server-plugin-creator.test.ts`, `tests/web-plugin-creator.test.ts`); verificación visual con
+  Playwright contra `alisio serve` y un proveedor falso (menú, estado vacío, detalle, diagrama de datos
+  y diálogo de compartir). No verificado en vivo: el progreso de una ejecución real con un modelo
+  real, las aprobaciones durante la ejecución, el trabajo de instalación de extremo a extremo, el
+  borrado y el modo de solo lectura. Límites: las aprobaciones de una sesión creadora solo se
+  muestran mientras su página está abierta; las pruebas se ejecutan con `node --test` y la
+  construcción ejecuta el código del plugin con los privilegios del usuario, no es un sandbox; el
+  diagrama de datos se deduce del SQL del código fuente (heurístico); los plugins no tienen
+  dependencias ni paso de compilación; la calidad del plugin depende del modelo elegido.
+
 ### Preguntar al usuario (ask_user_question)
 
 - Herramienta `ask_user_question` (núcleo, no un plugin) y comando `/ask`: el modelo —o un
@@ -1118,6 +1152,37 @@ el 2026-10-02). Las fases 2 (revisión del plan), 3 (tareas en segundo plano, mi
   popover de permisos con los tres modos, estado y «Gestionar permisos guardados…», confirmación al
   elegir acceso total, diálogo de `/changelog` (chunk propio) y aviso discreto tras actualizar
   (`localStorage` con `try/catch`). Textos en EN y ES.
+
+### Barra lateral con muchas aplicaciones y barras de desplazamiento superpuestas (web)
+
+- Barra lateral: la lista **Aplicaciones** muestra cinco aplicaciones (más la abierta si queda fuera)
+  y un botón «Mostrar todas (N)» / «Mostrar menos» con `aria-expanded`; la elección se guarda por
+  navegador (`alisio.sidebar.appsAll`, con `try/catch`). La lista completa se desplaza dentro de su
+  zona (máximo ~45 % de la barra), el desplegable **Complementos** queda fijo debajo, **Proyectos**
+  conserva al menos 120 px y el pie (**Ajustes y herramientas**, versión) no se recorta; si la ventana
+  es muy baja, se desplaza la barra entera. En el riel, los iconos se desplazan entre el botón de
+  Complementos y el engranaje sin encogerse. Lógica pura en `store/apps-list.ts`
+  (`tests/web-apps-list.test.ts`).
+- Barras de desplazamiento: OverlayScrollbars 2.17.0 (MIT) como mejora progresiva, con el propio
+  elemento como viewport (`elements.viewport`), así que el elemento que se desplaza no cambia y el
+  seguimiento del chat y «saltar al último mensaje» funcionan igual. Se carga en un chunk diferido
+  tras el primer pintado (no entra en el bundle inicial: 94,9 KB / 95 KB gzip). Integración única
+  `useOverlayScrollbars(ref)` (`util/scrollbars.ts`) y estilos en `styles/scrollbars.css` (6 px
+  visibles, ~12 px de zona útil, colores de los tokens, ocultación automática, sin transiciones con
+  `prefers-reduced-motion`). Aplicada al chat, la barra lateral (aplicaciones, proyectos, riel),
+  Ajustes (menú y contenido), Agentes, Skill Builder, panel de archivos, artefactos, novedades,
+  ajustes de proyecto, explorador de carpetas, creador de plugins y `/btw`.
+- Límites: mientras carga el chunk, si falla o en los contenedores que conservan el desplazamiento
+  nativo (bloques de código, tablas, diffs, terminal, el textarea del compositor, menús) se usan
+  barras nativas finas solo con CSS; donde el sistema no superpone las barras nativas, ocupan ~10 px
+  y el contenido se ensancha un poco al activarse la superposición. En dispositivos con barras
+  nativas superpuestas (móviles, macOS) no se inicializa y se usan las nativas.
+- Verificado con Vitest, `pnpm web:size` y Playwright (Chromium, Linux) contra `alisio serve` con un
+  proveedor simulado en streaming: 42 aplicaciones y 25 proyectos en barra expandida, riel y móvil
+  (390x844), temas claro y oscuro, aparición al desplazar, al pasar el puntero y con teclado, ocultación
+  automática, desplazamiento horizontal de un bloque de código, seguimiento del chat durante el
+  streaming (sin volver abajo al subir; el botón vuelve al final) y el respaldo CSS bloqueando el
+  chunk. No verificado: Firefox, Safari, Windows, macOS y pantallas táctiles reales.
 
 ### Pestaña Memory de la web y vistas de datos de plugins
 

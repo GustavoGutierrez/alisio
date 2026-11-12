@@ -3,7 +3,7 @@
 The Skill Builder writes a new skill for you. You describe what the skill should do, the active
 model drafts it in the open [Agent Skills](https://agentskills.io) format, and you review and edit
 the draft before anything is saved. It is in the web UI and the desktop app: **Skill Builder** in
-the sidebar, above **Settings**, or **New skill** in **Settings → Skills**.
+the **Settings & tools** menu at the bottom of the sidebar, or **New skill** in **Settings → Skills**.
 
 ## The three steps
 

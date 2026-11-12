@@ -3,7 +3,7 @@
 El Creador de skills redacta una skill nueva por ti. Describes qué debe hacer la skill, el modelo
 activo la redacta en el formato abierto [Agent Skills](https://agentskills.io) y tú revisas y editas
 el borrador antes de guardar nada. Está en la interfaz web y en la app de escritorio: **Creador de
-skills** en la barra lateral, sobre **Ajustes**, o **Nueva skill** en **Ajustes → Skills**.
+skills** en el menú **Ajustes y herramientas** al pie de la barra lateral, o **Nueva skill** en **Ajustes → Skills**.
 
 ## Los tres pasos
 
