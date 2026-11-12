@@ -1,7 +1,7 @@
 /** Signals and actions of the plugin Apps feature (catalog polling, open app, kept instances). */
 import { computed, effect, signal } from "@preact/signals";
 import { t } from "../i18n/index.ts";
-import { api, detail, showToast, sidebar } from "./app.ts";
+import { api, catalogTick, detail, showToast, sidebar } from "./app.ts";
 import { errorText } from "./errors.ts";
 import {
   type AppCatalogState,
@@ -56,10 +56,16 @@ export async function refreshAppCatalog(): Promise<void> {
   }
 }
 
-/** Starts the catalog refresh (on workspace change and every 15 s). Returns a stop function. */
+/**
+ * Starts the catalog refresh: on workspace change, at once when the server announces a plugin
+ * change (`catalog_changed` "plugins": install, update, uninstall, enable, disable) and every 15 s.
+ * Returns a stop function.
+ */
 export function startAppCatalog(interval = APP_CATALOG_REFRESH_MS): () => void {
+  const plugins = computed(() => catalogTick.value.plugins);
   const stopEffect = effect(() => {
     void appsWorkspace.value;
+    void plugins.value;
     void refreshAppCatalog();
   });
   const timer = setInterval(() => void refreshAppCatalog(), interval);

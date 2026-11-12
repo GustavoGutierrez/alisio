@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type BuiltinPlugin, type InstallRunner, inspectPluginTarball } from "@alisio/core";
-import { definePlugin, type PluginInfo } from "@alisio/sdk";
+import { definePlugin, type PluginAppInfo, type PluginInfo } from "@alisio/sdk";
 import { afterEach, describe, expect, it } from "vitest";
 import type { JobView } from "../packages/server/src/plugins/jobs.ts";
 import type {
@@ -12,6 +12,7 @@ import {
   deferred,
   gatedProvider,
   newSession,
+  openStream,
   raw,
   startTestServer,
   type TestServer,
@@ -29,6 +30,8 @@ interface NpmState {
   calls: string[][];
   gate?: Promise<void>;
   fail?: boolean;
+  /** The installed plugin also registers a plugin app. */
+  withApp?: boolean;
 }
 
 /** A fake npm that "installs" a tarball by writing a loadable plugin and the file: spec. */
@@ -67,7 +70,7 @@ function fakeNpm(state: NpmState): InstallRunner {
     );
     await writeFile(
       join(dir, "index.js"),
-      `export default { id: "fake-ica", name: "Fake ICA", version: ${JSON.stringify(info.version)}, apiVersion: 1, setup() {} };\n`,
+      `export default { id: "fake-ica", name: "Fake ICA", version: ${JSON.stringify(info.version)}, apiVersion: 1, setup(api) { ${state.withApp ? 'api.apps.register({ id: "ledger", label: { en: "Ledger", es: "Libro" }, html: () => "<p>ok</p>" });' : ""} } };\n`,
     );
     manifest.dependencies[name] = `file:${relative(prefix, target).split("\\").join("/")}`;
     await writeFile(manifestPath, JSON.stringify(manifest));
@@ -242,6 +245,23 @@ describe("POST /api/plugins/local/inspect", () => {
 });
 
 describe("local install job", () => {
+  it("lists the new plugin's app in the open workspace right after the install, without a restart", async () => {
+    const { t, wid } = await start({ npm: { calls: [], withApp: true } });
+    const stream = openStream(t.server.port, t.cookie);
+    expect((await t.api.get(`/api/workspaces/${wid}/apps`)).json<PluginAppInfo[]>()).toEqual([]);
+    const view = await runJob(t, (await inspect(t)).stagingId as string);
+    expect(view.error).toBeUndefined();
+    expect((await t.api.get(`/api/workspaces/${wid}/apps`)).json<PluginAppInfo[]>()).toEqual([
+      { plugin: "fake-ica", id: "ledger", label: { en: "Ledger", es: "Libro" } },
+    ]);
+    // Open web clients hear about it (the sidebar Apps list refreshes on this frame).
+    await stream.next(
+      ({ frame }) =>
+        frame.t === "catalog_changed" && frame.scope === "plugins" && frame.workspaceId === wid,
+    );
+    stream.close();
+  });
+
   it("installs from a stable copy, progresses through every phase and cleans up", async () => {
     const { t, wid, npm } = await start();
     const info = await inspect(t);

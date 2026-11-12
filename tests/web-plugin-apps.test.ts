@@ -1,9 +1,11 @@
 import type { PendingApproval, PluginAppInfo } from "@alisio/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppBridge, type PortLike } from "../packages/web/src/components/apps/bridge.ts";
 import { ApiRequestError } from "../packages/web/src/net/api.ts";
 import {
+  api,
   appPending,
+  catalogTick,
   currentId,
   detail,
   openSession,
@@ -18,6 +20,7 @@ import {
   appInstances,
   closeApp,
   openApp,
+  startAppCatalog,
 } from "../packages/web/src/store/plugin-apps.ts";
 import {
   appLabel,
@@ -288,5 +291,32 @@ describe("app frame port protocol", () => {
       { type: "response", id: "n", error: "not_found" },
     ]);
     expect(gone).toBe(1);
+  });
+});
+
+describe("apps catalog refresh", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    detail.value = undefined;
+    appCatalog.value = undefined;
+  });
+  it("re-reads the workspace apps as soon as the plugins change (catalog_changed), not only on the timer", async () => {
+    detail.value = { id: "chat-1", workspaceId: "w1" } as never;
+    const answers = [[], [info("shopping")]];
+    const calls = vi
+      .spyOn(api, "pluginApps")
+      .mockImplementation(async () => answers.shift() ?? [info("shopping")]);
+    const stop = startAppCatalog(3_600_000);
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    expect(appsOf(appCatalog.value, "w1")).toEqual([]);
+    catalogTick.value = { ...catalogTick.value, plugins: (catalogTick.value.plugins ?? 0) + 1 };
+    await vi.waitFor(() =>
+      expect(appsOf(appCatalog.value, "w1").map((a) => a.id)).toEqual(["shopping"]),
+    );
+    // Other catalogs (skills, models...) do not refetch the apps.
+    catalogTick.value = { ...catalogTick.value, skills: (catalogTick.value.skills ?? 0) + 1 };
+    await Promise.resolve();
+    expect(calls).toHaveBeenCalledTimes(2);
+    stop();
   });
 });
