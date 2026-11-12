@@ -136,6 +136,34 @@ Other cases: **Alisio is running in read-only mode** (started with `--read-only`
 cannot be created, built, installed or deleted, but you can still look at them; **That model is not
 configured anymore** means you should pick another model.
 
+### Checks before installing
+
+Every build checks the packaged plugin the way Alisio will use it: it unpacks it into a throwaway
+folder and starts it with Alisio's real plugin host (with throwaway settings and data folders),
+checks that every tool is accepted, calls each tool once with a minimal valid input, closes it and
+starts it again, and makes sure each tool has an automatic check. **Install** and **Update** stay
+disabled until the latest build passed every check for the files as they are now. When a check
+fails during a build, Alisio reads the problems and fixes them on its own; after a few failed
+attempts it stops and the page shows **Try again**.
+
+| Message | What it means |
+| --- | --- |
+| Alisio could not start it | The plugin failed to start in Alisio; open **Show the reason** (for example a tool input with two types) and ask Alisio to fix it |
+| One of its files is not valid JavaScript / It contains TypeScript files | Plugins ship plain JavaScript |
+| It uses a file that would be left out of the package | A file it imports is not in the package |
+| One of its tools failed when Alisio tried it | A tool threw an error instead of answering |
+| It fails when Alisio closes it / It cannot be started a second time | Closing or restarting the plugin breaks |
+| One of its tools has no automatic check | Each tool needs a check of its own |
+| Alisio could not run its safety checks on this computer | Not the plugin: update or reinstall Alisio. Nothing is installed without the checks |
+
+### Installed but it could not start
+
+If an installed plugin does not start, the page says **Installed but it could not start**, with the
+reason under **Show the reason** and **Ask Alisio to fix it**. Right after an install or update,
+Alisio checks that the plugin really started; if it did not, it undoes the install (an update puts
+the previous version back) and shows the same choice. Plugins installed before these checks are
+shown the same way.
+
 ## Limitations
 
 - Plugins are plain JavaScript with no dependencies and no build step; the creator cannot install

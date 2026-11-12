@@ -844,6 +844,23 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   construcción ejecuta el código del plugin con los privilegios del usuario, no es un sandbox; el
   diagrama de datos se deduce del SQL del código fuente (heurístico); los plugins no tienen
   dependencias ni paso de compilación; la calidad del plugin depende del modelo elegido.
+- Puertas de entrega (0.11.x): cada `build` empaqueta el `.tgz`, lo extrae en una carpeta temporal
+  (diseño instalado, sin npm ni red) y lo comprueba en un proceso hijo del mismo runtime (el binario
+  compilado usa el comando oculto `__plugin-gate`) con HOME, config y estado temporales
+  (`ALISIO_PLUGIN_GATE=1`): activación con el `PluginHost` y el `ToolRegistry` reales (Ajv estricto),
+  una llamada de humo por herramienta con una entrada mínima válida (se omiten las de efecto
+  `process`/`external` y las que no admiten entrada mínima), `dispose` y segunda activación; además
+  `node --check` de cada archivo enviado, imports relativos incluidos en el paquete y una prueba por
+  herramienta. Los códigos (`activation_failed`, `syntax_error`, `typescript_source`,
+  `import_not_packed`, `tool_smoke_failed`, `dispose_failed`, `reactivate_failed`, `tool_untested`,
+  `tests_too_few`; `gate_unavailable` cuando el runtime no puede ejecutar la comprobación: la build falla
+  cerrada y nunca pasa sin comprobar) llegan al agente, que reintenta hasta 3 veces. Instalar exige el paquete de la
+  última build correcta para las fuentes actuales (409 `plugin_not_built`); tras instalar se verifica
+  el estado en el catálogo de los espacios abiertos y, si falló, se revierte (actualización: versión
+  anterior; primera instalación: desinstalada) con `activationError`. El diagnóstico del catálogo
+  ahora incluye el motivo saneado (sin rutas absolutas, acotado). Límites: el hijo NO es un sandbox
+  (privilegios del usuario, puede usar la red); la verificación tras instalar se omite cuando el
+  código ya estaba cargado en el proceso (requiere reinicio) o no hay espacio abierto.
 
 ### Preguntar al usuario (ask_user_question)
 

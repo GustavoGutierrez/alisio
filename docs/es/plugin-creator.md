@@ -144,6 +144,35 @@ Otros casos: **Alisio está en modo de solo lectura** (iniciado con `--read-only
 pueden crear, preparar, instalar ni eliminar complementos, pero sí verlos; **Ese modelo ya no está
 configurado** significa que debes elegir otro modelo.
 
+### Comprobaciones antes de instalar
+
+Cada preparación comprueba el complemento empaquetado tal como Alisio lo usará: lo desempaqueta en
+una carpeta temporal y lo inicia con el host de complementos real de Alisio (con carpetas de ajustes
+y datos temporales), comprueba que se acepta cada herramienta, llama una vez a cada herramienta con
+una entrada mínima válida, lo cierra y lo vuelve a iniciar, y verifica que cada herramienta tenga
+una comprobación automática. **Instalar** y **Actualizar** siguen desactivados hasta que la última
+preparación pase todas las comprobaciones con los archivos tal como están ahora. Cuando una
+comprobación falla durante una preparación, Alisio lee los problemas y los corrige por su cuenta;
+tras unos pocos intentos fallidos se detiene y la página muestra **Intentar de nuevo**.
+
+| Mensaje | Qué significa |
+| --- | --- |
+| Alisio no pudo iniciarlo | El complemento no arrancó en Alisio; abre **Ver el motivo** (por ejemplo, una entrada de herramienta con dos tipos) y pide a Alisio que lo corrija |
+| Uno de sus archivos no es JavaScript válido / Contiene archivos TypeScript | Los complementos se entregan en JavaScript simple |
+| Usa un archivo que quedaría fuera del paquete | Un archivo que importa no está en el paquete |
+| Una de sus herramientas falló cuando Alisio la probó | Una herramienta lanzó un error en lugar de responder |
+| Falla cuando Alisio lo cierra / No se puede iniciar una segunda vez | Cerrar o reiniciar el complemento falla |
+| Una de sus herramientas no tiene comprobación automática | Cada herramienta necesita su propia comprobación |
+| Alisio no pudo ejecutar sus comprobaciones de seguridad en este equipo | No es el complemento: actualiza o reinstala Alisio. Nada se instala sin las comprobaciones |
+
+### Instalado, pero no pudo iniciarse
+
+Si un complemento instalado no arranca, la página dice **Instalado, pero no pudo iniciarse**, con el
+motivo en **Ver el motivo** y **Pedir a Alisio que lo corrija**. Justo después de instalar o
+actualizar, Alisio comprueba que el complemento arrancó de verdad; si no, deshace la instalación
+(una actualización vuelve a la versión anterior) y muestra la misma opción. Los complementos
+instalados antes de estas comprobaciones se muestran igual.
+
 ## Limitaciones
 
 - Los complementos son JavaScript simple, sin dependencias y sin paso de compilación; el creador no
