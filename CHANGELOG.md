@@ -4,6 +4,28 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.8] - 2026-11-12
+
+Plugin creator and a tidier sidebar.
+
+### Added
+
+- Plugin creator (Web UI): describe a task in plain words, pick a model, and Alisio builds a small
+  private plugin, checks it with automatic tests and lets you install and enable it with one click.
+  You can then ask for changes, update it, download it as a `.tgz` that installs from Settings >
+  Plugins > Install from file, see its files, stats and database tables, delete it and follow a
+  short guide to share it privately or on npm.
+- A Plugins menu at the bottom of Apps opens the plugin catalog or the plugin creator.
+
+### Improved
+
+- Agents, Skill builder and Settings are now grouped in one Settings & tools menu, leaving more room
+  for projects.
+- With many plugin apps the sidebar shows the first few with a Show all toggle, and the collapsed
+  sidebar now lists the installed apps; menus and projects always stay reachable.
+- Thin overlay scrollbars that appear while you scroll and hide when idle, in the chat, sidebar,
+  files panel, settings and other panels.
+
 ## [0.11.7] - 2026-11-10
 
 Semantic search for plugins.
