@@ -186,3 +186,5 @@ Third-party notice: [Chart.js](https://www.chartjs.org/) 4.5.1 (MIT, © Chart.js
 bundled in `@alisio/core` for dashboard charts. Its copyright header stays in the bundled file and
 its license text is kept in
 `packages/core/src/analysis/python/alisio_runtime/chart.LICENSE.txt`.
+[OverlayScrollbars](https://kingsora.github.io/OverlayScrollbars/) 2.17.0 (MIT, © Rene Haas) is
+bundled in the web UI (a lazy chunk) for the overlay scrollbars.

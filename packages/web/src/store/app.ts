@@ -48,7 +48,13 @@ import {
   resolveLocal,
   visiblePending,
 } from "./pending.ts";
-import { activeAppKey, activeAppSession } from "./plugin-apps-state.ts";
+import {
+  activeAppKey,
+  activeAppSession,
+  creatorOpen,
+  creatorSession,
+  frameTaps,
+} from "./plugin-apps-state.ts";
 import {
   effectiveTab,
   emptyPlugins,
@@ -107,6 +113,8 @@ export const now = signal(Date.now());
 export const settingsOpen = signal(false);
 /** The settings page to open first (an id; the former `analysis` opens Forja). */
 export const settingsPage = signal<string | undefined>(undefined);
+/** Tab Settings → Plugins opens on (read once by the page), e.g. the catalog from the sidebar. */
+export const settingsPluginsTab = signal<"catalog" | undefined>(undefined);
 /** The Agents window (list/editor), opened from the sidebar above Settings. */
 export const agentsOpen = signal(false);
 /** The Skill Builder window (describe, review and save a new skill). */
@@ -353,7 +361,7 @@ function scheduleForgeFlush(): void {
   forgeTimer = setTimeout(() => {
     forgeTimer = undefined;
     const frames = forgeGate.flush(Date.now());
-    if (frames.length) applyServerFrames(frames);
+    if (frames.length) deliver(frames);
     scheduleForgeFlush();
   }, due);
 }
@@ -361,7 +369,13 @@ function scheduleForgeFlush(): void {
 function onFrames(incoming: ServerFrame[]): void {
   const frames = forgeGate.admit(incoming, Date.now());
   scheduleForgeFlush();
-  if (frames.length) applyServerFrames(frames);
+  if (frames.length) deliver(frames);
+}
+
+/** Applies frames to the app state, then hands them to the listeners (the creator page). */
+function deliver(frames: ServerFrame[]): void {
+  applyServerFrames(frames);
+  for (const tap of frameTaps) tap(frames);
 }
 
 function applyServerFrames(frames: ServerFrame[]): void {
@@ -393,7 +407,8 @@ function applyServerFrames(frames: ServerFrame[]): void {
       if (
         frame.t === "approval" &&
         (frame.approval.rootSessionId === currentId.value ||
-          frame.approval.rootSessionId === activeAppSession.value)
+          frame.approval.rootSessionId === activeAppSession.value ||
+          frame.approval.rootSessionId === creatorSession.value)
       )
         announceAssertive.value = frame.approval.name ?? frame.approval.approvalId;
       if (frame.t === "capabilities_changed" && frame.sessionId === currentId.value)
@@ -472,7 +487,9 @@ function applyServerFrames(frames: ServerFrame[]): void {
 
 /** The stream watches the open chat and, while an app is open, the session its actions run in. */
 function watchSessions(): void {
-  const ids = [currentId.value, activeAppSession.value].filter((id): id is string => !!id);
+  const ids = [currentId.value, activeAppSession.value, creatorSession.value].filter(
+    (id, i, all): id is string => !!id && all.indexOf(id) === i,
+  );
   stream?.subscribe(ids);
 }
 
@@ -480,6 +497,7 @@ function watchSessions(): void {
 export async function openSession(id: string | undefined): Promise<void> {
   // Opening a chat from the sidebar leaves any plugin app (its frame stays mounted).
   activeAppKey.value = undefined;
+  creatorOpen.value = false;
   if (id === currentId.value && id) return;
   batch(() => {
     currentId.value = id;
@@ -568,6 +586,7 @@ export async function init(): Promise<void> {
   });
   effect(() => {
     activeAppSession.value;
+    creatorSession.value;
     watchSessions();
   });
   window.addEventListener("online", () => stream?.nudge());

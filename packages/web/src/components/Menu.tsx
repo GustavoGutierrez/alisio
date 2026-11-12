@@ -8,12 +8,16 @@ export interface MenuItem {
   description?: string;
   disabled?: boolean;
   checked?: boolean;
+  /** Leading icon (shown instead of the check column). */
+  icon?: ComponentChildren;
 }
 
 export interface MenuGroup {
   label?: string;
   items: MenuItem[];
   onSelect: (id: string) => void;
+  /** Plain commands (`menuitem`) instead of radio choices. */
+  actions?: boolean;
 }
 
 /**
@@ -32,16 +36,19 @@ export function Menu(props: {
    * so a scrolling container such as the sidebar cannot clip it; closes on scroll.
    */
   fixed?: boolean;
+  /** With `fixed`: the popover takes the trigger's width (descriptions wrap), e.g. in the sidebar. */
+  matchTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
+  const [width, setWidth] = useState<number | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const items = [...(list.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? [])];
+    const items = [...(list.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
     (
       items.find(
         (i) => i.getAttribute("aria-checked") === "true" && !i.hasAttribute("aria-disabled"),
@@ -83,9 +90,8 @@ export function Menu(props: {
 
   const onKeyDown = (event: KeyboardEvent) => {
     const items = [
-      ...(list.current?.querySelectorAll<HTMLElement>(
-        "[role=menuitemradio]:not([aria-disabled])",
-      ) ?? []),
+      ...(list.current?.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled])") ??
+        []),
     ];
     const index = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -115,7 +121,10 @@ export function Menu(props: {
         aria-label={props.label}
         title={props.label}
         disabled={props.disabled}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (props.matchTrigger) setWidth(button.current?.offsetWidth);
+          setOpen(!open);
+        }}
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             event.preventDefault();
@@ -133,9 +142,12 @@ export function Menu(props: {
           data-fixed={props.fixed ? "true" : undefined}
           style={
             props.fixed
-              ? position
-                ? { top: `${position.top}px`, left: `${position.left}px` }
-                : { visibility: "hidden" }
+              ? {
+                  ...(position
+                    ? { top: `${position.top}px`, left: `${position.left}px` }
+                    : { visibility: "hidden" }),
+                  ...(width ? { width: `${width}px`, minWidth: `${width}px` } : {}),
+                }
               : undefined
           }
           role="menu"
@@ -152,9 +164,9 @@ export function Menu(props: {
               {group.items.map((item) => (
                 <div
                   key={item.id}
-                  role="menuitemradio"
+                  role={group.actions ? "menuitem" : "menuitemradio"}
                   tabIndex={-1}
-                  aria-checked={!!item.checked}
+                  aria-checked={group.actions ? undefined : !!item.checked}
                   aria-disabled={item.disabled ? "true" : undefined}
                   class={styles.item}
                   onClick={() => {
@@ -170,8 +182,8 @@ export function Menu(props: {
                     }
                   }}
                 >
-                  <span class={styles.check} aria-hidden="true">
-                    {item.checked ? "✓" : ""}
+                  <span class={item.icon ? styles.itemIcon : styles.check} aria-hidden="true">
+                    {item.icon ?? (item.checked ? "✓" : "")}
                   </span>
                   <span class={styles.itemText}>
                     <span class={styles.itemLabel}>{item.label}</span>

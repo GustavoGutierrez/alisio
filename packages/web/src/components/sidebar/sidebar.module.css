@@ -6,7 +6,15 @@
   padding: 14px 10px 10px;
   border-right: 1px solid var(--border);
   background: var(--surface);
-  overflow: hidden;
+  /* The Apps list and Projects scroll on their own; only a very short window scrolls the whole
+     sidebar, so no static entry (New session, Plugins, Settings & tools) is ever cut off. */
+  overflow: hidden auto;
+}
+
+/* Static rows never shrink; only the Apps list and the Projects tree give up height. */
+.sidebar > *,
+.appsGroup > * {
+  flex: none;
 }
 
 .rail {
@@ -99,11 +107,11 @@
   font-weight: 550;
 }
 
-.tree {
-  flex: 1;
+.sidebar > .tree {
+  flex: 1 1 0;
+  min-height: 120px;
   margin-top: 8px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .folder + .folder {
@@ -343,9 +351,27 @@
   background: var(--hover);
 }
 
-/* Settings sits right under Agents (same menu). */
-.settingsBelow {
-  margin-top: 0;
+/* "Settings & tools": full-width trigger; the chevron points up (the menu opens upward). */
+.toolsTrigger {
+  width: 100%;
+  color: var(--text);
+}
+
+.toolsChevron {
+  flex: none;
+  color: var(--muted);
+  transform: rotate(180deg);
+  transition: transform 0.15s var(--ease);
+}
+
+.toolsTrigger[aria-expanded="true"] .toolsChevron {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolsChevron {
+    transition: none;
+  }
 }
 
 .version {
@@ -359,7 +385,7 @@
   text-overflow: ellipsis;
 }
 
-.spacer {
+.sidebar > .spacer {
   flex: 1;
 }
 
@@ -584,8 +610,48 @@
   --pc: var(--pc-gray);
 }
 
-.appsGroup {
+/* Apps: header, a capped list that scrolls inside its own region, the toggle and the Plugins
+   dropdown, which stays pinned under the list. The group never takes more than ~45% of the
+   sidebar, so Projects keeps room. */
+.sidebar > .appsGroup {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 45%;
   margin-bottom: 8px;
+}
+
+.appsGroup > .appList {
+  flex: 0 1 auto;
+  min-height: 0;
+  /* Room for the active row's accent bar (left: -6px), which a scroll region would clip. */
+  margin: 2px 0 0 -6px;
+  padding-left: 6px;
+  overflow-y: auto;
+}
+
+.appList:not(:empty) {
+  min-height: 72px;
+}
+
+.appsToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: start;
+}
+
+.appsToggle:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .appLink {
@@ -595,4 +661,53 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+/* The Plugins dropdown at the foot of the Apps group (its menu root fills the row). */
+.pluginsRow > * {
+  flex: 1;
+}
+
+.pluginsTrigger {
+  width: 100%;
+  color: var(--text);
+}
+
+.pluginsChevron {
+  flex: none;
+  margin-right: 6px;
+  color: var(--muted);
+  transition: transform 0.15s var(--ease);
+}
+
+.pluginsTrigger[aria-expanded="true"] .pluginsChevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pluginsChevron {
+    transition: none;
+  }
+}
+
+/* Rail apps: shrink and scroll so the Plugins button and the footer gear always stay on screen. */
+.rail > .railApps {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 4px;
+}
+
+/* Full-size buttons: the list scrolls instead of squashing them. */
+.railApps > * {
+  flex: none;
+}
+
+.railApps [aria-current="page"] {
+  background: var(--raised);
+  color: var(--accent-strong);
 }

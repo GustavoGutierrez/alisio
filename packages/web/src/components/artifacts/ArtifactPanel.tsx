@@ -21,6 +21,7 @@ import { setPanelExpanded } from "../../store/layout.ts";
 import { ARTIFACT_ICONS, downloadUrl } from "../../util/artifacts.ts";
 import { rendererFor } from "../../util/panel.ts";
 import { isPlanArtifact } from "../../util/plan-view.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { Icon, type IconName } from "../icons.tsx";
 import { ArtifactDetails } from "./ArtifactDetails.tsx";
 import { ArtifactMenu, type MenuAction } from "./ArtifactMenu.tsx";
@@ -144,6 +145,8 @@ export function ArtifactPanel(props: {
   const id = state?.id;
   const dataset = state?.dataset;
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const [listOpen, setListOpen] = useState(!!state?.listOpen || (!id && !dataset));
   const [sheet, setSheet] = useState<"export" | "details" | "delete" | undefined>();
   const [fullscreen, setFullscreen] = useState(false);
@@ -488,7 +491,7 @@ export function ArtifactPanel(props: {
           </div>
         </div>
       ) : null}
-      <div class={styles.body}>
+      <div ref={scroll} class={styles.body}>
         {dataset ? (
           <LazySpreadsheet key={dataset.id} dataset={dataset} />
         ) : !id ? (

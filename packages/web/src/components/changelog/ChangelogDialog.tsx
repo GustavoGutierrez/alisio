@@ -7,6 +7,7 @@ import type { ChangelogView } from "@alisio/sdk";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, changelogRequest, focusComposer } from "../../store/app.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { Icon } from "../icons.tsx";
 import settings from "../settings/settings.module.css";
 import styles from "./changelog.module.css";
@@ -25,6 +26,8 @@ const inlineCode = (text: string) =>
 
 export function ChangelogDialog(props: { version: string }) {
   const root = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const version = props.version;
   const [state, setState] = useState<{ view?: ChangelogView; error?: boolean }>({});
   useEffect(() => {
@@ -80,7 +83,7 @@ export function ChangelogDialog(props: { version: string }) {
             <Icon name="x" size={18} />
           </button>
         </div>
-        <div class={styles.body}>
+        <div ref={scroll} class={styles.body}>
           {state.error ? (
             <p class={styles.note} role="alert">
               {t("changelog.loadFailed")}

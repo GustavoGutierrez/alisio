@@ -4,6 +4,7 @@ import { t } from "../../i18n/index.ts";
 import { Markdown } from "../../markdown/view.tsx";
 import { loadOlder, retryEcho, transcript } from "../../store/app.ts";
 import { type VisibleItem, visibleItems } from "../../store/transcript.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { ArtifactCards } from "../artifacts/ArtifactCard.tsx";
 import { DatasetChips } from "../artifacts/DatasetChips.tsx";
 import { CopyButton } from "../CopyButton.tsx";
@@ -148,6 +149,8 @@ export function Transcript() {
   const items = useComputed(() => visibleItems(transcript.value));
   const state = transcript.value;
   const scroller = useRef<HTMLDivElement>(null);
+  // Overlay scrollbars keep `scroller` as the scrolling viewport: follow/jump math is unchanged.
+  useOverlayScrollbars(scroller);
   const [follow, setFollow] = useState(true);
   const [turns, setTurns] = useState(WINDOW_TURNS);
   const all = items.value;

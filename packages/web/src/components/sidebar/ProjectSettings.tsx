@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState } from "preact/hooks";
 import { patchWorkspace, setWorkspaceTrust, showToast, sidebar } from "../../store/app.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
 import settings from "../settings/settings.module.css";
@@ -38,6 +39,8 @@ export function ProjectSettings(props: { workspaceId: string; onClose: () => voi
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<"pin" | "archive" | "trust" | undefined>();
   const dialog = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const name = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -116,7 +119,7 @@ export function ProjectSettings(props: { workspaceId: string; onClose: () => voi
             <Icon name="x" size={18} />
           </button>
         </header>
-        <div class={styles.body}>
+        <div ref={scroll} class={styles.body}>
           {facts.missing ? (
             <p class={styles.missing} role="status">
               {ps("missing")}

@@ -15,6 +15,7 @@ import {
 import { agentsOpen, api, showToast } from "../../store/app.ts";
 import { errorText } from "../../store/errors.ts";
 import { readPref, writePref } from "../../store/storage.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { Icon } from "../icons.tsx";
 import settings from "../settings/settings.module.css";
 import { Pill, Status, settingsWorkspace, useLoad } from "../settings/shared.tsx";
@@ -49,6 +50,8 @@ export function AgentsModal() {
   const [dirty, setDirty] = useState(false);
   const [maximized, setMaximized] = useState(() => readPref(MAXIMIZED_PREF) === "1");
   const dialog = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const overview = useLoad(() => api.agentDefinitions(workspace?.id), [workspace?.id], ["agents"]);
   const templates = useLoad(() => api.agentTemplates(), []);
   const models = useLoad<AgentModelOption[]>(
@@ -125,7 +128,7 @@ export function AgentsModal() {
           }
         }}
       >
-        <div class={`${settings.content} ${styles.scroll}`}>
+        <div ref={scroll} class={`${settings.content} ${styles.scroll}`}>
           <div class={settings.topBar}>
             <nav class={styles.breadcrumb} aria-label={t("agentsWin.title")}>
               {view.kind === "editor" ? (

@@ -18,27 +18,86 @@ import {
   picking,
   pickWorkspace,
   settingsOpen,
+  settingsPage,
+  settingsPluginsTab,
   setWorkspaceTrust,
   sidebar,
   skillBuilderOpen,
 } from "../../store/app.ts";
+import { appsExpanded, capApps, setAppsExpanded } from "../../store/apps-list.ts";
 import { allCollapsed, closedFolders, folderOpen, setFoldersOpen } from "../../store/folders.ts";
 import { activeAppKey, appCatalog, appsWorkspace, openApp } from "../../store/plugin-apps.ts";
 import { appMenuItems } from "../../store/plugin-apps-model.ts";
+import { creatorOpen, openCreator } from "../../store/plugin-apps-state.ts";
 import { setSidebarCollapsed, sidebarCollapsed } from "../../store/prefs.ts";
 import { groupSessions, projectSections } from "../../store/sessions.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { relativeTime } from "../../util/time.ts";
-import { Icon } from "../icons.tsx";
+import { Icon, type IconName } from "../icons.tsx";
 import { Menu } from "../Menu.tsx";
 import type { ColorPalette } from "./ColorPalette.tsx";
 import type { FolderBrowser } from "./FolderBrowser.tsx";
 import type { ProjectSettings } from "./ProjectSettings.tsx";
 import { projectMenuItems } from "./project-settings.ts";
 import styles from "./sidebar.module.css";
+import { openTool, TOOLS } from "./tools-menu.ts";
 
 export const searchRequest = { focus: () => {} };
 
-/** The Apps group: listed just above Projects, and not rendered at all without apps. */
+/** The "Plugins" dropdown: find more in the catalog, or open the plugin creator. */
+function PluginsMenu(props: { rail?: boolean }) {
+  return (
+    <Menu
+      label={t("sidebar.plugins")}
+      fixed
+      matchTrigger={!props.rail}
+      class={
+        props.rail ? "icon-btn" : `${styles.rowLink} ${styles.appLink} ${styles.pluginsTrigger}`
+      }
+      groups={[
+        {
+          actions: true,
+          items: [
+            {
+              id: "find",
+              label: t("sidebar.pluginsFind"),
+              description: t("sidebar.pluginsFindHint"),
+              icon: <Icon name="search" size={15} />,
+            },
+            {
+              id: "creator",
+              label: t("sidebar.pluginsCreator"),
+              description: t("sidebar.pluginsCreatorHint"),
+              icon: <Icon name="wand" size={15} />,
+            },
+          ],
+          onSelect: (id) => {
+            mobileSidebar.value = false;
+            if (id === "creator") return openCreator();
+            settingsPluginsTab.value = "catalog";
+            settingsPage.value = "plugins";
+            settingsOpen.value = true;
+          },
+        },
+      ]}
+    >
+      <Icon name="puzzle" size={props.rail ? 18 : 15} />
+      {props.rail ? null : (
+        <>
+          <span class={styles.rowTitle}>{t("sidebar.plugins")}</span>
+          <Icon name="chevronDown" size={14} class={styles.pluginsChevron} />
+        </>
+      )}
+    </Menu>
+  );
+}
+
+/**
+ * The Apps group, just above Projects: the apps of the enabled plugins (when there are any) and
+ * the Plugins dropdown, which always shows so a fresh install can find and create plugins.
+ * A long list is capped ("Show all (N)") and scrolls inside its own region, so Projects, the
+ * Plugins dropdown and the footer stay reachable however many apps there are.
+ */
 function AppsGroup() {
   const items = appMenuItems(
     appCatalog.value,
@@ -46,7 +105,10 @@ function AppsGroup() {
     activeAppKey.value,
     locale.value,
   );
-  if (!items.length) return null;
+  const all = appsExpanded.value;
+  const view = capApps(items, all);
+  const list = useRef<HTMLUListElement>(null);
+  useOverlayScrollbars(list);
   return (
     <section class={styles.appsGroup} aria-labelledby="sidebar-apps-title">
       <div class={styles.sectionHead}>
@@ -54,8 +116,8 @@ function AppsGroup() {
           {t("sidebar.apps")}
         </h2>
       </div>
-      <ul class={styles.sessions}>
-        {items.map((item) => (
+      <ul ref={list} id="sidebar-apps" class={`${styles.sessions} ${styles.appList}`}>
+        {view.shown.map((item) => (
           <li key={item.key} class={styles.row} data-active={item.active}>
             <button
               type="button"
@@ -72,7 +134,60 @@ function AppsGroup() {
           </li>
         ))}
       </ul>
+      {view.toggle ? (
+        <button
+          type="button"
+          class={styles.appsToggle}
+          aria-expanded={all}
+          aria-controls="sidebar-apps"
+          onClick={() => setAppsExpanded(!all)}
+        >
+          <Icon name={all ? "chevronDown" : "chevronRight"} size={12} />
+          {all ? t("sidebar.appsLess") : t("sidebar.appsAll", { count: items.length })}
+        </button>
+      ) : null}
+      <div
+        class={`${styles.row} ${styles.pluginsRow}`}
+        data-active={creatorOpen.value ? "true" : undefined}
+      >
+        <PluginsMenu />
+      </div>
     </section>
+  );
+}
+
+/** The collapsed rail's apps: one icon button each, scrolling when there are many. */
+function RailApps() {
+  const items = appMenuItems(
+    appCatalog.value,
+    appsWorkspace.value,
+    activeAppKey.value,
+    locale.value,
+  );
+  const rail = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(rail);
+  if (!items.length) return null;
+  return (
+    <div
+      ref={rail}
+      class={styles.railApps}
+      role="group"
+      aria-label={`${t("sidebar.apps")} (${items.length})`}
+    >
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          class="icon-btn"
+          aria-label={item.label}
+          title={item.label}
+          aria-current={item.active ? "page" : undefined}
+          onClick={() => void openApp(item.plugin, item.id)}
+        >
+          <Icon name="layers" size={18} />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -131,12 +246,40 @@ function SessionRow({ session }: { session: SessionSummary }) {
 }
 
 /** Workspaces and their sessions (RF-11): search, archived filter, open folder, settings. */
-/** The windows opened from the foot of the sidebar, in order (above the version line). */
-const FOOTER = [
-  ["users", "sidebar.agents", agentsOpen],
-  ["sparkle", "sidebar.skillBuilder", skillBuilderOpen],
-  ["settings", "sidebar.settings", settingsOpen],
-] as const;
+/**
+ * "Settings & tools" at the foot of the sidebar: one menu (opening upward) over the `TOOLS`
+ * entries. In the rail it is a gear button with the menu at its normal width.
+ */
+function ToolsMenu(props: { rail?: boolean }) {
+  return (
+    <Menu
+      label={t("sidebar.tools")}
+      fixed
+      matchTrigger={!props.rail}
+      class={props.rail ? "icon-btn" : `${styles.settings} ${styles.toolsTrigger}`}
+      groups={[
+        {
+          actions: true,
+          items: TOOLS.map((tool) => ({
+            id: tool.id,
+            label: t(tool.label),
+            description: t(tool.hint),
+            icon: <Icon name={tool.icon as IconName} size={15} />,
+          })),
+          onSelect: openTool,
+        },
+      ]}
+    >
+      <Icon name="settings" size={props.rail ? 18 : 17} />
+      {props.rail ? null : (
+        <>
+          <span class={styles.rowTitle}>{t("sidebar.tools")}</span>
+          <Icon name="chevronDown" size={14} class={styles.toolsChevron} />
+        </>
+      )}
+    </Menu>
+  );
+}
 
 export function Sidebar() {
   const [query, setQuery] = useState("");
@@ -152,6 +295,8 @@ export function Sidebar() {
   /** The project whose settings dialog is open (a lazy chunk, like the palette). */
   const [project, setProject] = useState<{ id: string; View: typeof ProjectSettings }>();
   const search = useRef<HTMLInputElement>(null);
+  const tree = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(tree);
   // Plain render-time derivation: it depends on local state (query, archived) as well as the
   // sidebar signal, which a `useComputed` would only track for the signal.
   const groups = { value: groupSessions(sidebar.value, query, archived) };
@@ -347,21 +492,10 @@ export function Sidebar() {
         >
           <Icon name="plusCircle" size={18} />
         </button>
+        <PluginsMenu rail />
+        <RailApps />
         <span class={styles.spacer} />
-        {FOOTER.map(([icon, label, open]) => (
-          <button
-            key={label}
-            type="button"
-            class="icon-btn"
-            aria-label={t(label)}
-            title={t(label)}
-            onClick={() => {
-              open.value = true;
-            }}
-          >
-            <Icon name={icon} size={18} />
-          </button>
-        ))}
+        <ToolsMenu rail />
       </nav>
     );
 
@@ -509,7 +643,7 @@ export function Sidebar() {
       {adding === "browser" && Browser ? (
         <Browser.View onClose={() => setAdding("none")} onTypePath={() => setAdding("manual")} />
       ) : null}
-      <div class={styles.tree}>
+      <div ref={tree} class={styles.tree}>
         {sections.map((section) => {
           // Subgroup state shares the folder store under a `group:` key (never a workspace id).
           const key = `group:${section.id}`;
@@ -537,19 +671,7 @@ export function Sidebar() {
           );
         })}
       </div>
-      {FOOTER.map(([icon, label, open], index) => (
-        <button
-          key={label}
-          type="button"
-          class={index ? `${styles.settings} ${styles.settingsBelow}` : styles.settings}
-          onClick={() => {
-            open.value = true;
-          }}
-        >
-          <Icon name={icon} size={17} />
-          {t(label)}
-        </button>
-      ))}
+      <ToolsMenu />
       {appVersion.value ? (
         <p class={styles.version} title={t("about.versionTitle", { version: appVersion.value })}>
           {t("about.version", { version: appVersion.value })}

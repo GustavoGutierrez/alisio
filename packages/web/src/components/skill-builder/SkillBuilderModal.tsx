@@ -15,6 +15,7 @@ import {
 } from "../../store/app.ts";
 import { errorText } from "../../store/errors.ts";
 import { readPref, writePref } from "../../store/storage.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { Icon } from "../icons.tsx";
 import settings from "../settings/settings.module.css";
 import { settingsWorkspace, useLoad } from "../settings/shared.tsx";
@@ -62,6 +63,8 @@ export function SkillBuilderModal() {
   const [saved, setSaved] = useState<import("@alisio/sdk").SkillCreateResult | undefined>();
   const [maximized, setMaximized] = useState(() => readPref(MAXIMIZED_PREF) === "1");
   const dialog = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const controller = useRef<AbortController | undefined>(undefined);
   const refining = useRef(false);
   const models = useLoad<AgentModelOption[]>(
@@ -220,7 +223,7 @@ export function SkillBuilderModal() {
           }
         }}
       >
-        <div class={`${settings.content} ${styles.scroll}`}>
+        <div ref={scroll} class={`${settings.content} ${styles.scroll}`}>
           <div class={settings.topBar}>
             <div class={styles.titleBar}>
               <span id="sb-dialog-title" class={styles.titleText}>

@@ -12,7 +12,7 @@ import {
   receiveAppCatalog,
   withInstance,
 } from "./plugin-apps-model.ts";
-import { activeAppKey, activeAppSession } from "./plugin-apps-state.ts";
+import { activeAppKey, activeAppSession, creatorOpen } from "./plugin-apps-state.ts";
 import { newSessionTarget, upsertSession } from "./sessions.ts";
 
 export const APP_CATALOG_REFRESH_MS = 15_000;
@@ -77,6 +77,7 @@ export function closeApp(): void {
 
 /** Opens (or returns to) an app of the current workspace, resolving the session it runs in. */
 export async function openApp(plugin: string, app: string): Promise<void> {
+  creatorOpen.value = false;
   const workspace = appsWorkspace.value;
   if (!workspace) return;
   const key = instanceKey(workspace, plugin, app);

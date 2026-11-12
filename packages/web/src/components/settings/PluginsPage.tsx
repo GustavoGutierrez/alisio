@@ -7,7 +7,7 @@
 import type { PluginInfo } from "@alisio/sdk";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
-import { api, showToast } from "../../store/app.ts";
+import { api, settingsPluginsTab, showToast } from "../../store/app.ts";
 import { Icon } from "../icons.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import {
@@ -265,8 +265,14 @@ function RestartBanner(props: { available: boolean }) {
 
 export function PluginsPage() {
   const workspace = settingsWorkspace();
-  const [tab, setTab] = useState<Tab>("list");
-  const [visited, setVisited] = useState(false);
+  // The sidebar's "Find more plugins" opens this page on the catalog (read once, then cleared).
+  const [initialTab] = useState<Tab>(() => {
+    const requested = settingsPluginsTab.peek();
+    settingsPluginsTab.value = undefined;
+    return requested ?? "list";
+  });
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [visited, setVisited] = useState(initialTab === "catalog");
   const [scope, setScope] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | undefined>();

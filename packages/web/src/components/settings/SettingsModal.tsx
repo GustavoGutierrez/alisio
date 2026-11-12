@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, settingsOpen, settingsPage } from "../../store/app.ts";
 import { type SettingsPage, settingsPageFor } from "../../util/forge-page.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import { AboutPage } from "./AboutPage.tsx";
@@ -91,6 +92,10 @@ export function SettingsModal() {
   const [files, setFiles] = useState(false);
   const [maximized, setMaximized] = useState(readMaximized);
   const dialog = useRef<HTMLDivElement>(null);
+  const contentScroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(contentScroll);
+  const navScroll = useRef<HTMLElement>(null);
+  useOverlayScrollbars(navScroll);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.querySelector<HTMLElement>("nav button")?.focus();
@@ -133,7 +138,7 @@ export function SettingsModal() {
           }
         }}
       >
-        <nav class={styles.nav} aria-label={t("settings.title")}>
+        <nav ref={navScroll} class={styles.nav} aria-label={t("settings.title")}>
           <h2 id="settings-title" class={styles.heading}>
             {t("settings.title")}
           </h2>
@@ -150,7 +155,7 @@ export function SettingsModal() {
             </button>
           ))}
         </nav>
-        <div class={styles.content}>
+        <div ref={contentScroll} class={styles.content}>
           <div class={styles.topBar}>
             <button
               type="button"

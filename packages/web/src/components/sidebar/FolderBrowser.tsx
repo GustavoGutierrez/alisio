@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { addWorkspace, api } from "../../store/app.ts";
 import { errorText } from "../../store/errors.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { Icon } from "../icons.tsx";
 import styles from "./folder-browser.module.css";
 
@@ -17,6 +18,8 @@ export function FolderBrowser(props: { onClose: () => void; onTypePath: () => vo
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const request = useRef(0);
 
   const load = async (path?: string, showHidden = hidden) => {
@@ -124,7 +127,7 @@ export function FolderBrowser(props: { onClose: () => void; onTypePath: () => vo
             ))}
           </nav>
         </div>
-        <div class={styles.list} aria-busy={busy}>
+        <div ref={scroll} class={styles.list} aria-busy={busy}>
           {error ? (
             <p class={styles.error} role="alert">
               {error}

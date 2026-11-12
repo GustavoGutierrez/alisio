@@ -1,0 +1,73 @@
+/*
+ * Scrollbars, in one place: thin, fully rounded, transparent track, theme-token colors.
+ *
+ * 1. CSS-only fallback (always loaded): thin native scrollbars. It applies before the lazy
+ *    OverlayScrollbars chunk loads, if it fails, and to the containers that keep native scrolling
+ *    on purpose (code blocks, tables, diffs, terminals, the composer textarea, menus).
+ *    Native scrollbars take layout space (~8-10px) where the OS does not overlay them, so a
+ *    container can widen by that much once OverlayScrollbars takes over: the accepted trade-off of
+ *    keeping the library out of the initial bundle.
+ * 2. `os-theme-alisio`: the OverlayScrollbars theme (overlay, auto-hiding, 6px visual, ~12px hit
+ *    area, a little more contrast on hover and drag).
+ */
+:root {
+  --scroll-thumb: color-mix(in srgb, var(--muted) 40%, transparent);
+  --scroll-thumb-hover: color-mix(in srgb, var(--muted) 65%, transparent);
+  --scroll-thumb-active: color-mix(in srgb, var(--muted) 85%, transparent);
+}
+
+/* Firefox (and any engine without ::-webkit-scrollbar) uses the standard properties. Chromium and
+   Safari use the pseudo-elements below: setting the standard ones there would override them. */
+@supports not selector(::-webkit-scrollbar) {
+  :where(*) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scroll-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scroll-thumb-active);
+}
+
+/* Doubled class: the library CSS (lazy, loaded later) resets these variables on `.os-scrollbar`. */
+.os-scrollbar.os-theme-alisio {
+  --os-size: 12px;
+  --os-padding-perpendicular: 3px;
+  --os-padding-axis: 3px;
+  --os-track-border-radius: 999px;
+  --os-handle-border-radius: 999px;
+  --os-handle-bg: var(--scroll-thumb);
+  --os-handle-bg-hover: var(--scroll-thumb-hover);
+  --os-handle-bg-active: var(--scroll-thumb-active);
+  --os-handle-min-size: 32px;
+  /* Grab a little beyond the 6px thumb, toward the content. */
+  --os-handle-interactive-area-offset: 4px;
+  z-index: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-theme-alisio,
+  .os-theme-alisio * {
+    transition: none !important;
+  }
+}

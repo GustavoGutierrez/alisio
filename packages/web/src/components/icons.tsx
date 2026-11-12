@@ -14,6 +14,13 @@ const PATHS = {
   panel: "M4 5h16v14H4zM9 5v14",
   chevronDown: "M6 9l6 6 6-6",
   chevronRight: "M9 6l6 6-6 6",
+  arrowLeft: "M19 12H5M11 18l-6-6 6-6",
+  puzzle:
+    "M10 4a2 2 0 1 1 4 0v2h4v4h-1a2 2 0 1 0 0 4h1v4h-4v-1a2 2 0 1 0-4 0v1H6v-4h1a2 2 0 1 0 0-4H6V6h4V4Z",
+  wand: "M4 20 15 9M14 3v3M19 8h3M17.5 4.5 19 3M11 6l1 1M17 12l1 1",
+  trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  share:
+    "M8.6 13.5l6.8 4M15.4 6.5l-6.8 4M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   copy: "M9 9h10v10H9zM5 15V5h10",
   check: "M5 12l5 5 9-10",
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",

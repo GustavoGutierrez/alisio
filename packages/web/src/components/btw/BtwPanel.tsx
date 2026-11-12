@@ -8,6 +8,7 @@ import {
   sideQuestionMoves,
   stepSideQuestion,
 } from "../../store/btw.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon } from "../icons.tsx";
 import styles from "./btw.module.css";
@@ -23,6 +24,8 @@ const editable = (target: EventTarget | null) =>
 export function BtwPanel() {
   const state = btw.value;
   const panel = useRef<HTMLElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   useEffect(() => {
     panel.current?.focus();
   }, [state?.sessionId, state?.pending?.question]);
@@ -112,7 +115,7 @@ export function BtwPanel() {
           <Icon name="x" size={16} />
         </button>
       </header>
-      <div class={styles.body}>
+      <div ref={scroll} class={styles.body}>
         {state.usage ? (
           <div class={styles.usage}>
             <code>{BTW_USAGE}</code>

@@ -214,6 +214,9 @@ importers:
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
+      overlayscrollbars:
+        specifier: 2.17.0
+        version: 2.17.0
       preact:
         specifier: 10.29.8
         version: 10.29.8
@@ -3249,6 +3252,9 @@ packages:
         optional: true
       zod:
         optional: true
+
+  overlayscrollbars@2.17.0:
+    resolution: {integrity: sha512-tyFSxFVJ2FcTTiEkwMthAb+Ogs8vgpW31Sy5z2TL1Q6Kw7579zrcd4xDm38lmdD934LjiTHyrzR90KMDrbCXoA==, tarball: https://registry.npmjs.org/overlayscrollbars/-/overlayscrollbars-2.17.0.tgz}
 
   p-cancelable@2.1.1:
     resolution: {integrity: sha512-BZOr3nRQHOntUjTrH8+Lh54smKHoHyur8We1V8DSMVrl5A2malOOwuJRnKRDjSnkoeBh4at6BwEnb5I7Jl31wg==, tarball: https://registry.npmjs.org/p-cancelable/-/p-cancelable-2.1.1.tgz}
@@ -6975,6 +6981,8 @@ snapshots:
     optionalDependencies:
       undici: 7.30.2
       zod: 4.6.5
+
+  overlayscrollbars@2.17.0: {}
 
   p-cancelable@2.1.1: {}
 

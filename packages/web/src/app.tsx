@@ -48,6 +48,7 @@ import {
 import { mergeApprovals } from "./store/pending.ts";
 import { planReviewOf } from "./store/plan-review.ts";
 import { activeAppKey, appInstances, startAppCatalog } from "./store/plugin-apps.ts";
+import { creatorOpen, creatorSession } from "./store/plugin-apps-state.ts";
 import { clampPanelWidth, defaultPanelWidth } from "./util/panel.ts";
 
 function Centered(props: { title: string; body: string; action?: preact.ComponentChildren }) {
@@ -105,6 +106,7 @@ const loadProofCard = () => import("./components/proof/ProofCard.tsx").then((m) 
 const loadGoal = () => import("./components/goal/GoalBar.tsx").then((m) => m.GoalBar);
 const loadAppOutlet = () =>
   import("./components/apps/PluginAppOutlet.tsx").then((m) => m.PluginAppOutlet);
+const loadCreator = () => import("./components/creator/CreatorPage.tsx").then((m) => m.CreatorPage);
 const loadArtifacts = () =>
   import("./components/artifacts/ArtifactPanel.tsx").then((m) => m.ArtifactPanel);
 
@@ -160,6 +162,7 @@ export function App() {
         searchRequest.focus();
       } else if (
         !activeAppKey.value &&
+        !creatorOpen.value &&
         event.key === "/" &&
         !editable(event.target) &&
         !event.ctrlKey &&
@@ -180,11 +183,18 @@ export function App() {
   const id = currentId.value;
   // "Expand panel" hides the chat column, except while an approval or a question waits there.
   const appOpen = !!activeAppKey.value;
+  // The plugin creator page also takes the chat's place (it shows its own session's approvals).
+  const creator = creatorOpen.value && !appOpen;
+  const covered = appOpen || creator;
   // While an app is open the chat is hidden: its approvals (and the ones of the app's own
   // session) render over the app instead, so an action never waits unseen.
-  const overApp = appOpen ? mergeApprovals(approvals, appPending.value) : [];
+  const overApp = appOpen
+    ? mergeApprovals(approvals, appPending.value)
+    : creator
+      ? approvals.filter((a) => a.rootSessionId !== creatorSession.value)
+      : [];
   const expanded =
-    !appOpen &&
+    !covered &&
     rightPanel.value === "artifact" &&
     panelExpanded.value &&
     !narrowScreen.value &&
@@ -192,7 +202,7 @@ export function App() {
     !interactions.length;
   return (
     <div class={styles.app} data-artifact-expanded={expanded ? "true" : undefined}>
-      <a class="skip" href={appOpen ? "#plugin-app-main" : "#composer-input"}>
+      <a class="skip" href={covered ? "#plugin-app-main" : "#composer-input"}>
         {t("app.skip")}
       </a>
       <Sidebar />
@@ -220,13 +230,14 @@ export function App() {
           </div>
         ) : null}
         {appInstances.value.length ? <Lazy load={loadAppOutlet} /> : null}
+        {creator ? <Lazy load={loadCreator} /> : null}
         {overApp.length ? (
           <div class={styles.appApproval} data-app-approval="">
             <ApprovalPanel approvals={overApp} />
           </div>
         ) : null}
         {/* Hidden and inert (not unmounted) while an app is open: draft and attachments survive. */}
-        <div class={styles.chatContent} hidden={appOpen} inert={appOpen}>
+        <div class={styles.chatContent} hidden={covered} inert={covered}>
           <Header />
           {id ? (
             <>
@@ -239,7 +250,7 @@ export function App() {
               )}
               {goalInfo.value ? <Lazy key="goal" load={loadGoal} /> : null}
               {proofCount.value > 0 ? <Lazy key="proof" load={loadProofCard} /> : null}
-              {approvals.length && !appOpen ? (
+              {approvals.length && !covered ? (
                 <ApprovalPanel approvals={approvals} />
               ) : interactions[0] && planReviewOf(interactions[0]) ? (
                 <Lazy
@@ -266,8 +277,8 @@ export function App() {
           )}
         </div>
       </main>
-      {id && !appOpen ? <RightSlot expanded={expanded} /> : null}
-      {btw.value && id && !appOpen ? <Lazy load={loadBtw} /> : null}
+      {id && !covered ? <RightSlot expanded={expanded} /> : null}
+      {btw.value && id && !covered ? <Lazy load={loadBtw} /> : null}
       {settingsOpen.value ? <Lazy load={loadSettings} /> : null}
       {agentsOpen.value ? <Lazy load={loadAgents} /> : null}
       {skillBuilderOpen.value ? <Lazy load={loadSkillBuilder} /> : null}

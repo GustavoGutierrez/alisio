@@ -36,6 +36,7 @@ import {
 import { iconFor, loadIconTheme, resetIconTheme } from "../../store/icon-theme.ts";
 import { copyText } from "../../util/clipboard.ts";
 import { absolutePath, extensionOf, fileName } from "../../util/files.ts";
+import { useOverlayScrollbars } from "../../util/scrollbars.ts";
 import { CopyButton } from "../CopyButton.tsx";
 import { Icon, type IconName } from "../icons.tsx";
 import styles from "./dock.module.css";
@@ -359,6 +360,8 @@ function FileMenu() {
 /** `width`: the shared right-slot width (px) when the Dock sits beside the chat. */
 export function Dock(props: { width?: number } = {}) {
   const session = detail.value;
+  const scroll = useRef<HTMLDivElement>(null);
+  useOverlayScrollbars(scroll);
   const tab = dockTab.value;
   const state = preview.value;
   useEffect(() => {
@@ -447,7 +450,7 @@ export function Dock(props: { width?: number } = {}) {
           ) : null}
         </div>
       ) : null}
-      <div class={styles.body} role="tabpanel">
+      <div ref={scroll} class={styles.body} role="tabpanel">
         {!session ? (
           <p class={styles.empty}>{t("dock.noSession")}</p>
         ) : tab === "files" ? (
