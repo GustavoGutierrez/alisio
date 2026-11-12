@@ -4,7 +4,7 @@
  *
  * File names must match `artifactName` in apps/desktop/electron-builder.config.mjs.
  */
-export const DESKTOP_VERSION = "0.11.7";
+export const DESKTOP_VERSION = "0.11.8";
 
 const REPOSITORY = "https://github.com/GustavoGutierrez/alisio";
 
