@@ -6,6 +6,27 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.10",
+      date: "2026-11-12",
+      sections: [
+        {
+          title: "Added",
+          items: [
+            "The plugin creator can now build a plugin with its own screen in the Apps menu. Before it can be installed, the creator opens that screen, checks that it works the way Alisio shows it and tries every button action once. If you asked for a screen and the plugin has none, the build fails and says so.",
+          ],
+        },
+        {
+          title: "Fixed",
+          items: [
+            "The Apps menu shows a newly installed, updated, enabled or removed plugin right away, whether it came from the plugin creator, a file or the catalog.",
+            "Alisio Desktop remembers collapsed projects and other window preferences after you close and reopen it.",
+            "Closing Alisio now stops every command and background task it started, including on Windows and commands that ignore the request to stop. A program a command left running with `&` also stops when Alisio exits.",
+            "Alisio Desktop no longer leaves its background server running when it was started without the app.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.9",
       date: "2026-11-12",
       sections: [
