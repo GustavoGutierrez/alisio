@@ -5,7 +5,8 @@
  * path that could escape the package directory rejects the whole archive.
  */
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 import { PLUGIN_KEYWORD } from "../runtime/modules.ts";
@@ -20,6 +21,8 @@ const MAX_META_BYTES = 64 * 1024;
 const LIFECYCLE = ["preinstall", "install", "postinstall"] as const;
 
 export interface TarballLimits {
+  /** Receives every regular file under `package/` (its path without `package/`). */
+  onFile?: (path: string, data: Buffer) => void;
   maxPackageJsonBytes?: number;
   maxEntries?: number;
   maxExpandedBytes?: number;
@@ -88,13 +91,14 @@ export async function readTarballPackageJson(
   source.on("error", (error) => gunzip.destroy(error));
   source.pipe(gunzip);
 
-  type Mode = "skip" | "manifest" | "pax" | "longname";
+  type Mode = "skip" | "manifest" | "pax" | "longname" | "file";
   let state: "header" | "data" | "pad" | "end" = "header";
   let buf: Buffer = Buffer.alloc(0);
   let remaining = 0;
   let mode: Mode = "skip";
   let collected: Buffer[] = [];
   let pendingName: string | undefined;
+  let fileName = "";
   let entries = 0;
   let expanded = 0;
   let manifest: Buffer | undefined;
@@ -104,6 +108,7 @@ export async function readTarballPackageJson(
     const data = Buffer.concat(collected);
     collected = [];
     if (mode === "manifest") manifest = data;
+    if (mode === "manifest" || mode === "file") limits.onFile?.(fileName, data);
     else if (mode === "pax") pendingName = paxPath(data) ?? pendingName;
     else if (mode === "longname") pendingName = str(data, 0, data.length);
     mode = "skip";
@@ -131,10 +136,12 @@ export async function readTarballPackageJson(
       const name = safeName(pendingName ?? (prefix ? `${prefix}/${own}` : own));
       pendingName = undefined;
       mode = "skip";
-      if (name === "package/package.json" && (type === "0" || type === "7")) {
+      const regular = type === "0" || type === "7";
+      if (name === "package/package.json" && regular) {
         if (size > maxJson) throw new TarballError("package.json is too large");
         mode = "manifest";
-      }
+      } else if (limits.onFile && regular && name.startsWith("package/")) mode = "file";
+      fileName = name.slice("package/".length);
     }
     remaining = size;
     state = remaining > 0 ? "data" : padding > 0 ? "pad" : "header";
@@ -290,4 +297,32 @@ export async function inspectPluginTarball(
   info.lifecycleScripts = LIFECYCLE.filter((key) => typeof scripts[key] === "string");
   info.isAlisioPlugin = info.reasons.length === 0;
   return info;
+}
+
+/**
+ * Extracts the regular files under `package/` of a plugin tarball into `dest` (the layout npm
+ * gives an installed package), with the same bounds and path checks as the inspection. Used by
+ * the plugin creator to check the installed copy of a package without npm or the network.
+ */
+export async function extractPluginTarball(
+  path: string,
+  dest: string,
+  limits: Omit<TarballLimits, "onFile"> = {},
+): Promise<string[]> {
+  const files = new Map<string, Buffer>();
+  await readTarballPackageJson(createReadStream(path), {
+    ...limits,
+    onFile: (name, data) => {
+      if (name) files.set(name, data);
+    },
+  });
+  const root = resolve(dest);
+  for (const [name, data] of files) {
+    const target = resolve(root, name);
+    if (!target.startsWith(`${root}${sep}`))
+      throw new TarballError("The archive has an unsafe path");
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, data);
+  }
+  return [...files.keys()].sort();
 }

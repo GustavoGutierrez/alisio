@@ -21,6 +21,7 @@ import type {
   PluginCreatorBuildResponse,
   PluginCreatorProjectEntry,
   PluginCreatorSessionResponse,
+  PluginCreatorStatus,
 } from "@alisio/sdk";
 import type { SessionService } from "../host/sessions.ts";
 import { readJson } from "../http/body.ts";
@@ -94,8 +95,27 @@ export function registerPluginCreatorRoutes(
     }
   };
 
+  /** Why the installed plugin failed to start in an open workspace, if it did (sanitized). */
+  const activationErrorOf = (pluginId: string): string | undefined => {
+    for (const opened of ctx.workspaces.entries()) {
+      const failed = opened.app
+        .pluginCatalog()
+        .find((plugin) => plugin.id === pluginId && plugin.status === "failed");
+      if (failed) return failed.diagnostic ?? "Activation failed";
+    }
+    return undefined;
+  };
+
+  /** The install state plus the running app's view of it (a failed start is shown, G). */
+  const statusOf = async (id: string): Promise<PluginCreatorStatus> => {
+    const status = await projects.status(id);
+    if (!status.installed) return status;
+    const activationError = activationErrorOf((await projects.get(id)).pluginId);
+    return activationError ? { ...status, activationError } : status;
+  };
+
   const entry = async (id: string): Promise<PluginCreatorProjectEntry> =>
-    guard(async () => ({ project: await projects.get(id), status: await projects.status(id) }));
+    guard(async () => ({ project: await projects.get(id), status: await statusOf(id) }));
 
   /** Resolves a model selector against the configured models; 400 `model` when it is unknown. */
   const resolveModel = async (model: string, projectDir?: string): Promise<string> => {
@@ -126,7 +146,7 @@ export function registerPluginCreatorRoutes(
       issues: outcome.issues,
       ...(outcome.tests ? { tests: outcome.tests } : {}),
       project: await projects.get(id),
-      status: await projects.status(id),
+      status: await statusOf(id),
     };
     if (!outcome.ok)
       throw new HttpError(
@@ -143,7 +163,7 @@ export function registerPluginCreatorRoutes(
     guard(async () => {
       const list: PluginCreatorProjectEntry[] = [];
       for (const project of await projects.list())
-        list.push({ project, status: await projects.status(project.id) });
+        list.push({ project, status: await statusOf(project.id) });
       return { body: { projects: list } };
     }),
   );
@@ -172,7 +192,7 @@ export function registerPluginCreatorRoutes(
   router.get(`${BASE}/:id`, async ({ params }) => ({ body: await entry(params.id ?? "") }));
 
   router.get(`${BASE}/:id/status`, async ({ params }) => ({
-    body: await guard(() => projects.status(params.id ?? "")),
+    body: await guard(() => statusOf(params.id ?? "")),
   }));
 
   router.delete(`${BASE}/:id`, async ({ req, params }) => {
@@ -327,17 +347,28 @@ export function registerPluginCreatorRoutes(
       busy.delete(id);
     };
     try {
-      // Always rebuild right before installing or updating: the same validation (including the
-      // compatibility with the installed SDK), tests and probe run on exactly what is on disk.
+      // Only a build that passed every gate on exactly these sources may be installed (409).
+      if (!(await guard(() => projects.packagePath(id))))
+        throw new HttpError(
+          "plugin_not_built",
+          "The plugin has not passed every check for its current files: build it first",
+        );
+      // Rebuild right before installing or updating: the same gates (including the compatibility
+      // with the installed SDK and the real-host check) run on exactly what is on disk.
       await guard(() => build(id));
       const file = await guard(() => projects.packagePath(id));
       if (!file) throw new HttpError("plugin_not_built", "The plugin could not be packaged");
       const project = await guard(() => projects.get(id));
       const jobId = options.install.startLocalInstall(file, project.packageName, {
         cleanup: release,
+        // The safety net: the running app must actually start it, or the install is rolled back.
+        verify: async () => activationErrorOf((await projects.get(id)).pluginId),
         onSuccess: async (result) => {
           await projects.recordInstall(id, result.installedVersion);
           const extra: Record<string, unknown> = { projectId: id };
+          // Not verified before (its old code was still loaded): report what the app sees.
+          const activationError = activationErrorOf((await projects.get(id)).pluginId);
+          if (activationError) extra.activationError = activationError;
           if (!input.workspace) return extra;
           // "Install & enable": switch it on in the given workspace if it was turned off there.
           try {

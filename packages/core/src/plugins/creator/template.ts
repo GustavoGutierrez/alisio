@@ -186,6 +186,39 @@ function memoryDatabase() {
   };
 }
 
+const SCHEMA_KEYWORDS = new Set([
+  "type", "properties", "required", "additionalProperties", "description", "title", "enum",
+  "const", "default", "examples", "items", "minItems", "maxItems", "uniqueItems", "minLength",
+  "maxLength", "pattern", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+  "multipleOf", "anyOf", "oneOf", "allOf", "not", "minProperties", "maxProperties", "$schema",
+]);
+
+/**
+ * The rules Alisio's host enforces on a tool inputSchema (Ajv strict mode), checked the same way
+ * here so a test fails before the build does. Throws with the path of the first problem.
+ */
+export function checkSchema(schema, path = "#") {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema))
+    throw new Error(\`inputSchema \${path} must be an object\`);
+  if (Array.isArray(schema.type))
+    throw new Error(\`inputSchema \${path}: type arrays are not allowed (use one type and parse the value)\`);
+  for (const key of Object.keys(schema))
+    if (!SCHEMA_KEYWORDS.has(key)) throw new Error(\`inputSchema \${path}: keyword "\${key}" is not allowed\`);
+  const needs = { minimum: "number", maximum: "number", exclusiveMinimum: "number", exclusiveMaximum: "number",
+    multipleOf: "number", minLength: "string", maxLength: "string", pattern: "string", items: "array",
+    minItems: "array", maxItems: "array", required: "object", properties: "object" };
+  for (const [key, type] of Object.entries(needs))
+    if (key in schema && schema.type !== type && !(type === "number" && schema.type === "integer"))
+      throw new Error(\`inputSchema \${path}: "\${key}" needs type "\${type}"\`);
+  for (const name of schema.required ?? [])
+    if (!(name in (schema.properties ?? {})))
+      throw new Error(\`inputSchema \${path}: required "\${name}" is not in properties\`);
+  for (const [name, child] of Object.entries(schema.properties ?? {})) checkSchema(child, \`\${path}/properties/\${name}\`);
+  if (schema.items) checkSchema(schema.items, \`\${path}/items\`);
+  for (const key of ["anyOf", "oneOf", "allOf"])
+    for (const [i, child] of (schema[key] ?? []).entries()) checkSchema(child, \`\${path}/\${key}/\${i}\`);
+}
+
 /**
  * @param {{ options?: Record<string, unknown> }} [init]
  */
@@ -200,6 +233,9 @@ export function createFakeApi(init = {}) {
     tools: {
       register(tool) {
         if (tools.has(tool.name)) throw new Error(\`Tool registered twice: \${tool.name}\`);
+        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(tool.name)) throw new Error(\`Invalid tool name: \${tool.name}\`);
+        if (tool.inputSchema?.type !== "object") throw new Error("A tool inputSchema must be { type: \\"object\\" }");
+        checkSchema(tool.inputSchema);
         tools.set(tool.name, tool);
         return () => tools.delete(tool.name);
       },

@@ -75,6 +75,7 @@ import { pluginCreatorProjectOf } from "./plugins/creator/paths.ts";
 import { PluginCreatorProjects } from "./plugins/creator/projects.ts";
 import { ensurePluginCreatorSkill } from "./plugins/creator/skill.ts";
 import { registerPluginProjectTools } from "./plugins/creator/tools.ts";
+import { sanitizePluginDiagnostic } from "./plugins/diagnostic.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
 import { installedSdkVersion } from "./plugins/sdk-version.ts";
 import { ProofVerifierRegistry } from "./proof/plugin-verifiers.ts";
@@ -270,6 +271,20 @@ const parseProfileContextWindow = (
   const window = typeof value === "number" ? value : Number(String(value).trim());
   return Number.isFinite(window) && window > 0 ? window : undefined;
 };
+/**
+ * Catalog text of a plugin whose activation failed: the fixed prefix plus the error's reason with
+ * every absolute path removed and the length bounded (see `sanitizePluginDiagnostic`).
+ */
+const TERMINAL_RUN_EVENTS = new Set(["run_completed", "run_failed", "run_cancelled"]);
+
+function activationDiagnostic(error: unknown): string {
+  const reason = sanitizePluginDiagnostic(
+    error instanceof Error ? error.message : String(error),
+    300,
+  );
+  return `Activation failed; registrations were rolled back${reason ? `: ${reason}` : ""}`;
+}
+
 export async function createApplication(options: AppOptions = {}) {
   const cwd = resolve(options.cwd ?? process.cwd()),
     workspace = await findWorkspace(cwd);
@@ -510,7 +525,7 @@ export async function createApplication(options: AppOptions = {}) {
             : {}),
         });
         runtimePluginEnabled.set(builtin.id, enabled);
-      } catch {
+      } catch (error) {
         pluginCatalog.set(builtin.id, {
           id: builtin.id,
           name: instance?.name ?? builtin.name ?? builtin.id,
@@ -522,7 +537,7 @@ export async function createApplication(options: AppOptions = {}) {
           status: "failed",
           enabled,
           manageable: true,
-          diagnostic: "Activation failed; registrations were rolled back",
+          diagnostic: activationDiagnostic(error),
         });
       }
     }
@@ -584,7 +599,7 @@ export async function createApplication(options: AppOptions = {}) {
             ...(isPathSpec(entry.spec) ? {} : { spec: entry.spec }),
           });
           runtimePluginEnabled.set(candidate.plugin.id, enabled);
-        } catch {
+        } catch (error) {
           if (candidate) {
             pluginCatalog.set(candidate.plugin.id, {
               id: candidate.plugin.id,
@@ -597,7 +612,7 @@ export async function createApplication(options: AppOptions = {}) {
               status: "failed",
               enabled: true,
               manageable: entry.manageable,
-              diagnostic: "Activation failed; registrations were rolled back",
+              diagnostic: activationDiagnostic(error),
               ...(isPathSpec(entry.spec) ? {} : { spec: entry.spec }),
             });
             continue;
@@ -640,6 +655,7 @@ export async function createApplication(options: AppOptions = {}) {
     // A plugin creator project gets the bundled creator skill and its two project tools (and
     // nothing else changes). A failure to write the skill never blocks opening the workspace.
     const creatorProject = pluginCreatorProjectOf(workspace);
+    let creatorProjects: PluginCreatorProjects | undefined;
     const sdkOption = (version: string | undefined) => (version ? { sdkVersion: version } : {});
     let creatorSkillRoot: string | undefined;
     if (creatorProject) {
@@ -648,8 +664,9 @@ export async function createApplication(options: AppOptions = {}) {
       } catch {
         creatorSkillRoot = undefined;
       }
+      creatorProjects = new PluginCreatorProjects({ ...sdkOption(installedSdkVersion()) });
       registerPluginProjectTools(registry, {
-        projects: new PluginCreatorProjects({ ...sdkOption(installedSdkVersion()) }),
+        projects: creatorProjects,
         projectId: creatorProject,
       });
     }
@@ -1418,6 +1435,9 @@ export async function createApplication(options: AppOptions = {}) {
         : {}),
       onEvent: (event) => {
         herdr.event(event);
+        // A creator run that ended leaves no progress step "running" (best effort).
+        if (creatorProject && creatorProjects && TERMINAL_RUN_EVENTS.has(event.type))
+          void creatorProjects.settleProgress(creatorProject).catch(() => {});
         plugins.emit(event);
         options.onEvent?.(event);
       },

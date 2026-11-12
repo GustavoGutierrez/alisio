@@ -108,12 +108,32 @@ Issue codes the validator/build reports, and the fix:
 | \`unused_file\`, \`empty_file\`, \`template_example\`, \`registers_nothing\` (warnings) | Delete dead files, replace the example tool, register what the plugin offers |
 | \`symlink_forbidden\`, \`file_too_large\`, \`project_too_large\`, \`too_many_files\` | Keep the plugin small and plain |
 
+Delivery gates (the build runs them on the packaged plugin, installed in a throwaway folder and
+loaded by Alisio's real host; the person can only install a build that passed all of them):
+
+| Code | Fix |
+|---|---|
+| \`activation_failed\` | The plugin did not start in Alisio. Read the reason: usually an \`inputSchema\` rule (see sdk-cheatsheet.md), a \`setup\` that throws, or a file missing from the package |
+| \`syntax_error\`, \`typescript_source\` | Ship plain modern JavaScript (\`.js\`, ESM): no type annotations, no \`.ts\` files |
+| \`import_not_packed\` | A relative import points at a file the package does not ship: fix the path or add it to \`files\` |
+| \`tool_smoke_failed\` | Alisio called the tool once with a minimal valid input and it threw or did not return \`{ content: [...] }\`: return \`textResult(message, true)\` for bad input instead of throwing |
+| \`dispose_failed\` | \`dispose()\` must not throw: close what is open and ignore what is not |
+| \`reactivate_failed\` | \`setup\` must work again after \`dispose\` (no module-level "already started" state) |
+| \`tool_untested\`, \`tests_too_few\` | Every tool needs at least one test that calls it by name; at least one passing test per tool |
+| \`gate_unavailable\` | Not the plugin's fault: this Alisio could not run its check. Do not change the plugin for it; tell the person to update or reinstall Alisio |
+
+A failed build returns these issues: fix them all and build again. After a few failed builds in a
+row, stop and tell the person (the screen offers "Try again"). Never say the plugin is ready while
+a build fails.
+
 Before the build, also check:
 
 - [ ] Nothing unused: no file, function, string, effect, permission or manifest entry that the
       plugin does not need for this request.
 
-- [ ] Every tool has a precise description, a strict \`inputSchema\` (\`additionalProperties: false\`) and an honest \`effect\`.
+- [ ] Every tool has a precise description, a strict \`inputSchema\` (\`additionalProperties: false\`,
+      one \`type\` per property, no \`format\`) and an honest \`effect\`.
+- [ ] Every tool is called by at least one test; \`dispose\` closes everything and \`setup\` can run again.
 - [ ] Inputs are validated; bad input returns a friendly message (EN/ES), never a stack trace.
 - [ ] No secrets, tokens or personal data in code, logs or results.
 - [ ] Results are short; long lists are capped (for example the last 50 items).
@@ -158,6 +178,25 @@ api.tools.register({
   },
 });
 \`\`\`
+
+### inputSchema rules (Alisio compiles every schema with Ajv in strict mode)
+
+A schema the host rejects stops the WHOLE plugin from starting ("Activation failed"); the build
+checks it with the real host (\`activation_failed\`) and the test harness rejects the common cases.
+
+- \`type\` is ONE string. No type arrays such as \`type: ["number", "string"]\` (Ajv: "use
+  allowUnionTypes"). To accept "12,50" or 12.5, declare \`type: "string"\` and parse it in
+  \`execute\` (\`Number(text.replace(",", "."))\`), or use \`anyOf: [{ type: "number" }, { type:
+  "string" }]\` (accepted, but a string you parse is simpler for the model).
+- No \`format\` (\`"date"\`, \`"email"\`...: unknown formats are errors). Use \`pattern\` or check
+  the value in \`execute\`.
+- Every name in \`required\` is also in \`properties\`.
+- Keywords of a type need that type next to them: \`minimum\`/\`maximum\` with \`"number"\` or
+  \`"integer"\`, \`minLength\`/\`pattern\` with \`"string"\`, \`items\`/\`minItems\` with \`"array"\`,
+  \`properties\`/\`required\` with \`"object"\`.
+- Only standard JSON Schema keywords (\`description\`, \`enum\`, \`default\`, \`examples\` are fine);
+  no custom keys, no \`$ref\`, \`$id\`, \`nullable\` tricks or \`$schema\` other than draft-07/2020-12.
+- The root is \`{ type: "object", properties, required, additionalProperties: false }\`.
 
 - \`effect\`: \`read\` only when nothing changes; writes to its own storage are \`write\`; running
   programs is \`process\`; network is \`external\`. Undeclared = \`external\`. The person approves

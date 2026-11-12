@@ -2778,6 +2778,8 @@ export interface PluginCreatorBuildStats {
   version: string;
   /** Present when `ok` is false: `plugin_project_invalid`, `plugin_tests_failed`... */
   errorCode?: string;
+  /** The blocking findings of a failed build (bounded), so a later visit can explain it. */
+  issues?: PluginCreatorIssue[];
 }
 /** Tables found in the plugin's `CREATE TABLE` statements (for the schema view). */
 export interface PluginCreatorSchema {
@@ -2814,6 +2816,8 @@ export interface PluginCreatorProjectInfo {
   installedVersion?: string;
   /** Model selector (`provider/model`) of the last creator session; the default for the next one. */
   lastModel?: string;
+  /** Failed builds in a row since the last request (the creator agent stops after a few). */
+  failedBuilds?: number;
   /** Absolute path of the project's source folder (derived, for "open/publish from here"). */
   dir?: string;
   /** Project-relative path of `package.json` `alisio.icon`; the image is `GET …/:id/icon`. */
@@ -2828,8 +2832,13 @@ export interface PluginCreatorStatus {
   projectVersion: string;
   /** Installed, and the project's version differs from the installed one. */
   updateAvailable: boolean;
-  /** A package exists and matches the current sources. */
+  /** A package exists and matches the current sources: the latest build passed every gate. */
   packageReady: boolean;
+  /**
+   * The installed plugin failed to start in a running workspace (its sanitized reason). Present
+   * only when it is installed and the host reports it as failed.
+   */
+  activationError?: string;
 }
 
 /** A project with its install state (`GET /api/plugin-creator/projects[/:id]`). */

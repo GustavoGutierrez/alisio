@@ -1382,6 +1382,70 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
     assert.doesNotMatch(text, /not part of this build/, "document assets are available");
     assert.match(text, /PDF created|No document engine is ready/, text.slice(-1500));
   }
+  // Plugin creator delivery gate from THIS runtime's build: the dist entry under Node, the hidden
+  // `__plugin-gate` command of the compiled binary. A good plugin passes; a tool schema the host's
+  // strict Ajv rejects is reported; a runtime that cannot run the gate fails closed.
+  {
+    const core = (await import(resolve("packages/core/dist/index.js"))) as {
+      runInstalledGate: (
+        file: string,
+        name: string,
+        options?: { command?: { command: string; args: string[]; env: Record<string, string> } },
+      ) => Promise<{
+        ok: boolean;
+        issues: Array<{ code: string; message: string }>;
+        tools: string[];
+      }>;
+      packDirectory: (dir: string, out: string) => Promise<unknown>;
+    };
+    const gateCommand =
+      mode === "binary"
+        ? { command: command[0] as string, args: ["__plugin-gate"], env: {} }
+        : undefined;
+    const pack = async (label: string, type: string) => {
+      const dir = join(directory, `gate-${label}`);
+      await mkdir(join(dir, "src"), { recursive: true });
+      const name = `alisio-plugin-gate-${label}`;
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name,
+          version: "1.0.0",
+          type: "module",
+          keywords: ["alisio-plugin"],
+          exports: { ".": "./src/index.js" },
+          files: ["src"],
+        }),
+      );
+      await writeFile(
+        join(dir, "src", "index.js"),
+        `export default { id: "gate.${label}", version: "1.0.0", apiVersion: 1, setup(api) { api.tools.register({ name: "add", description: "d", effect: "read", inputSchema: { type: "object", properties: { n: { type: ${type} } }, required: ["n"], additionalProperties: false }, async execute(input) { return { content: [{ type: "text", text: String(input.n) }] }; } }); } };\n`,
+      );
+      const file = join(directory, `${name}.tgz`);
+      await core.packDirectory(dir, file);
+      return { file, name };
+    };
+    const good = await pack("good", '"string"');
+    const passed = await core.runInstalledGate(
+      good.file,
+      good.name,
+      gateCommand ? { command: gateCommand } : {},
+    );
+    assert.equal(passed.ok, true, JSON.stringify(passed.issues));
+    assert.deepEqual(passed.tools, ["add"]);
+    const bad = await pack("union", '["number", "string"]');
+    const failed = await core.runInstalledGate(
+      bad.file,
+      bad.name,
+      gateCommand ? { command: gateCommand } : {},
+    );
+    assert.equal(failed.issues[0]?.code, "activation_failed", JSON.stringify(failed.issues));
+    assert.match(failed.issues[0]?.message ?? "", /allowUnionTypes/);
+    const none = await core.runInstalledGate(good.file, good.name, {
+      command: { command: join(directory, "no-runtime"), args: [], env: {} },
+    });
+    assert.equal(none.issues[0]?.code, "gate_unavailable");
+  }
   console.log(
     JSON.stringify({
       ok: true,
@@ -1410,6 +1474,7 @@ writeFileSync(join(prefix, "..", "npm-calls.json"), JSON.stringify(args));
         "alisio run --json: one context_governed event per request with context.governor shadow, none with off",
         "alisio run --proof: criteria from --criterion/--verify, the proof/v1 ledger as the final --json event, exit 0 (verified) and 11 (unchecked), a --verify without --criterion refused",
         "alisio install with a PATH-shim fake npm: global install, config entry, --yes/--read-only refusals, plugins list",
+        "plugin creator delivery gate from this runtime (dist entry / hidden __plugin-gate): pass, strict-schema activation_failed, gate_unavailable",
       ],
     }),
   );

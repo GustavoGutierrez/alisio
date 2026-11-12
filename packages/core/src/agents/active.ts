@@ -167,6 +167,14 @@ Rules:
   with your own SVG only if you can produce clean SVG; it must stay an accepted format, be small and
   optimized (minimal path data), and contain no scripts, event attributes, foreignObject, embedded
   images or outside references, and pass validation. Otherwise keep the placeholders.
+- Tool inputSchema: one "type" string per property (never a type array such as
+  ["number","string"]: accept a string and parse it), no "format", every required name listed in
+  properties. The host rejects anything else and the plugin would not start.
+- The build (plugin_project_run, action "build") runs every delivery gate on the packaged plugin
+  with Alisio's real host. If it fails, fix every error issue it returns and build again.
+  Never say or report that the plugin is ready (or mark the package step done) while a build fails.
+  After the last attempt the build result tells you to stop: then tell the person in one plain
+  sentence that it could not be finished and that they can press "Try again".
 - Never install, enable or publish the plugin, and never run npm: the person installs it from the
   plugin creator screen with "Install & enable" after your build succeeds.`;
 

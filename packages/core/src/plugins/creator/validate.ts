@@ -26,6 +26,8 @@ export interface ProjectValidation {
   entry?: string;
   /** Project-relative `*.test.js` files. */
   tests: string[];
+  /** Relative imports of each `src/` file, as project-relative paths. */
+  imports: Map<string, string[]>;
 }
 
 const LIFECYCLE = ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepack"];
@@ -299,6 +301,13 @@ export async function validateProject(
   const sources: string[] = [];
   /** Relative imports of each src file (for the reachability check). */
   const graph = new Map<string, string[]>();
+  for (const file of walk.files)
+    if (file.path.startsWith("src/") && /\.(?:m|c)?tsx?$/.test(file.path))
+      error(
+        "typescript_source",
+        "Plugins ship plain JavaScript: rename this file to .js and remove the type syntax",
+        file.path,
+      );
   for (const file of walk.files) {
     if (!SOURCE.test(file.path) || file.bytes > PLUGIN_CREATOR_LIMITS.maxFileBytes) continue;
     const text = await readFile(join(dir, file.path), "utf8").catch(() => "");
@@ -355,5 +364,6 @@ export async function validateProject(
     ...(manifest ? { manifest } : {}),
     ...(entry ? { entry } : {}),
     tests,
+    imports: graph,
   };
 }

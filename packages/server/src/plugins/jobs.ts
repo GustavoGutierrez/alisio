@@ -73,10 +73,12 @@ export class InstallJob {
     this.touched = now;
   }
 
-  fail(error: string, logTail?: string, now = Date.now()): void {
+  /** `detail` (optional) is kept as the failed job's `result` (e.g. `activationError`). */
+  fail(error: string, logTail?: string, now = Date.now(), detail?: unknown): void {
     if (this.current) this.status.set(this.current, "failed");
     this.finished = true;
     this.failure = { error, ...(logTail ? { logTail } : {}) };
+    if (detail !== undefined) this.outcome = detail;
     this.touched = now;
   }
 
@@ -90,7 +92,7 @@ export class InstallJob {
       phases: INSTALL_PHASES.map((id) => ({ id, status: this.status.get(id) ?? "pending" })),
       done: this.finished,
       ...(this.failure ? this.failure : {}),
-      ...(this.finished && !this.failure ? { result: this.outcome } : {}),
+      ...(this.finished && this.outcome !== undefined ? { result: this.outcome } : {}),
     };
   }
 }

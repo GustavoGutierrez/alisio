@@ -24,7 +24,8 @@ import { installedGlobalPlugins, pluginDependencySpec } from "../install.ts";
 import { storedTarballName } from "../local-install.ts";
 import { packDirectory } from "../tarball-writer.ts";
 import { hashProject, projectFilePath, walkProject } from "./files.ts";
-import { type NodeCommand, probePlugin, runNodeTests } from "./node-test.ts";
+import { type GateCommand, runInstalledGate } from "./gate-runner.ts";
+import { checkSyntax, type NodeCommand, probePlugin, runNodeTests } from "./node-test.ts";
 import { type PluginCreatorPaths, PROJECT_ID, pluginCreatorPaths } from "./paths.ts";
 import { pluginTemplateFiles } from "./template.ts";
 import {
@@ -50,7 +51,14 @@ export interface PluginCreatorProjectsOptions {
   sdkVersion?: string;
   now?: () => number;
   node?: NodeCommand;
+  /** Time limit of the real-host gate of a build (default 30 s). */
+  gateTimeoutMs?: number;
+  /** How to start the gate child (default: this runtime, see `gateCommand`). */
+  gateCommand?: GateCommand;
 }
+
+/** Failed builds in a row after which the creator agent must stop and hand over to the person. */
+export const MAX_BUILD_ATTEMPTS = 3;
 
 export interface PluginBuildOutcome {
   ok: boolean;
@@ -84,10 +92,27 @@ function slugify(text: string): string {
   return slug || "plugin";
 }
 
-function titleFrom(request: string): string {
-  const words = request.replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" ");
-  const cut = words.slice(0, 60).replace(/[.,;:!?]+$/, "");
-  return cut.charAt(0).toUpperCase() + cut.slice(1);
+/** Words a short title must not end on ("Track the expenses of" -> "Track the expenses"). */
+const DANGLING =
+  /^(a|an|the|of|to|in|on|at|for|with|and|or|by|from|into|my|your|en|de|del|la|el|los|las|un|una|unos|unas|y|o|con|para|por|al|mi|mis|su|sus|que)$/i;
+
+/**
+ * A short provisional title from the request: its first clause, at most five words and 48
+ * characters, cut only between words and never on a dangling article or preposition. The plugin's
+ * own `name` replaces it after the first successful build.
+ */
+export function titleFrom(request: string): string {
+  const clause =
+    request
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/[.,;:!?¿¡()\n]/)[0]
+      ?.trim() ?? "";
+  const words = clause.split(" ").filter(Boolean).slice(0, 5);
+  while (words.join(" ").length > 48 && words.length > 1) words.pop();
+  while (words.length > 1 && DANGLING.test(words.at(-1) ?? "")) words.pop();
+  const title = words.join(" ").slice(0, 48) || request.trim().slice(0, 48);
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 function descriptionFrom(request: string): string {
@@ -325,7 +350,8 @@ export class PluginCreatorProjects {
         ...record.requests,
         { id: randomBytes(4).toString("hex"), kind, text: clean, at: this.now() },
       ].slice(-PLUGIN_CREATOR_LIMITS.maxRequests);
-      // A new request starts a new round of progress.
+      // A new request starts a new round of progress and of build attempts.
+      record.failedBuilds = 0;
       record.progress = {
         steps: PLUGIN_CREATOR_STEPS.map((step) => ({ id: step, status: "pending" })),
         updatedAt: this.now(),
@@ -348,14 +374,22 @@ export class PluginCreatorProjects {
   ): Promise<PluginCreatorProjectInfo> {
     if (!PLUGIN_CREATOR_STEPS.includes(step))
       throw new PluginCreatorError("validation_failed", `Unknown step: ${String(step)}`);
+    // "Packaged" is only true when the latest build passed every gate on these exact sources.
+    if (step === "package" && status === "done" && !(await this.packagePath(id)))
+      throw new PluginCreatorError(
+        "plugin_not_built",
+        "The plugin has not passed every check yet: run the build, fix every issue and build again",
+      );
     return this.update(id, (record) => {
       const now = this.now();
       const steps = PLUGIN_CREATOR_STEPS.map(
         (s): PluginCreatorStep =>
           record.progress?.steps.find((x) => x.id === s) ?? { id: s, status: "pending" },
       );
+      const index = PLUGIN_CREATOR_STEPS.indexOf(step);
+      const finished = step === "package" && status === "done";
       record.progress = {
-        steps: steps.map((s) =>
+        steps: steps.map((s, i) =>
           s.id === step
             ? {
                 id: s.id,
@@ -363,7 +397,37 @@ export class PluginCreatorProjects {
                 ...(note?.trim() ? { note: note.trim().slice(0, 200) } : {}),
                 updatedAt: now,
               }
-            : s,
+            : // A later step started or ended: an earlier step still "running" is done. Packaged:
+              // every step is done.
+              (i < index && s.status === "running") || (finished && s.status !== "done")
+              ? { ...s, status: "done", updatedAt: now }
+              : s,
+        ),
+        updatedAt: now,
+      };
+    });
+  }
+
+  /**
+   * Called when a creator run ends (completed, failed or cancelled): no step may stay "running".
+   * A leftover running step becomes "done" when the latest build passed every gate on the
+   * current sources (or the package step is already done), else "failed". Also repairs records
+   * written before this rule existed.
+   */
+  async settleProgress(id: string): Promise<PluginCreatorProjectInfo> {
+    const record = await this.readRecord(id);
+    if (!record.progress?.steps.some((step) => step.status === "running")) return record;
+    const packaged =
+      record.progress.steps.some((step) => step.id === "package" && step.status === "done") ||
+      (await this.packagePath(id)) !== undefined;
+    return this.update(id, (r) => {
+      if (!r.progress) return;
+      const now = this.now();
+      r.progress = {
+        steps: r.progress.steps.map((step) =>
+          step.status === "running"
+            ? { ...step, status: packaged ? "done" : "failed", updatedAt: now }
+            : step,
         ),
         updatedAt: now,
       };
@@ -450,6 +514,7 @@ export class PluginCreatorProjects {
         typeof validation.manifest?.version === "string"
           ? validation.manifest.version
           : record.version;
+      let displayName: string | undefined;
       const finish = async (
         outcome: Omit<PluginBuildOutcome, "stats" | "issues">,
         extra: Partial<PluginCreatorBuildStats> = {},
@@ -467,16 +532,47 @@ export class PluginCreatorProjects {
           testsFailed: outcome.tests?.failed ?? 0,
           version,
           ...(outcome.error ? { errorCode: outcome.error.code } : {}),
+          ...(outcome.ok
+            ? {}
+            : {
+                issues: issues
+                  .filter((issue) => issue.severity === "error")
+                  .slice(0, 20)
+                  .map((issue) => ({ ...issue, message: issue.message.slice(0, 500) })),
+              }),
           ...extra,
         };
         await this.update(id, (r) => {
           r.lastBuild = stats;
+          r.failedBuilds = outcome.ok ? 0 : (r.failedBuilds ?? 0) + 1;
+          if (outcome.ok && displayName)
+            r.displayName = displayName.slice(0, PLUGIN_CREATOR_LIMITS.displayNameChars);
           if (validation.schema.tables.length) r.schema = validation.schema;
           else delete r.schema;
         });
         return { ...outcome, stats, issues };
       };
       if (!validation.ok || !validation.entry)
+        return finish({
+          ok: false,
+          error: {
+            code: "plugin_project_invalid",
+            message: "The plugin breaks a plugin rule: see the issues",
+          },
+        });
+      const shipped = validation.walk.files
+        .map((f) => f.path)
+        .filter((path) => /\.(?:m|c)?js$/.test(path) && !path.startsWith("test/"));
+      for (const problem of await checkSyntax(dir, shipped, {
+        ...(this.options.node ? { node: this.options.node } : {}),
+      }))
+        issues.push({
+          code: "syntax_error",
+          severity: "error",
+          message: `${problem.file} is not a plain JavaScript module: ${problem.message}`,
+          file: problem.file,
+        });
+      if (issues.some((issue) => issue.severity === "error"))
         return finish({
           ok: false,
           error: {
@@ -552,6 +648,60 @@ export class PluginCreatorProjects {
       const file = join(buildDir, storedTarballName(name, version));
       const hash = await hashProject(dir);
       const packed = await packDirectory(dir, file);
+      // Gates on the package itself: what ships, then the real host on an installed copy.
+      const shippedSet = new Set(packed.files);
+      for (const [from, targets] of validation.imports)
+        if (shippedSet.has(from))
+          for (const target of targets)
+            if (!shippedSet.has(target))
+              issues.push({
+                code: "import_not_packed",
+                severity: "error",
+                message: `${from} imports ${target}, which the package does not include (check "files" in package.json and the path)`,
+                file: from,
+              });
+      const gate = await runInstalledGate(file, name, {
+        ...(this.options.gateTimeoutMs ? { timeoutMs: this.options.gateTimeoutMs } : {}),
+        ...(this.options.gateCommand ? { command: this.options.gateCommand } : {}),
+      });
+      for (const issue of gate.issues)
+        issues.push({ ...issue, severity: "error", file: validation.entry });
+      if (
+        gate.issues.every((i) => i.code !== "activation_failed" && i.code !== "gate_unavailable")
+      ) {
+        const testText = (
+          await Promise.all(
+            validation.tests.map((test) => readFile(join(dir, test), "utf8").catch(() => "")),
+          )
+        ).join("\n");
+        for (const tool of gate.tools)
+          if (!new RegExp(`(^|[^A-Za-z0-9_])${tool}([^A-Za-z0-9_]|$)`).test(testText))
+            issues.push({
+              code: "tool_untested",
+              severity: "error",
+              message: `No test uses the tool ${tool}: add a test that calls it`,
+              file: "test",
+            });
+        if (gate.tools.length > tests.passed)
+          issues.push({
+            code: "tests_too_few",
+            severity: "error",
+            message: `${tests.passed} test(s) passed for ${gate.tools.length} tools: add at least one test per tool`,
+            file: "test",
+          });
+      }
+      displayName = gate.name ?? (typeof probe.name === "string" ? probe.name.trim() : undefined);
+      if (issues.some((issue) => issue.severity === "error")) {
+        await rm(buildDir, { recursive: true, force: true });
+        return finish({
+          ok: false,
+          tests,
+          error: {
+            code: "plugin_project_invalid",
+            message: "The plugin did not pass Alisio's checks: see the issues",
+          },
+        });
+      }
       const buildRecord: BuildRecord = { file, hash, version };
       await writeFile(join(buildDir, "build.json"), JSON.stringify(buildRecord), { mode: 0o600 });
       if (typeof probe.id === "string" && probe.id !== record.pluginId)

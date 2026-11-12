@@ -32,6 +32,12 @@ export interface InstallLocalPluginInput {
   runner?: InstallRunner;
   /** Called as each phase starts. */
   onPhase?: (phase: LocalInstallPhase) => void;
+  /**
+   * Runs once the package is installed and registered, before the previous copy is discarded. A
+   * throw rolls the install back like a failed npm install (an update restores the previous
+   * version, a first install is removed) and is rethrown.
+   */
+  verify?: (result: InstallLocalPluginResult) => Promise<void>;
 }
 
 export interface InstallLocalPluginResult {
@@ -130,12 +136,10 @@ export async function installLocalPluginTarball(
     }
     input.onPhase?.("registering");
     const configFile = await persistGlobalPluginEntry(home, name);
-    await rm(backup, { force: true });
-    if (previousStored && previousStored !== storedPath) await rm(previousStored, { force: true });
     const manifest = (await readJson(join(packageDir, "package.json"))) as
       | { version?: string }
       | undefined;
-    return {
+    const outcome: InstallLocalPluginResult = {
       packageName: name,
       installedVersion: manifest?.version ?? version,
       ...(previous?.version ? { previousVersion: previous.version } : {}),
@@ -147,6 +151,10 @@ export async function installLocalPluginTarball(
       configFile,
       info,
     };
+    await input.verify?.(outcome);
+    await rm(backup, { force: true });
+    if (previousStored && previousStored !== storedPath) await rm(previousStored, { force: true });
+    return outcome;
   } catch (error) {
     await rm(storedPath, { force: true }).catch(() => {});
     if (hadStored) await rename(backup, storedPath).catch(() => {});

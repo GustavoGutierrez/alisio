@@ -989,6 +989,10 @@ try {
   if (process.argv.slice(2)[0] === "__forge-isolate") {
     const { runProcessIsolate } = await import("@alisio/core/forge-isolate");
     await runProcessIsolate();
+  } else if (process.argv.slice(2)[0] === "__plugin-gate") {
+    // The plugin creator's delivery gate (an installed copy, throwaway homes): internal too.
+    const { runPluginGateChild } = await import("@alisio/core");
+    await runPluginGateChild();
   } else await program.parseAsync();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

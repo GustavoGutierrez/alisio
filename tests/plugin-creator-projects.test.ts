@@ -550,3 +550,106 @@ describe("PluginCreatorProjects: folder and icon for the web UI", () => {
     expect((await projects.get(project.id)).icon).toBeUndefined();
   });
 });
+
+describe("PluginCreatorProjects: display name, progress and build attempts", () => {
+  it("makes a short provisional title that never ends mid-phrase", async () => {
+    const { titleFrom } = await import("../packages/core/src/index.ts");
+    expect(titleFrom("Llevar los gastos del mes en una tabla")).toBe("Llevar los gastos del mes");
+    expect(titleFrom("track the expenses of the month in a table")).toBe("Track the expenses");
+    expect(titleFrom("Count words. Then lines")).toBe("Count words");
+    const project = await projects.create({ request: "Llevar los gastos del mes en una tabla" });
+    expect(project.displayName).toBe("Llevar los gastos del mes");
+  });
+
+  it("takes the plugin's declared name as the display name after a successful build", async () => {
+    const project = await projects.create({ request: "Llevar los gastos del mes en una tabla" });
+    const index = await readFile(join(projects.dir(project.id), "src", "index.js"), "utf8");
+    await edit(
+      project.id,
+      "src/index.js",
+      index.replace(/name: ".*?",/, 'name: "Gastos del mes",'),
+    );
+    expect((await projects.build(project.id)).ok).toBe(true);
+    expect((await projects.get(project.id)).displayName).toBe("Gastos del mes");
+    const record = JSON.parse(
+      await readFile(join(projects.paths.records, `${project.id}.json`), "utf8"),
+    );
+    expect(record.displayName).toBe("Gastos del mes");
+  });
+
+  it("closes earlier running steps when a later one moves, and every step once packaged", async () => {
+    const project = await projects.create({ request: "Count words" });
+    await projects.recordProgress(project.id, "plan", "running", "Planning");
+    await projects.recordProgress(project.id, "tests", "running");
+    let steps = (await projects.get(project.id)).progress?.steps ?? [];
+    expect(steps.find((s) => s.id === "plan")).toMatchObject({ status: "done", note: "Planning" });
+    expect(steps.find((s) => s.id === "tests")?.status).toBe("running");
+    expect(steps.find((s) => s.id === "code")?.status).toBe("pending");
+    // "Packaged" needs a build that passed every gate on the current sources.
+    await expect(projects.recordProgress(project.id, "package", "done")).rejects.toMatchObject({
+      code: "plugin_not_built",
+    });
+    expect((await projects.build(project.id)).ok).toBe(true);
+    await projects.recordProgress(project.id, "package", "done");
+    steps = (await projects.get(project.id)).progress?.steps ?? [];
+    expect(steps.map((s) => s.status)).toEqual(["done", "done", "done", "done", "done"]);
+  });
+
+  it("counts failed builds in a row with their findings and resets on a new request", async () => {
+    const project = await projects.create({ request: "Count words" });
+    const pkg = await manifest(project.id);
+    await edit(project.id, "package.json", JSON.stringify({ ...pkg, type: "commonjs" }));
+    await projects.build(project.id);
+    await projects.build(project.id);
+    let got = await projects.get(project.id);
+    expect(got.failedBuilds).toBe(2);
+    expect(got.lastBuild?.issues?.map((i) => i.code)).toContain("type_not_module");
+    await projects.addRequest(project.id, "Try again", "modify");
+    got = await projects.get(project.id);
+    expect(got.failedBuilds).toBe(0);
+    await edit(project.id, "package.json", JSON.stringify(pkg));
+    expect((await projects.build(project.id)).ok).toBe(true);
+    got = await projects.get(project.id);
+    expect(got.failedBuilds).toBe(0);
+    expect(got.lastBuild?.issues).toBeUndefined();
+  });
+});
+
+describe("PluginCreatorProjects: settling progress when a creator run ends", () => {
+  it("leaves no step running: done when the package passed every gate, failed otherwise", async () => {
+    const project = await projects.create({ request: "Count words" });
+    await projects.recordProgress(project.id, "code", "running");
+    await projects.settleProgress(project.id);
+    let steps = (await projects.get(project.id)).progress?.steps ?? [];
+    expect(steps.find((s) => s.id === "code")?.status).toBe("failed");
+    expect(steps.some((s) => s.status === "running")).toBe(false);
+    expect(steps.find((s) => s.id === "package")?.status).toBe("pending");
+    expect((await projects.build(project.id)).ok).toBe(true);
+    await projects.recordProgress(project.id, "run_tests", "running");
+    await projects.settleProgress(project.id);
+    steps = (await projects.get(project.id)).progress?.steps ?? [];
+    expect(steps.find((s) => s.id === "run_tests")?.status).toBe("done");
+  });
+
+  it("repairs a legacy record whose plan step was left running after the package was done", async () => {
+    const project = await projects.create({ request: "Count words" });
+    expect((await projects.build(project.id)).ok).toBe(true);
+    const file = join(projects.paths.records, `${project.id}.json`);
+    const record = JSON.parse(await readFile(file, "utf8"));
+    record.progress = {
+      updatedAt: 1,
+      steps: [
+        { id: "plan", status: "running", note: "Planning" },
+        { id: "tests", status: "done" },
+        { id: "code", status: "done" },
+        { id: "run_tests", status: "done" },
+        { id: "package", status: "done" },
+      ],
+    };
+    await writeFile(file, JSON.stringify(record));
+    await projects.settleProgress(project.id);
+    const steps = (await projects.get(project.id)).progress?.steps ?? [];
+    expect(steps.map((s) => s.status)).toEqual(["done", "done", "done", "done", "done"]);
+    expect(steps[0]?.note).toBe("Planning");
+  });
+});

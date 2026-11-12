@@ -16,6 +16,8 @@ import { raw, startTestServer, type TestServer, until } from "./server-helpers.t
 
 interface NpmState {
   calls: string[][];
+  /** Installs a plugin with this id whose tool schema the host rejects. */
+  broken?: string;
 }
 
 /** A fake npm: "installs" a tarball by writing its manifest and a loadable plugin. */
@@ -45,10 +47,23 @@ function fakeNpm(state: NpmState): InstallRunner {
     );
     await writeFile(
       join(dir, "index.js"),
-      `export default { id: "fake-created", version: ${JSON.stringify(info.version)}, apiVersion: 1, setup() {} };\n`,
+      state.broken
+        ? `export default { id: ${JSON.stringify(state.broken)}, version: ${JSON.stringify(info.version)}, apiVersion: 1, setup(api) { api.tools.register({ name: "add", description: "d", effect: "read", inputSchema: { type: "object", properties: { n: { type: ["number", "string"] } } }, async execute() { return { content: [] }; } }); } };\n`
+        : `export default { id: "fake-created", version: ${JSON.stringify(info.version)}, apiVersion: 1, setup() {} };\n`,
     );
     manifest.dependencies[name] = `file:${relative(prefix, target).split("\\").join("/")}`;
     await writeFile(manifestPath, JSON.stringify(manifest));
+    if (state.broken)
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name,
+          version: info.version,
+          type: "module",
+          main: "index.js",
+          keywords: ["alisio-plugin"],
+        }),
+      );
     return { stdout: "added 1 package", stderr: "", exitCode: 0, truncated: false };
   };
 }
@@ -281,7 +296,11 @@ describe("plugin creator routes: files, build, package, install, delete", () => 
       pkgFile,
       JSON.stringify({ ...pkg, peerDependencies: { "@alisio/sdk": "^0.12.0" } }),
     );
-    const res = await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true });
+    // The sources changed after the last passing build: installing is refused outright.
+    const refused = await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true });
+    expect(refused.status).toBe(409);
+    expect(errorCode(refused)).toBe("plugin_not_built");
+    const res = await t.api.post(`${BASE}/${project.id}/build`, {});
     expect(res.status).toBe(422);
     const body = res.json<{ error: { code: string; details: PluginCreatorBuildResponse } }>();
     expect(body.error.code).toBe("plugin_project_invalid");
@@ -302,8 +321,74 @@ describe("plugin creator routes: files, build, package, install, delete", () => 
     expect(body.error.code).toBe("plugin_tests_failed");
     expect(body.error.details.build.testsFailed).toBe(1);
     expect((await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true })).status).toBe(
-      422,
+      409,
     );
+  });
+
+  it("refuses to install a project that has no passing build for its current sources", async () => {
+    const { t, npm } = await start();
+    const project = await create(t);
+    const res = await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true });
+    expect(res.status).toBe(409);
+    expect(errorCode(res)).toBe("plugin_not_built");
+    expect(npm.calls).toEqual([]);
+  });
+
+  it("rolls back an install whose plugin does not start and reports why", async () => {
+    const { t, npm } = await start();
+    const project = await create(t);
+    // A running workspace that loads global plugins (the creator session's).
+    expect((await t.api.post(`${BASE}/${project.id}/session`, {})).status).toBe(201);
+    expect((await t.api.post(`${BASE}/${project.id}/build`, {})).status).toBe(200);
+    const pluginId = (await t.api.get(`${BASE}/${project.id}`)).json<PluginCreatorProjectEntry>()
+      .project.pluginId;
+    npm.broken = pluginId;
+    const install = await t.api.post(`${BASE}/${project.id}/install`, { confirmed: true });
+    expect(install.status).toBe(202);
+    const { jobId } = install.json<{ jobId: string }>();
+    const job = await until(async () => {
+      const view = (await t?.api.get(`/api/plugins/jobs/${jobId}`))?.json<JobView>();
+      return view?.done ? view : undefined;
+    }, 15_000);
+    expect(job?.error).toMatch(/could not start/);
+    expect(job?.result).toMatchObject({ rolledBack: true });
+    expect((job?.result as { activationError: string }).activationError).toMatch(/allowUnionTypes/);
+    const status = (await t.api.get(`${BASE}/${project.id}/status`)).json<PluginCreatorStatus>();
+    expect(status.installed).toBe(false);
+  });
+
+  it("shows the reason of an already installed plugin that fails to start", async () => {
+    const { t } = await start();
+    const project = await create(t);
+    // Installed before the gates existed: the package is on disk and in the configuration.
+    const plugins = join(t.root, "config", "plugins");
+    const dir = join(plugins, "node_modules", project.packageName);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: project.packageName,
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        keywords: ["alisio-plugin"],
+      }),
+    );
+    await writeFile(
+      join(dir, "index.js"),
+      `export default { id: ${JSON.stringify(project.pluginId)}, version: "1.0.0", apiVersion: 1, setup(api) { api.tools.register({ name: "add", description: "d", effect: "read", inputSchema: { type: "object", properties: { n: { type: ["number", "string"] } } }, async execute() { return { content: [] }; } }); } };\n`,
+    );
+    await writeFile(
+      join(plugins, "package.json"),
+      JSON.stringify({ dependencies: { [project.packageName]: "file:local-packages/x.tgz" } }),
+    );
+    const configFile = join(t.root, "config", "config.json");
+    const config = JSON.parse(await readFile(configFile, "utf8").catch(() => "{}"));
+    await writeFile(configFile, JSON.stringify({ ...config, plugins: [project.packageName] }));
+    expect((await t.api.post(`${BASE}/${project.id}/session`, {})).status).toBe(201);
+    const entry = (await t.api.get(`${BASE}/${project.id}`)).json<PluginCreatorProjectEntry>();
+    expect(entry.status.installed).toBe(true);
+    expect(entry.status.activationError).toMatch(/allowUnionTypes/);
   });
 });
 

@@ -144,10 +144,30 @@ describe("project plugin manager", () => {
         expect.objectContaining({
           id: "broken",
           status: "failed",
-          diagnostic: "Activation failed; registrations were rolled back",
+          // The reason is shown (the person and the creator agent need it), without paths.
+          diagnostic: "Activation failed; registrations were rolled back: secret <path>",
         }),
       );
-      expect(JSON.stringify(app.pluginCatalog())).not.toMatch(/absolute|secret/);
+      expect(JSON.stringify(app.pluginCatalog())).not.toMatch(/absolute/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("explains a tool schema the host rejects in the catalog diagnostic", async () => {
+    const root = await project({ schemaVersion: 1, plugins: ["./union.mjs"] });
+    await writeFile(
+      join(root, ".alisio", "union.mjs"),
+      `export default {id:"union",version:"1.0.0",apiVersion:1,setup(api){api.tools.register({name:"add",description:"d",effect:"read",inputSchema:{type:"object",properties:{amount:{type:["number","string"]}}},async execute(){return {content:[]};}});}};`,
+    );
+    const app = await createApplication({ cwd: root, trustProject: true, noHerdr: true });
+    try {
+      const entry = app.pluginCatalog().find((plugin) => plugin.id === "union");
+      expect(entry?.status).toBe("failed");
+      expect(entry?.diagnostic).toMatch(
+        /^Activation failed; registrations were rolled back: strict mode: use allowUnionTypes/,
+      );
+      expect(entry?.diagnostic).not.toContain(root);
     } finally {
       await app.close();
     }

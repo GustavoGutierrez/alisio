@@ -11,7 +11,7 @@
  */
 import { textResult } from "@alisio/sdk";
 import type { ToolRegistry } from "../../core/registry.ts";
-import type { PluginCreatorProjects } from "./projects.ts";
+import { MAX_BUILD_ATTEMPTS, type PluginCreatorProjects } from "./projects.ts";
 import { PLUGIN_CREATOR_STEPS, PluginCreatorError } from "./types.ts";
 
 const STATUSES = ["running", "done", "failed"] as const;
@@ -108,9 +108,11 @@ export function registerPluginProjectTools(
     effect: "process",
     description:
       "Runs this plugin project's code. action 'test': node --test on test/*.test.js (scrubbed " +
-      "environment, time limit, no install). action 'build': validate + test + load check + " +
-      "package (.tgz) so the person can install it. Not a sandbox: the code runs with the user's " +
-      "privileges.",
+      "environment, time limit, no install). action 'build': every delivery gate (validation, " +
+      "syntax, tests, packaging, then Alisio's real host on an installed copy: activation, strict " +
+      "tool schemas, one smoke call per tool, dispose and reactivation, a test per tool) and the " +
+      "package (.tgz). A failed build lists the issues to fix. Not a sandbox: the code runs with " +
+      "the user's privileges.",
     inputSchema: {
       type: "object",
       properties: { action: { type: "string", enum: ["test", "build"] } },
@@ -125,6 +127,7 @@ export function registerPluginProjectTools(
         }
         if (input.action === "build") {
           const build = await projects.build(projectId, { signal: context.signal });
+          const attempt = build.ok ? 0 : ((await projects.get(projectId)).failedBuilds ?? 1);
           return textResult(
             JSON.stringify({
               ok: build.ok,
@@ -132,6 +135,17 @@ export function registerPluginProjectTools(
               issues: build.issues,
               stats: build.stats,
               ...(build.tests && !build.tests.ok ? { testOutput: build.tests.output } : {}),
+              ...(build.ok
+                ? { next: "Every check passed: report the package step as done." }
+                : {
+                    attempt,
+                    maxAttempts: MAX_BUILD_ATTEMPTS,
+                    next: build.issues.some((issue) => issue.code === "gate_unavailable")
+                      ? "Stop: this Alisio cannot run its plugin checks, which is not a problem of the plugin. Do not change the plugin; tell the person to update or reinstall Alisio."
+                      : attempt >= MAX_BUILD_ATTEMPTS
+                        ? "Stop now: do not build again. Tell the person in one plain sentence that the plugin could not be finished and that they can press Try again."
+                        : "The plugin is NOT ready: fix every error issue, run the tests and build again. Never say it is ready while a build fails.",
+                  }),
             }),
             !build.ok,
           );

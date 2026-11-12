@@ -559,6 +559,18 @@ export {
   PluginAppRegistry,
 } from "./plugins/apps.ts";
 export {
+  checkInstalledPlugin,
+  type GateReport,
+  type GateRequest,
+  runPluginGateChild,
+} from "./plugins/creator/gate.ts";
+export {
+  type GateCommand,
+  gateCommand,
+  gateEnvironment,
+  runInstalledGate,
+} from "./plugins/creator/gate-runner.ts";
+export {
   isPluginCreatorPath,
   type PluginCreatorPaths,
   pluginCreatorPathMatcher,
@@ -566,12 +578,15 @@ export {
   pluginCreatorProjectOf,
 } from "./plugins/creator/paths.ts";
 export {
+  MAX_BUILD_ATTEMPTS,
   type PluginBuildOutcome,
   PluginCreatorProjects,
   type PluginCreatorProjectsOptions,
   sdkRangeFor,
+  titleFrom,
 } from "./plugins/creator/projects.ts";
 export { detectSchema } from "./plugins/creator/schema.ts";
+export { sampleInput } from "./plugins/creator/schema-sample.ts";
 export { ensurePluginCreatorSkill } from "./plugins/creator/skill.ts";
 export {
   PLUGIN_CREATOR_SKILL_FILES,
@@ -584,6 +599,7 @@ export {
   type PluginCreatorErrorCode,
 } from "./plugins/creator/types.ts";
 export { type ProjectValidation, validateProject } from "./plugins/creator/validate.ts";
+export { sanitizePluginDiagnostic } from "./plugins/diagnostic.ts";
 export {
   discoverPlugins,
   type PluginEnvironment,

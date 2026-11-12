@@ -248,6 +248,56 @@ describe("installLocalPluginTarball", () => {
     expect((await config(home)).plugins).toEqual(["@alisio/plugin-ica"]);
   });
 
+  it("rolls a first install back completely when the installed plugin does not start", async () => {
+    const { home, original, plugins } = await setup();
+    const npm = fakeNpm();
+    const verified: string[] = [];
+    await expect(
+      installLocalPluginTarball({
+        tarballPath: await original(),
+        configHome: home,
+        runner: npm.runner,
+        verify: async (result) => {
+          verified.push(result.installedVersion);
+          throw new Error("Activation failed: bad schema");
+        },
+      }),
+    ).rejects.toThrow(/bad schema/);
+    expect(verified).toEqual(["0.1.0"]);
+    expect(await exists(join(plugins, "node_modules", "@alisio", "plugin-ica"))).toBe(false);
+    expect(await stored(plugins)).toEqual([]);
+    expect((await config(home).catch(() => ({ plugins: [] }))).plugins ?? []).toEqual([]);
+  });
+
+  it("puts the previous version back when an updated plugin does not start", async () => {
+    const { home, original, plugins } = await setup();
+    const npm = fakeNpm();
+    await installLocalPluginTarball({
+      tarballPath: await original(),
+      configHome: home,
+      runner: npm.runner,
+    });
+    await expect(
+      installLocalPluginTarball({
+        tarballPath: await original({ version: "0.2.0" }, "ica2.tgz"),
+        configHome: home,
+        runner: npm.runner,
+        verify: async () => {
+          throw new Error("Activation failed");
+        },
+      }),
+    ).rejects.toThrow(/Activation failed/);
+    const installed = JSON.parse(
+      await readFile(
+        join(plugins, "node_modules", "@alisio", "plugin-ica", "package.json"),
+        "utf8",
+      ),
+    );
+    expect(installed.version).toBe("0.1.0");
+    expect(await stored(plugins)).toEqual(["alisio-plugin-ica-0.1.0.tgz"]);
+    expect((await config(home)).plugins).toEqual(["@alisio/plugin-ica"]);
+  });
+
   it("migrates a plugin installed from an external file: spec into the stable store", async () => {
     const { home, root, original, plugins } = await setup();
     const external = await original({}, "external.tgz");

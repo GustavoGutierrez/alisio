@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PluginCreatorTestRun } from "@alisio/sdk";
 import { isMissingCommand, runProcess } from "../../runtime/process.ts";
+import { sanitizePluginDiagnostic } from "../diagnostic.ts";
 import { PLUGIN_API_SHAPE } from "./api-shape.ts";
 import { PLUGIN_CREATOR_LIMITS } from "./types.ts";
 
@@ -127,6 +128,7 @@ export async function runNodeTests(
 export interface PluginProbe {
   ok: boolean;
   id?: unknown;
+  name?: string;
   version?: unknown;
   apiVersion?: unknown;
   hasSetup?: boolean;
@@ -188,7 +190,7 @@ const report = (out) => { process.stdout.write("\\n@@PROBE@@" + JSON.stringify(o
 import(url).then(async (m) => {
   const p = m.default;
   if (!p || typeof p !== "object") return report({ ok: false, error: "The entry file has no default export object" });
-  const out = { ok: true, id: p.id, version: p.version, apiVersion: p.apiVersion, hasSetup: typeof p.setup === "function" };
+  const out = { ok: true, id: p.id, name: typeof p.name === "string" ? p.name : undefined, version: p.version, apiVersion: p.apiVersion, hasSetup: typeof p.setup === "function" };
   if (out.hasSetup) {
     try {
       await Promise.race([
@@ -247,4 +249,42 @@ export async function probePlugin(
   } finally {
     await cleanup();
   }
+}
+
+/**
+ * Parses each shipped file as a module (`node --check`, which honors `"type": "module"`): a file
+ * with TypeScript syntax or any other syntax error is reported with the parser's first error line.
+ */
+export async function checkSyntax(
+  dir: string,
+  files: string[],
+  options: { node?: NodeCommand; timeoutMs?: number } = {},
+): Promise<Array<{ file: string; message: string }>> {
+  const node = options.node ?? nodeCommand();
+  const { env, cleanup } = await scrubbedEnv(node.env);
+  const problems: Array<{ file: string; message: string }> = [];
+  try {
+    for (const file of files) {
+      try {
+        const result = await runProcess(node.command, ["--check", file], {
+          cwd: dir,
+          signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
+          timeoutMs: options.timeoutMs ?? 15_000,
+          env,
+          maxBytes: 16_000,
+          onOverflow: "truncate",
+          killGraceMs: 500,
+        });
+        if (result.exitCode === 0) continue;
+        const line =
+          result.stderr.split("\n").find((l) => /^\w*Error\b/.test(l.trim())) ?? "SyntaxError";
+        problems.push({ file, message: sanitizePluginDiagnostic(line.trim(), 300) });
+      } catch (error) {
+        if (isMissingCommand(error)) return [{ file, message: NODE_MISSING }];
+      }
+    }
+  } finally {
+    await cleanup();
+  }
+  return problems;
 }

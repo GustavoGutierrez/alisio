@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@alisio/sdk";
@@ -118,5 +118,61 @@ describe("creator workspace wiring", () => {
     const text = result?.content[0]?.type === "text" ? result.content[0].text : "";
     expect(JSON.parse(text)).toMatchObject({ ok: true });
     expect(await projects.packagePath(project.id)).toBeDefined();
+  });
+
+  it("plugin_project_run hands every failed gate back with a bounded number of attempts", async () => {
+    const { projects, project, open } = await setup();
+    const dir = projects.dir(project.id);
+    const app = await open(dir);
+    const index = await readFile(join(dir, "src", "index.js"), "utf8");
+    await writeFile(
+      join(dir, "src", "index.js"),
+      index.replace(
+        'properties: { name: { type: "string"',
+        'properties: { name: { type: ["string", "number"]',
+      ),
+    );
+    // Only a load test, so the plugin's own checks do not catch it: the real-host gate must.
+    await writeFile(
+      join(dir, "test", "plugin.test.js"),
+      'import test from "node:test";\ntest("greet loads", async () => { await import("../src/index.js"); });\n',
+    );
+    const run = app.registry.get("plugin_project_run");
+    const parse = async () => {
+      const result = await run?.execute({ action: "build" }, context(dir));
+      return {
+        isError: result?.isError,
+        body: JSON.parse(result?.content[0]?.type === "text" ? result.content[0].text : "{}"),
+      };
+    };
+    const first = await parse();
+    expect(first.isError).toBe(true);
+    expect(first.body).toMatchObject({ ok: false, attempt: 1, maxAttempts: 3 });
+    expect(first.body.issues.map((i: { code: string }) => i.code)).toContain("activation_failed");
+    expect(first.body.next).toMatch(/fix/i);
+    await parse();
+    const third = await parse();
+    expect(third.body.attempt).toBe(3);
+    expect(third.body.next).toMatch(/stop/i);
+    const tool = app.registry.get("plugin_project");
+    const ready = await tool?.execute(
+      { action: "progress", step: "package", status: "done" },
+      context(dir),
+    );
+    expect(ready?.isError).toBe(true);
+    expect((await projects.get(project.id)).progress?.steps.at(-1)?.status).not.toBe("done");
+  });
+
+  it("settles the progress when a creator run ends, so no step keeps spinning", async () => {
+    const { projects, project, open } = await setup();
+    const dir = projects.dir(project.id);
+    const app = await open(dir);
+    await projects.recordProgress(project.id, "plan", "running", "Planning");
+    const session = await app.createSession();
+    await app.runner.run(session.id, "hello");
+    await vi.waitFor(async () => {
+      const steps = (await projects.get(project.id)).progress?.steps ?? [];
+      expect(steps.find((s) => s.id === "plan")?.status).toBe("failed");
+    });
   });
 });

@@ -175,6 +175,11 @@ export interface PluginInstallService {
     hooks?: {
       cleanup?: () => Promise<void>;
       onSuccess?: (body: PluginInstallResponse) => Promise<Record<string, unknown> | undefined>;
+      /**
+       * Runs after the workspaces reloaded the new package: the reason it failed to start, or
+       * undefined. A reason rolls the install back (see `installLocalPluginTarball`).
+       */
+      verify?: () => Promise<string | undefined>;
     },
   ): string;
   /** Uninstalls a global npm plugin package. */
@@ -352,6 +357,7 @@ export function registerPluginCatalogRoutes(
     hooks: {
       cleanup?: () => Promise<void>;
       onSuccess?: (body: PluginInstallResponse) => Promise<Record<string, unknown> | undefined>;
+      verify?: () => Promise<string | undefined>;
     } = {},
   ): string => {
     if (mutating)
@@ -364,16 +370,29 @@ export function registerPluginCatalogRoutes(
     job.start("uploading");
     void (async () => {
       const loaded = packageName ? codeLoaded(packageName) : false;
+      let reloaded: boolean | undefined;
+      let activationError: string | undefined;
       try {
         const result = await installLocalPluginTarball({
           tarballPath: file,
           configHome: configHome(),
           ...(options.installRunner ? { runner: options.installRunner } : {}),
           onPhase: (phase) => job.start(phase),
+          // Code already loaded in this process stays cached: only a restart could tell.
+          ...(hooks.verify && !loaded
+            ? {
+                verify: async () => {
+                  job.start("reloading");
+                  reloaded = !(await applyToWorkspaces());
+                  activationError = reloaded ? await hooks.verify?.() : undefined;
+                  if (activationError) throw new Error(activationError);
+                },
+              }
+            : {}),
         });
         job.start("reloading");
         if (loaded) pendingRestart.add(result.packageName);
-        const deferred = await applyToWorkspaces();
+        const deferred = reloaded === undefined ? await applyToWorkspaces() : !reloaded;
         job.start("cleanup");
         await hooks.cleanup?.();
         const body: PluginInstallResponse = {
@@ -388,6 +407,18 @@ export function registerPluginCatalogRoutes(
         const extra = await hooks.onSuccess?.(body).catch(() => undefined);
         job.succeed({ ...body, ...(extra ?? {}) });
       } catch (error) {
+        if (activationError) {
+          // Rolled back: reload the workspaces so they run the previous version (or none).
+          await applyToWorkspaces().catch(() => false);
+          await hooks.cleanup?.().catch(() => {});
+          job.fail(
+            `The plugin was installed but could not start, so it was rolled back: ${activationError}`,
+            undefined,
+            undefined,
+            { activationError, rolledBack: true },
+          );
+          return;
+        }
         await hooks.cleanup?.().catch(() => {});
         const text = errorText(error).slice(0, MAX_ERROR_CHARS);
         const tail = (error as { logTail?: string }).logTail;
