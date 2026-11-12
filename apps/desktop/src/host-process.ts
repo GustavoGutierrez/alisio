@@ -1,6 +1,14 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { type HostMessage, parseHostLine, parseHostMessage } from "./host-protocol.ts";
+import {
+  type AppMessage,
+  DESKTOP_FORCE_GRACE_MS,
+  DESKTOP_KILL_WAIT_MS,
+  DESKTOP_SHUTDOWN_WAIT_MS,
+  type HostMessage,
+  parseHostLine,
+  parseHostMessage,
+} from "./host-protocol.ts";
 import { type PrintRequest, type PrintResult, parsePrintRequest } from "./print-protocol.ts";
 
 export interface LaunchOptions {
@@ -10,8 +18,16 @@ export interface LaunchOptions {
   cwd?: string;
   /** How long to wait for the `ready` message before giving up (default 30 s). */
   timeoutMs?: number;
-  /** Grace before SIGKILL when stopping (default 5 s). */
-  killAfterMs?: number;
+  /** How long `stop()` waits for the host to exit after the shutdown request (budget default). */
+  shutdownWaitMs?: number;
+  /** POSIX fallback: grace between SIGTERM and SIGKILL of the host (budget default). */
+  forceGraceMs?: number;
+  /** How long `stop()` still waits after the fallback before giving up (budget default). */
+  killWaitMs?: number;
+  /** Platform whose fallback applies (tests); defaults to `process.platform`. */
+  platform?: NodeJS.Platform;
+  /** Runs the Windows tree kill (tests replace it); defaults to a bounded `spawnSync`. */
+  runTaskkill?: (command: string, args: string[]) => void;
   /** Receives the host's stderr lines (diagnostics only). */
   onLog?: (line: string) => void;
   /** Serves the host's print requests (spec 026 D7); requests outside `root` are ignored. */
@@ -25,19 +41,92 @@ export interface LaunchOptions {
 export interface RunningHost {
   child: ChildProcess;
   launchUrl: string;
-  /** SIGTERM, then SIGKILL after the grace period. Resolves with the exit code. */
+  /**
+   * Asks the host to shut down (IPC), then kills its tree if it does not exit in time. Always
+   * resolves within the budget of `host-protocol.ts`: with the exit code, or `null` when killed.
+   */
   stop(): Promise<number | null>;
   /** Resolves when the host exits for any reason. */
   exited: Promise<number | null>;
 }
 
-/** Stops `child` with SIGTERM and falls back to SIGKILL; resolves with its exit code. */
-function terminate(child: ChildProcess, exited: Promise<number | null>, killAfterMs: number) {
-  if (child.exitCode !== null || child.signalCode !== null) return exited;
-  child.kill("SIGTERM");
-  const timer = setTimeout(() => child.kill("SIGKILL"), killAfterMs);
-  timer.unref();
-  return exited.finally(() => clearTimeout(timer));
+/** How the app kills a host that did not exit in time. */
+export type HostFallbackPlan =
+  | { kind: "taskkill"; command: "taskkill"; args: string[] }
+  /** POSIX: SIGTERM (a stopping host exits at once, running its exit hook), then SIGKILL. */
+  | { kind: "signals" };
+
+/**
+ * The fallback for `platform`. On Windows a signal is TerminateProcess of the host alone, which
+ * would skip its cleanup and leave its children running, so the whole tree goes at once.
+ */
+export function hostFallbackPlan(pid: number, platform: NodeJS.Platform): HostFallbackPlan {
+  return platform === "win32"
+    ? { kind: "taskkill", command: "taskkill", args: ["/PID", String(pid), "/T", "/F"] }
+    : { kind: "signals" };
+}
+
+/** How long a host that failed to start gets to exit on its own before the fallback. */
+const FAILED_START_WAIT_MS = 2_000;
+
+const defaultTaskkill = (command: string, args: string[]) => {
+  spawnSync(command, args, { stdio: "ignore", windowsHide: true, timeout: 5_000 });
+};
+
+/** Resolves true when `exited` settles within `ms`, false otherwise. */
+function within(exited: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    void exited.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+/**
+ * Stops the host: the IPC shutdown request when the channel is up (SIGTERM on POSIX otherwise),
+ * then the platform fallback if it is still running after `shutdownWaitMs`. Bounded.
+ */
+async function terminate(
+  child: ChildProcess,
+  exited: Promise<number | null>,
+  options: LaunchOptions,
+): Promise<number | null> {
+  const isDone = () => child.exitCode !== null || child.signalCode !== null;
+  if (isDone()) return exited;
+  const platform = options.platform ?? process.platform;
+  let requested = false;
+  if (child.connected) {
+    try {
+      child.send({ type: "shutdown" } satisfies AppMessage);
+      requested = true;
+    } catch {
+      /* the channel closed meanwhile: fall through */
+    }
+  }
+  if (!requested && platform !== "win32") {
+    child.kill("SIGTERM");
+    requested = true;
+  }
+  if (requested && (await within(exited, options.shutdownWaitMs ?? DESKTOP_SHUTDOWN_WAIT_MS)))
+    return exited;
+  if (isDone()) return exited;
+  const plan = hostFallbackPlan(child.pid ?? 0, platform);
+  if (plan.kind === "taskkill") {
+    if (child.pid !== undefined) {
+      try {
+        (options.runTaskkill ?? defaultTaskkill)(plan.command, plan.args);
+      } catch {
+        /* nothing more to try than the wait below */
+      }
+    }
+  } else {
+    child.kill("SIGTERM");
+    if (!(await within(exited, options.forceGraceMs ?? DESKTOP_FORCE_GRACE_MS)))
+      child.kill("SIGKILL");
+  }
+  return (await within(exited, options.killWaitMs ?? DESKTOP_KILL_WAIT_MS)) ? exited : null;
 }
 
 /**
@@ -46,7 +135,6 @@ function terminate(child: ChildProcess, exited: Promise<number | null>, killAfte
  * every rejection the child is stopped.
  */
 export function launchHost(options: LaunchOptions): Promise<RunningHost> {
-  const killAfterMs = options.killAfterMs ?? 5_000;
   const child = spawn(options.command, options.args, {
     cwd: options.cwd,
     env: options.env,
@@ -63,7 +151,14 @@ export function launchHost(options: LaunchOptions): Promise<RunningHost> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void terminate(child, exited, killAfterMs);
+      // A host that failed or hangs in its startup gets a short wait before the fallback.
+      void terminate(child, exited, {
+        ...options,
+        shutdownWaitMs: Math.min(
+          options.shutdownWaitMs ?? FAILED_START_WAIT_MS,
+          FAILED_START_WAIT_MS,
+        ),
+      });
       reject(error);
     };
     const handle = (message: HostMessage | undefined) => {
@@ -75,7 +170,7 @@ export function launchHost(options: LaunchOptions): Promise<RunningHost> {
         child,
         launchUrl: message.launchUrl,
         exited,
-        stop: () => terminate(child, exited, killAfterMs),
+        stop: () => terminate(child, exited, options),
       });
     };
     const timer = setTimeout(

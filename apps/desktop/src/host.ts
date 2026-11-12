@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { channelProblem, watchParent } from "./host-lifecycle.ts";
+import { HOST_SHUTDOWN_CAP_MS, isShutdownRequest } from "./host-protocol.ts";
 import { listenOnPreferredPort } from "./port-state.ts";
 import { installOutputRedaction } from "./redact-output.ts";
 import { parseHostArgs } from "./spawn-plan.ts";
@@ -31,17 +32,33 @@ async function main(): Promise<void> {
   // Without the app's IPC channel a supervised host would never hear that the app quit.
   const problem = channelProblem(process.env, !!process.send && process.connected);
   if (problem) throw new Error(problem);
+  // How the app asks this host to quit (every OS); until the server exists, stopping is exiting.
+  let stop: (force?: boolean) => void = () => process.exit(0);
+  process.on("message", (message) => {
+    if (isShutdownRequest(message)) stop();
+  });
+  // A signal while already stopping (the app's fallback, a second Ctrl+C) forces the exit now.
+  process.on("SIGTERM", () => stop(true));
+  process.on("SIGINT", () => stop(true));
+  // The parent is gone (crash or quit): nobody can reach this server any more.
+  process.on("disconnect", () => stop());
   // Nothing the host prints (server logs, plugins, libraries) may carry a token (specs/025 D26a).
   // The wrapper goes in before the slow imports so that nothing printed while they load escapes it;
   // no exact secret can be registered yet, so the JWT rule is all the early window needs.
   let redact = (text: string): string => text.replace(EARLY_JWT, "[redacted]");
   installOutputRedaction((text) => redact(text), [process.stdout, process.stderr]);
-  const [{ startServer }, { cliDefaults }, { redactCredentials }] = await Promise.all([
-    import("@alisio/server"),
-    import("@alisio/alisio-code/defaults"),
-    import("@alisio/core"),
-  ]);
+  const [{ startServer }, { cliDefaults }, { killAllTrackedProcesses, redactCredentials }] =
+    await Promise.all([
+      import("@alisio/server"),
+      import("@alisio/alisio-code/defaults"),
+      import("@alisio/core"),
+    ]);
   redact = (text) => redactCredentials(text);
+  // Whatever path ends this process (orderly close, the cap below, a crash handler), no command
+  // it started survives it: every process group still tracked is killed synchronously.
+  process.on("exit", () => {
+    killAllTrackedProcesses();
+  });
   const { ElectronPrintEngine } = await import("./print-client.ts");
   const printEngine =
     process.send && process.env.ALISIO_PRINT_ROOT && process.env.ALISIO_PRINT_VERSION
@@ -81,22 +98,22 @@ async function main(): Promise<void> {
     ? await listenOnPreferredPort(portFile, start, (s) => s.port)
     : await start(0);
   let stopping = false;
-  const stop = () => {
-    if (stopping) return;
+  stop = (force = false) => {
+    if (stopping) {
+      if (force) process.exit(1);
+      return;
+    }
     stopping = true;
-    // Shutdown is bounded internally; this is a last-resort guard against a hung close.
-    setTimeout(() => process.exit(1), 8_000).unref();
+    // The server close is bounded (`SERVER_CLOSE_BUDGET_MS`); this caps the whole shutdown
+    // below the app's wait. The exit hook then kills whatever is still running.
+    setTimeout(() => process.exit(1), HOST_SHUTDOWN_CAP_MS).unref();
     void server.close().then(
       () => process.exit(0),
       () => process.exit(1),
     );
   };
-  process.on("SIGTERM", stop);
-  process.on("SIGINT", stop);
-  // The parent is gone (crash or quit): nobody can reach this server any more.
-  process.on("disconnect", stop);
   // Started without a channel (by hand or a script): stop when that parent goes away.
-  if (!process.send) watchParent({ ppid: () => process.ppid, onGone: stop });
+  if (!process.send) watchParent({ ppid: () => process.ppid, onGone: () => stop() });
   report({ type: "ready", launchUrl: server.launchUrl });
 }
 

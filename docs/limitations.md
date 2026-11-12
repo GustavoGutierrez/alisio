@@ -411,6 +411,16 @@ On Alisio Desktop, interface preferences live in the browser storage of the host
 the host reuses its saved port, but when another program holds it that launch uses another port and
 those preferences are not visible until a later launch gets the saved port back.
 
+When Alisio Desktop quits, it asks its host to shut down over IPC; the host ends every command and
+background task it started (SIGTERM, then SIGKILL after one second; `taskkill /T /F` on Windows)
+within a 9-second cap, and the app kills the host's tree if it is still running after 10 seconds.
+Verified with Vitest on Linux, including a process group that ignores SIGTERM; the Windows
+`taskkill` path was checked only with a fake runner, and macOS was not run. Not covered yet: after
+an abrupt kill of Alisio, leftover tasks and OCI containers are not swept at the next start;
+programs that MCP servers start through `npx`/`uvx` depend on the MCP server; a plugin creator check
+in progress is not cancelled cleanly; on Windows a program whose launching command already ended
+cannot be found and survives.
+
 ### Provider sign-in (contract, core, server API, Web UI and TUI, phases 1 to 4)
 
 Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and

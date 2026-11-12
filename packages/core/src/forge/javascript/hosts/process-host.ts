@@ -15,6 +15,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { trackChild } from "../../../runtime/process-registry.ts";
 import type {
   IsolateExit,
   IsolateHost,
@@ -97,6 +98,7 @@ export class ProcessIsolateHost implements IsolateHost {
       stdio: ["pipe", "pipe", "ignore"],
       windowsHide: true,
     });
+    trackChild(child);
     let messageHandler: (raw: unknown) => void = () => {};
     let streamErrorHandler: (reason: string) => void = () => {};
     let exitState: IsolateExit | undefined;

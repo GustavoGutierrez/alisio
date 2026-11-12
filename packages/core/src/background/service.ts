@@ -2,12 +2,14 @@
  * `BackgroundTasks`: the runtime behind `bg_run`, `bg_list`, `bg_output` and `bg_stop`, and behind
  * the `/tasks` panels of the TUI and the web.
  *
- * A task is an ordinary child process of Alisio started through the shared process runner
- * (`runProcess`: same shell, same environment allowlist, process-group kill, `taskkill /T /F` on
- * Windows). It is NOT detached and NOT sandboxed: it dies with Alisio. The process group of every
- * live task is killed on an orderly `close()` and, as a last resort, from a synchronous `exit`
- * handler; after an abrupt death of Alisio (SIGKILL, power loss) nothing can run, so the next start
- * marks the leftovers `lost` (by owner pid) without touching them.
+ * A task is a child process of Alisio started through the shared process runner (`runProcess`:
+ * same shell, same environment allowlist, `taskkill /T /F` on Windows). It is NOT sandboxed. On
+ * POSIX it is spawned `detached` only so that it leads its own process group, which Alisio kills as
+ * a whole; it is still supervised and is meant to end with Alisio. The group of every live task is
+ * killed on an orderly `close()` and, as a last resort, by the live process registry
+ * (`runtime/process-registry.ts`) from a synchronous `exit` handler. After an abrupt death of
+ * Alisio (SIGKILL, power loss) nothing can run: the task's processes may survive it, and the next
+ * start only marks the leftover rows `lost` (by owner pid) without touching any process.
  *
  * Every state change is a compare-and-set in the database (see `store.ts`). The origin of an abort
  * is kept apart from its effect: a stop by the user or the model, or a shutdown, ends `cancelled`
@@ -124,18 +126,11 @@ interface Live {
 }
 
 const DEFAULT_MAX_PER_PROCESS = 16;
-/** Live tasks of every service of this process: the limit per process and the exit handler. */
-const PROCESS_LIVE = new Map<string, { pid?: number }>();
-let exitHookInstalled = false;
-/** Last resort for an `exit` that bypasses `close()`: kill every live task's process group. */
-function installExitHook(): void {
-  if (exitHookInstalled) return;
-  exitHookInstalled = true;
-  process.on("exit", () => {
-    for (const entry of PROCESS_LIVE.values())
-      if (entry.pid !== undefined) killProcessTree(entry.pid);
-  });
-}
+/**
+ * Live tasks of every service of this process (the limit per process). The `exit` hook that kills
+ * them when `close()` is bypassed is the process registry's: `runProcess` tracks every child.
+ */
+const PROCESS_LIVE = new Set<string>();
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -278,8 +273,7 @@ export class BackgroundTasks {
       finish,
     };
     this.live.set(id, live);
-    PROCESS_LIVE.set(id, {});
-    installExitHook();
+    PROCESS_LIVE.add(id);
     this.store.transition(id, ["queued"], "running", { startedAt: this.now() });
     live.watchdog = setTimeout(() => this.requestStop(live, "timeout"), timeoutMs);
     live.watchdog.unref?.();
@@ -315,8 +309,6 @@ export class BackgroundTasks {
           onData: (chunk) => live.writer.append(chunk),
           onSpawn: (pid) => {
             live.pid = pid;
-            const entry = PROCESS_LIVE.get(live.id);
-            if (entry) entry.pid = pid;
             this.store.setPid(live.id, pid);
           },
         },

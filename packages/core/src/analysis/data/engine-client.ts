@@ -11,6 +11,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { trackChild } from "../../runtime/process-registry.ts";
 import { ENGINE_SOURCE } from "./engine-source.ts";
 import type {
   CloseRequest,
@@ -126,6 +127,7 @@ class EngineProcess {
         windowsHide: true,
       },
     );
+    trackChild(this.child);
     const lines = new LineSplitter((line) => this.onLine(line));
     this.child.stdout?.setEncoding("utf8");
     this.child.stdout?.on("data", (text: string) => lines.write(text));

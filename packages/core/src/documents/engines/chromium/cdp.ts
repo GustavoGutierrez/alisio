@@ -7,6 +7,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
+import { trackChild } from "../../../runtime/process-registry.ts";
 
 export class CdpError extends Error {}
 
@@ -231,6 +232,7 @@ async function launchOnce(
     stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"],
     env: browserEnv(),
   });
+  trackChild(child);
   const exited = new Promise<void>((resolve) => {
     child.once("exit", () => resolve());
     child.once("error", () => resolve());

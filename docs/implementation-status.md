@@ -4850,6 +4850,54 @@ respaldo sin sobrescribir, archivo ausente/corrupto, cambio de padre) y
 IPC). No verificado: la aplicación gráfica real y el instalador con el puerto estable; Windows y
 macOS.
 
+## Aplicación de escritorio: ningún proceso sobrevive al salir
+
+Problema: al salir, la aplicación enviaba SIGTERM al host y SIGKILL a los 5 s. En Windows SIGTERM es
+`TerminateProcess` del host: no se ejecutaba ninguna limpieza y sus hijos seguían vivos. En
+Linux/macOS, `server.close()` solo esperaba 2 s a los turnos y el host salía con `process.exit(0)`
+antes de que venciera el SIGKILL de 5 s de `runProcess`, así que un grupo de procesos que ignoraba
+SIGTERM quedaba huérfano; los hijos de `runProcess` en primer plano no tenían gancho de salida.
+
+Ahora:
+- Cierre por IPC: el proceso principal envía `{type: "shutdown"}` (`host-protocol.ts`) y el host
+  ejecuta `server.close()` y sale; SIGTERM, SIGINT y `disconnect` siguen funcionando, y una segunda
+  señal durante el cierre fuerza la salida inmediata (con el gancho `exit`).
+- Presupuesto en un solo lugar (`apps/desktop/src/host-protocol.ts`): `SERVER_CLOSE_BUDGET_MS` = 2 s
+  de turnos + `APP_CLOSE_BUDGET_MS` (2 etapas de 2,5 s; los motores de documentos ya no se cierran en
+  serie, van en paralelo con herdr, MCP y tareas) + `PROCESS_SWEEP_GRACE_MS` (1 s) = 8 s; tope del host
+  `HOST_SHUTDOWN_CAP_MS` = 9 s; la aplicación espera `DESKTOP_SHUTDOWN_WAIT_MS` = 10 s. Un test
+  mantiene servidor < host < aplicación.
+- Respaldo: si el host no ha salido a los 10 s, en Windows `taskkill /PID <pid> /T /F`; en POSIX
+  SIGTERM (el host, ya cerrando, sale al momento y su gancho mata los grupos), SIGKILL 1 s después;
+  luego espera 2 s como máximo. Salir queda acotado (unos 13 s en el peor caso).
+- Registro de procesos vivos en el núcleo (`runtime/process-registry.ts`): `runProcess` (shell, git,
+  rg, tareas en segundo plano, creador de plugins, npm) registra cada hijo y lo da de baja al salir;
+  en POSIX la entrada es el grupo y sigue registrada mientras quede algún miembro vivo (un comando
+  dejado con `&`). También se registran Chromium de documentos, el motor de datos y el host de
+  procesos de Forja. `killAllTrackedProcesses()` es síncrono (SIGKILL a `-pid`, o `taskkill /T /F`
+  con `spawnSync`) y se instala como gancho `process.on("exit")` (además, el host lo llama en su
+  propio gancho). `server.close()` termina con `terminateAllTrackedProcesses` (SIGTERM, 1 s de
+  gracia, SIGKILL) antes de resolver. El gancho `exit` propio de las tareas en segundo plano se
+  sustituye por el del registro; se corrigen los comentarios que decían que las tareas «no están
+  desacopladas» (en POSIX sí lideran su propio grupo; siguen supervisadas).
+
+Verificado: `tests/runtime-process-registry.test.ts` (alta/baja, planes de muerte POSIX y
+`taskkill`, `killAll` y barrido con gracia sobre un grupo real `trap "" TERM; sleep 60 & wait`,
+grupo cuyo líder ya salió, `process.exit()` en un proceso hijo que deja el grupo muerto),
+`tests/server-shutdown.test.ts` (el cierre del servidor mata un grupo que ignora SIGTERM dentro del
+presupuesto) y `tests/desktop-host-lifecycle.test.ts` / `tests/desktop-host-integration.test.ts`
+(mensaje de cierre por IPC con salida limpia, respaldo SIGTERM→SIGKILL, comando `taskkill`
+construido con un ejecutor falso, tope aunque el respaldo no funcione, host real por IPC y por
+SIGTERM). Las pruebas POSIX se omiten en win32. No verificado: una ejecución real en Windows (el
+camino `taskkill` solo se probó con un ejecutor falso) ni en macOS, ni la aplicación gráfica real.
+
+Límites conocidos (próxima versión): tras una muerte abrupta de Alisio (SIGKILL, corte de luz) nada
+limpia al siguiente inicio las tareas en segundo plano ni los contenedores OCI que quedaron
+(las tareas solo se marcan `lost`); los nietos de servidores MCP (`npx`, `uvx`) dependen de que el
+servidor MCP los cierre; la puerta del creador de plugins no está ligada al cierre de la aplicación
+(el barrido final mata sus procesos y la compilación falla); en Windows, un descendiente cuyo padre ya
+salió no se puede encontrar con `taskkill /T` y sobrevive.
+
 ## Aplicación de escritorio: flujo de publicación y árbol sin enlaces simbólicos
 
 Corrección: el árbol `build/runtime` generado con `pnpm deploy` por defecto contenía un enlace simbólico que escapaba de él (`node_modules/.pnpm/node_modules/@alisio/desktop`, un autoenlace al workspace). En la compilación de Windows, 7-Zip lo siguió de forma recursiva y el archivo de la aplicación de NSIS superó 1,7 GB; además NSIS no puede recrear de forma fiable enlaces simbólicos en Windows (requiere privilegios). Ahora `prepare-runtime` despliega con `--config.node-linker=hoisted` (`node_modules` plano, sin almacén virtual de pnpm), elimina los directorios `node_modules/.bin` (solo contienen enlaces de acceso directo) y falla la compilación si queda cualquier enlace simbólico o alguna ruta que resuelva fuera del árbol (`apps/desktop/scripts/runtime-tree.ts`, cubierto por `tests/desktop-runtime-tree.test.ts`). `afterPack` copia archivos planos. Resultado en Linux: 80 MB, 0 enlaces simbólicos, el host arranca desde el árbol con el binario de Electron (mensaje `ready`, HTTP 200 y los plugins integrados `memory`, `openai-compatible` y `subagents` activos).

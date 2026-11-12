@@ -109,6 +109,11 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * failures are swallowed, so teardown errors never replace the caller's result.
  */
 const TEARDOWN_STAGE_TIMEOUT_MS = 2_500;
+/**
+ * Upper bound of `app.close()`: two capped stages (components + tasks, then providers + plugins).
+ * Part of the shutdown budget of `alisio serve` and Alisio Desktop (`SERVER_CLOSE_BUDGET_MS`).
+ */
+export const APP_CLOSE_BUDGET_MS = 2 * TEARDOWN_STAGE_TIMEOUT_MS;
 export interface AppOptions {
   cwd?: string;
   config?: string;
@@ -2187,11 +2192,18 @@ export async function createApplication(options: AppOptions = {}) {
         try {
           janitor.stop();
           taskJanitor.stop();
-          for (const engine of documentEngines) await capped(engine.dispose());
           scratchJanitor.stop();
           datasets?.close();
-          // Tasks first in the same stage: they end with Alisio (process groups killed).
-          await capped(Promise.allSettled([herdr.close(), mcp.close(), tasks.close()]));
+          // One stage, in parallel: tasks end with Alisio (process groups killed), document
+          // engines, herdr and MCP stop. Keeps `close()` within `APP_CLOSE_BUDGET_MS`.
+          await capped(
+            Promise.allSettled([
+              ...documentEngines.map((engine) => Promise.resolve().then(() => engine.dispose())),
+              herdr.close(),
+              mcp.close(),
+              tasks.close(),
+            ]),
+          );
         } finally {
           try {
             await capped(

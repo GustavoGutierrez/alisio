@@ -8,6 +8,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import {
   AnalysisJobs,
+  APP_CLOSE_BUDGET_MS,
   type AppOptions,
   ArtifactStore,
   AuthFlowRegistry,
@@ -15,11 +16,13 @@ import {
   BlobStore,
   CapabilityGrants,
   GoalStore,
+  PROCESS_SWEEP_GRACE_MS,
   ProviderSettingsStore,
   redactCredentials,
   SQLiteStore,
   stateHome,
   type TaskWakeRequest,
+  terminateAllTrackedProcesses,
   type WakeOutcome,
 } from "@alisio/core";
 import type { GoalInfo, ServerFrame } from "@alisio/sdk";
@@ -105,6 +108,16 @@ export { PROTOCOL_VERSION } from "./routes/health.ts";
  * desktop app) takes it as "start me again", not as a crash. 75 is `EX_TEMPFAIL`.
  */
 export const RESTART_EXIT_CODE = 75;
+
+/** How long `close()` lets in-flight runs settle after aborting them (step 1 of the budget). */
+const RUN_SETTLE_MS = 2_000;
+/**
+ * Upper bound of `RunningServer.close()`: runs settle (`RUN_SETTLE_MS`), every workspace app closes
+ * in parallel (`APP_CLOSE_BUDGET_MS`), then the sweep of the live process registry SIGTERMs what
+ * is left and SIGKILLs it after `PROCESS_SWEEP_GRACE_MS`. Alisio Desktop's host caps its whole
+ * shutdown above this, and the app waits above that (`apps/desktop/src/host-protocol.ts`).
+ */
+export const SERVER_CLOSE_BUDGET_MS = RUN_SETTLE_MS + APP_CLOSE_BUDGET_MS + PROCESS_SWEEP_GRACE_MS;
 
 export interface ServerOptions {
   /** Bind address (default `127.0.0.1`). Anything but loopback requires `allowRemote`. */
@@ -771,18 +784,22 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       shutdown ??= (async () => {
         // RNF-08: refuse new work (503), abort runs (queued ones are journaled cancelled),
         // withdraw approvals (deny), end the streams, close every app within the core's
-        // per-stage teardown caps, then stop listening. Locks are released by the runner.
+        // per-stage teardown caps, kill every process still tracked, then stop listening. Locks
+        // are released by the runner. Bounded by `SERVER_CLOSE_BUDGET_MS`.
         const began = Date.now();
         closing = true;
         clearInterval(sweeper);
         pickerAbort.abort();
         authFlows.cancelAll();
-        const settling = scheduler.shutdown(2_000);
+        const settling = scheduler.shutdown(RUN_SETTLE_MS);
         approvals?.denyAll();
         interactions?.cancelAll();
         await settling;
         hub.closeAll();
         await workspaces.closeAll();
+        // No command may outlive the server: groups that ignored SIGTERM (or that a command left
+        // running with `&`) get a short grace, then SIGKILL, before close resolves.
+        await terminateAllTrackedProcesses({ graceMs: PROCESS_SWEEP_GRACE_MS });
         await new Promise<void>((resolve) => {
           server.closeAllConnections();
           server.close(() => resolve());

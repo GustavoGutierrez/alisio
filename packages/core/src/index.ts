@@ -142,6 +142,7 @@ export {
 } from "./analysis/runtime-manager.ts";
 export { analysisStatus } from "./analysis/status.ts";
 export {
+  APP_CLOSE_BUDGET_MS,
   type AppOptions,
   type BuiltinContext,
   type BuiltinPlugin,
@@ -821,6 +822,16 @@ export {
   RIPGREP_INSTALL_HINT,
   runProcess,
 } from "./runtime/process.ts";
+export {
+  killAllTrackedProcesses,
+  PROCESS_SWEEP_GRACE_MS,
+  type ProcessKillPlan,
+  processKillPlan,
+  type TrackedProcess,
+  terminateAllTrackedProcesses,
+  trackedProcesses,
+  trackProcess,
+} from "./runtime/process-registry.ts";
 export { isSqliteExperimentalWarning, openDatabase } from "./runtime/sqlite.ts";
 export { SQLiteStore } from "./runtime/store.ts";
 export { crc32, writeZip, type ZipEntry, type ZipSink } from "./runtime/zip.ts";

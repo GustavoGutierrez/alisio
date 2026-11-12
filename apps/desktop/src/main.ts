@@ -150,7 +150,8 @@ if (!app.requestSingleInstanceLock()) {
     const running = host;
     host = undefined;
     if (!running) return;
-    // Wait for the host (SIGTERM, SIGKILL fallback) so quitting never leaves it behind.
+    // Ask the host to shut down (IPC) and wait for it; a host that does not exit in time is
+    // killed with its process tree (budget in host-protocol.ts), so quitting leaves nothing behind.
     event.preventDefault();
     void running.stop().finally(() => app.quit());
   });

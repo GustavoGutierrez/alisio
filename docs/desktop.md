@@ -101,8 +101,18 @@ window keeps the same address and your interface preferences (collapsed folders,
 all") survive a restart. The host reports its
 launch URL to the main process, which opens it in a sandboxed `BrowserWindow` (context isolation on,
 Node integration off, no preload script). Links that leave the app are opened in your default
-browser. When you quit, the host is stopped; a host that loses the app (its IPC channel) stops on its
-own, and one started for the app without that channel refuses to start.
+browser. A host that loses the app (its IPC channel) stops on its own, and one started for the app
+without that channel refuses to start.
+
+When you quit, the app asks the host to shut down (an IPC message, the same on Linux, macOS and
+Windows). The host stops accepting work, cancels running agent turns, stops background tasks, and
+then ends every command Alisio started that is still running: first with a polite request (SIGTERM
+on Linux and macOS) and, one second later, by force. That includes a command that ignores the polite
+request and a program that a command left running in the background (`cmd &`). The host's shutdown
+takes at most 9 seconds; if it has not exited after 10 seconds, the app kills it together with its
+process tree (`taskkill /T /F` on Windows; on Linux and macOS the host is told to exit at once, which
+kills the commands it tracks, then it is killed). Quitting therefore takes at most about 13
+seconds, and usually well under one.
 
 Nothing else changes: Alisio still uses `node:sqlite`, with no native addons, and the same Host,
 Origin and launch-token checks as `alisio serve`.
@@ -162,3 +172,13 @@ that tree contains any symlink, because installers cannot rely on them.
 - The app has not been verified on Windows or macOS; only Linux builds were exercised.
 - If another program holds the saved port, that launch uses a different port and your interface
   preferences are not visible until a later launch gets the saved port back (they are not lost).
+- If Alisio is killed abruptly (task manager, SIGKILL, power loss), the commands and background
+  tasks it started may keep running; the next start does not stop them (it only marks those tasks
+  `lost`). Containers started through Docker or Podman are not stopped on quit either.
+- Programs that an MCP server started itself (for example through `npx` or `uvx`) stop only when that
+  MCP server stops them.
+- A plugin creator build or check that is running when you quit is not cancelled cleanly: its
+  processes are killed by the final sweep, and the build has to be run again.
+- On Windows, a program that a command started and left running after the command itself ended can
+  no longer be linked to Alisio and keeps running. Quitting has not been verified on a real Windows
+  or macOS machine.

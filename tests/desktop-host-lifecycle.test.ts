@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { channelProblem, watchParent } from "../apps/desktop/src/host-lifecycle.ts";
+import { hostFallbackPlan, launchHost } from "../apps/desktop/src/host-process.ts";
+import {
+  DESKTOP_SHUTDOWN_WAIT_MS,
+  HOST_SHUTDOWN_CAP_MS,
+  isShutdownRequest,
+} from "../apps/desktop/src/host-protocol.ts";
 import { listenOnPreferredPort, readSavedPort } from "../apps/desktop/src/port-state.ts";
+import { SERVER_CLOSE_BUDGET_MS } from "../packages/server/src/index.ts";
 
 const busy = () => Object.assign(new Error("listen EADDRINUSE"), { code: "EADDRINUSE" });
 
@@ -118,5 +125,105 @@ describe("desktop host lifecycle: never outlive the app", () => {
     vi.advanceTimersByTime(5_000);
     expect(onGone).toHaveBeenCalledTimes(1);
     stop();
+  });
+});
+
+describe("desktop host shutdown: IPC request, bounded budget, tree-kill fallback", () => {
+  it("recognizes only the exact shutdown request", () => {
+    expect(isShutdownRequest({ type: "shutdown" })).toBe(true);
+    for (const value of [undefined, null, "shutdown", [], { type: "Shutdown" }, { type: "ready" }])
+      expect(isShutdownRequest(value)).toBe(false);
+  });
+
+  it("keeps the budget ordered: server close < host cap < the app's wait", () => {
+    expect(SERVER_CLOSE_BUDGET_MS).toBeLessThan(HOST_SHUTDOWN_CAP_MS);
+    expect(HOST_SHUTDOWN_CAP_MS).toBeLessThan(DESKTOP_SHUTDOWN_WAIT_MS);
+  });
+
+  it("falls back to taskkill /T /F on Windows and to SIGTERM then SIGKILL on POSIX", () => {
+    expect(hostFallbackPlan(321, "win32")).toEqual({
+      kind: "taskkill",
+      command: "taskkill",
+      args: ["/PID", "321", "/T", "/F"],
+    });
+    for (const platform of ["linux", "darwin"] as const)
+      expect(hostFallbackPlan(321, platform)).toEqual({ kind: "signals" });
+  });
+
+  const fakeHost = (body: string) => [
+    "-e",
+    `process.on("SIGTERM", () => {}); process.send({ type: "ready", launchUrl: "http://127.0.0.1:1/?token=t" }); ${body} setInterval(() => {}, 1000);`,
+  ];
+
+  it("asks the host to shut down over IPC and resolves with its clean exit", async () => {
+    const host = await launchHost({
+      command: process.execPath,
+      // Ignores SIGTERM: only the IPC request can stop it cleanly.
+      args: fakeHost(
+        `process.on("message", (m) => { if (m && m.type === "shutdown") process.exit(0); });`,
+      ),
+      env: process.env,
+      timeoutMs: 5_000,
+      shutdownWaitMs: 5_000,
+    });
+    const began = Date.now();
+    expect(await host.stop()).toBe(0);
+    expect(Date.now() - began).toBeLessThan(3_000);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "kills a host that ignores the request and SIGTERM once the wait is over (POSIX)",
+    async () => {
+      const host = await launchHost({
+        command: process.execPath,
+        args: fakeHost(""),
+        env: process.env,
+        timeoutMs: 5_000,
+        shutdownWaitMs: 200,
+        forceGraceMs: 200,
+        killWaitMs: 2_000,
+      });
+      const began = Date.now();
+      expect(await host.stop()).toBeNull();
+      expect(Date.now() - began).toBeLessThan(3_000);
+      expect(host.child.signalCode).toBe("SIGKILL");
+    },
+  );
+
+  it("runs taskkill /T /F on the host's pid when a Windows host does not exit in time", async () => {
+    const calls: string[][] = [];
+    const host = await launchHost({
+      command: process.execPath,
+      args: fakeHost(""),
+      env: process.env,
+      timeoutMs: 5_000,
+      shutdownWaitMs: 200,
+      killWaitMs: 2_000,
+      platform: "win32",
+      // Stands in for the real taskkill so the test runs anywhere: it ends the fake host.
+      runTaskkill: (command, args) => {
+        calls.push([command, ...args]);
+        process.kill(Number(args[1]), "SIGKILL");
+      },
+    });
+    await host.stop();
+    expect(calls).toEqual([["taskkill", "/PID", String(host.child.pid), "/T", "/F"]]);
+  });
+
+  it("stays bounded when even the fallback cannot end the host", async () => {
+    const host = await launchHost({
+      command: process.execPath,
+      args: fakeHost(""),
+      env: process.env,
+      timeoutMs: 5_000,
+      shutdownWaitMs: 100,
+      killWaitMs: 200,
+      platform: "win32",
+      runTaskkill: () => {},
+    });
+    const began = Date.now();
+    expect(await host.stop()).toBeNull();
+    expect(Date.now() - began).toBeLessThan(2_000);
+    host.child.kill("SIGKILL");
   });
 });

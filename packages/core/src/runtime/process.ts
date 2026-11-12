@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, type WriteStream } from "node:fs";
+import { trackProcess } from "./process-registry.ts";
 export interface ProcessResult {
   stdout: string;
   stderr: string;
@@ -97,6 +98,11 @@ export async function runProcess(
     detached: process.platform !== "win32",
     windowsHide: true,
   });
+  // Tracked until it exits (on POSIX, until its whole group is gone): a shutdown can kill it.
+  const release =
+    child.pid !== undefined
+      ? trackProcess(child.pid, { group: process.platform !== "win32" })
+      : () => {};
   if (child.pid !== undefined) options.onSpawn?.(child.pid);
   const exited = new Promise<number>((resolveExit, reject) => {
     child.once("error", reject);
@@ -106,9 +112,11 @@ export async function runProcess(
   exited.then(
     () => {
       finished = true;
+      release();
     },
     () => {
       finished = true;
+      release();
     },
   );
   let graceTimer: ReturnType<typeof setTimeout> | undefined;

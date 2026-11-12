@@ -4,8 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderEvent, ServerFrame } from "@alisio/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  APP_CLOSE_BUDGET_MS,
+  PROCESS_SWEEP_GRACE_MS,
+  runProcess,
+} from "../packages/core/src/index.ts";
 import { SQLiteStore } from "../packages/core/src/runtime/store.ts";
-import { startServer } from "../packages/server/src/index.ts";
+import { SERVER_CLOSE_BUDGET_MS, startServer } from "../packages/server/src/index.ts";
 import { createLogger } from "../packages/server/src/log.ts";
 import {
   client,
@@ -127,5 +132,42 @@ describe("graceful shutdown (T-13)", () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+describe.skipIf(process.platform === "win32")("shutdown leaves no tracked process behind", () => {
+  const groupAlive = (pgid: number) => {
+    try {
+      process.kill(-pgid, 0);
+      return true;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code !== "ESRCH";
+    }
+  };
+
+  it("kills a command's process group that ignores SIGTERM before close resolves", async () => {
+    t = await startTestServer();
+    let pid: number | undefined;
+    // An in-flight foreground command (what the shell tool runs) whose group ignores SIGTERM.
+    const command = runProcess("/bin/sh", ["-c", 'trap "" TERM; sleep 60 & wait'], {
+      cwd: t.workspace,
+      signal: new AbortController().signal,
+      timeoutMs: 60_000,
+      onSpawn: (p) => {
+        pid = p;
+      },
+    });
+    command.catch(() => {});
+    await vi.waitFor(() => expect(pid).toBeDefined());
+    expect(groupAlive(pid as number)).toBe(true);
+    const began = Date.now();
+    await t.close();
+    t = undefined;
+    expect(Date.now() - began).toBeLessThan(SERVER_CLOSE_BUDGET_MS);
+    await vi.waitFor(() => expect(groupAlive(pid as number)).toBe(false), { timeout: 500 });
+  });
+
+  it("documents a close budget made of the run settle, the app close and the process sweep", () => {
+    expect(SERVER_CLOSE_BUDGET_MS).toBe(2_000 + APP_CLOSE_BUDGET_MS + PROCESS_SWEEP_GRACE_MS);
   });
 });

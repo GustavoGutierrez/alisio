@@ -559,8 +559,10 @@ const configObjectSchema = z
         },
       })),
     /**
-     * Background tasks (`bg_run`, `bg_list`, `bg_output`, `bg_stop`). They are ordinary child
-     * processes of Alisio (not detached, not sandboxed): they end when Alisio ends. `enabled:
+     * Background tasks (`bg_run`, `bg_list`, `bg_output`, `bg_stop`). They are child processes
+     * of Alisio (not sandboxed; on POSIX each leads its own process group so it can be killed as a
+     * whole) and are stopped when Alisio shuts down or exits; after a hard kill of Alisio (SIGKILL,
+     * power loss) they may survive. `enabled:
      * false` registers none of the tools (applies from the next start). `retentionDays` is
      * global-only: one sweep covers every workspace, so a project layer cannot shorten it.
      */

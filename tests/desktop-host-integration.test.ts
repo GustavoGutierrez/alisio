@@ -47,7 +47,7 @@ afterEach(async () => {
 });
 
 describe("desktop host process", () => {
-  it("starts the server on a free loopback port, serves the launch URL and exits cleanly on SIGTERM", async () => {
+  it("starts the server on a free loopback port, serves the launch URL and exits cleanly on the IPC shutdown request", async () => {
     const plan = buildHostSpawn({
       execPath: process.execPath,
       hostEntry: HOST_SOURCE,
@@ -68,6 +68,22 @@ describe("desktop host process", () => {
     expect(code).toBe(0);
     running = undefined;
   });
+
+  it.skipIf(process.platform === "win32")(
+    "still shuts down cleanly on SIGTERM (POSIX), e.g. from a script or a service manager",
+    async () => {
+      const plan = buildHostSpawn({
+        execPath: process.execPath,
+        hostEntry: HOST_SOURCE,
+        parentEnv: hermeticEnv(),
+        nodeArgs: NODE_ARGS,
+      });
+      running = await launchHost({ ...plan, timeoutMs: 20_000 });
+      running.child.kill("SIGTERM");
+      expect(await running.exited).toBe(0);
+      running = undefined;
+    },
+  );
 
   it.skipIf(!ELECTRON)(
     "runs the same host on the Electron binary with ELECTRON_RUN_AS_NODE and serves HTTP 200",

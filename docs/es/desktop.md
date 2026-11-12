@@ -109,8 +109,18 @@ la aplicación); los siguientes lo reutilizan, así que la ventana conserva la m
 preferencias de la interfaz (carpetas plegadas, paneles, «Mostrar todo») sobreviven a un reinicio. El host comunica su URL de lanzamiento al proceso principal, que la abre en un
 `BrowserWindow` aislado (aislamiento de contexto activado, integración de Node desactivada, sin
 script de precarga). Los enlaces que salen de la aplicación se abren en el navegador
-predeterminado. Al cerrar, el host se detiene; un host que pierde la aplicación (su canal IPC) se
-detiene solo, y uno iniciado para la aplicación sin ese canal se niega a arrancar.
+predeterminado. Un host que pierde la aplicación (su canal IPC) se detiene solo, y uno iniciado para
+la aplicación sin ese canal se niega a arrancar.
+
+Al salir, la aplicación pide al host que se cierre (un mensaje IPC, igual en Linux, macOS y
+Windows). El host deja de aceptar trabajo, cancela los turnos del agente en curso, detiene las tareas
+en segundo plano y después termina todos los comandos que Alisio inició y siguen en ejecución:
+primero con una petición amable (SIGTERM en Linux y macOS) y, un segundo después, a la fuerza. Eso
+incluye un comando que ignora la petición amable y un programa que un comando dejó en segundo plano
+(`cmd &`). El cierre del host tarda como máximo 9 segundos; si no ha terminado a los 10 segundos, la
+aplicación lo mata junto con su árbol de procesos (`taskkill /T /F` en Windows; en Linux y macOS se
+le indica al host que salga de inmediato, lo que mata los comandos que registra, y después se le
+mata). Por tanto, salir tarda como máximo unos 13 segundos, y normalmente bastante menos de uno.
 
 Nada más cambia: Alisio sigue usando `node:sqlite`, sin módulos nativos, y las mismas comprobaciones
 de Host, Origin y token de lanzamiento que `alisio serve`.
@@ -174,3 +184,14 @@ los instaladores no pueden depender de ellos.
   Linux.
 - Si otro programa ocupa el puerto guardado, ese inicio usa otro puerto y tus preferencias de la
   interfaz no se ven hasta que un inicio posterior recupere el puerto guardado (no se pierden).
+- Si Alisio se cierra de golpe (administrador de tareas, SIGKILL, corte de luz), los comandos y las
+  tareas en segundo plano que inició pueden seguir en ejecución; el siguiente inicio no los detiene
+  (solo marca esas tareas como `lost`). Los contenedores iniciados con Docker o Podman tampoco se
+  detienen al salir.
+- Los programas que un servidor MCP inició por su cuenta (por ejemplo con `npx` o `uvx`) solo se
+  detienen cuando ese servidor MCP los detiene.
+- Una compilación o comprobación del creador de plugins que esté en curso al salir no se cancela de
+  forma ordenada: el barrido final mata sus procesos y hay que volver a ejecutar la compilación.
+- En Windows, un programa que un comando inició y dejó en ejecución después de terminar ya no puede
+  vincularse a Alisio y sigue en ejecución. La salida no se ha verificado en una máquina real con
+  Windows ni con macOS.
