@@ -71,7 +71,12 @@ import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import { currentPlan } from "./plan/state.ts";
+import { pluginCreatorProjectOf } from "./plugins/creator/paths.ts";
+import { PluginCreatorProjects } from "./plugins/creator/projects.ts";
+import { ensurePluginCreatorSkill } from "./plugins/creator/skill.ts";
+import { registerPluginProjectTools } from "./plugins/creator/tools.ts";
 import { discoverPlugins, PluginHost } from "./plugins/host.ts";
+import { installedSdkVersion } from "./plugins/sdk-version.ts";
 import { ProofVerifierRegistry } from "./proof/plugin-verifiers.ts";
 import { ProofRecorder } from "./proof/recorder.ts";
 import { ProofStore } from "./proof/store.ts";
@@ -632,6 +637,22 @@ export async function createApplication(options: AppOptions = {}) {
     // Every plugin has registered its providers: start the configured one in the background
     // (`activate` is bounded, never fatal and never awaited here).
     decisionService.syncActive();
+    // A plugin creator project gets the bundled creator skill and its two project tools (and
+    // nothing else changes). A failure to write the skill never blocks opening the workspace.
+    const creatorProject = pluginCreatorProjectOf(workspace);
+    const sdkOption = (version: string | undefined) => (version ? { sdkVersion: version } : {});
+    let creatorSkillRoot: string | undefined;
+    if (creatorProject) {
+      try {
+        creatorSkillRoot = await ensurePluginCreatorSkill();
+      } catch {
+        creatorSkillRoot = undefined;
+      }
+      registerPluginProjectTools(registry, {
+        projects: new PluginCreatorProjects({ ...sdkOption(installedSdkVersion()) }),
+        projectId: creatorProject,
+      });
+    }
     // Project skills follow the config trust model (--trust-project or an explicit --config).
     await skills.discover(
       skillRoots({
@@ -641,7 +662,12 @@ export async function createApplication(options: AppOptions = {}) {
         configHome: configHome(),
         trusted: !!options.trustProject || !!options.config,
         configSkills: config.skills,
-        pluginRoots: plugins.skillSources,
+        pluginRoots: [
+          ...plugins.skillSources,
+          ...(creatorSkillRoot
+            ? [{ dir: creatorSkillRoot, plugin: "plugin-creator", name: "Plugin creator" }]
+            : []),
+        ],
       }),
     );
     context.extras.push(async () => skills.catalog(), ...plugins.contexts);

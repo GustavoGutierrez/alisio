@@ -62,6 +62,7 @@ import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerPluginAppRoutes } from "./routes/plugin-apps.ts";
 import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
+import { registerPluginCreatorRoutes } from "./routes/plugin-creator.ts";
 import { registerPluginViewRoutes } from "./routes/plugin-views.ts";
 import { registerPromptRoutes } from "./routes/prompts.ts";
 import { registerProofRoutes } from "./routes/proof.ts";
@@ -619,12 +620,18 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     const { installRunner, sdkVersion, maxUploadBytes, jobTtlMs, ...catalogOptions } =
       options.pluginCatalog ?? {};
     const resolvedSdk = sdkVersion ?? installedSdkVersion();
-    registerPluginCatalogRoutes(router, management, recycler, {
+    const install = registerPluginCatalogRoutes(router, management, recycler, {
       service: new CatalogService(catalogOptions),
       ...(resolvedSdk ? { sdkVersion: resolvedSdk } : {}),
       ...(installRunner ? { installRunner } : {}),
       ...(maxUploadBytes ? { maxUploadBytes } : {}),
       ...(jobTtlMs ? { jobTtlMs } : {}),
+    });
+    registerPluginCreatorRoutes(router, management, recycler, {
+      sessions,
+      catalog,
+      install,
+      ...(resolvedSdk ? { sdkVersion: resolvedSdk } : {}),
     });
   }
   registerAgentDefinitionRoutes(router, management, recycler);

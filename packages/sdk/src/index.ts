@@ -2711,7 +2711,169 @@ export type ApiErrorCode =
   | "goal_conflict"
   /** Goals are turned off (`goal.enabled`) (409). */
   | "goal_disabled"
+  /** The plugin creator project does not exist (404). */
+  | "plugin_project_not_found"
+  /** The plugin creator project breaks a plugin rule; `details.issues` lists them (422). */
+  | "plugin_project_invalid"
+  /** The plugin's tests failed; `details.tests` carries the counts (422). */
+  | "plugin_tests_failed"
+  /** Another build, install or delete of the same project is running (409). */
+  | "plugin_project_busy"
+  /** No fresh package: build the project first (409). */
+  | "plugin_not_built"
   | "internal";
+// ---- Plugin creator (`/api/plugin-creator/*`) -----------------------------------------------
+// Additive wire types; clients ignore unknown fields.
+
+/** One request a user made for a creator project. */
+export interface PluginCreatorRequest {
+  id: string;
+  kind: "create" | "modify";
+  text: string;
+  /** Epoch milliseconds. */
+  at: number;
+}
+/** Progress steps the creator agent reports, in this order. */
+export type PluginCreatorStepId = "plan" | "tests" | "code" | "run_tests" | "package";
+export type PluginCreatorStepStatus = "pending" | "running" | "done" | "failed";
+export interface PluginCreatorStep {
+  id: PluginCreatorStepId;
+  status: PluginCreatorStepStatus;
+  /** Short plain-language note from the agent. */
+  note?: string;
+  updatedAt?: number;
+}
+/** A finding of the project validation; `code` is stable (the UI localizes it). */
+export interface PluginCreatorIssue {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  /** Project-relative file the issue is about. */
+  file?: string;
+}
+/** Result of running the project's `node:test` suite. */
+export interface PluginCreatorTestRun {
+  ok: boolean;
+  passed: number;
+  failed: number;
+  durationMs: number;
+  timedOut: boolean;
+  /** Tail of the test output (bounded). */
+  output: string;
+}
+/** Statistics of the last build (validate, test, package). */
+export interface PluginCreatorBuildStats {
+  /** Epoch milliseconds of the build. */
+  at: number;
+  ok: boolean;
+  durationMs: number;
+  /** Time from the latest request to this build, when the request came first. */
+  generationMs?: number;
+  /** Files and uncompressed bytes in the package (or in the project when packaging failed). */
+  files: number;
+  bytes: number;
+  tarballBytes?: number;
+  testsPassed: number;
+  testsFailed: number;
+  version: string;
+  /** Present when `ok` is false: `plugin_project_invalid`, `plugin_tests_failed`... */
+  errorCode?: string;
+}
+/** Tables found in the plugin's `CREATE TABLE` statements (for the schema view). */
+export interface PluginCreatorSchema {
+  tables: Array<{
+    name: string;
+    columns: Array<{
+      name: string;
+      type: string;
+      pk: boolean;
+      notNull: boolean;
+      fk?: { table: string; column?: string };
+    }>;
+  }>;
+}
+/** A plugin creator project as stored (`GET /api/plugin-creator/projects/:id`). */
+export interface PluginCreatorProjectInfo {
+  /** 12 lowercase hex characters. */
+  id: string;
+  packageName: string;
+  pluginId: string;
+  displayName: string;
+  description: string;
+  /** `package.json` version of the project sources. */
+  version: string;
+  createdAt: number;
+  updatedAt: number;
+  requests: PluginCreatorRequest[];
+  /** The creator session of the project (resumed by `POST …/session`). */
+  sessionId?: string;
+  progress?: { steps: PluginCreatorStep[]; updatedAt: number };
+  lastBuild?: PluginCreatorBuildStats;
+  schema?: PluginCreatorSchema;
+  /** Last version installed from the creator (informational: `status` checks the real install). */
+  installedVersion?: string;
+  /** Model selector (`provider/model`) of the last creator session; the default for the next one. */
+  lastModel?: string;
+  /** Absolute path of the project's source folder (derived, for "open/publish from here"). */
+  dir?: string;
+  /** Project-relative path of `package.json` `alisio.icon`; the image is `GET …/:id/icon`. */
+  icon?: string;
+}
+/** Install state, cross-checked against the real plugins directory. */
+export interface PluginCreatorStatus {
+  installed: boolean;
+  installedVersion?: string;
+  /** Installed from a local package (`file:` dependency). */
+  local: boolean;
+  projectVersion: string;
+  /** Installed, and the project's version differs from the installed one. */
+  updateAvailable: boolean;
+  /** A package exists and matches the current sources. */
+  packageReady: boolean;
+}
+
+/** A project with its install state (`GET /api/plugin-creator/projects[/:id]`). */
+export interface PluginCreatorProjectEntry {
+  project: PluginCreatorProjectInfo;
+  status: PluginCreatorStatus;
+}
+/** `POST /api/plugin-creator/projects/:id/session`. */
+export interface PluginCreatorSessionResponse {
+  sessionId: string;
+  /** False when the existing creator session was resumed. */
+  created: boolean;
+  /** Model selector the session uses, when one was chosen. */
+  model?: string;
+}
+/** `GET /api/plugin-creator/projects/:id/files`. */
+export interface PluginCreatorFileList {
+  files: Array<{ path: string; bytes: number }>;
+  count: number;
+  bytes: number;
+}
+/** `GET /api/plugin-creator/projects/:id/files/<path>`. */
+export interface PluginCreatorFile {
+  path: string;
+  bytes: number;
+  binary: boolean;
+  /** The text was cut at the read limit. */
+  truncated: boolean;
+  /** Absent for binary files. */
+  text?: string;
+}
+/**
+ * `POST /api/plugin-creator/projects/:id/build` (200 when `ok`). A failed build answers 422
+ * `plugin_project_invalid` / `plugin_tests_failed` whose `details` is this same object.
+ */
+export interface PluginCreatorBuildResponse {
+  ok: boolean;
+  build: PluginCreatorBuildStats;
+  issues: PluginCreatorIssue[];
+  tests?: PluginCreatorTestRun;
+  project: PluginCreatorProjectInfo;
+  status: PluginCreatorStatus;
+}
+
 /** `GET /api/health` (the only unauthenticated API route). */
 export interface HealthInfo {
   name: "alisio";

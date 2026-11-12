@@ -1,5 +1,5 @@
 import { isAbsolute } from "node:path";
-import type { SQLiteStore } from "@alisio/core";
+import { pluginCreatorPathMatcher, type SQLiteStore } from "@alisio/core";
 import { WORKSPACE_COLOR_IDS } from "@alisio/sdk";
 import type { RunScheduler } from "../host/run-scheduler.ts";
 import type { WorkspaceHost } from "../host/workspace-host.ts";
@@ -20,7 +20,9 @@ export function registerWorkspaceRoutes(
       throw new HttpError("validation_failed", "Invalid query parameter", {
         fields: ["archived"],
       });
-    return { body: await ctx.workspaces.list(archived) };
+    // Plugin creator projects are workspaces too, but they live in the plugin creator screen.
+    const creator = pluginCreatorPathMatcher();
+    return { body: (await ctx.workspaces.list(archived)).filter((w) => !creator(w.path)) };
   });
 
   router.post("/api/workspaces", async ({ req }) => {

@@ -18,6 +18,8 @@ export {
   mainAgentFromRecord,
   nextAgent,
   PLAN_AGENT_ID,
+  PLUGIN_CREATOR_AGENT,
+  PLUGIN_CREATOR_AGENT_ID,
   type PlanInstructionSettings,
   planInstructions,
   resolveActiveAgent,
@@ -557,6 +559,32 @@ export {
   PluginAppRegistry,
 } from "./plugins/apps.ts";
 export {
+  isPluginCreatorPath,
+  type PluginCreatorPaths,
+  pluginCreatorPathMatcher,
+  pluginCreatorPaths,
+  pluginCreatorProjectOf,
+} from "./plugins/creator/paths.ts";
+export {
+  type PluginBuildOutcome,
+  PluginCreatorProjects,
+  type PluginCreatorProjectsOptions,
+  sdkRangeFor,
+} from "./plugins/creator/projects.ts";
+export { detectSchema } from "./plugins/creator/schema.ts";
+export { ensurePluginCreatorSkill } from "./plugins/creator/skill.ts";
+export {
+  PLUGIN_CREATOR_SKILL_FILES,
+  PLUGIN_CREATOR_SKILL_NAME,
+} from "./plugins/creator/skill-files.ts";
+export {
+  PLUGIN_CREATOR_LIMITS,
+  PLUGIN_CREATOR_STEPS,
+  PluginCreatorError,
+  type PluginCreatorErrorCode,
+} from "./plugins/creator/types.ts";
+export { type ProjectValidation, validateProject } from "./plugins/creator/validate.ts";
+export {
   discoverPlugins,
   type PluginEnvironment,
   PluginHost,
@@ -614,6 +642,7 @@ export {
   resolveNpmInvocation,
   runNpm,
 } from "./plugins/npm-runner.ts";
+export { installedSdkVersion } from "./plugins/sdk-version.ts";
 export {
   inspectPluginTarball,
   MAX_TARBALL_BYTES,
@@ -621,6 +650,15 @@ export {
   readTarballPackageJson,
   type TarballLimits,
 } from "./plugins/tarball.ts";
+export {
+  type PackDirectoryResult,
+  packDirectory,
+  type TarballWriteEntry,
+  TarballWriteError,
+  type TarballWriteLimits,
+  tarGzBuffer,
+  writeTarGz,
+} from "./plugins/tarball-writer.ts";
 export {
   type CatalogPluginState,
   type CatalogPluginStateInput,
@@ -758,6 +796,7 @@ export {
   inside,
   outsideRootsMessage,
   safePath,
+  WORKSPACE_MARKER,
   workspaceKey,
 } from "./runtime/paths.ts";
 export {

@@ -1,5 +1,10 @@
 import { isAbsolute } from "node:path";
-import type { SQLiteStore, StoredEvent } from "@alisio/core";
+import {
+  PLUGIN_CREATOR_AGENT_ID,
+  pluginCreatorPathMatcher,
+  type SQLiteStore,
+  type StoredEvent,
+} from "@alisio/core";
 import type { PermissionPresetId, RunEvent, SessionSummary } from "@alisio/sdk";
 import { PRESET_IDS, presetInfo } from "../host/presets.ts";
 import type { RunScheduler } from "../host/run-scheduler.ts";
@@ -48,9 +53,13 @@ export function registerSessionRoutes(router: Router, ctx: SessionRouteContext):
       });
     const limit = queryInt(url, "limit", 50, 200) ?? 50;
     const offset = queryInt(url, "cursor", 0) ?? 0;
+    // Plugin creator sessions show up only when asked for (their workspace or their agent).
+    const creator =
+      workspace || agent === PLUGIN_CREATOR_AGENT_ID ? undefined : pluginCreatorPathMatcher();
     const rows = catalog
       .list()
       .filter((session) => !agent || session.options?.agent === agent)
+      .filter((session) => !creator?.(session.workspace))
       .map((session) => sessions.summary(session))
       .filter(
         (s) =>

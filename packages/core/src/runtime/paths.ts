@@ -34,14 +34,22 @@ export async function safePath(root: string, path: string): Promise<string> {
   }
   return target;
 }
+/**
+ * A file that marks its directory as a workspace root, like `.git` does. Alisio writes it into
+ * folders it owns (plugin creator projects) so they stay their own workspace even when they sit
+ * inside a git repository (for example a config home kept in a dotfiles repo).
+ */
+export const WORKSPACE_MARKER = ".alisio-workspace";
 export async function findWorkspace(cwd: string): Promise<string> {
   let path = await realpath(cwd);
   while (true) {
-    try {
-      await lstat(resolve(path, ".git"));
-      return path;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    for (const marker of [".git", WORKSPACE_MARKER]) {
+      try {
+        await lstat(resolve(path, marker));
+        return path;
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
     }
     if (dirname(path) === path) return realpath(cwd);
     path = dirname(path);

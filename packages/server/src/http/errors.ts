@@ -49,6 +49,11 @@ export const STATUS: Record<ApiErrorCode, number> = {
   goal_not_found: 404,
   goal_conflict: 409,
   goal_disabled: 409,
+  plugin_project_not_found: 404,
+  plugin_project_invalid: 422,
+  plugin_tests_failed: 422,
+  plugin_project_busy: 409,
+  plugin_not_built: 409,
   internal: 500,
 };
 

@@ -30,7 +30,13 @@ export type { AgentDefinitionInfo, AgentDefinitionInput, AgentScope };
 export const AGENT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 48;
 /** Built-in agent names a user file must not shadow (main `build`/`plan`, subagents). */
-export const RESERVED_AGENT_IDS = new Set(["build", "plan", "general", "explore"]);
+export const RESERVED_AGENT_IDS = new Set([
+  "build",
+  "plan",
+  "general",
+  "explore",
+  "plugin-creator",
+]);
 export const AGENT_LIMITS = {
   name: 80,
   description: 300,

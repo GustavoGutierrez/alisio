@@ -166,6 +166,21 @@ export interface InstalledPluginPackage {
   icon?: string;
 }
 
+/** What other route modules (the plugin creator) reuse of the install machinery. */
+export interface PluginInstallService {
+  /** Starts a background install of a valid local `.tgz`; returns the job id (409 when busy). */
+  startLocalInstall(
+    file: string,
+    packageName: string | undefined,
+    hooks?: {
+      cleanup?: () => Promise<void>;
+      onSuccess?: (body: PluginInstallResponse) => Promise<Record<string, unknown> | undefined>;
+    },
+  ): string;
+  /** Uninstalls a global npm plugin package. */
+  uninstallPackage(name: string): Promise<PluginUninstallResponse>;
+}
+
 const COVER_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 const SLUG = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
@@ -214,7 +229,7 @@ export function registerPluginCatalogRoutes(
   ctx: ManagementContext,
   recycler: WorkspaceRecycler,
   options: PluginCatalogRouteOptions,
-): void {
+): PluginInstallService {
   const { service } = options;
   let mutating = false;
   const jobs = new InstallJobs(options.jobTtlMs);
@@ -325,6 +340,86 @@ export function registerPluginCatalogRoutes(
     }
     return result;
   };
+
+  /**
+   * Installs a validated local `.tgz` as a background job (phases polled through
+   * `/api/plugins/jobs/:jobId`). Shares the install lock, the restart bookkeeping and the
+   * workspace recycling with every other install. `onSuccess` may add fields to the job result.
+   */
+  const startLocalInstall = (
+    file: string,
+    packageName: string | undefined,
+    hooks: {
+      cleanup?: () => Promise<void>;
+      onSuccess?: (body: PluginInstallResponse) => Promise<Record<string, unknown> | undefined>;
+    } = {},
+  ): string => {
+    if (mutating)
+      throw new HttpError(
+        "runs_active",
+        "Another plugin install or uninstall is in progress: wait for it to finish, then retry",
+      );
+    mutating = true;
+    const job = jobs.create();
+    job.start("uploading");
+    void (async () => {
+      const loaded = packageName ? codeLoaded(packageName) : false;
+      try {
+        const result = await installLocalPluginTarball({
+          tarballPath: file,
+          configHome: configHome(),
+          ...(options.installRunner ? { runner: options.installRunner } : {}),
+          onPhase: (phase) => job.start(phase),
+        });
+        job.start("reloading");
+        if (loaded) pendingRestart.add(result.packageName);
+        const deferred = await applyToWorkspaces();
+        job.start("cleanup");
+        await hooks.cleanup?.();
+        const body: PluginInstallResponse = {
+          package: result.packageName,
+          installedVersion: result.installedVersion,
+          alreadyInstalled: result.alreadyInstalled,
+          updated: result.updated,
+          ...(result.previousVersion ? { previousVersion: result.previousVersion } : {}),
+          restartPending: deferred,
+          restartRequired: loaded,
+        };
+        const extra = await hooks.onSuccess?.(body).catch(() => undefined);
+        job.succeed({ ...body, ...(extra ?? {}) });
+      } catch (error) {
+        await hooks.cleanup?.().catch(() => {});
+        const text = errorText(error).slice(0, MAX_ERROR_CHARS);
+        const tail = (error as { logTail?: string }).logTail;
+        job.fail(text, tail);
+      } finally {
+        mutating = false;
+      }
+    })();
+    return job.id;
+  };
+
+  /** Uninstalls a global npm plugin package (shared lock); throws `HttpError`. */
+  const uninstallPackage = (name: string): Promise<PluginUninstallResponse> =>
+    exclusive(async () => {
+      let removed: Awaited<ReturnType<typeof uninstallPlugin>>;
+      try {
+        removed = await uninstallPlugin({
+          packageName: name,
+          configHome: configHome(),
+          ...(options.installRunner ? { runner: options.installRunner } : {}),
+        });
+      } catch (error) {
+        const text = errorText(error).slice(0, MAX_ERROR_CHARS);
+        throw new HttpError(
+          text.includes(NPM_NOT_FOUND_MESSAGE) ? "validation_failed" : "provider_unavailable",
+          text,
+        );
+      }
+      pendingRestart.delete(name);
+      const deferred = await applyToWorkspaces();
+      return { package: removed.packageName, removed: removed.removed, restartPending: deferred };
+    });
 
   // ---- Catalog ------------------------------------------------------------------------------
   router.get("/api/plugin-catalog", async ({ url }) => {
@@ -705,48 +800,10 @@ export function registerPluginCatalogRoutes(
         `Not a valid Alisio plugin package: ${info.reasons.join("; ")}`,
       );
     }
-    if (mutating)
-      throw new HttpError(
-        "runs_active",
-        "Another plugin install or uninstall is in progress: wait for it to finish, then retry",
-      );
-    mutating = true;
-    const job = jobs.create();
-    job.start("uploading");
-    void (async () => {
-      const loaded = info.name ? codeLoaded(info.name) : false;
-      try {
-        const result = await installLocalPluginTarball({
-          tarballPath: file,
-          configHome: configHome(),
-          ...(options.installRunner ? { runner: options.installRunner } : {}),
-          onPhase: (phase) => job.start(phase),
-        });
-        job.start("reloading");
-        if (loaded) pendingRestart.add(result.packageName);
-        const deferred = await applyToWorkspaces();
-        job.start("cleanup");
-        await removeStaging(input.stagingId);
-        const body: PluginInstallResponse = {
-          package: result.packageName,
-          installedVersion: result.installedVersion,
-          alreadyInstalled: result.alreadyInstalled,
-          updated: result.updated,
-          ...(result.previousVersion ? { previousVersion: result.previousVersion } : {}),
-          restartPending: deferred,
-          restartRequired: loaded,
-        };
-        job.succeed(body);
-      } catch (error) {
-        await removeStaging(input.stagingId).catch(() => {});
-        const text = errorText(error).slice(0, MAX_ERROR_CHARS);
-        const tail = (error as { logTail?: string }).logTail;
-        job.fail(text, tail);
-      } finally {
-        mutating = false;
-      }
-    })();
-    return { status: 202, body: { jobId: job.id } satisfies LocalInstallJobResponse };
+    const jobId = startLocalInstall(file, info.name, {
+      cleanup: () => removeStaging(input.stagingId),
+    });
+    return { status: 202, body: { jobId } satisfies LocalInstallJobResponse };
   });
 
   router.get("/api/plugins/jobs/:jobId", ({ params }) => {
@@ -784,29 +841,8 @@ export function registerPluginCatalogRoutes(
         );
       throw new HttpError("not_found", "Plugin package is not installed");
     }
-    return exclusive(async () => {
-      let removed: Awaited<ReturnType<typeof uninstallPlugin>>;
-      try {
-        removed = await uninstallPlugin({
-          packageName: name,
-          configHome: configHome(),
-          ...(options.installRunner ? { runner: options.installRunner } : {}),
-        });
-      } catch (error) {
-        const text = errorText(error).slice(0, MAX_ERROR_CHARS);
-        throw new HttpError(
-          text.includes(NPM_NOT_FOUND_MESSAGE) ? "validation_failed" : "provider_unavailable",
-          text,
-        );
-      }
-      pendingRestart.delete(name);
-      const deferred = await applyToWorkspaces();
-      const body: PluginUninstallResponse = {
-        package: removed.packageName,
-        removed: removed.removed,
-        restartPending: deferred,
-      };
-      return { body };
-    });
+    return { body: await uninstallPackage(name) };
   });
+
+  return { startLocalInstall, uninstallPackage };
 }
