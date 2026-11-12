@@ -357,6 +357,26 @@
   color: var(--warn);
 }
 
+.badge[data-badge="failed"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.reason {
+  margin-top: var(--s2);
+}
+
+.reason summary {
+  cursor: pointer;
+}
+
+.reason code {
+  display: block;
+  margin-top: var(--s1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .badge[data-badge="building"] {
   background: var(--accent-soft);
   color: var(--accent-strong);

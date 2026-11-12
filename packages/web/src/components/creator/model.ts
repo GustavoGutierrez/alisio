@@ -19,10 +19,14 @@ import { creatorStrings, type IssueKey } from "./strings.ts";
 export const REQUEST_MAX = 8_000;
 export const STEP_IDS: PluginCreatorStepId[] = ["plan", "tests", "code", "run_tests", "package"];
 
-export type Badge = "building" | "update" | "installed" | "notInstalled";
+export type Badge = "building" | "update" | "installed" | "notInstalled" | "failed";
+
+/** Failed builds in a row after which the creator agent stops (`MAX_BUILD_ATTEMPTS` in core). */
+export const MAX_BUILD_ATTEMPTS = 3;
 
 export function statusBadge(entry: PluginCreatorProjectEntry, running: boolean): Badge {
   if (running) return "building";
+  if (entry.status.installed && entry.status.activationError) return "failed";
   if (entry.status.installed && entry.status.updateAvailable) return "update";
   if (entry.status.installed) return "installed";
   return "notInstalled";
@@ -32,11 +36,41 @@ export function statusBadge(entry: PluginCreatorProjectEntry, running: boolean):
 export const displayVersion = (entry: PluginCreatorProjectEntry): string =>
   entry.project.version || entry.status.projectVersion;
 
-/** The five steps in order; steps the agent has not reported yet are pending. */
-export function stepsView(steps: PluginCreatorStep[] | undefined): PluginCreatorStep[] {
-  return STEP_IDS.map(
+/**
+ * The five steps in order; steps the agent has not reported yet are pending. With no active run
+ * nothing is shown as running (older records could keep a stale "running" step): such a step is
+ * done when the plugin was packaged, failed otherwise.
+ */
+export function stepsView(
+  steps: PluginCreatorStep[] | undefined,
+  run: { active: boolean; packaged?: boolean } = { active: true },
+): PluginCreatorStep[] {
+  const list = STEP_IDS.map(
     (id) => steps?.find((step) => step.id === id) ?? { id, status: "pending" as const },
   );
+  if (run.active) return list;
+  const packaged =
+    !!run.packaged || list.some((step) => step.id === "package" && step.status === "done");
+  return list.map((step) =>
+    step.status === "running" ? { ...step, status: packaged ? "done" : "failed" } : step,
+  );
+}
+
+/** Why Install/Update is not possible right now (a string key), or undefined. */
+export function installBlock(entry: PluginCreatorProjectEntry): "installNeedsBuild" | undefined {
+  return entry.status.packageReady ? undefined : "installNeedsBuild";
+}
+
+/** The failed latest build stored in the record (an earlier visit or the agent's own build). */
+export function lastBuildFailure(
+  entry: PluginCreatorProjectEntry,
+): { gaveUp: boolean; issues: PluginCreatorIssue[] } | undefined {
+  const build = entry.project.lastBuild;
+  if (!build || build.ok) return undefined;
+  return {
+    gaveUp: (entry.project.failedBuilds ?? 0) >= MAX_BUILD_ATTEMPTS,
+    issues: build.issues ?? [],
+  };
 }
 
 /** A creator run is going on: the model works or waits for the person. */

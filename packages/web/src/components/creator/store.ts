@@ -212,11 +212,18 @@ export async function buildProject(id: string): Promise<boolean> {
   }
 }
 
+/** Project id -> why its last install was rolled back (the plugin could not start). */
+export const activationFailures = signal<Record<string, string>>({});
+
 export interface InstallJobView {
   done: boolean;
   error?: string;
   result?: {
-    installedVersion: string;
+    /** The installed plugin did not start (sanitized reason). */
+    activationError?: string;
+    /** The install was undone because of `activationError`. */
+    rolledBack?: boolean;
+    installedVersion?: string;
     restartPending?: boolean;
     restartRequired?: boolean;
     enabled?: boolean;

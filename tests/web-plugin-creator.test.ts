@@ -10,8 +10,10 @@ import {
   displayVersion,
   fileTree,
   formatDuration,
+  installBlock,
   isRunActive,
   issueKey,
+  lastBuildFailure,
   REQUEST_MAX,
   requestProblem,
   schemaLayout,
@@ -62,6 +64,48 @@ describe("statusBadge", () => {
   });
 });
 
+describe("statusBadge: a plugin that does not start", () => {
+  it("shows failed when the installed plugin could not start", () => {
+    expect(
+      statusBadge(entry({ installed: true, activationError: "Activation failed" }), false),
+    ).toBe("failed");
+  });
+});
+
+describe("installBlock", () => {
+  it("allows installing only a package that passed every gate for the current sources", () => {
+    expect(installBlock(entry({ packageReady: false }))).toBe("installNeedsBuild");
+    expect(installBlock(entry({ packageReady: true }))).toBeUndefined();
+  });
+});
+
+describe("lastBuildFailure", () => {
+  it("explains a failed build of an earlier visit, and says when Alisio gave up", () => {
+    const failedBuild = {
+      at: 1,
+      ok: false,
+      durationMs: 1,
+      files: 1,
+      bytes: 1,
+      testsPassed: 0,
+      testsFailed: 0,
+      version: "1.0.0",
+      errorCode: "plugin_project_invalid",
+      issues: [{ code: "activation_failed", severity: "error" as const, message: "strict mode" }],
+    };
+    expect(lastBuildFailure(entry({}, { lastBuild: failedBuild, failedBuilds: 1 }))).toEqual({
+      gaveUp: false,
+      issues: failedBuild.issues,
+    });
+    expect(lastBuildFailure(entry({}, { lastBuild: failedBuild, failedBuilds: 3 }))?.gaveUp).toBe(
+      true,
+    );
+    expect(
+      lastBuildFailure(entry({}, { lastBuild: { ...failedBuild, ok: true } })),
+    ).toBeUndefined();
+  });
+});
+
 describe("displayVersion", () => {
   it("shows the project version (what the next install ships)", () => {
     expect(displayVersion(entry({ installed: true, installedVersion: "1.0.0" }))).toBe("1.0.0");
@@ -86,6 +130,28 @@ describe("stepsView", () => {
     expect(view.map((s) => s.status)).toEqual(["done", "pending", "running", "pending", "pending"]);
     expect(view[2]?.note).toBe("Writing it");
     expect(stepsView(undefined).every((s) => s.status === "pending")).toBe(true);
+  });
+
+  it("never shows a running step when no run is active (legacy records included)", () => {
+    // The record of an older build: plan stayed "running" after every later step was done.
+    const legacy = [
+      { id: "plan" as const, status: "running" as const, note: "Planning" },
+      { id: "tests" as const, status: "done" as const },
+      { id: "code" as const, status: "done" as const },
+      { id: "run_tests" as const, status: "done" as const },
+      { id: "package" as const, status: "done" as const },
+    ];
+    expect(stepsView(legacy, { active: false }).map((s) => s.status)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+    ]);
+    expect(stepsView(legacy, { active: true })[0]?.status).toBe("running");
+    const stopped = [{ id: "code" as const, status: "running" as const }];
+    expect(stepsView(stopped, { active: false })[2]?.status).toBe("failed");
+    expect(stepsView(stopped, { active: false, packaged: true })[2]?.status).toBe("done");
   });
 });
 
@@ -121,6 +187,19 @@ describe("issueKey", () => {
   it("maps stable build codes to localized keys and unknown ones to undefined", () => {
     const { issuesEn, issuesEs } = creatorStrings;
     for (const code of ["sdk_incompatible", "svg_unsafe", "tests_missing", "forbidden_import"])
+      expect(issueKey(code), code).toBe(code);
+    for (const code of [
+      "activation_failed",
+      "syntax_error",
+      "typescript_source",
+      "import_not_packed",
+      "tool_smoke_failed",
+      "dispose_failed",
+      "reactivate_failed",
+      "tool_untested",
+      "tests_too_few",
+      "gate_unavailable",
+    ])
       expect(issueKey(code), code).toBe(code);
     expect(issueKey("brand_new_code")).toBeUndefined();
     expect(Object.keys(issuesEs).sort()).toEqual(Object.keys(issuesEn).sort());

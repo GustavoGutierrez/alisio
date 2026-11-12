@@ -58,6 +58,7 @@ const en = {
   badgeInstalled: "Installed",
   badgeUpdate: "Update available",
   badgeNotInstalled: "Not installed",
+  badgeFailed: "Could not start",
 
   // Build view
   buildTitle: "Building “{name}”",
@@ -192,6 +193,25 @@ const en = {
   installDoneRestart: "“{name}” is installed. Restart Alisio to start using it.",
   installEnableFailed: "“{name}” is installed but could not be turned on: {message}",
   installFailed: "The plugin could not be installed: {message}",
+  installNeedsBuild:
+    "Build and check it first: only a plugin that passed every check can be installed.",
+  installActivationFailed: "“{name}” could not start, so Alisio undid the install.",
+  activationTitle: "Installed but it could not start",
+  activationBody:
+    "The plugin is installed, but Alisio could not start it, so its tools are not available. Alisio can read the reason and fix it.",
+  activationRolledBackTitle: "It could not start, so Alisio undid the install",
+  activationRolledBackBody:
+    "Nothing changed in your Alisio: the previous version, if there was one, is still in place. Alisio can read the reason and fix it.",
+  activationReason: "Show the reason",
+  activationFix: "Ask Alisio to fix it",
+  activationFixPrompt:
+    "The plugin was installed but Alisio could not start it. Alisio said: {message}\nPlease fix the cause, run the checks again and build the plugin.",
+  lastBuildFailedTitle: "The last check found problems that must be fixed before installing.",
+  gaveUpTitle: "Alisio could not finish this plugin",
+  gaveUpBody:
+    "It tried several times and some checks still fail. Try again and Alisio starts over from these problems.",
+  retryPrompt:
+    "Try again: the last builds failed with these problems. Fix them, run the checks and build the plugin:\n{list}",
 
   // Download
   downloadHint:
@@ -284,6 +304,7 @@ const es: typeof en = {
   badgeInstalled: "Instalado",
   badgeUpdate: "Actualización disponible",
   badgeNotInstalled: "Sin instalar",
+  badgeFailed: "No pudo iniciarse",
 
   buildTitle: "Creando «{name}»",
   stepsLabel: "Progreso",
@@ -412,6 +433,26 @@ const es: typeof en = {
   installDoneRestart: "«{name}» está instalado. Reinicia Alisio para empezar a usarlo.",
   installEnableFailed: "«{name}» está instalado pero no se pudo activar: {message}",
   installFailed: "No se pudo instalar el complemento: {message}",
+  installNeedsBuild:
+    "Primero compílalo y compruébalo: solo se puede instalar un complemento que pasó todas las comprobaciones.",
+  installActivationFailed: "«{name}» no pudo iniciarse, así que Alisio deshizo la instalación.",
+  activationTitle: "Instalado, pero no pudo iniciarse",
+  activationBody:
+    "El complemento está instalado, pero Alisio no pudo iniciarlo, así que sus herramientas no están disponibles. Alisio puede leer el motivo y corregirlo.",
+  activationRolledBackTitle: "No pudo iniciarse, así que Alisio deshizo la instalación",
+  activationRolledBackBody:
+    "Tu Alisio no cambió: la versión anterior, si la había, sigue instalada. Alisio puede leer el motivo y corregirlo.",
+  activationReason: "Ver el motivo",
+  activationFix: "Pedir a Alisio que lo corrija",
+  activationFixPrompt:
+    "El complemento se instaló pero Alisio no pudo iniciarlo. Alisio dijo: {message}\nCorrige la causa, vuelve a ejecutar las comprobaciones y compila el complemento.",
+  lastBuildFailedTitle:
+    "La última comprobación encontró problemas que hay que corregir antes de instalar.",
+  gaveUpTitle: "Alisio no pudo terminar este complemento",
+  gaveUpBody:
+    "Lo intentó varias veces y algunas comprobaciones siguen fallando. Inténtalo de nuevo y Alisio empezará desde estos problemas.",
+  retryPrompt:
+    "Inténtalo de nuevo: las últimas compilaciones fallaron con estos problemas. Corrígelos, ejecuta las comprobaciones y compila el complemento:\n{list}",
 
   downloadHint:
     "La descarga es un archivo .tgz. Cualquiera puede instalarlo en Alisio desde Ajustes → Complementos → Instalar desde archivo.",
@@ -497,6 +538,17 @@ const issuesEn = {
   setup_probe_failed: "It failed when Alisio tried to load it.",
   load_failed: "It could not be loaded.",
   plugin_id_invalid: "Its plugin id is not valid.",
+  activation_failed: "Alisio could not start it.",
+  syntax_error: "One of its files is not valid JavaScript.",
+  typescript_source: "It contains TypeScript files; plugins ship plain JavaScript.",
+  import_not_packed: "It uses a file that would be left out of the package.",
+  tool_smoke_failed: "One of its tools failed when Alisio tried it.",
+  dispose_failed: "It fails when Alisio closes it.",
+  reactivate_failed: "It cannot be started a second time.",
+  tool_untested: "One of its tools has no automatic check.",
+  tests_too_few: "It needs at least one automatic check per tool.",
+  gate_unavailable:
+    "Alisio could not run its safety checks on this computer, so it cannot install the plugin yet.",
   genericIssue: "There is a problem that needs fixing.",
 };
 
@@ -544,6 +596,17 @@ const issuesEs: typeof issuesEn = {
   setup_probe_failed: "Falló cuando Alisio intentó cargarlo.",
   load_failed: "No se pudo cargar.",
   plugin_id_invalid: "Su identificador de complemento no es válido.",
+  activation_failed: "Alisio no pudo iniciarlo.",
+  syntax_error: "Uno de sus archivos no es JavaScript válido.",
+  typescript_source: "Contiene archivos TypeScript; los complementos se entregan en JavaScript.",
+  import_not_packed: "Usa un archivo que quedaría fuera del paquete.",
+  tool_smoke_failed: "Una de sus herramientas falló cuando Alisio la probó.",
+  dispose_failed: "Falla cuando Alisio lo cierra.",
+  reactivate_failed: "No se puede iniciar una segunda vez.",
+  tool_untested: "Una de sus herramientas no tiene comprobación automática.",
+  tests_too_few: "Necesita al menos una comprobación automática por herramienta.",
+  gate_unavailable:
+    "Alisio no pudo ejecutar sus comprobaciones de seguridad en este equipo, así que aún no puede instalar el complemento.",
   genericIssue: "Hay un problema que hay que corregir.",
 };
 

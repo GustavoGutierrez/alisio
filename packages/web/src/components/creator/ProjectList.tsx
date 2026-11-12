@@ -12,6 +12,7 @@ const BADGE_KEYS: Record<Badge, CrKey> = {
   installed: "badgeInstalled",
   update: "badgeUpdate",
   notInstalled: "badgeNotInstalled",
+  failed: "badgeFailed",
 };
 
 export function StatusBadge({ badge }: { badge: Badge }) {

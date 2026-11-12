@@ -160,8 +160,12 @@ function Reply({ sessionId, disabled }: { sessionId: string; disabled: boolean }
 
 export function RunPanel({ entry }: { entry: PluginCreatorProjectEntry }) {
   const { project } = entry;
-  const steps = stepsView(project.progress?.steps);
   const active = running.value;
+  // Without an active run no step spins, even in records written before progress was settled.
+  const steps = stepsView(project.progress?.steps, {
+    active,
+    packaged: entry.status.packageReady,
+  });
   const status = runStatus.value;
   const sid = creatorSession.value;
   const waiting = approvals.value;

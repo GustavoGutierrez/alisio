@@ -3,7 +3,7 @@
  * or update, ask for changes, download, share, delete) and the Overview / Stats / Files / Data
  * sections. Every mutating action is disabled in read-only mode and while a run is going on.
  */
-import type { PluginCreatorProjectEntry } from "@alisio/sdk";
+import type { PluginCreatorIssue, PluginCreatorProjectEntry } from "@alisio/sdk";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { locale } from "../../i18n/index.ts";
 import { formatSize } from "../../util/artifacts.ts";
@@ -12,12 +12,20 @@ import { ConfirmDialog } from "../settings/ConfirmDialog.tsx";
 import styles from "./creator.module.css";
 import { FilesView } from "./FilesView.tsx";
 import { failureMessage } from "./failures.ts";
-import { creatorFailure, fixList, formatDuration, statusBadge } from "./model.ts";
+import {
+  creatorFailure,
+  fixList,
+  formatDuration,
+  installBlock,
+  lastBuildFailure,
+  statusBadge,
+} from "./model.ts";
 import { ProjectIcon, StatusBadge } from "./ProjectList.tsx";
 import { RunPanel } from "./RunPanel.tsx";
 import { SchemaView } from "./SchemaView.tsx";
 import { ShareDialog } from "./ShareDialog.tsx";
 import {
+  activationFailures,
   buildingId,
   buildProject,
   deleteProject,
@@ -33,6 +41,66 @@ import {
   watch,
 } from "./store.ts";
 import { type CrKey, cr, issueText } from "./strings.ts";
+
+/** A finding with its localized sentence, its file and (folded) the exact reason. */
+function IssueList({ issues }: { issues: PluginCreatorIssue[] }) {
+  return (
+    <ul class={styles.issues}>
+      {issues.map((issue, i) => (
+        <li key={`${issue.code}-${issue.file ?? ""}-${i}`}>
+          {issueText(issue.code)}
+          {issue.file ? (
+            <span class={styles.muted}>
+              {" "}
+              (<code>{issue.file}</code>)
+            </span>
+          ) : null}
+          {issue.message ? (
+            <details class={styles.reason}>
+              <summary>{cr("activationReason")}</summary>
+              <code>{issue.message}</code>
+            </details>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** "Installed but it could not start" (or "…so the install was undone"), the reason and a fix. */
+function ActivationFailed(props: {
+  rolledBack: boolean;
+  message: string;
+  disabled: boolean;
+  onFix?: () => void;
+}) {
+  return (
+    <div class={styles.callout} data-tone="danger" role="alert">
+      <Icon name="alert" size={16} />
+      <div>
+        <strong>{cr(props.rolledBack ? "activationRolledBackTitle" : "activationTitle")}</strong>
+        <p>{cr(props.rolledBack ? "activationRolledBackBody" : "activationBody")}</p>
+        <details class={styles.reason}>
+          <summary>{cr("activationReason")}</summary>
+          <code>{props.message}</code>
+        </details>
+        {props.onFix ? (
+          <p class={styles.spaced}>
+            <button
+              type="button"
+              class={styles.ghost}
+              disabled={props.disabled}
+              onClick={props.onFix}
+            >
+              <Icon name="wand" size={15} />
+              {cr("activationFix")}
+            </button>
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 type Tab = "overview" | "stats" | "files" | "data";
 type DialogKind = "install" | "delete" | "share" | undefined;
@@ -186,6 +254,11 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
   const blocked = locked || active || buildingNow || installingNow;
   const build = lastBuild.value?.id === project.id ? lastBuild.value : undefined;
   const failure = build && !build.ok ? creatorFailure(build.error) : undefined;
+  // A failed build from an earlier visit or from the agent (the record keeps its findings).
+  const stored = !build && !active ? lastBuildFailure(entry) : undefined;
+  const activationError = status.installed ? status.activationError : undefined;
+  const rolledBack = activationFailures.value[project.id];
+  const blockedInstall = installBlock(entry);
   const hasSchema = !!project.schema?.tables.length;
   const showRun =
     !!project.sessionId &&
@@ -223,8 +296,19 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
     const name = project.displayName;
     try {
       const job = await installProject(project.id, props.workspace);
-      if (job.error) return toastText(cr("installFailed", { message: job.error }));
       const result = job.result;
+      if (result?.activationError) {
+        activationFailures.value = {
+          ...activationFailures.value,
+          [project.id]: result.activationError,
+        };
+        return toastText(cr("installActivationFailed", { name }));
+      }
+      if (job.error) return toastText(cr("installFailed", { message: job.error }));
+      if (activationFailures.value[project.id]) {
+        const { [project.id]: _gone, ...rest } = activationFailures.value;
+        activationFailures.value = rest;
+      }
       if (result?.enableError)
         toastText(cr("installEnableFailed", { name, message: result.enableError }));
       else if (result?.restartRequired || result?.restartPending)
@@ -308,7 +392,7 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
                 () => setDialog("install"),
                 {
                   primary: true,
-                  disabled: blocked,
+                  disabled: blocked || !!blockedInstall,
                   busy: installingNow,
                 },
               )
@@ -320,7 +404,7 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
                   () => setDialog("install"),
                   {
                     primary: true,
-                    disabled: blocked,
+                    disabled: blocked || !!blockedInstall,
                     busy: installingNow,
                   },
                 )}
@@ -334,6 +418,61 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
             disabled: blocked,
           })}
         </div>
+        {blockedInstall && !status.installed && !buildingNow && !installingNow ? (
+          <p class={`${styles.muted} ${styles.small}`}>{cr(blockedInstall)}</p>
+        ) : null}
+        {activationError || rolledBack ? (
+          <ActivationFailed
+            rolledBack={!activationError}
+            message={activationError ?? rolledBack ?? ""}
+            disabled={blocked || sending}
+            {...(locked
+              ? {}
+              : {
+                  onFix: () =>
+                    void askAlisio(
+                      cr("activationFixPrompt", { message: activationError ?? rolledBack ?? "" }),
+                      true,
+                    ),
+                })}
+          />
+        ) : null}
+        {stored ? (
+          <div class={styles.callout} data-tone="danger" role="alert">
+            <Icon name="alert" size={16} />
+            <div>
+              {stored.gaveUp ? (
+                <>
+                  <strong>{cr("gaveUpTitle")}</strong>
+                  <p>{cr("gaveUpBody")}</p>
+                </>
+              ) : (
+                cr("lastBuildFailedTitle")
+              )}
+              <IssueList issues={stored.issues} />
+              {!locked ? (
+                <p class={styles.spaced}>
+                  <button
+                    type="button"
+                    class={styles.ghost}
+                    disabled={blocked || sending}
+                    onClick={() =>
+                      void askAlisio(
+                        stored.gaveUp
+                          ? cr("retryPrompt", { list: fixList(stored.issues) })
+                          : cr("fixPrompt", { list: fixList(stored.issues) }),
+                        stored.gaveUp,
+                      )
+                    }
+                  >
+                    <Icon name={stored.gaveUp ? "refresh" : "wand"} size={15} />
+                    {cr(stored.gaveUp ? "tryAgain" : "buildFixWithAlisio")}
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {error ? (
           <p class={styles.callout} data-tone="danger" role="alert">
             <Icon name="alert" size={16} />
@@ -352,19 +491,7 @@ export function ProjectView(props: { entry: PluginCreatorProjectEntry; workspace
               {failure.kind === "invalid" ? (
                 <>
                   {cr("buildFailedInvalid")}
-                  <ul class={styles.issues}>
-                    {failure.issues.map((issue) => (
-                      <li key={`${issue.code}-${issue.file ?? ""}`}>
-                        {issueText(issue.code)}
-                        {issue.file ? (
-                          <span class={styles.muted}>
-                            {" "}
-                            (<code>{issue.file}</code>)
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
+                  <IssueList issues={failure.issues} />
                 </>
               ) : (
                 failureMessage(failure)
