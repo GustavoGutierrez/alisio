@@ -1,6 +1,7 @@
-/* Decorative artwork is background-only; all content remains in semantic HTML. */
+/* ---------- Hero: deep-navy band with the winds video (decorative, background only) ---------- */
 .VPHome .VPHero {
   position: relative;
+  overflow-x: clip;
   background-color: var(--alisio-deep-navy);
   /* Static fallback while the video loads, without JS or under reduced motion. */
   background-image: url("/assets/background-box.jpg");
@@ -22,7 +23,7 @@
   background-color: var(--alisio-deep-navy);
 }
 
-/* Dimming gradient above the video (and the static fallback), below the hero content. */
+/* Dimming layer above the video (and the static fallback), below the hero content. */
 .VPHome .VPHero::after {
   content: "";
   position: absolute;
@@ -37,12 +38,153 @@
   z-index: 2;
 }
 
+/* Copy reads left-aligned at every width, like the rest of the page. */
+.VPHome .VPHero.has-image .container {
+  text-align: left;
+}
+
+.VPHome .VPHero.has-image .name,
+.VPHome .VPHero.has-image .text,
+.VPHome .VPHero.has-image .tagline {
+  margin: 0;
+}
+
+.VPHome .VPHero .name,
+.VPHome .VPHero .text {
+  max-width: 13ch;
+  font-size: 2.5rem;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Solid cyan on deep navy (11:1); no gradient text. */
+.VPHome .VPHero .name.clip {
+  position: relative;
+  background: none;
+  color: var(--alisio-cyan);
+  -webkit-text-fill-color: currentColor;
+}
+
 .VPHome .VPHero .text {
   color: var(--alisio-panel-text);
 }
 
+/* Order inside the copy column: headline, the wind (HeroWind.vue, injected after the tagline by
+   the slot), tagline, actions. */
+.VPHome .VPHero .main {
+  display: flex;
+  flex-direction: column;
+}
+
+.VPHome .VPHero .main > .tagline {
+  order: 3;
+}
+
+.VPHome .VPHero .main > .hero-wind {
+  order: 2;
+}
+
+.VPHome .VPHero .main > .actions {
+  order: 4;
+}
+
+.hero-wind {
+  width: min(400px, 92%);
+  margin: 14px 0 0 -6px;
+  color: var(--alisio-cyan);
+  pointer-events: none;
+}
+
+.hero-wind svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Gusts: one short dash per line travels east to west (toward the path start). They exist only
+   while the hero is on screen and motion is allowed; otherwise the faint base lines stand alone. */
+.hero-wind-gusts path {
+  stroke-dasharray: 18 82;
+  stroke-dashoffset: 0;
+  opacity: 0;
+}
+
+.VPHero[data-wind-on] .hero-wind-gusts path {
+  opacity: 1;
+  animation: alisio-gust var(--gust-dur, 9s) linear var(--gust-delay, 0s) infinite;
+}
+
+@keyframes alisio-gust {
+  to {
+    stroke-dashoffset: 100;
+  }
+}
+
 .VPHome .VPHero .tagline {
+  padding-top: 16px;
   color: var(--alisio-panel-text-muted);
+  font-size: 1.25rem;
+  line-height: 1.45;
+}
+
+/* Hero actions: the brand button keeps the shared solid style; the second one is an outline. */
+.VPHome .VPHero .VPButton.alt {
+  border: 1px solid rgba(238, 243, 250, 0.55);
+  background: transparent;
+  color: var(--alisio-panel-text);
+}
+
+.VPHome .VPHero .VPButton.alt:hover {
+  border-color: var(--alisio-cyan);
+  color: #ffffff;
+}
+
+.VPHome .VPHero .VPButton:focus-visible {
+  outline: 2px solid var(--alisio-cyan);
+  outline-offset: 3px;
+}
+
+.VPHome .VPHero .actions {
+  justify-content: flex-start;
+}
+
+@media (min-width: 640px) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    font-size: 3.25rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .VPHome .VPHero.has-image .main {
+    max-width: 680px;
+  }
+
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    max-width: 14ch;
+    font-size: 4.75rem;
+  }
+
+  .VPHome .VPHero .tagline {
+    font-size: 1.375rem;
+  }
+}
+
+@media (max-width: 959px) {
+  /* A stronger top-to-bottom scrim keeps the stacked hero copy readable over the video. */
+  .VPHome .VPHero::after {
+    background-image: linear-gradient(
+      180deg,
+      rgba(2, 15, 53, 0.3) 0%,
+      rgba(2, 15, 53, 0.45) 32%,
+      rgba(2, 15, 53, 0.84) 46%,
+      rgba(2, 15, 53, 0.92) 60%,
+      rgba(2, 15, 53, 0.94) 100%
+    );
+  }
 }
 
 .VPHome {
@@ -72,98 +214,7 @@
   color: var(--vp-c-brand-1);
 }
 
-@media (max-width: 959px) {
-  /* A stronger top-to-bottom scrim keeps the stacked hero copy readable over the video. */
-  .VPHome .VPHero::after {
-    background-image: linear-gradient(
-      180deg,
-      rgba(2, 14, 28, 0.3) 0%,
-      rgba(2, 14, 28, 0.42) 32%,
-      rgba(2, 14, 28, 0.82) 44%,
-      rgba(2, 14, 28, 0.9) 58%,
-      rgba(2, 14, 28, 0.92) 100%
-    );
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
-
-  /* No autoplaying background: the static fallback image shows instead of the video. */
-  .alisio-hero-video {
-    display: none;
-  }
-}
-
-/* ---------- Hero: trade-wind motion (driven by hero-motion.ts after hydration) ---------- */
-
-:root {
-  --alisio-streak: var(--alisio-300);
-  --alisio-wind-gradient: linear-gradient(
-    100deg,
-    #60e0f9 0%,
-    #07c4f9 25%,
-    #01a5f7 50%,
-    #07c4f9 75%,
-    #60e0f9 100%
-  );
-}
-
-.dark {
-  --alisio-streak: var(--alisio-400);
-}
-
-/* The hero never scrolls sideways because of the streaks that extend past the logo. */
-.VPHome .VPHero {
-  overflow-x: clip;
-}
-
-/* The name uses a two-tile repeating gradient so the breeze can loop seamlessly. */
-.VPHome .VPHero .name.clip {
-  background: var(--alisio-wind-gradient);
-  background-size: 200% 100%;
-  background-repeat: repeat-x;
-  -webkit-background-clip: text;
-  background-clip: text;
-  /* offsetParent for the per-letter gradient slices */
-  position: relative;
-}
-
-/* Slow breeze across the name, right to left; starts once the entrance is done. */
-.VPHome .VPHero .name[data-breeze] {
-  animation: alisio-breeze 18s linear infinite;
-}
-
-@keyframes alisio-breeze {
-  to {
-    background-position: 200% 0;
-  }
-}
-
-/* While the name is split, each letter paints its own slice of the same gradient. */
-.VPHome .VPHero .name .alisio-part {
-  display: inline-block;
-  background: var(--alisio-wind-gradient);
-  background-size: var(--alisio-name-w, 200%) 100%;
-  background-position: var(--alisio-part-x, 0) 0;
-  background-repeat: repeat-x;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  will-change: transform, opacity, filter;
-}
-
-.VPHome .VPHero .text .alisio-part {
-  display: inline-block;
-  will-change: transform, opacity, filter;
-}
+/* ---------- Hero artwork: the mascot with thin wind streaks (animated by hero-motion.ts) ---------- */
 
 .alisio-hero-art {
   position: absolute;
@@ -184,7 +235,7 @@
   width: 520px;
   height: 300px;
   max-width: none;
-  color: var(--alisio-streak);
+  color: var(--alisio-cyan);
   transform: translate(-50%, -50%);
   overflow: visible;
 }
@@ -194,12 +245,33 @@
   opacity: 0;
 }
 
+/* Hero entrance (hero-motion.ts splits the name and the line into these parts). */
+.VPHome .VPHero .heading .alisio-part {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* No autoplaying background: the static fallback image shows instead of the video. */
+  .alisio-hero-video {
+    display: none;
+  }
+
   .alisio-streak {
     opacity: 0.28;
   }
 
-  .VPHome .VPHero .name[data-breeze] {
+  .VPHero[data-wind-on] .hero-wind-gusts path {
     animation: none;
+    opacity: 0;
   }
 }

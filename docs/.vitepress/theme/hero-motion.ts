@@ -4,16 +4,20 @@
  * sways, and thin streaks of wind cross behind it.
  *
  * SSR and the first client render are the final, static state. Everything here runs after
- * hydration (see `index.ts`), touches only transform, opacity and filter (plus the CSS-only name
- * shimmer) and does nothing at all under `prefers-reduced-motion: reduce`.
+ * hydration (see `index.ts`), touches only transform, opacity and filter, and does nothing at all
+ * under `prefers-reduced-motion: reduce`.
  */
 import { loadMotion, prefersReducedMotion } from "./motion";
 
-type Controls = { stop: () => void };
+type Controls = { stop: () => void; pause: () => void; play: () => void };
 
 let running: Controls[] = [];
+let heroWatch: IntersectionObserver | undefined;
 
 const stopAll = () => {
+  heroWatch?.disconnect();
+  document.querySelector(".VPHero[data-wind-on]")?.removeAttribute("data-wind-on");
+  heroWatch = undefined;
   for (const control of running) control.stop();
   running = [];
 };
@@ -109,6 +113,18 @@ export function initHeroMotion(): void {
         });
       }
 
+      // The sway and the streaks loop: they run only while the hero is on screen.
+      heroWatch = new IntersectionObserver((entries) => {
+        const visible = entries.some((entry) => entry.isIntersecting);
+        // The headline gusts (HeroWind.vue, CSS-driven) follow the same visibility.
+        hero.toggleAttribute("data-wind-on", visible);
+        for (const control of running) {
+          if (visible) control.play();
+          else control.pause();
+        }
+      });
+      heroWatch.observe(hero);
+
       if (!heading || !name || !textLine) return;
       heading.setAttribute(
         "aria-label",
@@ -116,14 +132,6 @@ export function initHeroMotion(): void {
       );
       const nameSplit = split(name, "letters");
       const textSplit = split(textLine, "words");
-
-      // Give every letter the slice of the name gradient it occupies, so the gradient looks the
-      // same while the letters are separate elements (background-clip does not cross transforms).
-      const width = name.getBoundingClientRect().width;
-      name.style.setProperty("--alisio-name-w", `${Math.round(width * 2)}px`);
-      for (const part of nameSplit.parts) {
-        part.style.setProperty("--alisio-part-x", `${-part.offsetLeft}px`);
-      }
 
       // Letters and words arrive from the east (the right) with a blur-to-sharp settle.
       const gust = (parts: HTMLElement[], duration: number, step: number, delay: number) =>
@@ -148,9 +156,6 @@ export function initHeroMotion(): void {
         .then(() => {
           nameSplit.restore();
           textSplit.restore();
-          name.style.removeProperty("--alisio-name-w");
-          // Only now does the slow gradient breeze start, on the original, unsplit text.
-          name.dataset.breeze = "true";
         })
         .catch(() => {
           nameSplit.restore();

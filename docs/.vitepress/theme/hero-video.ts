@@ -30,5 +30,14 @@ export function initHeroVideo(): void {
   // Reduced motion: the CSS hides the video, so never start it.
   if (window.matchMedia(REDUCE).matches) return;
   // Autoplay can still be rejected (battery saver, strict policies): keep the poster frame.
-  void video.play().catch(() => undefined);
+  // The loop plays only while the hero is on screen.
+  const watch = new IntersectionObserver((entries) => {
+    if (!video.isConnected) {
+      watch.disconnect();
+      return;
+    }
+    if (entries.some((entry) => entry.isIntersecting)) void video.play().catch(() => undefined);
+    else video.pause();
+  });
+  watch.observe(hero);
 }

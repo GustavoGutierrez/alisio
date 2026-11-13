@@ -1,7 +1,8 @@
 /**
- * Progressive enhancement for the home "What is Alisio?" block: a staggered
- * entrance (only when motion is allowed), a pause/play control for the looping
- * demo video and a lightbox that expands the Web UI screenshot and the video.
+ * Progressive enhancement for the home page content: the "How you work" wind sequence
+ * and a few once-only section entrances (only when motion is allowed), a pause/play
+ * control for the looping terminal demo video and a lightbox that expands every framed
+ * screenshot and the video.
  * Copy and markup stay in the home markdown; every control starts `hidden` and
  * is revealed here, so nothing is offered that JS cannot deliver.
  */
@@ -25,20 +26,60 @@ export function initWhatIs(): void {
     for (const dispose of disposers) dispose();
   };
 
-  // Entrance. Visible by default; hidden start state only once JS can reveal it.
-  if (!reduced.matches && "IntersectionObserver" in window) {
-    root.classList.add("is-ready");
-    const reveal = new IntersectionObserver(
+  // The page's one authored motion moment: in "How you work", the wind line draws from 1 to 3
+  // and each numeral lights up as it passes, showing that the three steps form one sequence.
+  // Runs once. Visible by default; the dimmed start state exists only once JS can play it, and
+  // never under reduced motion.
+  const steps = root.querySelector<HTMLElement>(".home-steps");
+  if (steps && !reduced.matches && "IntersectionObserver" in window) {
+    steps.classList.add("is-ready");
+    const play = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          root.classList.add("is-in");
-          reveal.disconnect();
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        steps.classList.add("is-in");
+        play.disconnect();
+      },
+      { threshold: 0.45 },
+    );
+    play.observe(steps);
+    disposers.push(() => play.disconnect());
+  }
+
+  // Supporting entrances, each specific to its section and played once (motion allowed only):
+  // offer screenshots drift in from the east, the task rules draw in, the apps status pills
+  // cascade, the data and permissions items fade in, the download button gets one breeze sheen.
+  // Content is visible by default; the start states apply only under `.is-motion`.
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    root.querySelector("#data-and-permissions ~ .home-list")?.classList.add("home-list-stagger");
+    const targets = root.querySelectorAll<HTMLElement>(
+      ".offer-row, .home-columns, .home-table, .home-list-stagger, #download",
+    );
+    root.classList.add("is-motion");
+    const enter = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add("is-in");
+          enter.unobserve(entry.target);
         }
       },
-      { threshold: 0.08 },
+      { threshold: 0.25 },
     );
-    reveal.observe(root);
-    disposers.push(() => reveal.disconnect());
+    for (const target of targets) enter.observe(target);
+    disposers.push(() => enter.disconnect());
+
+    // The closing band's faint streamlines move only while the band is on screen.
+    const closing = root.querySelector<HTMLElement>(".home-closing");
+    if (closing) {
+      const flow = new IntersectionObserver((entries) => {
+        closing.classList.toggle(
+          "is-flowing",
+          entries.some((entry) => entry.isIntersecting),
+        );
+      });
+      flow.observe(closing);
+      disposers.push(() => flow.disconnect());
+    }
   }
 
   const video = root.querySelector<HTMLVideoElement>('[data-component="video"] video');
@@ -116,14 +157,19 @@ export function initWhatIs(): void {
     // a second click while one is open must not stack another dialog
     if (lightboxOpen) return;
     const kind = trigger.dataset.expand;
-    const card = trigger.closest("section");
+    // The frame that holds the button also holds the media it expands.
+    const frame = trigger.parentElement;
     const source =
       kind === "video"
-        ? card?.querySelector<HTMLVideoElement>("video")
-        : card?.querySelector<HTMLImageElement>("img");
+        ? frame?.querySelector<HTMLVideoElement>("video")
+        : frame?.querySelector<HTMLImageElement>("img");
     if (!source) return;
 
-    const title = card?.querySelector("h3")?.textContent?.trim() ?? "";
+    // Title: the heading of the section or offer row around the media, else the image alt text.
+    const owner = trigger.closest(".offer-row, section");
+    const title =
+      owner?.querySelector("h3")?.textContent?.trim() ||
+      (source instanceof HTMLImageElement ? source.alt : "");
     const dialog = document.createElement("dialog");
     dialog.className = "whatis-lightbox";
     dialog.setAttribute("aria-label", title);
@@ -160,11 +206,13 @@ export function initWhatIs(): void {
       big.autoplay = !reduced.matches;
       body.append(big);
     } else {
+      // Shown at its natural resolution, scaled down only to fit the viewport (lightbox CSS), so it
+      // is never smaller than the inline copy.
       const big = document.createElement("img");
       big.src = source.currentSrc || source.src;
       big.alt = source.alt;
-      big.width = source.naturalWidth || 1833;
-      big.height = source.naturalHeight || 990;
+      big.width = source.naturalWidth || source.width;
+      big.height = source.naturalHeight || source.height;
       body.append(big);
     }
     dialog.append(bar, body);

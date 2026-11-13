@@ -41,7 +41,7 @@ const LINK = /(!?)\[([^\]]*)\]\((<[^>]*>|[^)\s]+)/g;
 const FENCE = /^\s*(`{3,}|~{3,})/;
 const HTML_IMAGE = /<img\b([^>]*)>/gi;
 const HTML_ATTRIBUTE = /\b(src|alt)=(?:"([^"]*)"|'([^']*)')/gi;
-const HOME_COMPONENTS = ["brand-banner", "web-ui-preview", "video"] as const;
+const HOME_COMPONENTS = ["web-ui-preview", "video"] as const;
 const ARCHITECTURE_DIAGRAMS = [
   { page: "architecture.md", source: "architecture.en.mmd", asset: "architecture.en.svg" },
   { page: "es/architecture.md", source: "architecture.es.mmd", asset: "architecture.es.svg" },

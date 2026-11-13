@@ -6,6 +6,13 @@ const footer = {
   message: "Released under the MIT License.",
   copyright: "Copyright © 2026 Gustavo Gutierrez",
 };
+const footerEs = {
+  message: "Publicado bajo la licencia MIT.",
+  copyright: "Copyright © 2026 Gustavo Gutierrez",
+};
+/** Brand typefaces: Bricolage Grotesque (display), Atkinson Hyperlegible Next (text), JetBrains Mono (code). */
+const fonts =
+  "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,500;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&display=swap";
 
 function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.SidebarItem[] {
   const item = (page: string) => ({ text: labels[page] ?? page, link: `${prefix}/${page}` });
@@ -159,7 +166,12 @@ export default defineConfig({
     "AI that works with you. Alisio is a desktop app that helps you work with documents and data, find apps for your tasks, build your own and get results you can review and use.",
   cleanUrls: true,
   lastUpdated: true,
-  head: [["link", { rel: "icon", href: "/alisio/assets/favicon.png" }]],
+  head: [
+    ["link", { rel: "icon", href: "/alisio/assets/favicon.png" }],
+    ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
+    ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
+    ["link", { rel: "stylesheet", href: fonts }],
+  ],
   sitemap: { hostname: "https://gustavogutierrez.github.io/alisio/" },
   markdown: {
     config(md) {
@@ -257,7 +269,7 @@ export default defineConfig({
         ],
         sidebar: sidebar("/es", es),
         editLink: { pattern: `${repo}/edit/main/docs/:path`, text: "Editar esta página en GitHub" },
-        footer,
+        footer: footerEs,
         docFooter: { prev: "Página anterior", next: "Página siguiente" },
         outline: { label: "En esta página" },
         lastUpdated: { text: "Última actualización" },

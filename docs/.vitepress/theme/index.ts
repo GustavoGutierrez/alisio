@@ -1,23 +1,23 @@
 import type { Theme } from "vitepress";
-import DefaultTheme from "vitepress/theme";
+import DefaultTheme from "vitepress/theme-without-fonts";
 import { defineComponent, h, onMounted } from "vue";
-import BentoFeatures from "./components/BentoFeatures.vue";
 import DesktopDownloads from "./components/DesktopDownloads.vue";
 import HeroArt from "./components/HeroArt.vue";
+import HeroWind from "./components/HeroWind.vue";
 import HomeIntro from "./components/HomeIntro.vue";
+import TerminalInstall from "./components/TerminalInstall.vue";
 import { initHeroMotion } from "./hero-motion";
 import { initHeroVideo } from "./hero-video";
 import { initWhatIs } from "./whatis";
 import "./styles/vars.css";
 import "./styles/home.css";
-import "./styles/bento.css";
-import "./styles/whatis.css";
-import "./styles/sections.css";
+import "./styles/landing.css";
 import "./styles/docs.css";
 
 /**
  * Extends VitePress' default theme with Alisio's shared visual tokens and
- * home-page treatments. Content and navigation remain VitePress defaults.
+ * home-page treatments. Content and navigation remain VitePress defaults; the brand
+ * typefaces load from Google Fonts (see `head` in config.ts), so the bundled Inter is skipped.
  */
 const enhanceHome = () => {
   initWhatIs();
@@ -35,8 +35,8 @@ const Layout = defineComponent({
     return () =>
       h(DefaultTheme.Layout, null, {
         "home-hero-image": () => h(HeroArt),
-        "home-hero-after": () => [h(HomeIntro), h(DesktopDownloads)],
-        "home-features-before": () => h(BentoFeatures),
+        "home-hero-info-after": () => h(HeroWind),
+        "home-hero-after": () => h(HomeIntro),
       });
   },
 });
@@ -44,7 +44,10 @@ const Layout = defineComponent({
 export default {
   extends: DefaultTheme,
   Layout,
-  enhanceApp({ router }) {
+  enhanceApp({ app, router }) {
+    // Used inside the home markdown (docs/index.md, docs/es/index.md).
+    app.component("DesktopDownloads", DesktopDownloads);
+    app.component("TerminalInstall", TerminalInstall);
     if (typeof window === "undefined") return;
 
     const afterRouteChange = router.onAfterRouteChange;
