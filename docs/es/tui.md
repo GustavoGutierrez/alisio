@@ -15,7 +15,7 @@ alisio --no-tui           # plain readline mode instead of the TUI
 terminal; al salir imprime la conversación y el ID de sesión. Salir es rápido: un turno en vuelo
 recibe hasta 3 segundos, los hooks de fin de sesión ~1,5 segundos (durante la salida; `/clear`
 sigue honrando el `pluginHooks.sessionEndTimeoutMs` completo) y el cierre de servidores MCP,
-proveedor y plugins corre en paralelo con topes cortos — un servidor o plugin colgado nunca
+proveedor y complementos corre en paralelo con topes cortos — un servidor o complemento colgado nunca
 retrasa la salida.
 
 ## Ruta rápida
@@ -33,7 +33,7 @@ retrasa la salida.
 Las sesiones interactivas comienzan con una pantalla de inicio: la mascota (por defecto "Ali", un
 espíritu-nube de los vientos alisios), la versión, una línea de bienvenida, el modelo, el host del
 proveedor (nunca las claves), el directorio de trabajo, el acceso (estado de `write`/`process` o
-`read-only`), si la memoria está activada, los plugins cargados y dos consejos rotativos. Se dispone
+`read-only`), si la memoria está activada, los complementos cargados y dos consejos rotativos. Se dispone
 en paralelo cuando la terminal es ancha y apilada cuando es estrecha; por debajo de 40 columnas la
 mascota se reduce a una sola línea. En la TUI es el primer bloque de la conversación y se desplaza
 con ella; en el modo `--no-tui` se imprime en stderr.
@@ -41,7 +41,7 @@ con ella; en el modo `--no-tui` se imprime en stderr.
 Solo se muestra en la TUI interactiva (stdout es una terminal) o en el modo readline (solo cuando
 stderr es una terminal). Nunca se muestra con `run`, `resume <id> "prompt"`, `--json`, `--quiet`,
 `--no-banner`, cuando la variable de entorno `CI` está definida, ni cuando el flujo de destino no es
-una terminal. La salida JSONL nunca se ve afectada, aunque los plugins registren una mascota.
+una terminal. La salida JSONL nunca se ve afectada, aunque los complementos registren una mascota.
 
 ```sh
 alisio --no-banner        # interactive, without the startup screen
@@ -49,7 +49,7 @@ alisio --quiet            # no startup screen and no non-essential hints
 ```
 
 `TERM=dumb` la muestra en ASCII sin color, `NO_COLOR` desactiva el color y una locale `C`/`POSIX`
-cambia a ASCII. Los plugins pueden reemplazar la mascota o toda la pantalla mediante
+cambia a ASCII. Los complementos pueden reemplazar la mascota o toda la pantalla mediante
 [puntos de extensión](/es/plugins#extension-points).
 
 ## Disposición {#layout}
@@ -61,7 +61,7 @@ La pantalla se reorganiza al redimensionar la terminal, y cada línea se trunca 
 | Cabecera | **Alisio Code** y la versión del paquete en ejecución (el mismo valor que imprime `--version`), **modelo · proveedor · effort** (el nombre del modelo en cian negrita, el nombre del proveedor en magenta, el nivel de effort en amarillo cuando el modelo activo anuncia niveles soportados), host del proveedor (nunca la clave ni la ruta), modo de API, directorio de trabajo abreviado, ID corto de sesión, la rama git del directorio de trabajo cuando está dentro de un repositorio (`⎇ main`, o el SHA corto del commit en HEAD separado) y permisos con color (`write`/`process`: `on`, `ask` u `off`; `mcp:on` cuando el permiso de ejecución efectivo está concedido, `mcp:off` en caso contrario; `read-only`) |
 | Conversación | Mensajes del usuario resaltados; respuestas del asistente en streaming renderizadas como Markdown: títulos en cian brillante y negrita, tablas con columnas alineadas adaptadas al ancho (las filas separadoras con guiones largos em/en se normalizan de nuevo a `---`), listas, código en línea y en bloque — el código en bloque se sangra y se colorea por sintaxis según el lenguaje (TypeScript/JavaScript, JSON, Bash, Python, YAML, CSS, HTML, Markdown) sin ninguna dependencia de resaltado — y enlaces. Una pista atenuada `⎘ copy · /copy` aparece bajo cada respuesta completada. El razonamiento visible que envía el proveedor (por ejemplo `reasoning_content` de DeepSeek) se muestra atenuado mientras llega y luego se colapsa en una línea; nunca se persiste ni se reenvía |
 | Bloques de herramientas | Un bloque por llamada: nombre, argumento resumido (ruta, comando, patrón), spinner mientras se ejecuta, estado ✓/✗, duración y vista previa truncada. `edit_file`/`write_file` muestran un diff `+`/`-` calculado a partir de los argumentos. Las herramientas que devuelven datos estructurados (por ejemplo MCP) renderizan **bloques nativos**: tablas de columnas alineadas con celdas que se ajustan al ancho, clave-valor en dos columnas, árboles con glifos de ramas, bloques de código con resaltado de sintaxis, bloques markdown e imágenes en línea cuando la terminal lo soporta (marcador atenuado `[image: …]` en caso contrario) |
-| Barra de estado | **Línea del agente activo** bajo el editor: `agente: <nombre> · <modelo> · <proveedor> · <effort>` (modelo en cian negrita, proveedor en magenta, effort en amarillo; el effort aparece solo cuando el modelo activo anuncia niveles soportados; en terminales estrechos se descartan primero las piezas de menor prioridad). Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de plugins (por ejemplo `mem N`) |
+| Barra de estado | **Línea del agente activo** bajo el editor: `agente: <nombre> · <modelo> · <proveedor> · <effort>` (modelo en cian negrita, proveedor en magenta, effort en amarillo; el effort aparece solo cuando el modelo activo anuncia niveles soportados; en terminales estrechos se descartan primero las piezas de menor prioridad). Contexto usado frente al **presupuesto efectivo**, `used / total (pct%)`, con barra verde/amarilla/roja que se pone roja exactamente donde se dispara la compactación automática; tokens acumulados de entrada/salida y en caché (`⚡`) cuando se informan; turnos; duración del turno en curso; estado; estado de complementos (por ejemplo `mem N`) |
 | Estado de la ejecución | Mientras hay una ejecución en curso, la pieza de estado dice qué está haciendo en lugar de un simple «streaming»: `waiting for the model`, `thinking`, `writing the answer`, `running Python (analysis.py)`, `reading your data (sales.csv)`, `publishing the artifact (dashboard.html)`, `running <herramienta>`, `compacting context`, `the model did not respond; retrying (1/1)` (se reenvía una petición silenciosa, ver `limits.firstTokenRetries`), `the response was cut off; retrying in smaller steps (1/2)` (el límite de tokens de salida cortó la respuesta, ver `limits.truncationRecoveries`), `waiting for your approval` o `a sub-agent is working`, seguida del tiempo transcurrido. Solo se muestran títulos y nombres de archivo, nunca comandos ni URL. Tras 15 s sin ningún evento añade `no response for 20.0s`, y tras 60 s `(stuck?)` en amarillo; Esc interrumpe como siempre. Esperar al usuario o a un subagente nunca se informa como silencio. Las etiquetas están en inglés, como el resto del pie del TUI |
 | Selectores | Listas seleccionables para `/model`, `/agents`, `/effort`, `/plugins`, `/skills`, `/resume` y las aprobaciones |
 
@@ -92,40 +92,40 @@ nombre o descripción, y `/resume` sugiere los IDs de sesión que coincidan con 
 | Comando | Función |
 | --- | --- |
 | `/help` | Comandos y teclas |
-| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva. Un proveedor cuyo plugin ofrece inicio de sesión muestra además un selector de método y una entrada para cerrar sesión ([detalles](#connect)) |
+| `/connect` | Abrir un formulario de proveedor con pegado de URL, entrada secreta enmascarada, un campo de variable de entorno de la clave de API (la conexión recuerda su nombre para el respaldo por entorno), edición con cursor e instrucciones explícitas para enviar/cancelar; después mostrar la lista titulada y prefijada del proveedor elegido, persistir la selección globalmente e iniciar una sesión nueva. Un proveedor cuyo complemento ofrece inicio de sesión muestra además un selector de método y una entrada para cerrar sesión ([detalles](#connect)) |
 | `/model`, `/models` | Abre el selector global de proveedor/modelo. Las entradas se agrupan y prefijan con el título del proveedor, se marca la pareja activa y los catálogos no disponibles siguen visibles sin ocultar perfiles sanos. Una pareja distinta se persiste e inicia una sesión nueva; la pareja activa no hace nada. No se lista la configuración raíz heredada |
 | `/compact [focus]` | Resume la historia antigua con el modelo actual, con instrucciones de foco opcionales |
-| `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto, detalles de plugins y, cuando hubo decisiones, una sección de [Decision Intelligence](/es/decision-intelligence#stats-section) |
+| `/stats` | Tokens (entrada, salida, caché), turnos, llamadas y errores por herramienta, duración, modelos, contexto, detalles de complementos y, cuando hubo decisiones, una sección de [Decision Intelligence](/es/decision-intelligence#stats-section) |
 | `/context` | El [informe de contexto](/es/context#context-report): qué lleva la siguiente petición, los segmentos que el Context Governor fija o elide y por qué, y los recuentos de invariantes; con el governor en `off` dice que no se mide nada |
 | `/decisions` | Estado de [Decision Intelligence](/es/decision-intelligence#decisions-command): proveedor y salud, circuito, tiempo límite y métricas de la sesión y del proceso |
-| `/semantic` | Estado de la búsqueda semántica (solo lectura): proveedores registrados y activos, modelo, dimensiones y salud del proveedor. Vea [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search) |
+| `/semantic` | Estado de la búsqueda semántica (solo lectura): proveedores registrados y activos, modelo, dimensiones y salud del proveedor. Consulta [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search) |
 | `/clear` (`/new`) | Inicia una sesión nueva con el modelo actual |
 | `/sessions` | Sesiones recientes del workspace |
 | `/resume <id>` | Reanuda por ID o prefijo; sin argumento muestra un selector |
 | `/tools` | Herramientas y su estado según los permisos (`enabled`, `ask`, `disabled`) |
-| `/plugins` | Filtra plugins activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo. Los plugins se agrupan bajo cabeceras de categoría no seleccionables (`model-provider ›`, `memory ›`…); al filtrar, una cabecera solo permanece si su grupo aún tiene coincidencias, y `↑`/`↓` saltan las cabeceras |
-| `/skills` | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de plugins están bloqueadas y se gestionan con `/plugins` |
+| `/plugins` | Filtra complementos activos, inactivos y fallidos; muestra metadatos/origen y persiste una anulación del proyecto. Los cambios indican `restart required`; las acciones externas requieren confianza y confirmación, y no se puede desactivar el proveedor de modelo activo. Los complementos se agrupan bajo cabeceras de categoría no seleccionables (`model-provider ›`, `memory ›`…); al filtrar, una cabecera solo permanece si su grupo aún tiene coincidencias, y `↑`/`↓` saltan las cabeceras |
+| `/skills` | Explora el catálogo efectivo acotado; busca con `/`, alterna orden por nombre/origen/tokens con `t`, muestra detalles seguros y habilita o deshabilita skills gestionables de inmediato. Las skills de complementos están bloqueadas y se gestionan con `/plugins` |
 | `/mcps` | Explora servidores por origen; separa configuración/activación, permiso de sesión, conexión y herramientas cargadas; muestra anotaciones; conecta/reconecta; y persiste la activación en el archivo que lo definió. Sin `--allow-mcp` inicial (o `mcp.allow` global), Conectar/Activar muestra las consecuencias de proceso/red y puede conceder acceso solo para esta sesión TUI, o recordarlo globalmente (`mcp.allow`) para todas las sesiones. Una fila "Revocar consentimiento MCP global" limpia esa preferencia y desconecta los servidores. `--read-only` lo bloquea |
 | `/settings` (`/prefs`) | Menú de ajustes: lista estilo OpenCode con preferencias reales y conectadas (compactación, contexto, consentimiento MCP, límites, padding del editor, inset del contenido) y filas de navegación hacia los gestores siguientes. Filas de dos columnas (nombre + valor actual), filtro escribiendo, contador `(n/total)`, pie con la descripción de la fila resaltada; Enter o Espacio cambia un valor, Esc sale. Se persiste en tu configuración de usuario y se aplica a la sesión en curso |
 | `/copy` | Copia la última respuesta del asistente al portapapeles como texto crudo (sin formato, sin los colores ANSI que se ven en pantalla) |
-| `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulte [Preguntar al usuario](#ask-user-question) |
+| `/ask <pregunta>` | Convierte tu propia pregunta en una llamada a `ask_user_question` de opción múltiple; consulta [Preguntar al usuario](#ask-user-question) |
 | `/btw [pregunta]` | Hace una pregunta lateral sobre la sesión actual sin añadirla a la conversación: una llamada sin herramientas al modelo de la sesión ve el historial activo (se descartan los mensajes más antiguos para caber en el presupuesto de contexto) y responde en un panel sobre el editor, nunca en la transcripción, los runs, los eventos ni los tokens de la sesión. Funciona con un turno en curso; Esc cancela una pregunta pendiente o cierra el panel. Sin pregunta muestra tu respuesta lateral más reciente, `←`/`→` recorren las anteriores (`2/5`) y `↑`/`↓` desplazan; si aún no hay ninguna imprime `Usage: /btw <question>`. Se guardan las 20 últimas por sesión, compartidas con la interfaz web. En modo `--no-tui` la respuesta se imprime |
-| `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulte [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del plugin de subagentes, consulte [Subagentes](/es/subagents#in-the-tui) |
-| `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulte [Agente activo y effort](#active-agent-and-effort) |
+| `/agents` | Abre el selector de agente activo: cada agente seleccionable de la sesión principal con su descripción y marcadores de actual/por defecto/solo lectura. Elegir uno persiste `agents.active`, se aplica desde el siguiente prompt y cambia el modelo de la sesión si el agente declara uno; consulta [Agente activo y effort](#active-agent-and-effort). Con un argumento (`list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`) enruta a la gestión de tareas del complemento de subagentes, consulta [Subagentes](/es/subagents#in-the-tui) |
+| `/effort [nivel]` | Establece el effort de razonamiento del modelo activo cuando anuncia `effort.supportedLevels`: sin argumento abre un selector (el valor por defecto del modelo está marcado), con argumento valida y persiste (`agents.effort`). El nivel se envía desde el siguiente prompt; consulta [Agente activo y effort](#active-agent-and-effort) |
 | `/init [focus]` | [Plantilla de prompt](/es/prompt-templates#built-in-init) integrada: analiza el repositorio y crea o actualiza el `AGENTS.md` raíz |
 | `/artifacts [filter]` | Recorre los artefactos de la sesión (los más recientes primero, con filtro) y ofrece Vista previa aquí, Abrir con la aplicación predeterminada, Copiar ruta, Mostrar en la carpeta, Copiar al workspace…, Mostrar fuentes del análisis, Detalles o Eliminar; consulta [Artefactos](#artifacts) |
-| `/permission [ask\|auto\|full\|status]` (`/permissions`) | Un único menú con **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** y **Manage saved permissions…** (revisar y revocar los permisos guardados de la sesión, por ejemplo análisis en Python permitido en esta sesión). Con un argumento fija el modo o imprime el estado directamente; véase [Modos de permisos](#permission-modes) |
-| `/reload` | Recarga la configuración, los agentes, las skills, las plantillas de prompt y los servidores MCP entre turnos; una configuración rota deja la sesión intacta; véase [Recarga y novedades](#reload-and-changelog) |
-| `/tasks` | Panel con las [tareas en segundo plano](/es/tools#background-tasks) de esta sesión (`bg_run`) y una vista de solo lectura de sus subagentes: una lista, la salida en vivo de una y una tecla para detener; véase [Tareas en segundo plano](#tasks) |
-| `/goal [objetivo \| pause \| resume \| edit \| clear \| help \| budget=<n>]` | Inicia o gestiona el objetivo de la sesión: con un objetivo abre un menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda); con un texto inicia uno en el que el agente sigue trabajando hasta que esté terminado, bloqueado, en pausa o sin presupuesto; véase [Objetivos de sesión](#goals) |
-| `/changelog [version]` | Panel desplazable con lo que cambió en las versiones recientes (sin conexión); véase [Recarga y novedades](#reload-and-changelog) |
+| `/permission [ask\|auto\|full\|status]` (`/permissions`) | Un único menú con **Use ask mode**, **Use auto mode**, **Use full access mode**, **Status** y **Manage saved permissions…** (revisar y revocar los permisos guardados de la sesión, por ejemplo análisis en Python permitido en esta sesión). Con un argumento fija el modo o imprime el estado directamente; consulta [Modos de permisos](#permission-modes) |
+| `/reload` | Recarga la configuración, los agentes, las skills, las plantillas de prompt y los servidores MCP entre turnos; una configuración rota deja la sesión intacta; consulta [Recarga y novedades](#reload-and-changelog) |
+| `/tasks` | Panel con las [tareas en segundo plano](/es/tools#background-tasks) de esta sesión (`bg_run`) y una vista de solo lectura de sus subagentes: una lista, la salida en vivo de una y una tecla para detener; consulta [Tareas en segundo plano](#tasks) |
+| `/goal [objetivo \| pause \| resume \| edit \| clear \| help \| budget=<n>]` | Inicia o gestiona el objetivo de la sesión: con un objetivo abre un menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda); con un texto inicia uno en el que el agente sigue trabajando hasta que esté terminado, bloqueado, en pausa o sin presupuesto; consulta [Objetivos de sesión](#goals) |
+| `/changelog [version]` | Panel desplazable con lo que cambió en las versiones recientes (sin conexión); consulta [Recarga y novedades](#reload-and-changelog) |
 | `/exit` (`/quit`) | Salir |
 | `/skill:name request` | Carga una skill y envía la solicitud |
-| `/plugin.id:name args` (o `/command plugin.id:name args`) | Ejecuta un comando de plugin |
-| `/memory …` | Comando del plugin integrado de memoria; consulte [Memoria persistente](/es/memory) |
-| `/agents …` | Gestión heredada de tareas de subagentes (plugin integrado): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; sigue disponible con un argumento como arriba — consulte [Subagentes](/es/subagents#in-the-tui) |
-| `/agents new [descripción]` | Crea un agente en `.agents/agents` (proyecto o global). Con una descripción, el modelo activo redacta las instrucciones de inmediato ("Building with Alisio", Esc cancela); al terminar Alisio ofrece probarlo en una sesión nueva. Consulte [Agentes](/es/agents#terminal-agents) |
-| `/agents templates` | Crea un agente a partir de una plantilla (Code Reviewer, Test Writer, Security Auditor, …). Consulte [Agentes](/es/agents) |
+| `/plugin.id:name args` (o `/command plugin.id:name args`) | Ejecuta un comando de complemento |
+| `/memory …` | Comando del complemento integrado de memoria; consulta [Memoria persistente](/es/memory) |
+| `/agents …` | Gestión heredada de tareas de subagentes (complemento integrado): `list`, `open`, `cancel`, `kill`, `resume`, `merge`, `discard`, `defs`; sigue disponible con un argumento como arriba — consulta [Subagentes](/es/subagents#in-the-tui) |
+| `/agents new [descripción]` | Crea un agente en `.agents/agents` (proyecto o global). Con una descripción, el modelo activo redacta las instrucciones de inmediato ("Building with Alisio", Esc cancela); al terminar Alisio ofrece probarlo en una sesión nueva. Consulta [Agentes](/es/agents#terminal-agents) |
+| `/agents templates` | Crea un agente a partir de una plantilla (Code Reviewer, Test Writer, Security Auditor, …). Consulta [Agentes](/es/agents) |
 | `/agents manage` | Edita, activa, prueba o elimina agentes guardados; `/agents edit <id> [project\|global]` y `/agents delete <id> [project\|global]` van directo a uno |
 | `/agents reload` | Vuelve a descubrir archivos de agentes cambiados fuera de Alisio |
 | `/agent:<id>` | Activa un agente cargado desde el siguiente prompt; hay un comando por agente cargado y el prefijo `agent:` nunca colisiona con otros comandos |
@@ -135,9 +135,9 @@ tiene relación con el comando `alisio setup`, que solo genera un `.alisio/confi
 Las demás [plantillas de prompts](/es/prompt-templates) aparecen en una sección propia de `/help` y
 en el autocompletado.
 
-Los demás comandos de plugins se enrutan de la misma manera y aparecen en `/help` y en el
+Los demás comandos de complementos se enrutan de la misma manera y aparecen en `/help` y en el
 autocompletado. Mientras un turno está en curso, los prompts y los comandos `/model`, `/agents` (selector), `/effort`, `/plugins`, `/skills`, `/mcps`, `/settings`, `/compact`,
-`/clear`, `/resume` y `/reload` esperan: pulse Esc para interrumpir primero. Los verbos de gestión de tareas de
+`/clear`, `/resume` y `/reload` esperan: pulsa Esc para interrumpir primero. Los verbos de gestión de tareas de
 subagentes (`/agents open …`, `/agents list`, …) y `/btw` siguen funcionando durante un turno.
 
 ### Catálogo de skills y autocompletado
@@ -148,7 +148,7 @@ recortes como `↑ N more above` / `↓ N more below`. Enter o Espacio cambia la
 seleccionada; Esc cierra el catálogo. Las skills también aparecen directamente en el
 autocompletado de comandos del editor: al empezar a escribir `/ski…` (o el propio nombre de la
 skill, como `/branch-pr…`) cada skill efectiva aparece como comando `skill:<nombre>` con un
-marcador de ámbito (`[u]` usuario, `[p]` proyecto, `[c]` config, `[l]` plugin) y su descripción, al
+marcador de ámbito (`[u]` usuario, `[p]` proyecto, `[c]` config, `[l]` complemento) y su descripción, al
 estilo OpenCode; elegir una inserta `skill:<nombre>` y envía. Además, `/skills <prefijo>` (o
 `/skills <prefijo>`) autocompleta las entradas del catálogo por nombre o descripción (las
 deshabilitadas, bloqueadas y sombreadas siguen listadas con una pista de estado); aceptar una
@@ -185,7 +185,7 @@ y se aplica a la sesión en curso. Los valores que no estén en la lista ofrecid
 | Tope de tokens de salida del agente (`limits.maxOutputTokens`) | 1k / 2k / 4k / 8k / 16k | `16384` | siguiente ejecución |
 | Presupuesto de caracteres de contexto (`limits.maxContextChars`) | 80k / 120k / 160k / 240k / 320k / 800k | `800000` | siguiente ejecución |
 | Tiempo de espera de ejecución (`limits.timeoutMs`) | 30 s – 600 s en pasos de 30 s (se persiste en ms) | `300000 ms` (5 min) | siguiente ejecución |
-| Tiempo de espera de hooks de plugins (`pluginHooks.timeoutMs`) | 1 s – 120 s en pasos de 1 s (se persiste en ms) | `15000 ms` | siguiente hook |
+| Tiempo de espera de hooks de complementos (`pluginHooks.timeoutMs`) | 1 s – 120 s en pasos de 1 s (se persiste en ms) | `15000 ms` | siguiente hook |
 | Padding del editor (`tui.paddingX`) | 0 – 4 | `1` | inmediato |
 | Inset del contenido (`tui.contentPaddingX`) | 0 – 12 | `2` | inmediato |
 | Comandos slash de skills (`tui.skillSlashCommands`) | `true` / `false` | `true` | inmediato |
@@ -196,7 +196,7 @@ concesión de `/mcps`: activarlo escribe `mcp.allow` y concede el permiso en tie
 conectarlos ahora), y desactivarlo revoca el consentimiento y desconecta los servidores.
 
 Las filas inferiores navegan: Proveedor y modelo, Conectar proveedor, Compactar contexto ahora,
-Plugins, Skills, Servidores MCP y Estadísticas de sesión. Las filas que abren un gestor dejan
+Complementos, Skills, Servidores MCP y Estadísticas de sesión. Las filas que abren un gestor dejan
 Esc/atrás a ese gestor; las acciones puntuales (compactar, estadísticas) vuelven a la lista.
 
 **No incluidos (lista honesta):** varios ajustes habituales en otros agentes de código no existen
@@ -249,7 +249,7 @@ elegido también se muestra en la cabecera y en la barra de estado, en amarillo.
 
 **Shift+Tab** cambia el agente activo sin abrir un menú: `build` → `plan` → cada uno de los demás
 agentes principales (definiciones con `mode: primary` o `mode: all`, ordenadas por nombre) y de
-nuevo `build`. El orden es estable, sea cual sea el orden en que los plugins descubrieron los
+nuevo `build`. El orden es estable, sea cual sea el orden en que los complementos descubrieron los
 agentes. La barra de estado bajo el editor muestra `agent: <nombre>` y el aviso nombra el agente
 nuevo (`Agent: plan (read-only) · Shift+Tab cycles agents`). La elección se persiste como en
 `/agents` (`agents.active`) y se aplica **desde el siguiente prompt**.
@@ -259,13 +259,13 @@ nuevo (`Agent: plan (read-only) · Shift+Tab cycles agents`). La elección se pe
 - Con un selector, la lista de autocompletado o el panel de agentes abiertos, la tecla se deja
   pasar.
 - A diferencia del selector `/agents`, alternar nunca cambia el modelo ni inicia una sesión nueva.
-  Si el agente declara un modelo distinto del actual, el aviso lo dice; ejecute `/agents` para
+  Si el agente declara un modelo distinto del actual, el aviso lo dice; ejecuta `/agents` para
   aplicarlo.
 - Con `--read-only` no se pueden escribir los ajustes, así que la elección solo dura mientras vive
   el proceso.
 - Algunas terminales no distinguen Shift+Tab como tecla propia; `/agents` y `/agent:<id>` siempre
   funcionan.
-- Los permisos son otro eje: véase [Modos de permisos](#permission-modes).
+- Los permisos son otro eje: consulta [Modos de permisos](#permission-modes).
 
 ### Modo plan y revisión del plan {#plan-review}
 
@@ -312,7 +312,7 @@ tabla gobierna los presets de la web, así que un modo se comporta igual en amba
 
 - **Modo inicial.** Se deriva de los flags de arranque y solo etiqueta el estado: sin flags es
   `ask`, `--allow-write` solo es `auto`, `--allow-write --allow-process --allow-external` es `full`
-  y cualquier otra combinación es `custom`. Al arrancar no se cambia nada. Si los plugins o MCP ya
+  y cualquier otra combinación es `custom`. Al arrancar no se cambia nada. Si los complementos o MCP ya
   podían salir al exterior al arrancar, `/permission status` indica que `external` está activo.
 - **Se aplica entre turnos.** Cambiar el modo durante un turno se rechaza con un aviso. Un modo
   surte efecto desde la siguiente llamada a herramienta y reinicia las aprobaciones «Permitir
@@ -333,11 +333,11 @@ tabla gobierna los presets de la web, así que un modo se comporta igual en amba
 plantillas de prompt y los servidores MCP sin salir de la sesión. Solo se ejecuta **entre turnos**:
 se rechaza mientras hay un turno, un subagente, una aprobación o una [tarea en segundo plano](#tasks) en espera. Todo se valida **antes**
 de aplicar nada: primero se analiza la configuración y se construye una aplicación nueva junto a la
-actual, así que un archivo roto deja su sesión exactamente como estaba (el error explica por qué).
+actual, así que un archivo roto deja tu sesión exactamente como estaba (el error explica por qué).
 Si todo va bien, el informe lista por área qué cambió (recuentos y nombres añadidos, eliminados o
 actualizados), actualiza el autocompletado de comandos y conserva el modo de permisos que eligió.
 
-El código de plugins ya importado no se puede descargar: el informe nombra los plugins externos que
+El código de complementos ya importado no se puede descargar: el informe nombra los complementos externos que
 necesitan un reinicio para recoger cambios en su código, y los flags de arranque (`--allow-write`,
 `--read-only`, `--model`…) conservan su valor inicial. `alisio run` no tiene `/reload`.
 
@@ -400,7 +400,7 @@ aparte.
 | Comando | Qué hace |
 | --- | --- |
 | `/goal` | Con un objetivo: abre el menú (estado, pausar, reanudar, editar, presupuesto, borrar, ayuda). Sin uno: explica cómo iniciarlo |
-| `/proof` | Muestra el ledger de Proof (criterios de aceptación y evidencia) y lo gestiona: `add`, `edit`, `required`, `optional`, `na`, `export`; véase [Proof](#proof) |
+| `/proof` | Muestra el ledger de Proof (criterios de aceptación y evidencia) y lo gestiona: `add`, `edit`, `required`, `optional`, `na`, `export`; consulta [Proof](#proof) |
 | `/goal <objetivo>` | Crea el objetivo y empieza a trabajar. Un objetivo por sesión: si ya hay uno, pregunta antes de reemplazarlo |
 | `/goal <objetivo> budget=50k` | Igual, con un presupuesto de tokens (`50k`, `1.5M`, `250000`) |
 | `/goal pause` | Deja de continuar automáticamente; el turno en curso termina |
@@ -494,7 +494,7 @@ propone; aprobar los activa todos (la revisión web te deja decidir cada uno).
 
 ## Conectar un proveedor e iniciar sesión {#connect}
 
-`/connect` pregunta qué proveedor configurar. Cuando el plugin de ese proveedor declara métodos de
+`/connect` pregunta qué proveedor configurar. Cuando el complemento de ese proveedor declara métodos de
 inicio de sesión (`auth` en su registración), primero aparece un selector:
 
 - `Sign in · <método>`: una entrada por método, marcada `(unofficial)` cuando el proveedor no lo
@@ -507,26 +507,26 @@ inicio de sesión (`auth` en su registración), primero aparece un selector:
   listando a Alisio como aplicación autorizada; revócala en los ajustes de la cuenta del proveedor si
   lo quieres.
 
-Mientras corre el inicio de sesión, la TUI imprime como texto plano lo que muestra el plugin: la URL
-de autorización (con las instrucciones del plugin), o el código de dispositivo con su dirección de
-verificación, y las líneas de progreso. Una pregunta del plugin (por ejemplo pegar la URL final)
-abre un campo rotulado solo con el mensaje del propio plugin, enmascarado cuando el plugin lo marca
+Mientras corre el inicio de sesión, la TUI imprime como texto plano lo que muestra el complemento: la URL
+de autorización (con las instrucciones del complemento), o el código de dispositivo con su dirección de
+verificación, y las líneas de progreso. Una pregunta del complemento (por ejemplo pegar la URL final)
+abre un campo rotulado solo con el mensaje del propio complemento, enmascarado cuando el complemento lo marca
 como secreto. **Esc** cancela el inicio de sesión en cualquier momento: en ese campo, o en el
 selector de «espera» que se muestra mientras el paso del navegador está pendiente. Los caracteres de
-control del texto del plugin se eliminan antes de imprimir. Si el inicio de sesión tiene éxito,
+control del texto del complemento se eliminan antes de imprimir. Si el inicio de sesión tiene éxito,
 `/connect` continúa con la validación y la elección de modelo habituales.
 
 Un método marcado `unofficial` muestra primero un aviso fijo (el proveedor no ha autorizado
 oficialmente el método, el servicio puede cambiar y la cuenta podría ser restringida) y solo empieza
 después de que respondas que sí.
 
-El terminal ofrece al plugin un listener de loopback en `127.0.0.1` para la redirección salvo en una
+El terminal ofrece al complemento un listener de loopback en `127.0.0.1` para la redirección salvo en una
 sesión SSH (`SSH_CONNECTION` o `SSH_TTY`), donde tu navegador probablemente está en otro equipo; en
-ese caso solo está disponible pegar la URL (o un código de dispositivo, si el plugin lo ofrece). Es
+ese caso solo está disponible pegar la URL (o un código de dispositivo, si el complemento lo ofrece). Es
 una heurística. La sesión se guarda en texto plano en `credentials.json` (`0600`): es comodidad, no
-cifrado, y cualquier plugin cargado puede leerla. `alisio run` sin interfaz nunca inicia sesión:
+cifrado, y cualquier complemento cargado puede leerla. `alisio run` sin interfaz nunca inicia sesión:
 usa una sesión guardada y, si no hay, falla con un mensaje para iniciar sesión desde la interfaz web
-o la TUI. Consulta [Limitaciones](/es/limitations) y [Plugins](/es/plugins) para el contrato.
+o la TUI. Consulta [Limitaciones](/es/limitations) y [Complementos](/es/plugins) para el contrato.
 
 ## Gestor MCP {#mcp}
 
@@ -536,7 +536,7 @@ de las herramientas. Sin `--allow-mcp` al arrancar (o el `mcp.allow` global), **
 explica las consecuencias de proceso/red y ofrece una concesión **solo para esta sesión** o
 **Conceder y recordar** (que escribe `mcp.allow` y auto-conecta los servidores activados desde el
 siguiente arranque); una fila **Revocar consentimiento MCP global** borra esa preferencia y
-desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
+desconecta los servidores. `--read-only` bloquea todo el gestor. Consulta
 [Herramientas y permisos](/es/tools#mcp) para la configuración de servidores y
 [Configuración](/es/configuration#servidores-mcp) para `mcp.allow`.
 ## Teclas
@@ -551,15 +551,15 @@ desconecta los servidores. `--read-only` bloquea todo el gestor. Consulte
 | Ctrl+C | Borrar la entrada; interrumpir un turno activo; pulsado dos veces con la entrada vacía, salir |
 | Ctrl+D | Salir cuando la entrada está vacía |
 | `c` / `y` | Copiar la última respuesta del asistente como texto crudo (cuando la entrada está vacía) |
-| `x` | Expandir o plegar la fila plegable más cercana — una sección **Thought** terminada, un lote agrupado de llamadas a herramientas o una salida de comando larga (cuando la entrada está vacía; véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
-| Clic del ratón | En la fila de cabecera de un bloque plegable, expandirlo o plegarlo (véase [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
+| `x` | Expandir o plegar la fila plegable más cercana — una sección **Thought** terminada, un lote agrupado de llamadas a herramientas o una salida de comando larga (cuando la entrada está vacía; consulta [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
+| Clic del ratón | En la fila de cabecera de un bloque plegable, expandirlo o plegarlo (consulta [Visualización de herramientas y razonamiento](#tool-reasoning-display)) |
 | PgUp / PgDn, rueda del ratón | Desplazar la conversación |
 | Ctrl+Home / Ctrl+End | Ir al inicio / final de la conversación (Inicio / Fin mueven el cursor de la entrada) |
-| Shift+Tab | Alterna los agentes principales: `build`, `plan` y después sus agentes primarios, con vuelta al inicio (véase [Alternar agentes](#cycle-agents)) |
+| Shift+Tab | Alterna los agentes principales: `build`, `plan` y después sus agentes primarios, con vuelta al inicio (consulta [Alternar agentes](#cycle-agents)) |
 | Ctrl+X | Enfocar el [panel de agentes](#agent-panel) |
 | Ctrl+B | Pasar a segundo plano los agentes en primer plano en ejecución (durante un turno) |
 | Ctrl+K | Cancelar el agente seleccionado o visualizado |
-| Ctrl+V | Adjuntar una imagen del portapapeles (véase [Pegar](#paste-text-and-images)) |
+| Ctrl+V | Adjuntar una imagen del portapapeles (consulta [Pegar](#paste-text-and-images)) |
 | Ctrl+R | Quitar la última imagen adjuntada |
 
 `/exit`, doble Ctrl+C con la entrada vacía y Ctrl+D pasan por el mismo apagado acotado: lo que siga
@@ -747,15 +747,15 @@ pantalla local o APIs nativas de la plataforma que una sesión SSH simple no ofr
 integración con el portapapeles. El pegado de una sola línea de texto funciona igual que escribir.
 El pegado de varias líneas **no** se pega de forma atómica: la interfaz `readline` simple de Node no
 admite pegado con corchetes, así que cada salto de línea incluido se trata como su propio Enter, y
-se envía un mensaje por línea en lugar de un único mensaje combinado. Use la TUI completa (la
+se envía un mensaje por línea en lugar de un único mensaje combinado. Usa la TUI completa (la
 opción por defecto en una terminal interactiva) para pegar varias líneas o imágenes.
 
 ## Preguntar al usuario (ask_user_question) {#ask-user-question}
 
 El modelo puede hacer una o varias preguntas de opción múltiple con la herramienta
-`ask_user_question` (véase [Herramientas y permisos](/es/tools#ask-user-question)) —por ejemplo
+`ask_user_question` (consulta [Herramientas y permisos](/es/tools#ask-user-question)) —por ejemplo
 cuando hay una bifurcación real en el enfoque y la preferencia del usuario cambia lo que sigue—.
-También puede iniciarlo usted mismo con `/ask <pregunta>`: el agente propone 2 a 4 opciones
+También puedes iniciarlo tú mismo con `/ask <pregunta>`: el agente propone 2 a 4 opciones
 concretas para su propia pregunta (marcando una como `recommended` solo cuando tiene una opinión
 clara) y llama a la herramienta de inmediato.
 
@@ -801,16 +801,16 @@ sesión ya muerta. El [panel de agentes](#agent-panel) muestra a ese agente como
 mientras esté en cola o mostrándose.
 
 Los selectores propios de `/model` y `/resume` no forman parte de esta cola compartida: son comandos
-que usted mismo escribe, nunca concurrentes con la pregunta de un subagente.
+que tú mismo escribes, nunca concurrentes con la pregunta de un subagente.
 
 ## Respuestas truncadas {#truncated-responses}
 
 Cuando una respuesta se corta por `limits.maxOutputTokens` (razón de finalización `length`), el
 texto producido hasta ese momento se conserva y la ejecución termina con normalidad, pero la TUI
 añade un aviso visible: `Response cut by max output tokens — the answer may be incomplete.` Es un
-aviso, no un error: aumente `limits.maxOutputTokens` en su configuración para respuestas más largas
-(véase [Configuración](/es/configuration#limits)). Un checkpoint de compactación truncado se
-muestra con el marcador `partial` y apunta a `compaction.maxOutputTokens` (véase
+aviso, no un error: aumenta `limits.maxOutputTokens` en tu configuración para respuestas más largas
+(consulta [Configuración](/es/configuration#limits)). Un checkpoint de compactación truncado se
+muestra con el marcador `partial` y apunta a `compaction.maxOutputTokens` (consulta
 [Compactación de contexto](/es/compaction)). Los modos sin interfaz siguen siendo legibles por
 máquina: `alisio run --json` nunca imprime el texto del aviso y solo lleva el estado en los datos
 del evento — `run_completed` incluye `"truncated": true` cuando la respuesta final se cortó, y
@@ -823,12 +823,12 @@ presupuesto de tokens y el tiempo de espera de ejecución). Cuando una ejecució
 turnos, Alisio conserva todo lo producido hasta ese momento y termina la ejecución **suavemente**:
 la TUI añade un aviso amable —
 `Turn limit reached — the answer may be incomplete. Continue with another prompt or raise
-limits.maxTurns (/settings → Max turns).` — en lugar de un bloque de error, y usted puede
+limits.maxTurns (/settings → Max turns).` — en lugar de un bloque de error, y puedes
 simplemente escribir `continue` para seguir en la misma sesión (el transcript queda intacto). Los
 consumidores sin interfaz ven el evento `run_turns_exceeded` con el tope en sus datos, y el
 resultado de la ejecución trae `"status": "turns-exceeded"` con el texto parcial. Los subagentes
 que alcanzan su tope devuelven su informe parcial como salida utilizable con un marcador
-`turnsExceeded`, nunca como un fallo (véase [Subagentes](/es/subagents#turn-limit)).
+`turnsExceeded`, nunca como un fallo (consulta [Subagentes](/es/subagents#turn-limit)).
 
 ## Aprobaciones interactivas {#interactive-approvals}
 
@@ -844,7 +844,7 @@ directorio contenedor (una aprobación de sesión cubre el subárbol de ese dire
 `--read-only` no se pregunta y esas herramientas siguen desactivadas. Los modos headless nunca
 preguntan. El tiempo de espera de una aprobación no lo cuenta `limits.timeoutMs` (el límite de la ejecución cuenta tiempo activo). Las
 aprobaciones comparten la misma [cola interactiva](#ask-user-question) que `ask_user_question`, así
-que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulte
+que el aviso de aprobación de un subagente y su pregunta nunca compiten por la pantalla. Consulta
 [Herramientas y permisos](/es/tools) y [Modos de permisos](#permission-modes), que activan o
 desactivan estas aprobaciones de una sola vez.
 

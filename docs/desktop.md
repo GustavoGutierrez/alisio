@@ -1,14 +1,18 @@
 # Desktop app
 
-Alisio Desktop is the easiest way to use Alisio: install it like any other program and open it. No
-terminal is needed. It is made for everyday work (writing a thesis, preparing an exam, analyzing a
-spreadsheet, producing a report) on your own files, and it always asks permission before it reads
-or changes anything.
+Alisio Desktop is the easiest way to use Alisio: install it like any other program, open it and
+describe what you need. No terminal is needed. It is made for everyday work (writing a thesis,
+preparing an exam, analyzing a spreadsheet, producing a report) on your own files: you choose the
+folder, Alisio asks before it changes anything and you review the result before you use it. From
+the same window you can install plugins from the catalog, build your own with the
+[plugin creator](/plugin-creator) and connect tools and services from the
+[MCP catalog](/mcp-catalog).
 
-::: warning Experimental
-The desktop app is a thin Electron shell around the same local server as
-[`alisio serve`](/web). It is built from the repository and is **not published to npm**. There is no
-auto-update and the installers are not code-signed. See [Known limitations](#limitations).
+::: info Good to know
+The desktop app runs the same local server as [`alisio serve`](/web) in its own window. Download the
+installers from the [GitHub Releases page](https://github.com/GustavoGutierrez/alisio/releases); it
+is not published to npm. New versions are installed by downloading the new installer (there is no
+automatic update yet), and the installers are not code-signed. See [Known limitations](#limitations).
 :::
 
 The desktop app opens the [Web UI](/web) in its own window. It adds no features of its own: sessions,

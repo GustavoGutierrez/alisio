@@ -1,6 +1,6 @@
-# Escribir plugins
+# Escribir complementos
 
-Un plugin es un módulo ES cuya exportación por defecto es un objeto `Plugin`. El contrato está en
+Un complemento es un módulo ES cuya exportación por defecto es un objeto `Plugin`. El contrato está en
 [`@alisio/sdk`](https://www.npmjs.com/package/@alisio/sdk): tipos más dos utilidades
 (`definePlugin`, `textResult`), sin dependencias de runtime ni SDKs de proveedores.
 
@@ -27,10 +27,10 @@ export default definePlugin({
 });
 ```
 
-::: danger Los plugins son código de confianza
-Los plugins se ejecutan en el mismo proceso con todos los privilegios del proceso de Alisio. Ni un
-manifiesto de plugin ni un subproceso son un sandbox, y el campo `effect` no aísla nada. Cargue solo
-código en el que confíe.
+::: danger Los complementos son código de confianza
+Los complementos se ejecutan en el mismo proceso con todos los privilegios del proceso de Alisio. Ni un
+manifiesto de complemento ni un subproceso son un sandbox, y el campo `effect` no aísla nada. Carga solo
+código en el que confíes.
 :::
 
 ## El objeto `Plugin`
@@ -41,20 +41,20 @@ código en el que confíe.
 | `version` | SemVer, por ejemplo `0.1.0` o `0.1.0-beta.1` |
 | `apiVersion` | Siempre `1` |
 | `name`, `description` | Texto opcional y legible para el catálogo de `/plugins` |
-| `categories` | Categorías de catálogo opcionales (consulte la sección siguiente, Categorías de plugins). El host también deriva `model-provider` de los registros de proveedores |
+| `categories` | Categorías de catálogo opcionales (consulta la sección siguiente, Categorías de complementos). El host también deriva `model-provider` de los registros de proveedores |
 | `setup(api)` | Registra todo; puede ser asíncrono. Si falla, se revierten los registros parciales |
 | `extensions` | Opcional; proveedores declarativos para [puntos de extensión](#extension-points), registrados con prioridad 0 |
-| `dispose()` | Opcional; libera recursos cuando Alisio se cierra. Se ejecuta solo al cerrar, nunca al deshabilitar un plugin ni con `/reload`, y lo limita `pluginHooks.disposeTimeoutMs` (consulte [Cierre](#shutdown)) |
+| `dispose()` | Opcional; libera recursos cuando Alisio se cierra. Se ejecuta solo al cerrar, nunca al deshabilitar un complemento ni con `/reload`, y lo limita `pluginHooks.disposeTimeoutMs` (consulta [Cierre](#shutdown)) |
 
-`definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de plugin duplicados.
+`definePlugin` es una función de identidad que solo añade tipado. Se rechazan IDs de complemento duplicados.
 
-## Categorías de plugins
+## Categorías de complementos
 
 `categories` es una lista de agrupaciones de catálogo. La TUI agrupa las filas de `/plugins` por la
-primera categoría declarada y usa "General" cuando el plugin no declara ninguna; la vista de detalle
-lista todas las categorías. Los autores de plugins pueden declarar cualquier valor aceptado; el host
+primera categoría declarada y usa "General" cuando el complemento no declara ninguna; la vista de detalle
+lista todas las categorías. Los autores de complementos pueden declarar cualquier valor aceptado; el host
 solo deriva `model-provider` por su cuenta, a partir de los registros de proveedores. Las categorías
-describen qué hace el plugin, así que un mismo plugin puede declarar varias.
+describen qué hace el complemento, así que un mismo complemento puede declarar varias.
 
 | Categoría | Significado | Usada por los integrados |
 | --- | --- | --- |
@@ -72,32 +72,32 @@ describen qué hace el plugin, así que un mismo plugin puede declarar varias.
 | `decisions` | Proveedores de [Decision Intelligence](/es/decision-intelligence) (`api.decisions.registerProvider`) | — |
 
 El único proveedor de modelos integrado es `openai-compatible`. Los proveedores dedicados
-(DeepSeek, OpenCode Console (Zen), OpenCode Go) son plugins independientes publicados desde el
+(DeepSeek, OpenCode Console (Zen), OpenCode Go) son complementos independientes publicados desde el
 monorepo [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) e instalables con
 `alisio install npm:@alisio/plugin-{deepseek,opencode,opencode-go}`; una vez instalados se
-registran como plugins `model-provider` y aparecen en `/connect` y `/model`.
+registran como complementos `model-provider` y aparecen en `/connect` y `/model`.
 
-## Gestionar plugins en la TUI
+## Gestionar complementos en la TUI
 
-Ejecute `/plugins` para abrir el catálogo filtrable. `[x]`, `[ ]`, `[!]` y `[*]`
-significan activo, inactivo, fallido y reinicio necesario; las filas también distinguen los plugins
-integrados de etiquetas de origen externas seguras. Seleccione una fila para ver la descripción
+Ejecuta `/plugins` para abrir el catálogo filtrable. `[x]`, `[ ]`, `[!]` y `[*]`
+significan activo, inactivo, fallido y reinicio necesario; las filas también distinguen los complementos
+integrados de etiquetas de origen externas seguras. Selecciona una fila para ver la descripción
 completa, la categoría y la acción disponible.
 
 Los cambios actualizan atómicamente `.alisio/config.json` del proyecto actual y conservan los campos
 JSON no relacionados. Se aplican deliberadamente al iniciar Alisio de nuevo: los registros, hooks,
 almacenamiento y clientes de proveedor vivos no se eliminan parcialmente. Devolver un cambio al
-estado original del runtime elimina `restart-required`. Los plugins externos requieren un proyecto
+estado original del runtime elimina `restart-required`. Los complementos externos requieren un proyecto
 de confianza y confirmación explícita porque se ejecutan con todos los privilegios del proceso.
-Alisio impide desactivar un plugin de proveedor mientras lo retenga el proveedor activo o cualquier
-sesión enrutada viva, y también bloquea plugins con recursos de la sesión actual. Cambie de proveedor
-y cierre las sesiones retenidas, o reinicie Alisio, primero. Los perfiles y credenciales siguen
-siendo ajustes globales y nunca se copian a la configuración de plugins.
+Alisio impide desactivar un complemento de proveedor mientras lo retenga el proveedor activo o cualquier
+sesión enrutada viva, y también bloquea complementos con recursos de la sesión actual. Cambia de proveedor
+y cierra las sesiones retenidas, o reinicia Alisio, primero. Los perfiles y credenciales siguen
+siendo ajustes globales y nunca se copian a la configuración de complementos.
 
 ## Referencia de `PluginAPI`
 
 Cada método `register`/`on` devuelve una función para anular el registro. Todo lo que registra un
-plugin se elimina automáticamente cuando se descarga.
+complemento se elimina automáticamente cuando se descarga.
 
 | Miembro | Descripción |
 | --- | --- |
@@ -105,17 +105,17 @@ plugin se elimina automáticamente cuando se descarga.
 | `commands.register(name, handler, options?)` | Registra un comando; `handler(args: string, context?: { sessionId? }) => Promise<string>` devuelve el texto que se muestra al usuario (`sessionId` es la sesión actual de la interfaz interactiva, cuando se conoce). `options`: `{ description?, argumentHint? }`, mostrados en `/help` y en el autocompletado |
 | `events.on(handler)` | Observa los eventos versionados de ejecución (`RunEvent`: `schemaVersion`, `runId`, `sessionId`, `seq`, `type`, `timestamp`, `data`, más los opcionales `eventId` y `correlationId`). `KnownRunEvent` tipa el `data` de cada [evento que emite el núcleo](/es/architecture#run-events) |
 | `context.register(provider)` | `() => Promise<string>`; añade texto al contexto del modelo |
-| `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del plugin) |
-| `resources.agents(path)` | Añade un directorio de definiciones de agentes para plugins de delegación (consulte [Subagentes](/es/subagents#discovery-and-precedence)) |
-| `resources.list(kind)` | Directorios registrados por todos los plugins para `skills`, `prompts` o `agents`, con el ID del plugin |
-| `resources.prompts(path)` | Añade un directorio de [plantillas de prompts](/es/prompt-templates#templates-from-plugins) (`*.md`, relativo al archivo del plugin) |
-| `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por plugin, persistido en la base de datos de sesiones |
+| `resources.skills(path)` | Añade una raíz de Agent Skills (relativa al archivo del complemento) |
+| `resources.agents(path)` | Añade un directorio de definiciones de agentes para complementos de delegación (consulta [Subagentes](/es/subagents#discovery-and-precedence)) |
+| `resources.list(kind)` | Directorios registrados por todos los complementos para `skills`, `prompts` o `agents`, con el ID del complemento |
+| `resources.prompts(path)` | Añade un directorio de [plantillas de prompts](/es/prompt-templates#templates-from-plugins) (`*.md`, relativo al archivo del complemento) |
+| `state.get(key)` / `state.set(key, value)` | Estado JSON pequeño por complemento, persistido en la base de datos de sesiones |
 | `storage.sqlite(path)` | Abre un archivo SQLite privado (0600), creando los directorios padre (0700). Devuelve el puerto de almacenamiento `SqlDatabase` |
-| `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: use `api.views?.register(...)` |
-| `apps.register(app)` | Registra una [aplicación de plugin](#plugin-apps) de página completa junto al panel de proyectos. Ausente en un núcleo anterior: use `api.apps?.register(...)` |
-| `proof.registerVerifier(verifier)` | Registra un [verificador de Proof](#proof-verifiers) (`{ id, describe, run(input, ctx) }`) al que se enlazan los criterios como `<pluginId>:<id>`. Ausente en un núcleo anterior a Proof: use `api.proof?.registerVerifier(...)` |
-| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId, options?)` (`options.recommend` preselecciona Yes tras una acción explícita del usuario). Ausente en un núcleo anterior: use `api.decisions?.registerProvider(...)` |
-| `paths` | `{ state, config, cache }`: directorios por plugin resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
+| `views.register(view)` | Registra una [vista de datos](#data-views) con nombre y de solo lectura que los hosts, como la interfaz web, pueden leer. Ausente en un núcleo anterior: usa `api.views?.register(...)` |
+| `apps.register(app)` | Registra una [aplicación de complemento](#plugin-apps) de página completa junto al panel de proyectos. Ausente en un núcleo anterior: usa `api.apps?.register(...)` |
+| `proof.registerVerifier(verifier)` | Registra un [verificador de Proof](#proof-verifiers) (`{ id, describe, run(input, ctx) }`) al que se enlazan los criterios como `<pluginId>:<id>`. Ausente en un núcleo anterior a Proof: usa `api.proof?.registerVerifier(...)` |
+| `decisions.registerProvider(provider)` | Registra un proveedor de [Decision Intelligence](/es/decision-intelligence) (no lo activa); también `available()`, `activeProvider()`, `tryDecide(request, options?)` y el opcional `activate(providerId, options?)` (`options.recommend` preselecciona Yes tras una acción explícita del usuario). Ausente en un núcleo anterior: usa `api.decisions?.registerProvider(...)` |
+| `paths` | `{ state, config, cache }`: directorios por complemento resueltos por el host y creados con modo `0700` en la primera lectura. Ausente en un núcleo anterior |
 | `options` | `pluginOverrides[id].options` de solo lectura (o `{}`), congelado cuando se ejecuta `setup`. Ausente en un núcleo anterior |
 | `compaction.register({ beforeCompact, afterCompact })` | Hooks de compactación, ver más abajo |
 | `session.onStart(handler)` | El texto devuelto se inyecta una vez al comienzo de una sesión nueva y vacía (persistido en la sesión) |
@@ -131,9 +131,9 @@ plugin se elimina automáticamente cuando se descarga.
 | `ui.interactive()` | `true` cuando una interfaz interactiva puede responder a `select` |
 | `sessions.*` | Sesiones hijas, ver [más abajo](#child-sessions) |
 
-Los plugins de proveedores dependen solo de `@alisio/sdk`. Su factoría recibe por separado el
+Los complementos de proveedores dependen solo de `@alisio/sdk`. Su factoría recibe por separado el
 `profile` sin secretos, las `credentials` secretas y valores heredados opcionales. El núcleo controla
-la persistencia y la activación. La limpieza del registro participa en el rollback del plugin; si
+la persistencia y la activación. La limpieza del registro participa en el rollback del complemento; si
 falla la creación de un proveedor, el proveedor activo permanece intacto.
 
 ### Herramientas
@@ -152,15 +152,15 @@ interface ToolDefinition {
 
 `concurrent: true` permite que una llamada se ejecute a la vez que otras llamadas de lectura o
 concurrentes del mismo turno (las herramientas de delegación lo usan). `ToolContext` proporciona
-`signal`, `workspace`, `emit(data)` y `session`. Devuelva
+`signal`, `workspace`, `emit(data)` y `session`. Devuelve
 `textResult(text, isError?)`. El efecto controla los permisos ([Herramientas y permisos](/es/tools)):
-las operaciones desconocidas o de plugins usan `external` por defecto; declare `read` solo para
+las operaciones desconocidas o de complementos usan `external` por defecto; declara `read` solo para
 herramientas sin efectos secundarios.
 
 ### Resultados enriquecidos (bloques `ui`) {#ui-blocks}
 
 Un resultado de herramienta puede añadir partes `{ type: "ui", block }` junto a su texto. Un
-`UiBlock` son solo datos; los plugins nunca envían código de renderizado. Conserve siempre también
+`UiBlock` son solo datos; los complementos nunca envían código de renderizado. Conserva siempre también
 una parte de texto: los proveedores, la compactación y la salida headless solo ven la proyección de
 texto, y el bloque es una indicación de presentación.
 
@@ -195,16 +195,16 @@ return {
 | `test-results` | `suites` (`name`, `file?`, `cases`), `framework?`, `durationMs?` | Tabla de suite, caso, estado y tiempo, más los fallos |
 | `progress` | `steps` (`label`, `status`, `detail?`), `title?` | Una línea por paso con un glifo de estado |
 
-`UI_BLOCK_KINDS` lista todos los kinds. Acote los tamaños (unos 200 KB para un diff y 256 KB para la
+`UI_BLOCK_KINDS` lista todos los kinds. Acota los tamaños (unos 200 KB para un diff y 256 KB para la
 salida de terminal o el JSON serializado). Un kind que la versión de Alisio en ejecución no conoce, o
 un bloque mal formado, se muestra como JSON etiquetado en lugar de fallar, de modo que versiones
 anteriores pueden reproducir transcripciones más nuevas.
 
 ### Reglas de nombres y prefijos
 
-| Elemento | Plugin externo | Plugin integrado |
+| Elemento | Complemento externo | Complemento integrado |
 | --- | --- | --- |
-| Nombre de herramienta | `p_<hash>_<name>` (10 caracteres hexadecimales del SHA-256 del ID del plugin), para evitar colisiones y cumplir los límites de nombres del proveedor | Sin prefijo |
+| Nombre de herramienta | `p_<hash>_<name>` (10 caracteres hexadecimales del SHA-256 del ID del complemento), para evitar colisiones y cumplir los límites de nombres del proveedor | Sin prefijo |
 | Comando | `<plugin id>:<name>`, invocado como `/command acme.hello:name args` o `/acme.hello:name`; también desde `alisio run "/acme.hello:name args"`, que imprime el resultado sin llamar al modelo (`--json` imprime una línea `command_result`), y desde la paleta web | Sin prefijo (por ejemplo `/memory`) |
 | Efecto `internal` | Se degrada a `external` | Permitido |
 
@@ -234,8 +234,8 @@ export default definePlugin({
   resumidor) y `outputFields` (campos JSON adicionales de primer nivel, nombre → descripción,
   solicitados en la misma llamada al resumidor).
 - `afterCompact(result)` recibe además `model`, `replaced`, `structured`, `checkpoint`,
-  `checkpointText` y `extracted` (los campos de este plugin, **sin validar**: valídelos usted mismo).
-  Puede devolver `injectContext` (texto añadido tras el checkpoint; manténgalo dentro de un
+  `checkpointText` y `extracted` (los campos de este complemento, **sin validar**: valídalos tú mismo).
+  Puede devolver `injectContext` (texto añadido tras el checkpoint; mantenlo dentro de un
   presupuesto) y `report` (`summary` se muestra literalmente).
 
 ### Hooks de sesión y completados del modelo
@@ -255,7 +255,7 @@ api.session.onEnd(async (info) => {
 
 `SessionInfo` contiene `sessionId`, `model`, `workspace`, `reason` (`start`, `clear` o `exit`),
 `messages` y `signal`. `model.complete` usa el proveedor configurado (el modelo de la sesión cuando el
-plugin lo pasa) y no descuenta del presupuesto `limits.maxTokens`.
+complemento lo pasa) y no descuenta del presupuesto `limits.maxTokens`.
 
 ### Puerto de almacenamiento
 
@@ -269,12 +269,12 @@ const rows = db.prepare("SELECT * FROM notes").all();
 `SqlDatabase` es síncrono: `exec(sql)`, `prepare(sql)` (las sentencias se cachean por texto SQL y
 ofrecen `run`, `get`, `all`), `transaction(fn)` (transacción inmediata; las llamadas anidadas se unen
 a la exterior) y `close()`. FTS5 está disponible. El host proporciona el driver, por lo que los
-plugins nunca dependen de un runtime concreto.
+complementos nunca dependen de un runtime concreto.
 
 ### Vistas de datos {#data-views}
 
 Una vista de datos es una función con nombre que devuelve JSON para una sesión y que los hosts leen
-sin ejecutar una herramienta. `alisio serve` las expone a la interfaz web (el plugin de memoria
+sin ejecutar una herramienta. `alisio serve` las expone a la interfaz web (el complemento de memoria
 integrado alimenta así la [pestaña Memoria](/es/web#memory-tab)).
 
 ```ts
@@ -300,15 +300,15 @@ export default definePlugin({
 });
 ```
 
-- `id` son letras minúsculas, dígitos y guiones (hasta 40 caracteres) y es único dentro del plugin;
+- `id` son letras minúsculas, dígitos y guiones (hasta 40 caracteres) y es único dentro del complemento;
   `description` es obligatoria. `params` es un objeto JSON Schema de primitivos (`string`,
   `integer`, `number`, `boolean`; sin `$ref`) cuyas claves desconocidas se rechazan. Las cadenas de
   consulta se convierten a los tipos declarados y se aplican los valores por defecto antes de
   ejecutar `handler(params, { sessionId, workspace, signal })`. `ViewParamsError` convierte un
   parámetro que el esquema no puede expresar en un `400`.
 - Por HTTP una vista es `GET /api/sessions/:sid/views/:plugin/:view?<params>`, con la misma cookie
-  de sesión y las mismas reglas de Host y Origin que el resto de rutas. Solo responden los plugins
-  habilitados, la sesión debe existir y su workspace también, y una vista de otro plugin o de uno
+  de sesión y las mismas reglas de Host y Origin que el resto de rutas. Solo responden los complementos
+  habilitados, la sesión debe existir y su workspace también, y una vista de otro complemento o de uno
   deshabilitado es un `404`. Se aceptan como máximo 16 parámetros de consulta de 512 caracteres.
 - La respuesta es JSON de como máximo 1 MiB (`view_too_large`, 502) y el handler tiene 5 segundos
   (`view_timeout`, 504; `signal` aborta). Cualquier otro fallo es un `view_failed` genérico (502):
@@ -316,14 +316,14 @@ export default definePlugin({
   proyecto.
 - **Las vistas son de solo lectura por contrato, no por aislamiento.** El host solo controla el
   método, los parámetros validados, el tiempo y el tamaño; no puede impedir que el código de un
-  plugin escriba, y un handler que bloquee el bucle de eventos no se interrumpe con el timeout. Un
-  plugin no es un sandbox.
+  complemento escriba, y un handler que bloquee el bucle de eventos no se interrumpe con el timeout. Un
+  complemento no es un sandbox.
 
-### Aplicaciones de plugins {#plugin-apps}
+### Aplicaciones de complementos {#plugin-apps}
 
-Un plugin puede aportar una aplicación de página completa: una herramienta pequeña o una interfaz
+Un complemento puede aportar una aplicación de página completa: una herramienta pequeña o una interfaz
 completa de varias páginas que vive junto al panel de proyectos y es independiente del chat.
-Regístrela durante `setup`; el host la elimina cuando el plugin se cierra o cuando `setup` falla.
+Regístrala durante `setup`; el host la elimina cuando el complemento se cierra o cuando `setup` falla.
 
 ```ts
 import { definePlugin } from "@alisio/sdk";
@@ -354,9 +354,9 @@ export default definePlugin({
 ```
 
 - **Ids y etiquetas.** `id` sigue las reglas de las vistas (`^[a-z][a-z0-9-]{0,39}$`) y es único por
-  plugin; un duplicado lanza un error. `label` es un texto o `{ en, es }`; la web usa el idioma
+  complemento; un duplicado lanza un error. `label` es un texto o `{ en, es }`; la web usa el idioma
   activo. Los nombres de acción cumplen `^[A-Za-z][A-Za-z0-9_.-]{0,63}$`.
-- **Dónde aparece.** La web lista las aplicaciones de los plugins habilitados del proyecto abierto
+- **Dónde aparece.** La web lista las aplicaciones de los complementos habilitados del proyecto abierto
   en un grupo **Aplicaciones** justo encima de **Proyectos** (el grupo no se muestra si no hay
   ninguna) y refresca la lista cada 15 segundos. Una lista larga muestra cinco aplicaciones y un
   botón **Mostrar todas (N)**. Abrir una aplicación sustituye toda el área del
@@ -372,7 +372,7 @@ export default definePlugin({
   medios `data:`/`blob:`, `connect-src blob:`, `worker-src blob:`, `base-uri 'none'` y
   `form-action 'none'`: la página no alcanza la red, solo el host.
 - **Mensajes.** Al cargar, el host transfiere un `MessagePort` al frame con
-  `{ type: "alisio.app.connect", locale, visible }` (acepte el primer canal que venga de
+  `{ type: "alisio.app.connect", locale, visible }` (acepta el primer canal que venga de
   `window.parent`). Por el puerto el frame envía `{ type: "request", id, action, input }` y recibe
   `{ type: "response", id, result }` o `{ type: "response", id, error: <código> }`; el host también
   envía `{ type: "locale", locale }` y `{ type: "visibility", visible }`. Los códigos son
@@ -387,7 +387,7 @@ export default definePlugin({
   capacidades efectivas de la sesión. Un efecto que la sesión ya concede se ejecuta. Cuando el chat
   lo preguntaría (una acción `write` o `process` en una sesión que no es de solo lectura), el host
   abre la misma aprobación que una llamada a herramienta del chat, con las mismas opciones (permitir
-  una vez, permitir para la sesión, denegar): el aviso dice «Plugin · App quiere escribir archivos
+  una vez, permitir para la sesión, denegar): el aviso dice «Complemento · App quiere escribir archivos
   (acción)», se muestra sobre la app (el chat está oculto mientras hay una app abierta) y nunca
   incluye la entrada. «Permitir para la sesión» amplía la política de la sesión igual que el chat,
   así que las acciones de apps y las herramientas del chat con ese efecto dejan de preguntar.
@@ -399,23 +399,23 @@ export default definePlugin({
   pendiente. El rechazo nombra el efecto para que la app pueda decir qué activar:
   `{ type: "response", id, error: "not_permitted", effect: "write" | "process" }` por el puerto y
   `error.details.effect` en el cuerpo del error HTTP. La sesión sale de la ruta, nunca de la entrada (`context.sessionId`, `context.workspace`). Se comprueba en
-  cada llamada que el plugin esté habilitado. Límites: 37 MiB de petición, 90 MiB de resultado
+  cada llamada que el complemento esté habilitado. Límites: 37 MiB de petición, 90 MiB de resultado
   (`app_result_too_large`), 30 segundos (`app_action_timeout`, 504; `context.signal` aborta). El
   trabajo largo debe devolver un job enseguida en lugar de retener la petición. Los fallos son un
   `app_action_failed` genérico (502); las entradas y los resultados nunca se registran.
 - **Modelos y agentes.** Los handlers reutilizan `api.models`, `api.model.complete` y `api.sessions`;
   no necesitan un SDK de proveedor ni claves aparte.
 - **Un sandbox de navegador no es un sandbox de Node.** El frame está aislado en el navegador, pero
-  el backend del plugin es código de confianza en proceso con los privilegios de Alisio, y el
-  timeout de una promesa no detiene código que consume CPU. Deshabilitar un plugin bloquea de
+  el backend del complemento es código de confianza en proceso con los privilegios de Alisio, y el
+  timeout de una promesa no detiene código que consume CPU. Deshabilitar un complemento bloquea de
   inmediato las acciones nuevas, pero un puerto ya abierto no se revoca al instante.
 
-Consulte [`examples/plugins/hello-app`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/hello-app) para una aplicación mínima.
+Consulta [`examples/plugins/hello-app`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/hello-app) para una aplicación mínima.
 
 ### Decision Intelligence, rutas y opciones {#decision-intelligence}
 
 `api.decisions`, `api.paths` y `api.options` son **opcionales**: un núcleo anterior los omite, así
-que detecte cada uno por presencia y siga funcionando sin él.
+que detecta cada uno por presencia y sigue funcionando sin él.
 
 ```ts
 setup(api) {
@@ -425,30 +425,30 @@ setup(api) {
 }
 ```
 
-- **`api.decisions`** registra un proveedor de decisiones y permite que una herramienta de plugin
+- **`api.decisions`** registra un proveedor de decisiones y permite que una herramienta de complemento
   pida decisiones. El usuario activa un proveedor con `decisions.provider` en la configuración
-  global; instalar el plugin no basta. El contrato, los errores y el ciclo de vida están en
+  global; instalar el complemento no basta. El contrato, los errores y el ciclo de vida están en
   [Decision Intelligence](/es/decision-intelligence#writing-a-provider). Las herramientas reciben el
   lado consumidor como `context.decisions?.tryDecide(...)`, ligado a la ejecución actual. El
-  miembro opcional `api.decisions?.activate?.(providerId)` permite que un plugin pida al host, desde
+  miembro opcional `api.decisions?.activate?.(providerId)` permite que un complemento pida al host, desde
   un paso iniciado por el usuario, que un proveedor que registró pase a ser el activo: el usuario
-  confirma una vez y el host guarda `decisions.provider` en la global (véase
+  confirma una vez y el host guarda `decisions.provider` en la global (consulta
   [pedir la activación](/es/decision-intelligence#requesting-activation)).
 - **`api.paths`** ofrece `state` (`<raíz de estado>/plugins/<id>`), `config`
   (`<config home>/plugins/<id>`) y `cache` (`<raíz de estado>/plugins/<id>/cache`). La raíz de estado
-  es la que usan el análisis y los artefactos, así que respeta `--db`. Úselas en lugar de resolver
-  usted mismo las rutas XDG o `ALISIO_*`.
-- **`api.options`** contiene el JSON que usted o el usuario pusieron en `pluginOverrides[id].options`
-  de la configuración global (consulte [`pluginOverrides`](/es/configuration#plugins)). Es solo
+  es la que usan el análisis y los artefactos, así que respeta `--db`. Úsalas en lugar de resolver
+  tú mismo las rutas XDG o `ALISIO_*`.
+- **`api.options`** contiene el JSON que tú o el usuario pusieron en `pluginOverrides[id].options`
+  de la configuración global (consulta [`pluginOverrides`](/es/configuration#plugins)). Es solo
   global, de como máximo 8 KB, y una instantánea tomada en `setup`: cambiarlo requiere reiniciar. No
-  guarde secretos ahí.
+  guardes secretos ahí.
 
 ### Proveedores y consumidores de búsqueda semántica {#semantic-search}
 
 `api.semantic` y `context.semantic` son **opcionales**: un núcleo anterior los omite, así que
-detéctelos por presencia y siga funcionando sin ellos. El núcleo define dos puertos independientes y
+detéctalos por presencia y sigue funcionando sin ellos. El núcleo define dos puertos independientes y
 un servicio que los compone; **no incluye ningún motor** (ni base de datos vectorial, ni runtime de
-inferencia, ni modelo). La búsqueda semántica existe solo cuando el usuario instala un plugin que la
+inferencia, ni modelo). La búsqueda semántica existe solo cuando el usuario instala un complemento que la
 ofrece.
 
 ```ts
@@ -478,18 +478,18 @@ setup(api) {
 ```
 
 - **La activación es del usuario.** `semantic.embedding` y `semantic.store` en la configuración
-  **global** eligen los proveedores activos (vea [`semantic`](/es/configuration#semantic)); una
+  **global** eligen los proveedores activos (consulta [`semantic`](/es/configuration#semantic)); una
   configuración de proyecto no puede. Un proveedor puede ofrecer un paso de configuración iniciado por
   el usuario que llame a `api.semantic?.activate?.({ embedding, store })`: el host pregunta una vez,
   guarda los ids globalmente, nunca sobrescribe otro proveedor configurado y devuelve
   `needs_confirmation` cuando no hay a quién preguntar (headless).
-- **Las colecciones tienen espacio de nombres por plugin.** El host guarda
+- **Las colecciones tienen espacio de nombres por complemento.** El host guarda
   `<pluginId>/<collection>` y `collections()` lista solo las suyas, sin el prefijo. Evita colisiones
-  accidentales; **no es aislamiento**: los plugins son código de confianza en proceso.
+  accidentales; **no es aislamiento**: los complementos son código de confianza en proceso.
 - **Los modelos se vigilan.** Cada colección recuerda el `modelId` y las `dimensions` con que se
   creó. Si el usuario cambia de modelo, `index` y `search` rechazan con `model_mismatch` o
-  `dimension_mismatch`: borre la colección e indexe de nuevo desde su propio texto fuente, porque solo
-  usted lo conserva. `trySearch` devuelve `null` en ese caso para que pueda recurrir a otra vía.
+  `dimension_mismatch`: borra la colección e indexa de nuevo desde tu propio texto fuente, porque solo
+  tú lo conservas. `trySearch` devuelve `null` en ese caso para que puedas recurrir a otra vía.
 - **Los límites se comprueban antes de llamar a ningún proveedor** y fallan con `invalid_request`:
   1..256 textos por `embed` (hasta 32768 caracteres cada uno), hasta 1000 documentos por `index`,
   `topK` 1..100, ids de registro `^[A-Za-z0-9._:-]{1,128}$`, nombres de colección
@@ -505,8 +505,8 @@ setup(api) {
 
 ### Verificadores de Proof {#proof-verifiers}
 
-Un plugin puede aportar un verificador para los criterios de aceptación de [Proof](/proof). El
-miembro es **opcional**: detéctelo por presencia y el plugin sigue funcionando en un núcleo sin Proof.
+Un complemento puede aportar un verificador para los criterios de aceptación de [Proof](/proof). El
+miembro es **opcional**: detéctalo por presencia y el complemento sigue funcionando en un núcleo sin Proof.
 
 ```ts
 setup(api) {
@@ -537,13 +537,13 @@ sandbox, y nunca crea ni edita criterios.
 separada y persistida (contexto nuevo) con un vínculo a su padre, ejecutada por el mismo runner con
 permisos **reducidos**. Un hijo nunca puede obtener una capacidad, herramienta o aprobación que su
 padre no tenga, y abortar la ejecución de un padre aborta sus descendientes en ejecución. El núcleo no
-contiene lógica de agentes; el plugin de [subagentes](/es/subagents) está construido sobre este
+contiene lógica de agentes; el complemento de [subagentes](/es/subagents) está construido sobre este
 servicio.
 
 | Miembro | Descripción |
 | --- | --- |
 | `spawn(spec)` | Crea una sesión hija (`ChildSessionSpec`) y devuelve `ChildSessionInfo` |
-| `create(spec)` | Resuelve `spec.model`, si existe, y crea un hijo vinculado al proveedor; úselo para reemplazos de modelo |
+| `create(spec)` | Resuelve `spec.model`, si existe, y crea un hijo vinculado al proveedor; úsalo para reemplazos de modelo |
 | `run(id, prompt, { signal? })` | Ejecuta un turno en el hijo; resuelve un `ChildRunResult` (`status`, `text`, `usage`, `error?`) |
 | `get(id)`, `children(parentId)` | Información de la sesión (`id`, `parentId`, `depth`, `agent`, `title`, `status`, `model`, `workspace`, `usage`, `capabilities`, marcas de tiempo) |
 | `ancestors(id)` | IDs de los ancestros, del más cercano al más lejano |
@@ -606,7 +606,7 @@ api.tools.register({
   10 000 ms).
 - Cada hook recibe un `AbortSignal` que se aborta cuando vence el tiempo límite.
 - Un fallo o timeout se registra como evento `plugin_hook_failed` y el núcleo continúa sin la
-  contribución de ese plugin.
+  contribución de ese complemento.
 - Los hooks se ejecutan en el mismo proceso: el timeout detiene la espera y señala el `AbortSignal`,
   pero no puede detener código síncrono bloqueante.
 
@@ -614,26 +614,26 @@ api.tools.register({
 
 - `dispose()` se ejecuta cuando Alisio se cierra: salir de la interfaz de terminal, `SIGINT`,
   `SIGTERM` y `SIGHUP` (interfaz de terminal, `alisio serve` y `alisio run`) y el final de una
-  ejecución. **No** se ejecuta al deshabilitar un plugin ni con `/reload`, porque ambos requieren
+  ejecución. **No** se ejecuta al deshabilitar un complemento ni con `/reload`, porque ambos requieren
   reiniciar.
-- Los plugins se liberan en paralelo y cada uno está limitado por `pluginHooks.disposeTimeoutMs`
+- Los complementos se liberan en paralelo y cada uno está limitado por `pluginHooks.disposeTimeoutMs`
   (2000 ms por defecto, de 100 a 10000); un `dispose()` lento o colgado no retrasa a los demás, y su
-  fallo se informa sin detenerlos. Termine con holgura dentro de ese límite.
-- Una muerte súbita (`SIGKILL`, una caída) no puede cubrirse: un plugin que posee un proceso del
+  fallo se informa sin detenerlos. Termina con holgura dentro de ese límite.
+- Una muerte súbita (`SIGKILL`, una caída) no puede cubrirse: un complemento que posee un proceso del
   sistema operativo debe limpiar por sí mismo los que queden huérfanos.
 
 ## Puntos de extensión {#extension-points}
 
-Los puntos de extensión permiten que un plugin reemplace una parte del host con su propio proveedor.
+Los puntos de extensión permiten que un complemento reemplace una parte del host con su propio proveedor.
 Están tipados en `ExtensionPoints`; los puntos nuevos se añaden ahí sin romper los existentes.
 
 | Punto | Tipo de proveedor | Por defecto |
 | --- | --- | --- |
 | `mascot` | `MascotProvider`: `{ id, render(ctx: MascotContext) }` que devuelve un `string` o `string[]` | `DefaultAlisioMascot` (`alisio.default`) |
 | `startup-screen` | `StartupScreenProvider`: `{ id, render(ctx: StartupContext): string[] }` | `DefaultStartupScreen` (`alisio.default`) |
-| `websearch` | `SearchProvider`: `{ id, search(query, options?: { signal? }): Promise<SearchResult[]> }`, `SearchResult = { title, url, snippet }` | La cadena integrada: un `websearch.provider` configurado, o si no una instancia pública de SearXNG (véase [Herramientas y permisos](/es/tools#websearch)) |
+| `websearch` | `SearchProvider`: `{ id, search(query, options?: { signal? }): Promise<SearchResult[]> }`, `SearchResult = { title, url, snippet }` | La cadena integrada: un `websearch.provider` configurado, o si no una instancia pública de SearXNG (consulta [Herramientas y permisos](/es/tools#websearch)) |
 
-Registre un proveedor de forma imperativa, o declárelo en el objeto del plugin:
+Registra un proveedor de forma imperativa, o decláralo en el objeto del complemento:
 
 ```ts
 import { definePlugin } from "@alisio/sdk";
@@ -673,11 +673,11 @@ export const declarative = definePlugin({
 Para cada punto, el host elige exactamente un proveedor, de forma determinista:
 
 1. la mayor `priority`;
-2. después, el `id` del plugin en orden lexicográfico (los plugins se identifican por `id`, no por el
+2. después, el `id` del complemento en orden lexicográfico (los complementos se identifican por `id`, no por el
    nombre del paquete);
-3. después, el orden de registro dentro del mismo plugin.
+3. después, el orden de registro dentro del mismo complemento.
 
-El orden de carga entre plugins nunca influye. Los valores por defecto integrados solo se usan cuando
+El orden de carga entre complementos nunca influye. Los valores por defecto integrados solo se usan cuando
 no hay nada registrado, o como reemplazo de un proveedor que falla. Cuando varios proveedores empatan
 en la prioridad ganadora, el host informa un diagnóstico `extension_conflict` con `point`, `winner` y
 `losers` (como IDs `plugin/provider`). Los conflictos y los proveedores resueltos se muestran en
@@ -703,7 +703,7 @@ reutilizar la mascota ganadora.
 ### Reglas de seguridad
 
 - Los proveedores reciben **solo su contexto**: no deben leer globales, variables de entorno ni el
-  sistema de archivos. Respete `terminal.color`, `terminal.unicode` y `terminal.columns`.
+  sistema de archivos. Respeta `terminal.color`, `terminal.unicode` y `terminal.columns`.
 - Un proveedor que lanza una excepción, devuelve algo distinto de un string o un array de strings,
   devuelve demasiadas líneas (12 para una mascota, 60 para una pantalla) o tarda más de 250 ms se
   reemplaza por el valor por defecto, y se registra un diagnóstico `plugin_hook_failed`. El
@@ -723,7 +723,7 @@ reutilizar la mascota ganadora.
 
 El repositorio incluye un paquete de ejemplo en
 [`examples/plugins/custom-mascot`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-mascot)
-(`alisio-plugin-kite-mascot`, `id` de plugin `kite-mascot`). Solo depende de `@alisio/sdk`
+(`alisio-plugin-kite-mascot`, `id` de complemento `kite-mascot`). Solo depende de `@alisio/sdk`
 (dependencia peer) y distribuye JavaScript.
 
 ```ts
@@ -776,7 +776,7 @@ alisio --plugin ./examples/plugins/custom-mascot/dist/index.js
 
 Una registración de proveedor puede declarar `auth: ProviderAuthMethod[]` para que el usuario inicie
 sesión con una cuenta en lugar de pegar una clave. El host ejecuta el flujo, guarda la sesión, la
-renueva y la redacta; el plugin solo habla con su propio servicio.
+renueva y la redacta; el complemento solo habla con su propio servicio.
 
 ```ts
 api.providers.register({
@@ -822,16 +822,16 @@ api.providers.register({
   de la renovación se fusiona sobre la guardada.
 - `request.oauth.get()` devuelve una credencial válida (renovando antes) e
   `invalidate("sign_in_required")` avisa al host de que el proveedor rechazó la sesión.
-- Un plugin es código de confianza que corre en el proceso del host: puede leer la sesión guardada.
-  El host reduce la superficie (el asa existe solo con `auth` y está ligada al perfil), pero un plugin
+- Un complemento es código de confianza que corre en el proceso del host: puede leer la sesión guardada.
+  El host reduce la superficie (el asa existe solo con `auth` y está ligada al perfil), pero un complemento
   nunca es un sandbox.
 
 ### Ejemplo: proveedor de búsqueda personalizado
 
 [`examples/plugins/custom-websearch`](https://github.com/GustavoGutierrez/alisio/tree/main/examples/plugins/custom-websearch)
-(`alisio-plugin-brave-websearch`, `id` de plugin `brave-websearch`) envuelve
+(`alisio-plugin-brave-websearch`, `id` de complemento `brave-websearch`) envuelve
 [Brave Search](https://api.search.brave.com/) con una clave de API proporcionada por el usuario
-mediante el punto de extensión `websearch` — una referencia copiable para "traiga su propio motor
+mediante el punto de extensión `websearch` — una referencia copiable para "trae tu propio motor
 de búsqueda":
 
 ```ts
@@ -876,17 +876,17 @@ export BRAVE_SEARCH_API_KEY=...
 alisio --plugin ./examples/plugins/custom-websearch/dist/index.js --allow-external
 ```
 
-## Cargar plugins {#loading-plugins}
+## Cargar complementos {#loading-plugins}
 
-Los plugins solo se cargan desde orígenes de confianza explícita. Alisio instala un plugin solo cuando
-se lo pide: el comando `alisio install`, los botones de instalación de la interfaz web y de la
+Los complementos solo se cargan desde orígenes de confianza explícita. Alisio instala un complemento solo cuando
+se lo pides: el comando `alisio install`, los botones de instalación de la interfaz web y de la
 aplicación de escritorio, o la herramienta `plugin_install` tras su aprobación.
 
 | Origen | Confianza |
 | --- | --- |
 | `--plugin <path>`, `--plugin <package>` | Confianza explícita en esa entrada y sus dependencias |
 | `plugins` en el archivo de configuración | El propio archivo es de confianza (configuración global, `--config` o `--trust-project`) |
-| `<config home>/plugins/` (archivos o directorios) | Plugins globales: código personal de confianza |
+| `<config home>/plugins/` (archivos o directorios) | Complementos globales: código personal de confianza |
 | `<workspace>/.alisio/plugins/` | Solo con `--trust-project` |
 
 ```sh
@@ -898,7 +898,7 @@ alisio --plugin alisio-plugin-foo
 { "plugins": ["alisio-plugin-foo"] }
 ```
 
-`--read-only` desactiva los plugins ejecutables (externos). Los plugins integrados no se ven afectados.
+`--read-only` desactiva los complementos ejecutables (externos). Los complementos integrados no se ven afectados.
 
 **Resolución.** Una entrada con forma de ruta (empieza por `.`, es absoluta, contiene `\`, termina en
 una extensión JS/TS, o contiene `/` sin empezar por `@`) es un archivo o directorio. Cualquier otra
@@ -927,16 +927,16 @@ entrada (un paquete también puede incluirlo); la entrada debe permanecer dentro
 { "apiVersion": 1, "entry": "./index.js" }
 ```
 
-Compruebe lo que registra un plugin con:
+Comprueba lo que registra un complemento con:
 
 ```sh
 alisio plugins list
 alisio plugins doctor --plugin ./my-plugin.js
 ```
 
-## Instalar plugins desde npm {#installing-plugins-from-npm}
+## Instalar complementos desde npm {#installing-plugins-from-npm}
 
-La CLI puede instalar un paquete npm en el directorio GLOBAL de plugins de Alisio
+La CLI puede instalar un paquete npm en el directorio GLOBAL de complementos de Alisio
 (`<config home>/plugins`, por ejemplo `~/.config/alisio/plugins`) y registrar su NOMBRE npm en el
 array `plugins` de la configuración global — la misma entrada que hoy puedes escribir a mano:
 
@@ -944,8 +944,8 @@ array `plugins` de la configuración global — la misma entrada que hoy puedes 
 alisio install npm:plugin-openrouter          # última versión
 alisio install npm:@scope/plugin-x@1.2.3      # una versión fijada
 alisio install plugin-openrouter              # el nombre pelado es igual que npm:
-alisio install npm:plugin-openrouter --update # actualiza un plugin instalado a @latest
-alisio install --update                       # actualiza TODOS los plugins instalados en una sola llamada de npm
+alisio install npm:plugin-openrouter --update # actualiza un complemento instalado a @latest
+alisio install --update                       # actualiza TODOS los complementos instalados en una sola llamada de npm
 ```
 
 La especificación se valida antes de cualquier operación de red: `npm:<paquete>[@<versión>]`, o un
@@ -959,32 +959,32 @@ reintento exacto.
 `<config home>/plugins/node_modules/<paquete>` y su NOMBRE (nunca la ruta resuelta en el filesystem)
 se añade al array `plugins` de `<config home>/config.json` (escritura atómica, campos no relacionados
 conservados, sin duplicados). `alisio plugins list` muestra los paquetes instalados junto a los
-plugins de archivos/directorios.
+complementos de archivos/directorios.
 
 | Aspecto | Comportamiento |
 | --- | --- |
 | Alcance global | Una instalación sirve a todos los proyectos desde los que ejecutes Alisio |
-| Carga | El plugin se carga como código ejecutable en proceso dondequiera que carguen los plugins globales; debe declarar la keyword `alisio-plugin` para poder cargarse |
-| Confianza del proyecto | La configuración y los plugins PROPIOS de un proyecto solo cargan en proyectos de confianza (`--trust-project` o el aviso de confianza de una sola vez) |
-| `--read-only` | Se rechaza instalar y el plugin nunca carga (los plugins ejecutables están desactivados) |
+| Carga | El complemento se carga como código ejecutable en proceso dondequiera que carguen los complementos globales; debe declarar la keyword `alisio-plugin` para poder cargarse |
+| Confianza del proyecto | La configuración y los complementos PROPIOS de un proyecto solo cargan en proyectos de confianza (`--trust-project` o el aviso de confianza de una sola vez) |
+| `--read-only` | Se rechaza instalar y el complemento nunca carga (los complementos ejecutables están desactivados) |
 | Reinstalación | Si el paquete ya está instalado, el comando lo indica y sugiere `--update` en lugar de volver a ejecutar npm |
 | Scripts | `npm install` puede ejecutar scripts de ciclo de vida del paquete con tus privilegios — Alisio avisa y exige confirmación en terminal interactiva |
 | Headless / `--json` | Nunca pregunta: sin un `--yes` explícito (o `--trust-plugin`) falla con un error accionable antes de ejecutar npm |
 | Errores | Salida npm saneada, nombre del paquete y comando de reintento exacto en el mensaje final |
-| `--update` sin spec | Actualiza a `@latest` todos los plugins instalados en el directorio global de plugins con una sola llamada a `npm install --prefix`; mismas reglas de confirmación, `--yes` y `--read-only`; sin plugins instalados lo indica y termina con código 0 |
+| `--update` sin spec | Actualiza a `@latest` todos los complementos instalados en el directorio global de complementos con una sola llamada a `npm install --prefix`; mismas reglas de confirmación, `--yes` y `--read-only`; sin complementos instalados lo indica y termina con código 0 |
 
 La instalación es una acción global del usuario: no concede nada a ningún proyecto. La carga sigue la
-política existente de plugins ejecutables — el aviso de confianza de una sola vez (o `--trust-project`)
-es lo que permite a un proyecto cargar su propia configuración y plugins, y `--read-only` desactiva
-los plugins ejecutables por completo.
+política existente de complementos ejecutables — el aviso de confianza de una sola vez (o `--trust-project`)
+es lo que permite a un proyecto cargar su propia configuración y complementos, y `--read-only` desactiva
+los complementos ejecutables por completo.
 
 ### Conflictos de dependencias peer (`ERESOLVE`)
 
-Los plugins antiguos ya instalados pueden fijar un `@alisio/sdk` anterior mediante su rango peer,
-por lo que npm rechaza instalar un plugin nuevo que necesita un SDK más reciente (`ERESOLVE ...
-Conflicting peer dependency`). Alisio explica entonces la causa, lista los plugins instalados
+Los complementos antiguos ya instalados pueden fijar un `@alisio/sdk` anterior mediante su rango peer,
+por lo que npm rechaza instalar un complemento nuevo que necesita un SDK más reciente (`ERESOLVE ...
+Conflicting peer dependency`). Alisio explica entonces la causa, lista los complementos instalados
 implicados y no muestra la línea genérica de reintento, porque el reintento fallaría igual.
-Actualiza todos los plugins instalados juntos (hacerlo uno a uno vuelve a chocar con el mismo
+Actualiza todos los complementos instalados juntos (hacerlo uno a uno vuelve a chocar con el mismo
 conflicto) y luego repite la instalación original:
 
 ```sh
@@ -994,48 +994,48 @@ alisio install npm:@alisio/plugin-laya
 
 Alisio nunca sugiere `--force` ni `--legacy-peer-deps` para esto.
 
-En la interfaz web (**Ajustes → Plugins → Instalados**) esto es automático. **Actualizar todo**
-ejecuta un único `npm install` combinado de todos los plugins del catálogo con actualización.
-**Actualizar** en un solo plugin prueba primero ese plugin solo; si npm informa `ERESOLVE`, Alisio
-reintenta exactamente una vez como una sola instalación de ese plugin más los demás plugins del
-catálogo instalados que tienen una versión más reciente y compatible (los plugins locales `.tgz` y
-los que ya están al día no se tocan) y lista los plugins que se actualizaron junto con él. Si el
-conflicto persiste, no se intenta nada más y el error nombra los plugins implicados.
+En la interfaz web (**Ajustes → Complementos → Complementos instalados**) esto es automático. **Actualizar todo**
+ejecuta un único `npm install` combinado de todos los complementos del catálogo con actualización.
+**Actualizar** en un solo complemento prueba primero ese complemento solo; si npm informa `ERESOLVE`, Alisio
+reintenta exactamente una vez como una sola instalación de ese complemento más los demás complementos del
+catálogo instalados que tienen una versión más reciente y compatible (los complementos locales `.tgz` y
+los que ya están al día no se tocan) y lista los complementos que se actualizaron junto con él. Si el
+conflicto persiste, no se intenta nada más y el error nombra los complementos implicados.
 
-### El agente puede instalar un plugin por ti
+### El agente puede instalar un complemento por ti
 
-En la TUI, el modelo puede instalar un plugin a petición mediante la herramienta del host
+En la TUI, el modelo puede instalar un complemento a petición mediante la herramienta del host
 `plugin_install`: valida la especificación, ejecuta la **misma** rutina de instalación que
 `alisio install` y responde con el nombre del paquete, la versión instalada, la entrada de
 configuración y la ruta, más la nota de confianza. La herramienta usa el efecto `process`, así que
 pasa por la compuerta de permisos habitual — el aviso de aprobación en la TUI, o `--allow-process`
-en headless — y nunca está disponible con `--read-only`. Consulte
+en headless — y nunca está disponible con `--read-only`. Consulta
 [Herramientas y permisos](/es/tools#plugin-install).
 
 ```text
-Tú:    instala el plugin plugin-openrouter
+Tú:    instala el complemento plugin-openrouter
 Agente: (llama a plugin_install con spec "npm:plugin-openrouter", tú lo apruebas)
-Agente: Instalado el plugin "plugin-openrouter" v1.2.3 en
+Agente: Instalado el complemento "plugin-openrouter" v1.2.3 en
         ~/.config/alisio/plugins/node_modules/plugin-openrouter y añadido al array
-        "plugins" de ~/.config/alisio/config.json. El plugin carga como código
+        "plugins" de ~/.config/alisio/config.json. El complemento carga como código
         personal de confianza; --read-only impide que cargue. Ejecuta `alisio plugins
         list` para inspeccionarlo.
 ```
 
 ## Instalar desde la web y desde un archivo {#installing-from-the-web}
 
-La interfaz web y la [aplicación de escritorio](/es/desktop) instalan, actualizan y eliminan plugins
-en **Ajustes → Plugins**, con la misma advertencia de seguridad que la CLI. Las pantallas están en
-[Catálogo de plugins, instalación y actualizaciones](/es/web#plugin-catalog).
+La interfaz web y la [aplicación de escritorio](/es/desktop) instalan, actualizan y eliminan complementos
+en **Ajustes → Complementos**, con la misma advertencia de seguridad que la CLI. Las pantallas están en
+[Catálogo de complementos, instalación y actualizaciones](/es/web#plugin-catalog).
 
-- **Desde el catálogo.** Un plugin del catálogo se instala con un clic, en la versión del catálogo (la
+- **Desde el catálogo.** Un complemento del catálogo se instala con un clic, en la versión del catálogo (la
   última del registro cuando npm aún no sirve esa versión). Solo se pueden instalar así los paquetes
   listados en el catálogo, y `--read-only` lo rechaza.
 - **Actualizar en el sitio.** Instalar un paquete que ya está instalado lo reemplaza (actualización,
   reinstalación o versión anterior) y conserva una sola entrada en el array `plugins`. Una
   actualización fallida restaura la versión anterior.
-- **Desde un archivo (plugins privados).** Un plugin que nunca se publica se distribuye como tarball.
-  Se genera desde la carpeta del plugin (o deja que el [creador de plugins](/es/plugin-creator) lo
+- **Desde un archivo (complementos privados).** Un complemento que nunca se publica se distribuye como tarball.
+  Se genera desde la carpeta del complemento (o deja que el [creador de complementos](/es/plugin-creator) lo
   cree y lo empaquete por ti):
 
 ```sh
@@ -1043,34 +1043,34 @@ pnpm pack
 npm pack
 ```
 
-  Después elija el `.tgz` en **Instalar desde archivo**. Alisio lee solo `package/package.json` (un
-  lector gzip y tar propio: no hace falta el binario `tar`) y comprueba que sea un plugin de Alisio: la
+  Después elige el `.tgz` en **Instalar desde archivo**. Alisio lee solo `package/package.json` (un
+  lector gzip y tar propio: no hace falta el binario `tar`) y comprueba que sea un complemento de Alisio: la
   keyword `alisio-plugin`, un nombre npm válido y una versión semver, y un punto de entrada
   (`exports` o `main`). El archivo puede pesar hasta 50 MB y `package.json` hasta 1 MB; una entrada
   cuya ruta pudiera salir de la carpeta del paquete rechaza el archivo. Un rango del peer
   `@alisio/sdk` que no coincide con el SDK instalado es una advertencia, y los scripts `preinstall`,
   `install` o `postinstall` declarados se destacan.
-- **Dónde vive un plugin de archivo.** El tarball se copia a
+- **Dónde vive un complemento de archivo.** El tarball se copia a
   `<config home>/plugins/local-packages/<nombre>-<versión>.tgz` y npm instala desde esa copia, así que
   la dependencia `file:local-packages/...` de `<config home>/plugins/package.json` nunca apunta a un
-  archivo que pueda moverse. Actualizar reemplaza la copia guardada; desinstalar la elimina; un plugin
+  archivo que pueda moverse. Actualizar reemplaza la copia guardada; desinstalar la elimina; un complemento
   instalado desde una ruta fuera de `local-packages` se migra en su siguiente actualización. La carga
   se guarda temporalmente en `<state home>/tmp/plugin-uploads/` y se borra tras la instalación, un
   fallo o una cancelación; lo que quede con más de una hora se limpia. Una instalación fallida se
   revierte: la copia guardada, un paquete parcial y la entrada de configuración se restauran.
-- **Reinicio tras una actualización.** Node conserva el código de un plugin que ya cargó, así que la
-  actualización de un plugin cargado solo se ejecuta tras un reinicio. El resultado lo indica; la
-  aplicación de escritorio puede reiniciarse sola y `alisio serve` debe reiniciarlo usted.
-- **npm.** La CLI usa el `npm` de su `PATH`. La aplicación de escritorio incluye npm (`ALISIO_NPM_CLI`
-  lo señala), así que instala plugins sin Node.js en el sistema. Sin ninguno de los dos, el error dice:
+- **Reinicio tras una actualización.** Node conserva el código de un complemento que ya cargó, así que la
+  actualización de un complemento cargado solo se ejecuta tras un reinicio. El resultado lo indica; la
+  aplicación de escritorio puede reiniciarse sola y `alisio serve` debes reiniciarlo tú.
+- **npm.** La CLI usa el `npm` de tu `PATH`. La aplicación de escritorio incluye npm (`ALISIO_NPM_CLI`
+  lo señala), así que instala complementos sin Node.js en el sistema. Sin ninguno de los dos, el error dice:
   npm was not found: install Node.js, or use the desktop app, which bundles it.
-- **Desinstalar.** `DELETE /api/plugins/package/:name` (el botón **Desinstalar**) elimina un plugin
-  de npm del directorio global de plugins y su nombre de la configuración; los plugins integrados y
+- **Desinstalar.** `DELETE /api/plugins/package/:name` (el botón **Desinstalar**) elimina un complemento
+  de npm del directorio global de complementos y su nombre de la configuración; los complementos integrados y
   los de proyecto o locales no se pueden desinstalar desde la web.
 
-## Creador de plugins {#plugin-creator}
+## Creador de complementos {#plugin-creator}
 
-El [creador de plugins](/es/plugin-creator) de la interfaz web construye plugins a partir de una
+El [creador de complementos](/es/plugin-creator) de la interfaz web construye complementos a partir de una
 petición en lenguaje natural. Es una herramienta para usuarios no técnicos; esta sección es la
 referencia de lo que genera y expone.
 
@@ -1086,7 +1086,7 @@ creadora, que ejecuta el agente `plugin-creator` con el preset de permisos `ask`
 proyecto o la preparación completa, con entorno depurado y límite de tiempo). Las aprobaciones de una
 sesión creadora solo se muestran en su página mientras está abierta.
 
-### Estructura del plugin generado
+### Estructura del complemento generado
 
 ```text
 package.json          name, version, type: module, alisio.pluginId / icon / cover
@@ -1094,13 +1094,13 @@ src/index.js          ESM simple + JSDoc, el export por defecto es el objeto Plu
 test/harness.js       un PluginAPI falso con una base node:sqlite real en memoria
 test/*.test.js        suites de node:test (npm test = node --test test/)
 assets/icon.svg       icono provisional de 64x64
-assets/cover.svg      portada provisional de 1280x720 con el nombre del plugin
+assets/cover.svg      portada provisional de 1280x720 con el nombre del complemento
 README.md
 ```
 
 El contrato: JavaScript ESM simple, sin paso de compilación, sin dependencias en tiempo de ejecución,
 `@alisio/sdk` solo como peer opcional (nada lo importa en ejecución), la palabra clave
-`alisio-plugin`, un id de plugin con prefijo `local.` y la versión solo en `package.json`
+`alisio-plugin`, un id de complemento con prefijo `local.` y la versión solo en `package.json`
 (`src/index.js` la lee). Los paquetes se llaman `alisio-plugin-local-<slug>-<id>` y son privados
 (`UNLICENSED`) hasta que los publiques.
 
@@ -1115,7 +1115,7 @@ incrustadas, destinos externos en `href` o `url(...)`, `@import` y entidades XML
 
 ### Validación y compatibilidad
 
-Una preparación valida de forma estática, ejecuta las pruebas y una sonda que importa el plugin, y
+Una preparación valida de forma estática, ejecuta las pruebas y una sonda que importa el complemento, y
 luego empaqueta un `.tgz` determinista. Los hallazgos tienen códigos estables (por ejemplo
 `sdk_incompatible`, `api_member_unknown`, `forbidden_import`, `template_example`, `svg_unsafe`,
 `tests_missing`). El rango de `peerDependencies["@alisio/sdk"]` debe aceptar el SDK instalado (los
@@ -1141,16 +1141,16 @@ Todas las rutas cuelgan de `/api/plugin-creator/projects` y toda mutación se re
 | `GET /:id/package` | Descarga el `.tgz` (`plugin_not_built` si está desactualizado) |
 | `POST /:id/install` | Vuelve a preparar y luego instala con el trabajo de instalación de archivo local; requiere `confirmed: true` |
 
-## Plugins TypeScript
+## Complementos TypeScript
 
-- Los plugins publicados en npm **deben distribuir JavaScript**.
-- Los plugins `.ts` locales cargados con `--plugin` funcionan en Bun (y en el binario independiente) y
+- Los complementos publicados en npm **deben distribuir JavaScript**.
+- Los complementos `.ts` locales cargados con `--plugin` funcionan en Bun (y en el binario independiente) y
   en Node.js >= 22.18 mediante type stripping, que solo admite sintaxis borrable (sin `enum`,
   `namespace` ni parameter properties).
 - En versiones anteriores de Node.js, Alisio falla con un error claro que pide Bun, Node.js >= 22.18 o
   una compilación a JavaScript.
 
-## Paquete de plugin de ejemplo
+## Paquete de complemento de ejemplo
 
 ```text
 alisio-plugin-hello/
@@ -1191,12 +1191,12 @@ alisio-plugin-hello/
 }
 ```
 
-Usa la última versión publicada de `@alisio/sdk` al crear tu propio plugin — consulta
-`npm view @alisio/sdk version` para saber cuál es. Los plugins deben declarar `@alisio/sdk` como
+Usa la última versión publicada de `@alisio/sdk` al crear tu propio complemento — consulta
+`npm view @alisio/sdk version` para saber cuál es. Los complementos deben declarar `@alisio/sdk` como
 dependencia **peer** con `^0.2.0`: mientras Alisio sea 0.x, un rango con circunflejo solo acepta su
 propia versión menor, porque una versión menor nueva puede incluir cambios incompatibles, así que
-adoptas cada versión menor de forma explícita. Un plugin que deba funcionar con ambas líneas puede
-declarar `"^0.1.0 || ^0.2.0"`; los plugins publicados para 0.1 (como `@alisio/plugin-deepseek`)
+adoptas cada versión menor de forma explícita. Un complemento que deba funcionar con ambas líneas puede
+declarar `"^0.1.0 || ^0.2.0"`; los complementos publicados para 0.1 (como `@alisio/plugin-deepseek`)
 declaran `^0.1.0` hasta que se actualicen.
 
 `tsconfig.json`:
@@ -1253,7 +1253,7 @@ export default definePlugin({
 });
 ```
 
-Compílelo y pruébelo:
+Compílalo y pruébalo:
 
 ```sh
 npm install

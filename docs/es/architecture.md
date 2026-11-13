@@ -5,17 +5,17 @@ Alisio es un monorepo pnpm con nueve paquetes publicables. El adaptador del SDK 
 activación y la persistencia de proveedores.
 
 <div class="architecture-diagram" role="region" aria-label="Diagrama desplazable de la arquitectura de paquetes de Alisio" tabindex="0">
-  <img src="/assets/architecture.es.svg" alt="Dependencias entre paquetes de Alisio: la CLI conecta el núcleo, el SDK, memoria y subagentes; el núcleo depende del SDK y los plugins usan el SDK como peer dependency." width="714" height="1028" />
+  <img src="/assets/architecture.es.svg" alt="Dependencias entre paquetes de Alisio: la CLI conecta el núcleo, el SDK, memoria y subagentes; el núcleo depende del SDK y los complementos usan el SDK como peer dependency." width="714" height="1028" />
 </div>
 
 | Paquete | Función | Depende de |
 | --- | --- | --- |
-| `@alisio/sdk` | Contrato público de plugins: tipos más `definePlugin` y `textResult`. Sin imports de runtime ni de proveedores | Nada |
-| `@alisio/core` | Runner agnóstico del proveedor, registro/activación/persistencia de proveedores, herramientas, adaptadores de runtime, host de plugins, sesiones hijas, configuración y MCP | `@alisio/sdk`, cliente MCP, `ajv`, `yaml`, `zod` |
+| `@alisio/sdk` | Contrato público de complementos: tipos más `definePlugin` y `textResult`. Sin imports de runtime ni de proveedores | Nada |
+| `@alisio/core` | Runner agnóstico del proveedor, registro/activación/persistencia de proveedores, herramientas, adaptadores de runtime, host de complementos, sesiones hijas, configuración y MCP | `@alisio/sdk`, cliente MCP, `ajv`, `yaml`, `zod` |
 | `@alisio/plugin-openai-compatible` | Adaptador integrado Chat Completions/Responses y descubrimiento de modelos | `@alisio/sdk` (peer), `openai` |
-| `@alisio/plugin-memory` | Plugin integrado de memoria persistente | `@alisio/sdk` (peer), `zod` |
-| `@alisio/plugin-subagents` | Plugin integrado de [subagentes](/es/subagents): definiciones de agentes, herramientas de delegación, límites, worktrees de git y el árbol de agentes | `@alisio/sdk` (peer), `yaml`, `zod` |
-| `alisio` | CLI, TUI y registro que conecta los plugins integrados de proveedor, memoria y subagentes | `@alisio/core`, todos los plugins integrados, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
+| `@alisio/plugin-memory` | Complemento integrado de memoria persistente | `@alisio/sdk` (peer), `zod` |
+| `@alisio/plugin-subagents` | Complemento integrado de [subagentes](/es/subagents): definiciones de agentes, herramientas de delegación, límites, worktrees de git y el árbol de agentes | `@alisio/sdk` (peer), `yaml`, `zod` |
+| `alisio` | CLI, TUI y registro que conecta los complementos integrados de proveedor, memoria y subagentes | `@alisio/core`, todos los complementos integrados, `@alisio/sdk`, `@earendil-works/pi-tui`, `commander` |
 
 Los proveedores dedicados de modelos (DeepSeek, OpenCode Console (Zen), OpenCode Go) son paquetes
 `@alisio/plugin-*` publicados desde el monorepo
@@ -27,58 +27,58 @@ contratos del núcleo del agente.
 
 ## Puerto de almacenamiento
 
-Los plugins nunca importan un driver SQLite. `api.storage.sqlite(path)` devuelve el puerto
+Los complementos nunca importan un driver SQLite. `api.storage.sqlite(path)` devuelve el puerto
 `SqlDatabase` definido en `@alisio/sdk` (`exec`, `prepare`, `transaction`, `close`), implementado por
-`@alisio/core` sobre `node:sqlite` con FTS5. El plugin de memoria está escrito únicamente contra este
+`@alisio/core` sobre `node:sqlite` con FTS5. El complemento de memoria está escrito únicamente contra este
 puerto, y por eso solo depende del SDK y de `zod`.
 
-## Plugins integrados y externos
+## Complementos integrados y externos
 
 | | Integrado | Externo |
 | --- | --- | --- |
-| Origen | Registro en la CLI (`packages/cli/src/builtin.ts`) | `--plugin`, configuración `plugins`, directorios de plugins globales o de proyecto de confianza |
+| Origen | Registro en la CLI (`packages/cli/src/builtin.ts`) | `--plugin`, configuración `plugins`, directorios de complementos globales o de proyecto de confianza |
 | Ruta de confianza | Ruta de confianza del host, también con `--read-only`, sin `--trust-project` | Solo confianza explícita; desactivados por `--read-only` |
 | Nombres | Herramientas y comandos sin prefijo | Prefijo `p_<hash>_` en herramientas, comandos `id:name` |
 | Efecto `internal` | Permitido | Se degrada a `external` |
-| Configuración | `builtinPlugins.<id>`; se desactiva con `enabled: false` o `--disable-plugin <id>` | Específica de cada plugin |
+| Configuración | `builtinPlugins.<id>`; se desactiva con `enabled: false` o `--disable-plugin <id>` | Específica de cada complemento |
 
 El núcleo no contiene referencias a la memoria: la CLI pasa su registro a `createApplication`. Añadir
-otro plugin integrado consiste en agregar una entrada a ese registro.
+otro complemento integrado consiste en agregar una entrada a ese registro.
 
 ## Sesiones hijas
 
 `@alisio/core` proporciona un servicio genérico de sesiones hijas (`packages/core/src/sessions/children.ts`),
-expuesto a los plugins como `api.sessions`. Una sesión hija es una conversación persistida con un
+expuesto a los complementos como `api.sessions`. Una sesión hija es una conversación persistida con un
 vínculo a su padre que se ejecuta con el mismo runner y permisos reducidos: las herramientas, las
 capacidades y las aprobaciones se intersecan con las del padre, un padre de solo lectura hace que todo
 el subárbol sea de solo lectura, y abortar un padre aborta sus descendientes en ejecución. Al arrancar,
 los hijos que quedaron en ejecución o en cola se marcan como `interrupted`. El servicio no contiene
 lógica de agentes: las definiciones, los límites, las colas, los worktrees de git y el árbol de agentes
 están en `@alisio/plugin-subagents`, y la TUI solo renderiza paneles genéricos (`api.ui.panel`) y vistas
-de sesión de solo lectura. Consulte [Sesiones hijas](/es/plugins#child-sessions).
+de sesión de solo lectura. Consulta [Sesiones hijas](/es/plugins#child-sessions).
 
 ## Registro de extensiones
 
-`@alisio/core` mantiene un registro de extensiones tipado en el host de plugins
-(`packages/core/src/extensions`). Los plugins registran proveedores para los puntos declarados en
+`@alisio/core` mantiene un registro de extensiones tipado en el host de complementos
+(`packages/core/src/extensions`). Los complementos registran proveedores para los puntos declarados en
 `ExtensionPoints` de `@alisio/sdk` (`mascot`, `startup-screen`). La resolución es determinista e
-independiente del orden de carga de los plugins: mayor prioridad, después ID del plugin y después
-orden de registro dentro de un plugin; los empates en la prioridad ganadora se informan como
+independiente del orden de carga de los complementos: mayor prioridad, después ID del complemento y después
+orden de registro dentro de un complemento; los empates en la prioridad ganadora se informan como
 diagnósticos `extension_conflict`. `renderStartup` (`packages/core/src/startup`) resuelve los
 proveedores, valida, sanea y recorta su salida, y recurre a `DefaultAlisioMascot` y
 `DefaultStartupScreen` cuando un proveedor falla. La CLI (`packages/cli/src/banner.ts`) solo decide
-cuándo mostrar la pantalla y detecta las capacidades de la terminal. Consulte
+cuándo mostrar la pantalla y detecta las capacidades de la terminal. Consulta
 [Puntos de extensión](/es/plugins#extension-points).
 
 ## Runtime
 
 Alisio se ejecuta en Node.js >= 22.16 o Bun >= 1.4.2. Ambos proporcionan `node:sqlite`, que guarda las
-sesiones (conversación, eventos, journal de herramientas, estado de plugins, bloqueo de sesión) y la
+sesiones (conversación, eventos, journal de herramientas, estado de complementos, bloqueo de sesión) y la
 memoria. Node.js 22.16 es el mínimo porque las compilaciones 22.x anteriores carecen de FTS5.
 
 ## Eventos de ejecución {#run-events}
 
-El runner informa del progreso como `RunEvent`: a los integradores mediante `onEvent`, a los plugins
+El runner informa del progreso como `RunEvent`: a los integradores mediante `onEvent`, a los complementos
 (`events.on`) y como JSONL con `alisio run --json`. `schemaVersion` sigue en `1` mientras los cambios
 sean aditivos, por lo que los consumidores deben ignorar campos y tipos de evento desconocidos. Con el
 Context Governor en `shadow` o `on`, cada petición al modelo emite además un evento duradero
@@ -99,7 +99,7 @@ ausente si el proveedor no transmitió nada). El límite de ejecución `limits.t
 activo**: el runner mantiene un reloj pausable por ejecución y toda espera de una persona
 (aprobaciones de herramientas y de directorios externos, `ask_user_question`, la revisión del plan) lo
 pausa mediante un único registro, `HumanWaits`, que comparten el runner, la interfaz interactiva del
-host de plugins y la aprobación de directorios externos, así que un host que enlaza una interfaz
+host de complementos y la aprobación de directorios externos, así que un host que enlaza una interfaz
 obtiene el comportamiento sin código adicional. Una sesión hija que espera a una persona también pausa
 a sus ancestros; un padre que espera a su hijo no se pausa. `run_failed` es aditivo para los límites de tiempo: una
 ejecución detenida por `limits.timeoutMs` o `limits.firstTokenTimeoutMs` termina como `failed` con
@@ -115,7 +115,7 @@ Una respuesta cortada por el presupuesto de tokens de salida antes de ser útil 
 decir un mensaje `completed` con `truncated: true`, sin texto ni llamada a herramienta, o con una
 llamada cuyos argumentos no son un JSON completo; o un fallo del proveedor con
 `code: "output_truncated"`, el `OutputTruncatedError` tipado de `@alisio/sdk`, o el texto heredado de
-plugins antiguos) se recupera hasta `limits.truncationRecoveries` veces (por defecto 2). El runner
+complementos antiguos) se recupera hasta `limits.truncationRecoveries` veces (por defecto 2). El runner
 descarta las llamadas cortadas (nunca se ejecutan ni se persisten, así que toda llamada guardada
 conserva su resultado), conserva el texto visible como un mensaje normal del asistente, emite
 `truncation_recovery` (`attempt`, `of`, `reason`: `tool_call_cut` o `empty_response`,
@@ -172,11 +172,11 @@ los adjuntos en línea, que siguen funcionando sin cambios.
 ## Catálogo de comandos {#command-catalog}
 
 `CommandCatalog` lista, resuelve y ejecuta los comandos de barra para todas las superficies. Sus
-fuentes son los comandos integrados (`BUILTIN_COMMANDS`), los comandos de plugins, las plantillas de
+fuentes son los comandos integrados (`BUILTIN_COMMANDS`), los comandos de complementos, las plantillas de
 prompt y las skills efectivas (`skill:<id>`); ante una colisión de nombres gana la primera fuente en
 ese orden. Cada `CommandDescriptor` declara sus `surfaces` (`tui`, `web`, `api`) y su `execution`: los
 comandos `core` (`compact`, `model`, `effort`, `clear`/`new`, `sessions`, `resume`, `stats`, `tools`,
-`skills`, `plugins`, `mcp`, `agents` y los comandos de plugins) se ejecutan con
+`skills`, `plugins`, `mcp`, `agents` y los comandos de complementos) se ejecutan con
 `execute(name, args, { sessionId })`; los comandos `surface` (`help`, `connect`, `settings`, `copy`,
 `ask`, `exit`, plantillas y skills) los gestiona cada UI. La TUI toma su lista de comandos y la
 resolución de nombres del catálogo y le delega `/tools` y `/sessions`; su salida no cambia.

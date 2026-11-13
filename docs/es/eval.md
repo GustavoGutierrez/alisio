@@ -222,7 +222,7 @@ configuración:
 ```
 
 Solo se aceptan claves de la configuración medida; una clave desconocida, o una que no entra en el hash
-de configuración (proveedor, plugins, MCP, rutas), rechaza el archivo antes de la primera ejecución.
+de configuración (proveedor, complementos, MCP, rutas), rechaza el archivo antes de la primera ejecución.
 Para comparar modelos usa `--model`. Las variantes se ejecutan intercaladas (A, B, luego B, A...) sobre
 las mismas tareas, repeticiones y semillas, lo que reparte la deriva del proveedor sin eliminarla. Cada
 variante tiene su propio directorio de reporte, más `comparison.json` y `comparison.md` en la raíz.
@@ -496,7 +496,7 @@ del propietario. Tras un cambio intencional del arnés, regraba con `pnpm eval:r
   `alisio eval variants long-context-stress --variants tests/fixtures/eval/long-context-stress/compare.json`
   y lee el conteo del incidente `compaction` de cada variante. Ver [Resultados medidos](#measured).
 - **Solo está verificado el proveedor compatible con OpenAI desde un archivo de configuración**; el
-  proveedor se resuelve una vez por comando, así que un plugin de proveedor que lea credenciales de
+  proveedor se resuelve una vez por comando, así que un complemento de proveedor que lea credenciales de
   forma perezosa en cada petición puede no funcionar.
 
 Consulta [Limitaciones conocidas](/es/limitations) para el alcance de la verificación.

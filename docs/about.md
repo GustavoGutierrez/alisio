@@ -1,31 +1,35 @@
 # About Alisio
 
-**Alisio is a desktop AI harness for the everyday work of non-technical people:** teachers,
-students, secretaries and office staff, accountants and the home. It installs with one click, works
-on your own files and always asks permission. It specializes through plugins per profession and
-delivers ready-to-use results: PDFs, spreadsheets, charts, reports and dashboards. Programming is
-still possible, but it is an advanced, secondary use.
+**Alisio is a desktop app with artificial intelligence that helps you with tasks from your work,
+your studies and your daily life.** Describe what you need: Alisio organizes the steps, uses the
+tools available and helps you reach a result you can review and use, such as a PDF, a spreadsheet, a
+chart, a report or a dashboard. It is made for people who know their craft (teachers, students,
+office staff, accountants and anyone at home) and want a simple way to put AI to work, without
+learning engineering first. Programming is still possible, but it is an advanced, secondary use.
 
-Under the hood it is a harness with its own TypeScript core. It connects to any OpenAI-compatible
-endpoint and drives its own tool loop. It runs in the desktop app, in your terminal (an interactive
-TUI, or headless for scripts and CI) or in your browser with `alisio serve`.
+At the advanced level, Alisio has its own TypeScript core. It connects to any OpenAI-compatible
+model service and drives its own tool loop. It runs in the desktop app, in your terminal (an
+interactive TUI, or headless for scripts and CI) or in your browser with `alisio serve`.
 
 ## Pillars
 
-1. **Easy.** A desktop app, no terminal needed. See [Desktop app](/desktop).
-2. **Your files, your control.** Local-first, with explicit permissions: reads by default, and
-   writes ask first. See [Tools & permissions](/tools#permission-flags).
-3. **Plugins per profession.** Thesis, exams, accounting, certificates, research. See
-   [Writing plugins](/plugins).
-4. **Deliverable results.** Documents, spreadsheets, charts and dashboards. See [Forja](/forja) and
-   [Data analysis](/analysis).
-5. **Any model.** OpenAI-compatible endpoints, DeepSeek, OpenRouter and others. See
-   [Configuration](/configuration).
+1. **Easy to start.** A desktop app, no terminal needed. See [Desktop app](/desktop).
+2. **Your files, your decisions.** You choose the folder, and Alisio asks before it changes files or
+   runs programs. Working with local files does not mean nothing leaves your computer: what Alisio
+   reads is sent to the model you configured. See [Tools & permissions](/tools#permission-flags).
+3. **Apps for your work.** Install plugins from the catalog or build your own with the
+   [plugin creator](/plugin-creator); connect tools and services from the
+   [MCP catalog](/mcp-catalog). See [Writing plugins](/plugins).
+4. **Results you can use.** Documents, spreadsheets, charts and dashboards you review and adjust.
+   See [Forja](/forja) and [Data analysis](/analysis).
+5. **The model you choose.** An online service (OpenAI-compatible, DeepSeek, OpenRouter and others)
+   or a compatible model server on your own computer. See [Configuration](/configuration).
 
 ## Who it is for
 
 This table lists only what exists today. The external plugins live in the public
-[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository and install with
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository. Install them in
+one click from **Settings → Plugins → Plugin catalog** in the app, or with
 `alisio install npm:<package>`; they are **not bundled in the desktop app yet** (see
 [Desktop app](/desktop#limitations)).
 

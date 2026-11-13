@@ -2,7 +2,7 @@
 
 Una plantilla de prompt es un archivo Markdown que se expande en un turno normal del usuario cuando
 escribe `/name args`. Alisio incluye una plantilla integrada, [`/init`](#built-in-init), y carga
-otras desde plugins, su directorio de usuario y proyectos de confianza.
+otras desde complementos, su directorio de usuario y proyectos de confianza.
 
 ## Formato
 
@@ -57,12 +57,12 @@ mismo nombre.
 | Nivel | Ubicación | Cuándo |
 | --- | --- | --- |
 | builtin | Incluidas en la CLI (`/init`) | Siempre |
-| plugin | Directorios registrados con `api.resources.prompts(dir)` | Cuando el plugin está cargado |
+| complemento | Directorios registrados con `api.resources.prompts(dir)` | Cuando el complemento está cargado |
 | user | `<config home>/prompts/` (`~/.config/alisio/prompts` o `$ALISIO_CONFIG_HOME/prompts`) | Siempre |
 | project | `<workspace>/.alisio/prompts/` | Solo cuando el proyecto es de confianza |
 
-Solo se leen los archivos `*.md` situados directamente en cada directorio. Si varios plugins definen
-el mismo nombre, se resuelve por ID de plugin y después por orden de registro.
+Solo se leen los archivos `*.md` situados directamente en cada directorio. Si varios complementos definen
+el mismo nombre, se resuelve por ID de complemento y después por orden de registro.
 
 ## Confianza
 
@@ -79,8 +79,8 @@ Los problemas nunca detienen Alisio; se listan en `/stats` en la TUI.
 | --- | --- |
 | `prompt_invalid` | Un archivo no superó la validación (frontmatter, nombre, tamaño o cuerpo vacío) y se omitió |
 | `prompt_override` | Un nivel superior reemplazó una plantilla de un nivel inferior |
-| `prompt_conflict` | Varios plugins definieron el mismo nombre; el ganador se elige por ID de plugin y después por orden de registro |
-| `prompt_shadowed` | Una plantilla intentó usar el nombre o alias de un comando de la TUI (por ejemplo `/help`, `/new`) o el nombre de un comando de plugin, y se ignoró |
+| `prompt_conflict` | Varios complementos definieron el mismo nombre; el ganador se elige por ID de complemento y después por orden de registro |
+| `prompt_shadowed` | Una plantilla intentó usar el nombre o alias de un comando de la TUI (por ejemplo `/help`, `/new`) o el nombre de un comando de complemento, y se ignoró |
 
 ## Requisitos
 
@@ -98,7 +98,7 @@ Los problemas nunca detienen Alisio; se listan en `/stats` en la TUI.
 
 Las plantillas aparecen como comandos con barra en una sección propia de `/help` y en el
 autocompletado, con su descripción y su sugerencia de argumentos. Ejecutar una transmite un turno
-normal del usuario con herramientas y aprobaciones. La conversación muestra lo que usted escribió
+normal del usuario con herramientas y aprobaciones. La conversación muestra lo que escribiste
 (por ejemplo `/init focus on tests`) en lugar del prompt completo renderizado; ese texto se persiste
 como la visualización del mensaje y lo reutiliza `/resume`.
 
@@ -115,7 +115,7 @@ Un `/name` que no es una plantilla (ni `/skill:name`) se envía al modelo litera
 
 ## Escribir una plantilla
 
-Guarde esto como `~/.config/alisio/prompts/explain.md`:
+Guarda esto como `~/.config/alisio/prompts/explain.md`:
 
 ```md
 ---
@@ -126,13 +126,13 @@ Read $1 and explain what it does, how it fits in this repository and the non-obv
 Write for this audience: $2
 ```
 
-Después ejecute `/explain src/index.ts "a new contributor"` en la TUI, o
+Después ejecuta `/explain src/index.ts "a new contributor"` en la TUI, o
 `alisio run '/explain src/index.ts "a new contributor"'`.
 
-## Plantillas desde plugins {#templates-from-plugins}
+## Plantillas desde complementos {#templates-from-plugins}
 
-Un plugin registra un directorio de plantillas con `resources.prompts`; la ruta es relativa al
-archivo del plugin.
+Un complemento registra un directorio de plantillas con `resources.prompts`; la ruta es relativa al
+archivo del complemento.
 
 ```ts
 import { definePlugin } from "@alisio/sdk";
@@ -147,8 +147,8 @@ export default definePlugin({
 });
 ```
 
-Las plantillas de usuario y de proyecto con el mismo nombre reemplazan a las de los plugins.
-Consulte [Escribir plugins](/es/plugins).
+Las plantillas de usuario y de proyecto con el mismo nombre reemplazan a las de los complementos.
+Consulta [Escribir complementos](/es/plugins).
 
 ## `/init` integrado {#built-in-init}
 
@@ -192,8 +192,8 @@ distinto que solo escribe un `.alisio/config.json` de ejemplo y muestra una suge
 
 ::: tip Repositorios grandes
 La exploración reenvía el contexto creciente en cada turno, y `limits.maxTokens` es un presupuesto
-acumulado por ejecución. Ahora, por defecto, es proporcional a la ventana de contexto (consulte
-[Configuración](/es/configuration#limits)); si fija un valor explícito, que sea holgado en repositorios
+acumulado por ejecución. Ahora, por defecto, es proporcional a la ventana de contexto (consulta
+[Configuración](/es/configuration#limits)); si fijas un valor explícito, que sea holgado en repositorios
 grandes. En una ejecución real con DeepSeek con el antiguo presupuesto fijo de 100000 tokens, las
 ediciones se aplicaron pero el resumen final agotó el presupuesto.
 :::

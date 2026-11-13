@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useData, withBase } from "vitepress";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import creatorShotEn from "../../../assets/web-ui/plugin_creator_empty_web_ui.webp";
+import creatorShotEs from "../../../assets/web-ui/plugin_creator_empty_web_ui_es.webp";
 import { loadMotion, prefersReducedMotion } from "../motion";
 
 interface FeatureLink {
@@ -56,6 +58,8 @@ const { frontmatter, lang } = useData();
 const newTab = computed(() =>
   lang.value.startsWith("es") ? "se abre en una pestaña nueva" : "opens in a new tab",
 );
+/** Real plugin creator screenshot, in the page language (same capture as the plugin creator guide). */
+const creatorShot = computed(() => (lang.value.startsWith("es") ? creatorShotEs : creatorShotEn));
 const featured = computed<Feature[]>(() => (frontmatter.value.featured ?? []).slice(0, 3));
 const more = computed<Feature[]>(() => frontmatter.value.more ?? []);
 const heading = computed<string>(() => frontmatter.value.featuresHeading ?? "");
@@ -234,6 +238,9 @@ onBeforeUnmount(() => {
                 <text :x="tileCx(i)" :y="TILE_Y[i] + 51" text-anchor="middle">{{ label }}</text>
               </g>
             </svg>
+          </div>
+          <div v-else-if="item.icon === 'agent'" class="visual visual-shot visual-creator" aria-hidden="true">
+            <img :src="creatorShot" alt="" width="1280" height="900" loading="lazy" decoding="async" />
           </div>
           <div v-else-if="item.icon === 'chart'" class="visual visual-shot" aria-hidden="true">
             <img :src="withBase('/assets/dashboard_charts_web_ui.webp')" alt="" width="1280" height="1000" loading="lazy" decoding="async" />

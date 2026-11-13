@@ -126,7 +126,7 @@ const es = {
   context: "Contexto y AGENTS.md",
   agents: "Agentes",
   "skill-builder": "Creador de skills",
-  "plugin-creator": "Creador de plugins",
+  "plugin-creator": "Creador de complementos",
   documents: "PDF diseñados",
   subagents: "Subagentes",
   plan: "Modo plan y revisión",
@@ -139,7 +139,7 @@ const es = {
   eval: "Reliability Lab (eval)",
   "decision-intelligence": "Decision Intelligence",
   "smart-dashboard": "Smart Dashboard",
-  plugins: "Escribir plugins",
+  plugins: "Escribir complementos",
   "icon-themes": "Temas de iconos",
   architecture: "Arquitectura",
   mcp: "MCP",
@@ -156,7 +156,7 @@ export default defineConfig({
   base: "/alisio/",
   title: "Alisio",
   description:
-    "A provider-agnostic agent harness with its own tool loop: terminal, web UI and headless, permissioned tools, plans, subagents, plugins and data dashboards.",
+    "AI that works with you. Alisio is a desktop app that helps you work with documents and data, find apps for your tasks, build your own and get results you can review and use.",
   cleanUrls: true,
   lastUpdated: true,
   head: [["link", { rel: "icon", href: "/alisio/assets/favicon.png" }]],
@@ -244,13 +244,13 @@ export default defineConfig({
       lang: "es",
       link: "/es/",
       description:
-        "Un arnés de agentes agnóstico del proveedor, con su propio ciclo de herramientas: terminal, interfaz web y modo headless, herramientas con permisos, planes, subagentes, plugins y paneles de datos.",
+        "Inteligencia artificial que trabaja contigo. Alisio es una aplicación de escritorio que te ayuda a trabajar con documentos y datos, encontrar aplicaciones para tus tareas, crear las tuyas y obtener resultados que puedes revisar y usar.",
       themeConfig: {
         nav: [
           { text: "Guía", link: "/es/quick-start" },
-          { text: "Plugins", link: "/es/plugins" },
+          { text: "Complementos", link: "/es/plugins" },
           {
-            text: "Catálogo completo de plugins",
+            text: "Catálogo de complementos",
             link: "https://gustavogutierrez.github.io/alisio-plugins/",
           },
           { text: "Configuración", link: "/es/configuration" },

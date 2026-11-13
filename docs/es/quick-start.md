@@ -1,43 +1,47 @@
 # Inicio rápido
 
-La forma más rápida de empezar es la [aplicación de escritorio](/es/desktop): instálela, ábrala,
-conecte un modelo y abra una carpeta. No hace falta terminal. El resto de esta página cubre la línea
-de comandos, que es la vía avanzada.
+Tu primer resultado útil lleva cuatro pasos en la [aplicación de escritorio](/es/desktop):
+instálala, conecta un modelo, abre la carpeta con tus archivos y describe la tarea con tus palabras,
+por ejemplo "Prepara un informe con gráficos a partir de ventas.csv". No hace falta terminal y
+Alisio pregunta antes de cambiar algo. El resto de esta página cubre la línea de comandos, que es la
+vía avanzada.
 
 ## Aplicación de escritorio
 
-1. Instale Alisio Desktop para su sistema (instalador de Windows, `.dmg` de macOS, `AppImage` o
-   `.deb` de Linux); consulte [Descargar e instalar](/es/desktop#descargar-e-instalar). Los
+1. Instala Alisio Desktop para tu sistema (instalador de Windows, `.dmg` de macOS, `AppImage` o
+   `.deb` de Linux); consulta [Descargar e instalar](/es/desktop#descargar-e-instalar). Los
    instaladores no están firmados, así que Windows SmartScreen y macOS Gatekeeper muestran un aviso
    la primera vez.
-2. Abra Alisio, vaya a **Ajustes**, luego a **Modelos**, añada un perfil para su proveedor y active
-   un modelo.
-3. Abra la carpeta en la que desea trabajar y describa la tarea. Alisio pregunta antes de cambiar
-   algo.
-4. Opcionalmente, instale un plugin por profesión desde
-   [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); consulte
-   [Instalar plugins por profesión](/es/desktop#instalar-plugins-por-profesion).
+2. Abre Alisio, ve a **Ajustes**, luego a **Modelos**, añade un perfil para tu servicio de
+   modelos (o un servidor de modelos en tu equipo) y activa un modelo.
+3. Abre la carpeta en la que deseas trabajar y describe la tarea. Alisio pregunta antes de cambiar
+   algo. Revisa el resultado, pide correcciones y guárdalo.
+4. Opcionalmente, añade herramientas para tu trabajo: instala un complemento desde **Ajustes →
+   Complementos → Catálogo de complementos** (consulta
+   [Instalar complementos por profesión](/es/desktop#instalar-plugins-por-profesion)), crea el tuyo con
+   el [creador de complementos](/es/plugin-creator) o conecta un servicio desde el
+   [catálogo MCP](/es/mcp-catalog).
 
 ## Línea de comandos (avanzado)
 
-Alisio incluye activado el plugin de proveedor compatible con OpenAI, pero no un modelo ni
-credenciales predeterminados. Inicie la TUI y ejecute `/connect`: elija el proveedor, introduzca sus
-ajustes y clave, y seleccione un modelo descubierto. La selección se aplica globalmente en inicios
+Alisio incluye activado el complemento de proveedor compatible con OpenAI, pero no un modelo ni
+credenciales predeterminados. Inicia la TUI y ejecuta `/connect`: elige el proveedor, introduce tus
+ajustes y clave, y selecciona un modelo descubierto. La selección se aplica globalmente en inicios
 posteriores.
 
 ## Ruta rápida (60 segundos)
 
-1. `alisio setup` — escriba un `.alisio/config.json` de ejemplo, sin secretos.
-2. Exporte la variable de la clave que indique ese archivo (paso 2 más abajo).
-3. `alisio doctor --config ./my-api.json` — confirme runtime, herramientas y proveedor.
-4. `alisio --config ./my-api.json` — abra la TUI y ejecute `/connect` para elegir proveedor y modelo.
+1. `alisio setup` — escribe un `.alisio/config.json` de ejemplo, sin secretos.
+2. Exporta la variable de la clave que indique ese archivo (paso 2 más abajo).
+3. `alisio doctor --config ./my-api.json` — confirma runtime, herramientas y proveedor.
+4. `alisio --config ./my-api.json` — abre la TUI y ejecuta `/connect` para elegir proveedor y modelo.
 
 Cada paso se detalla a continuación; [Interfaz de terminal](/es/tui) cubre la TUI.
 
 ## 1. Crear un archivo de configuración
 
 `alisio setup` escribe un `.alisio/config.json` de ejemplo en el directorio actual, sin secretos.
-También puede escribir el archivo usted mismo en cualquier ubicación.
+También puedes escribir el archivo tú mismo en cualquier ubicación.
 
 ```sh
 alisio setup
@@ -60,7 +64,7 @@ Endpoint compatible con OpenAI (`my-api.json`):
 }
 ```
 
-DeepSeek (`deepseek.json`, tras instalar el plugin DeepSeek con
+DeepSeek (`deepseek.json`, tras instalar el complemento DeepSeek con
 `alisio install npm:@alisio/plugin-deepseek`):
 
 ```json
@@ -83,7 +87,7 @@ Un servidor local sin autenticación usa `"auth": "none"` y su propia `baseURL`,
 ## 2. Proporcionar la clave de API mediante el entorno
 
 Las claves se leen **solo** de la variable de entorno indicada en `provider.apiKeyEnv`
-(por defecto `OPENAI_API_KEY`). Nunca escriba claves en archivos de configuración.
+(por defecto `OPENAI_API_KEY`). Nunca escribas claves en archivos de configuración.
 
 ```sh
 export OPENAI_API_KEY='YOUR_KEY'
@@ -128,8 +132,8 @@ vez, permitir durante la sesión o denegar— sin necesitar ningún flag.
 `--read-only` las desactiva por completo, sin ofrecerlas nunca al modelo. Los modos headless
 `run`/`resume <id> "prompt"`/`--json` no tienen a nadie a quien preguntar, así que ahí esos mismos
 flags significan que la herramienta simplemente no está disponible sin ellos. `--allow-process` (o
-una respuesta de "permitir" a la pregunta) da acceso a procesos arbitrarios con sus privilegios de
-usuario; no es un sandbox. Consulte [Herramientas y permisos](/es/tools#permission-flags) para la
+una respuesta de "permitir" a la pregunta) da acceso a procesos arbitrarios con tus privilegios de
+usuario; no es un sandbox. Consulta [Herramientas y permisos](/es/tools#permission-flags) para la
 tabla de verdad completa.
 
 ## 5. Sesiones
@@ -145,31 +149,31 @@ alisio sessions recover <id> --acknowledge
 
 Indicar `--model` al reanudar cambia la sesión a ese modelo para los turnos siguientes.
 `sessions recover` solo es necesario cuando una caída dejó una herramienta con resultado incierto;
-consulte [Compactación de contexto](/es/compaction#uncertain-tool-results).
+consulta [Compactación de contexto](/es/compaction#uncertain-tool-results).
 
 ## 6. Generar AGENTS.md
 
-Ejecute la plantilla integrada `/init` en la TUI, o en modo headless, para crear o actualizar el
+Ejecuta la plantilla integrada `/init` en la TUI, o en modo headless, para crear o actualizar el
 `AGENTS.md` raíz con instrucciones específicas del proyecto para agentes de programación:
 
 ```sh
 alisio run "/init" --config ./my-api.json --allow-write
 ```
 
-Consulte [Plantillas de prompts](/es/prompt-templates#built-in-init).
+Consulta [Plantillas de prompts](/es/prompt-templates#built-in-init).
 
 ## Modelo de confianza de la configuración {#configuration-trust-model}
 
-Abrir un repositorio no debe redirigir su clave de API a un endpoint elegido por ese repositorio. Por
+Abrir un repositorio no debe redirigir tu clave de API a un endpoint elegido por ese repositorio. Por
 eso Alisio lee:
 
 | Origen | Cuándo |
 | --- | --- |
 | `--config <path>` | Siempre que se indique: un archivo de confianza explícita |
-| `<workspace>/.alisio/config.json` | Con `--trust-project`, o tras confiar en él interactivamente (véase abajo) |
+| `<workspace>/.alisio/config.json` | Con `--trust-project`, o tras confiar en él interactivamente (ve abajo) |
 | `~/.config/alisio/config.json` (`ALISIO_CONFIG_HOME` o `XDG_CONFIG_HOME`) | En los demás casos |
 
-Confiar en un proyecto también carga sus plugins ejecutables desde `.alisio/plugins` (todos los
+Confiar en un proyecto también carga sus complementos ejecutables desde `.alisio/plugins` (todos los
 privilegios del proceso), y sus agentes/skills/prompts desde `.alisio/agents`, `.agents/agents`,
 `.alisio/skills` y `.alisio/prompts`.
 

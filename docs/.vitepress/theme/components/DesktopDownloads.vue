@@ -40,7 +40,7 @@ const copy = computed(() =>
   es.value
     ? {
         heading: "Descarga Alisio Desktop",
-        main: "Descargar Alisio Desktop",
+        main: "Descargar Alisio",
         github: "Ver en GitHub",
         more: "Más formatos de descarga",
         select: (os: string) => `Elige el formato para ${os}`,
@@ -77,7 +77,7 @@ const copy = computed(() =>
       }
     : {
         heading: "Download Alisio Desktop",
-        main: "Download Alisio Desktop",
+        main: "Download Alisio",
         github: "View on GitHub",
         more: "More download formats",
         select: (os: string) => `Select ${os} format`,

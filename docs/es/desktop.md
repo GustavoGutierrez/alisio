@@ -1,36 +1,41 @@
 # Aplicación de escritorio
 
-Alisio Desktop es la forma más sencilla de usar Alisio: se instala como cualquier otro programa y se
-abre. No hace falta terminal. Está pensada para el trabajo de todos los días (redactar una tesis,
-preparar un examen, analizar una hoja de cálculo, producir un informe) sobre sus propios archivos, y
-siempre pide permiso antes de leer o cambiar algo.
+Alisio Desktop es la forma más sencilla de usar Alisio: se instala como cualquier otro programa, se
+abre y tú describes lo que necesitas. No hace falta terminal. Está pensada para el trabajo de todos
+los días (redactar una tesis, preparar un examen, analizar una hoja de cálculo, producir un informe)
+sobre tus propios archivos: tú eliges la carpeta, Alisio pregunta antes de cambiar algo y tú
+revisas el resultado antes de usarlo. Desde la misma ventana puedes instalar complementos desde el
+catálogo, crear los tuyos con el [creador de complementos](/es/plugin-creator) y conectar
+herramientas y servicios desde el [catálogo MCP](/es/mcp-catalog).
 
-::: warning Experimental
-La aplicación de escritorio es una capa fina de Electron sobre el mismo servidor local que
-[`alisio serve`](/es/web). Se construye desde el repositorio y **no se publica en npm**. No hay
-actualización automática y los instaladores no están firmados. Consulte
+::: info Para tener en cuenta
+La aplicación de escritorio ejecuta el mismo servidor local que [`alisio serve`](/es/web) en su
+propia ventana. Descarga los instaladores desde la
+[página de versiones de GitHub](https://github.com/GustavoGutierrez/alisio/releases); no se publica
+en npm. Las nuevas versiones se instalan descargando el nuevo instalador (todavía no hay
+actualización automática) y los instaladores no están firmados. Consulta
 [Limitaciones conocidas](#limitations).
 :::
 
 La aplicación de escritorio abre la [interfaz web](/es/web) en su propia ventana. No añade
-funcionalidades propias: las sesiones, la configuración, los plugins y la base de datos de sesiones
+funcionalidades propias: las sesiones, la configuración, los complementos y la base de datos de sesiones
 son los mismos que usa la CLI.
 
 ## Descargar e instalar
 
-Descargue el archivo de su sistema desde la [versión Alisio 0.11.11](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11) (los mismos
+Descarga el archivo de tu sistema desde la [versión Alisio 0.11.11](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11) (los mismos
 enlaces están en la [página de inicio](/es/)):
 
 | Sistema | Descarga | Cómo instalar |
 | --- | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe) | Ejecútelo y siga el asistente |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
-| macOS Intel (x64) | [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg) | Ábrala y arrastre Alisio a Aplicaciones |
-| Linux, cualquier distribución | [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) | Hágalo ejecutable (`chmod +x`) y ejecútelo |
-| Debian y Ubuntu | [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb) | Instálelo con su gestor de paquetes |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe) | Ejecútalo y sigue el asistente |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
+| macOS Intel (x64) | [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
+| Linux, cualquier distribución | [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) | Hazlo ejecutable (`chmod +x`) y ejecútalo |
+| Debian y Ubuntu | [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb) | Instálalo con tu gestor de paquetes |
 
-Cada versión incluye también `SHA256SUMS-desktop.txt`, para que pueda verificar una descarga. Para
-construir los instaladores usted mismo, consulte [Construir los instaladores](#construir-los-instaladores).
+Cada versión incluye también `SHA256SUMS-desktop.txt`, para que puedas verificar una descarga. Para
+construir los instaladores tú mismo, consulta [Construir los instaladores](#construir-los-instaladores).
 
 **Windows.** El instalador asistido se construye con NSIS 3 y Modern UI 2. Se instala por usuario,
 así que no necesita derechos de administrador, y permite elegir la carpeta. Crea accesos directos en
@@ -43,62 +48,62 @@ el escritorio y en el menú Inicio, ejecuta Alisio al terminar y está disponibl
 
 Los instaladores no están firmados digitalmente, así que el sistema muestra un aviso la primera vez:
 
-- **Windows (SmartScreen):** cuando aparezca «Windows protegió su PC», elija **Más información** y
+- **Windows (SmartScreen):** cuando aparezca «Windows protegió su PC», elige **Más información** y
   luego **Ejecutar de todas formas**.
 - **macOS (Gatekeeper):** la aplicación tiene una firma ad hoc y no está notarizada. Si macOS indica
-  que no se puede abrir la aplicación, abra **Ajustes del Sistema**, luego **Privacidad y
-  seguridad**, y elija **Abrir de todos modos** para Alisio. También puede hacer clic sobre la
+  que no se puede abrir la aplicación, abre **Ajustes del Sistema**, luego **Privacidad y
+  seguridad**, y elige **Abrir de todos modos** para Alisio. También puedes hacer clic sobre la
   aplicación con la tecla Control pulsada y elegir **Abrir**. Si macOS sigue indicando que la
-  aplicación está dañada, ejecute una vez `xattr -cr /Applications/Alisio.app` en una terminal y
-  ábrala de nuevo.
+  aplicación está dañada, ejecuta una vez `xattr -cr /Applications/Alisio.app` en una terminal y
+  ábrela de nuevo.
 
-Haga esto solo con un instalador que haya construido usted mismo o que haya descargado de la
+Haz esto solo con un instalador que hayas construido tú mismo o que hayas descargado de la
 versión oficial.
 
 ## Primer inicio
 
-Abra Alisio desde el acceso directo del escritorio, el menú Inicio, la carpeta Aplicaciones o su
+Abre Alisio desde el acceso directo del escritorio, el menú Inicio, la carpeta Aplicaciones o tu
 lanzador. La aplicación inicia su servidor local en segundo plano y abre la ventana por sí sola. Al
 cerrar, el servidor se detiene.
 
 ## Conectar un modelo
 
-Alisio funciona con el modelo que usted elija; no incluye ningún modelo ni credencial por defecto.
-Abra **Ajustes**, luego **Modelos**, añada un perfil para su proveedor (compatible con OpenAI,
-DeepSeek, OpenRouter y otros), introduzca su clave y active un modelo. Las claves se guardan como
-credenciales, nunca en archivos de configuración en texto plano. Consulte la
+Alisio funciona con el modelo que elijas; no incluye ningún modelo ni credencial por defecto.
+Abre **Ajustes**, luego **Modelos**, añade un perfil para tu proveedor (compatible con OpenAI,
+DeepSeek, OpenRouter y otros), introduce tu clave y activa un modelo. Las claves se guardan como
+credenciales, nunca en archivos de configuración en texto plano. Consulta la
 [interfaz web](/es/web) y [Configuración](/es/configuration) para ver todos los campos.
 
 ## Abrir una carpeta
 
-Por defecto el workspace es su directorio personal. Use el selector de workspaces para abrir la
-carpeta con los archivos en los que desea trabajar. Alisio lee por defecto y pregunta antes de
-escribir, de modo que usted controla cada cambio. Consulte
+Por defecto el workspace es tu directorio personal. Usa el selector de workspaces para abrir la
+carpeta con los archivos en los que deseas trabajar. Alisio lee por defecto y pregunta antes de
+escribir, de modo que tú controlas cada cambio. Consulta
 [Herramientas y permisos](/es/tools#permission-flags).
 
-## Instalar plugins por profesión
+## Instalar complementos por profesión {#instalar-plugins-por-profesion}
 
-Los plugins dan a Alisio habilidades para una profesión. Se publican desde el repositorio público
+Los complementos dan a Alisio habilidades para una profesión. Se publican desde el repositorio público
 [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) y se instalan con
-`alisio install npm:<paquete>`; o abra **Ajustes → Plugins** y use la pestaña **Catálogo de plugins**:
-un clic instala un plugin y aparece de inmediato en **Plugins instalados**. **Instalar desde archivo**
-instala un plugin privado desde un `.tgz`. El asistente también puede instalar uno por usted mediante
-su herramienta con permisos `plugin_install`, una vez que usted lo apruebe. La aplicación incluye
-npm, así que instalar plugins no requiere Node.js en su sistema; al actualizar un plugin que ya está
-cargado, un aviso le pide reiniciar y **Reiniciar ahora** reinicia el proceso en segundo plano de la
-aplicación y recarga la ventana. Vea
-[Catálogo de plugins, instalación y actualizaciones](/es/web#plugin-catalog).
+`alisio install npm:<paquete>`; o abre **Ajustes → Complementos** y usa la pestaña **Catálogo de complementos**:
+un clic instala un complemento y aparece de inmediato en **Complementos instalados**. **Instalar desde archivo**
+instala un complemento privado desde un `.tgz`. El asistente también puede instalar uno por ti mediante
+su herramienta con permisos `plugin_install`, una vez que lo apruebes. La aplicación incluye
+npm, así que instalar complementos no requiere Node.js en tu sistema; al actualizar un complemento que ya está
+cargado, un aviso te pide reiniciar y **Reiniciar ahora** reinicia el proceso en segundo plano de la
+aplicación y recarga la ventana. Mira
+[Catálogo de complementos, instalación y actualizaciones](/es/web#plugin-catalog).
 
-| Plugin | Para |
+| Complemento | Para |
 | --- | --- |
 | `@alisio/plugin-thesis` | Estudiantes: planifica, investiga, redacta y compone tesis universitarias en PDF con Typst |
 | `@alisio/plugin-literature-research` | Estudiantes: búsqueda de metadatos académicos |
 | `@alisio/plugin-evalua` | Docentes: exámenes imprimibles (por ahora solo matemáticas escolares) |
 | `@alisio/plugin-cardsmith` | Oficina: certificados, tarjetas y gráficos |
 
-Estos plugins **todavía no vienen incluidos en la aplicación de escritorio**; usted los instala. Los
-plugins se ejecutan con sus privilegios de usuario y no están aislados, así que instale solo código
-de confianza. Consulte [Escribir plugins](/es/plugins).
+Estos complementos **todavía no vienen incluidos en la aplicación de escritorio**; tú los instalas. Los
+complementos se ejecutan con tus privilegios de usuario y no están aislados, así que instala solo código
+de confianza. Consulta [Escribir complementos](/es/plugins).
 
 ## Cómo funciona
 
@@ -156,9 +161,9 @@ pnpm desktop:package
 `pnpm desktop:package:dir` genera una aplicación sin empaquetar en `apps/desktop/release/` (rápida
 de comprobar). `pnpm desktop:package` construye con `electron-builder` los instaladores de la
 plataforma actual: `AppImage` y `deb` en Linux, un instalador asistido `nsis` por usuario en Windows
-y un `dmg` en macOS. Construya cada plataforma en su propio sistema operativo: el `.dmg` de macOS
+y un `dmg` en macOS. Construye cada plataforma en su propio sistema operativo: el `.dmg` de macOS
 debe construirse en un Mac o en un runner de CI de macOS. Los instaladores oficiales los construye el
-workflow de GitHub `Desktop release` (consulte
+workflow de GitHub `Desktop release` (consulta
 [Publicar Alisio Desktop](/es/publishing#publicar-alisio-desktop)).
 
 El paso de empaquetado ejecuta `pnpm deploy --legacy --prod --config.node-linker=hoisted` para
@@ -169,15 +174,15 @@ los instaladores no pueden depender de ellos.
 
 ## Limitaciones {#limitations}
 
-- Los plugins por profesión no vienen incluidos en la aplicación.
+- Los complementos por profesión no vienen incluidos en la aplicación.
 - Las funciones de Git requieren tener `git` instalado.
 - La selección de carpetas usa el mismo selector nativo que `alisio serve` (una herramienta del
   sistema), no un diálogo de Electron.
-- El descubrimiento global de plugins deriva su prefijo de la ruta del ejecutable, lo cual no tiene
-  sentido dentro de Electron: los plugins instalados con un gestor de paquetes global no se
-  encuentran desde la aplicación de escritorio. Los plugins instalados mediante Alisio y los
-  plugins de proyecto no se ven afectados.
-- No hay actualización automática. Instale una versión nueva sobre la anterior.
+- El descubrimiento global de complementos deriva su prefijo de la ruta del ejecutable, lo cual no tiene
+  sentido dentro de Electron: los complementos instalados con un gestor de paquetes global no se
+  encuentran desde la aplicación de escritorio. Los complementos instalados mediante Alisio y los
+  complementos de proyecto no se ven afectados.
+- No hay actualización automática. Instala una versión nueva sobre la anterior.
 - Los instaladores no están firmados: Windows SmartScreen y macOS Gatekeeper muestran avisos. La
   aplicación de macOS solo tiene firma ad hoc y no está notarizada.
 - La aplicación no se ha verificado en Windows ni en macOS; solo se probaron compilaciones de
@@ -190,7 +195,7 @@ los instaladores no pueden depender de ellos.
   detienen al salir.
 - Los programas que un servidor MCP inició por su cuenta (por ejemplo con `npx` o `uvx`) solo se
   detienen cuando ese servidor MCP los detiene.
-- Una compilación o comprobación del creador de plugins que esté en curso al salir no se cancela de
+- Una compilación o comprobación del creador de complementos que esté en curso al salir no se cancela de
   forma ordenada: el barrido final mata sus procesos y hay que volver a ejecutar la compilación.
 - En Windows, un programa que un comando inició y dejó en ejecución después de terminar ya no puede
   vincularse a Alisio y sigue en ejecución. La salida no se ha verificado en una máquina real con

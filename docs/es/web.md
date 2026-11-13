@@ -8,7 +8,7 @@ aprobaciones y la base de datos de sesiones se comparten con la TUI y con `alisi
 El servidor, su API y la interfaz del navegador están disponibles, incluidos los adjuntos de
 imagen, el panel de archivos, la vista de trayectoria, los renderizadores de desarrollo (diff,
 terminal, JSON, resultados de tests), los diagramas Mermaid, las fórmulas TeX y las páginas de
-Ajustes para modelos, plugins, skills, servidores MCP y presets de agente. Consulte
+Ajustes para modelos, complementos, skills, servidores MCP y presets de agente. Consulta
 [Limitaciones conocidas](/es/limitations).
 :::
 
@@ -22,8 +22,8 @@ alisio serve --allow-write        # web sessions may write files without asking
 
 El comando imprime una URL de arranque con un token de un solo uso, por ejemplo
 `http://127.0.0.1:4317/?token=…`. Al abrirla, el token se canjea por una cookie de sesión y se
-redirige a `/`. Mantenga la URL en privado: quien la abra primero en un navegador puede conducir el
-agente con sus permisos. Pulse `Ctrl+C` (o envíe `SIGTERM`) para detener el servidor; un segundo
+redirige a `/`. Mantén la URL en privado: quien la abra primero en un navegador puede conducir el
+agente con sus permisos. Pulsa `Ctrl+C` (o envía `SIGTERM`) para detener el servidor; un segundo
 `Ctrl+C` fuerza la salida.
 
 `alisio`, `alisio run` y la TUI nunca cargan el servidor: solo lo importa `alisio serve`.
@@ -43,7 +43,7 @@ También se aplican los flags globales. Los flags de permisos (`--allow-write`, 
 `--allow-analysis`, `--allow-external`, `--allow-mcp`, `--read-only`) son el **techo** de toda sesión web: el navegador
 puede estrecharlos por sesión, pero nunca superarlos. `--trust-project` y `--config` se aplican a
 cada workspace que abre el servidor, igual que en la terminal. `--db` elige la base de datos de
-sesiones compartida. Defina `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) para
+sesiones compartida. Define `ALISIO_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `silent`) para
 controlar las líneas de log JSON que el servidor escribe en stderr.
 
 ## Usar la interfaz web
@@ -60,8 +60,8 @@ con la actividad más reciente primero: su última apertura o la última actuali
 sin ninguno fijado es una sola lista ordenada como **Recientes**. Cada encabezado es un botón que
 contrae su grupo (se recuerda por navegador, como las carpetas). Los iconos junto al encabezado
 contraen o expanden todas las carpetas de proyecto a la vez (los grupos **Fijados** / **Recientes** conservan su propio estado), buscan sesiones (también `Ctrl+K` /
-`Cmd+K`), muestran las sesiones y los proyectos archivados y abren otro proyecto (vea
-[Abrir un proyecto](#abrir-un-proyecto)). Las carpetas que contrae siguen contraídas tras recargar
+`Cmd+K`), muestran las sesiones y los proyectos archivados y abren otro proyecto (mira
+[Abrir un proyecto](#abrir-un-proyecto)). Las carpetas que contraes siguen contraídas tras recargar
 (se recuerda por navegador; los proyectos nuevos empiezan abiertos y una búsqueda abre las carpetas
 sin cambiar eso). Al pasar sobre una sesión aparecen **Fijar** y **Archivar**, y sobre una carpeta,
 una nueva sesión dentro de ella y su menú de acciones (**Fijar**, **Color**, **Ajustes del proyecto…**, **Archivar** /
@@ -70,7 +70,7 @@ icono de carpeta del proyecto; se guarda en el servidor junto con el proyecto y 
 teclado (flechas, Intro). **Ajustes del proyecto…** abre un diálogo de ese proyecto (más abajo).
 **Ajustes** está abajo; el icono de panel contrae la barra a un riel
 estrecho. Por debajo de 900 px la barra lateral pasa a ser un cajón que se abre desde la cabecera.
-Con muchas aplicaciones de plugins, **Aplicaciones** muestra las cinco primeras (más la abierta) y
+Con muchas aplicaciones de complementos, **Aplicaciones** muestra las cinco primeras (más la abierta) y
 un botón **Mostrar todas (N)**; la lista completa se desplaza dentro de su propia zona, así que
 **Nueva sesión**, **Complementos**, **Proyectos** y **Ajustes y herramientas** quedan siempre a la
 vista (la elección se recuerda en cada navegador). En el riel, los iconos de las aplicaciones se
@@ -90,7 +90,7 @@ botón de copiar), la paleta de **Color** e interruptores para **Fijado**, **Pro
 **Archivado**. El nombre es solo lo que Alisio muestra en la barra lateral: cambia la etiqueta del
 proyecto, nunca renombra la carpeta en el disco, y un nombre vacío vuelve al nombre de la carpeta
 (el texto de ejemplo del campo). El nombre se guarda con **Guardar** o `Intro` (máximo 200
-caracteres); el color, fijado, confianza y archivado se aplican en cuanto los cambia, y dar confianza
+caracteres); el color, fijado, confianza y archivado se aplican en cuanto los cambias, y dar confianza
 a un proyecto pide la misma confirmación que el elemento del menú. Un proyecto cuya carpeta ya no
 existe lo indica y oculta el interruptor de confianza. El diálogo es el mismo en el navegador y en
 Alisio Desktop. `Escape` o **Cerrar** lo cierra y el foco vuelve al botón de menú del proyecto.
@@ -100,15 +100,15 @@ Alisio Desktop. `Escape` o **Cerrar** lo cierra y el foco vuelve al botón de me
   <figcaption>El diálogo Ajustes del proyecto: nombre, carpeta, color y los interruptores de fijado, confianza y archivado.</figcaption>
 </figure>
 
-**Cabecera.** Haga clic en el título para renombrar la sesión (las sesiones sin título muestran su
+**Cabecera.** Haz clic en el título para renombrar la sesión (las sesiones sin título muestran su
 primer prompt). La insignia muestra el agente y el preset de permisos. **Log de sesión** descarga la
 sesión como JSON Lines: cada evento durable en el formato de `alisio run --json` y después una línea
 `{"type":"message"}` por cada mensaje guardado. El icono de panel a la derecha abre el panel de
-archivos (más abajo). Las pestañas **Conversación**, **Trayectoria** y, con el plugin de memoria habilitado, **Memoria** cambian la vista principal.
+archivos (más abajo). Las pestañas **Conversación**, **Trayectoria** y, con el complemento de memoria habilitado, **Memoria** cambian la vista principal.
 
-**Conversación.** Sus mensajes aparecen a la derecha con un botón de copiar. El trabajo del agente
+**Conversación.** Tus mensajes aparecen a la derecha con un botón de copiar. El trabajo del agente
 aparece como filas de una línea: `Razonamiento · …`, `Inyección de contexto · AGENTS.md` y una fila
-por llamada a herramienta, como `Read · README.md` o `Shell · npm test`. Haga clic en una fila para
+por llamada a herramienta, como `Read · README.md` o `Shell · npm test`. Haz clic en una fila para
 ver su entrada y su salida. La respuesta llega en streaming como Markdown; los bloques de código
 tienen etiqueta de lenguaje, **Ajustar líneas** y **Copiar**, y se resaltan cuando entran en
 pantalla. Los enlaces a rutas del workspace abren el archivo en el panel de archivos. Los bloques
@@ -161,8 +161,8 @@ y de su JSONPath; los resultados de tests muestran el total de correctos, fallid
 un filtro **Solo fallos**; los bloques de progreso muestran sus pasos. El texto original de la
 herramienta, que es lo que recibió el modelo, queda bajo **Salida en bruto**. Un bloque que la
 página no conoce muestra su texto y el JSON plegado. El icono de panel de una fila de herramienta
-con ruta abre ese archivo. Las herramientas que aportan los plugins muestran su propio nombre
-seguido del nombre del plugin como etiqueta (por ejemplo `Test report` · `Smoke tools`).
+con ruta abre ese archivo. Las herramientas que aportan los complementos muestran su propio nombre
+seguido del nombre del complemento como etiqueta (por ejemplo `Test report` · `Smoke tools`).
 
 **Trayectoria.** La pestaña **Trayectoria** lista los eventos durables de la sesión agrupados por
 ejecución: estado, hora de inicio, turnos y duración de cada ejecución, y una fila por evento con su
@@ -209,7 +209,7 @@ Debajo del cuadro de texto:
 | Anillo de contexto | Contexto estimado de la próxima petición frente a la ventana del modelo |
 | Enviar / Detener | Detener sustituye a Enviar mientras hay una ejecución activa y el cuadro está vacío |
 
-Mientras hay una ejecución activa puede seguir escribiendo: el texto se encola para el siguiente
+Mientras hay una ejecución activa puedes seguir escribiendo: el texto se encola para el siguiente
 turno de la sesión. Las imágenes se suben en cuanto se añaden y aparecen como miniaturas que se
 pueden quitar; solo se pueden enviar cuando no hay una ejecución activa.
 
@@ -217,15 +217,15 @@ pueden quitar; solo se pueden enviar cuando no hay una ejecución activa.
 (llamadas a herramientas), tiempo en el modelo y en herramientas, tiempo medio hasta el primer
 token, tokens de salida por segundo, la parte de la entrada servida desde la caché de prompts del
 proveedor y los tokens de entrada. Al pasar el ratón se ven los totales de toda la sesión; cuando hubo decisiones, el tooltip
-también indica cuántas se respondieron y cuántas recurrieron al valor por defecto (consulte
+también indica cuántas se respondieron y cuántas recurrieron al valor por defecto (consulta
 [Decision Intelligence](/es/decision-intelligence#stats-section)). La caché muestra `—` cuando el
 proveedor no informa de la entrada en caché. El comando `/decisions` funciona en el cuadro de
-mensaje igual que en la terminal: consulte [`/decisions`](/es/decision-intelligence#decisions-command).
+mensaje igual que en la terminal: consulta [`/decisions`](/es/decision-intelligence#decisions-command).
 
 **Aprobaciones y preguntas.** Cuando una herramienta necesita aprobación, un panel ocupa el lugar del
-compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Responda con **Denegar**
+compositor y recibe el foco: indica la herramienta, el efecto y su entrada. Responde con **Denegar**
 (`D`), **Permitir una vez** (`O`) o **Permitir en la sesión** (`S`); las teclas pulsadas en los
-primeros 300 ms se ignoran para que un `Enter` accidental no apruebe. Las preguntas de plugins (por
+primeros 300 ms se ignoran para que un `Enter` accidental no apruebe. Las preguntas de complementos (por
 ejemplo `ask_user_question`) aparecen del mismo modo.
 
 **Ajustes.** El menú **Ajustes y herramientas** al pie de la barra lateral agrupa Agentes, Creador de skills y Ajustes; **Ajustes** abre esta ventana. Las páginas que gestionan
@@ -239,22 +239,22 @@ ninguna):
 
 | Página | Qué hace |
 | --- | --- |
-| **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de plugins y proveedor de búsqueda web, guardados en su `config.json` de usuario |
+| **General** | Idioma de la interfaz (este navegador) y los ajustes del agente: compactación, contexto, límites, tiempo máximo de los hooks de complementos y proveedor de búsqueda web, guardados en tu `config.json` de usuario |
 | **Modelos** | Perfiles de proveedor con sus valores no secretos, credenciales y **Activar en este workspace** con un modelo del perfil; **Añadir un perfil** crea uno |
-| **Plugins** | Cuatro pestañas: **Configuración de plugins** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Plugins instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de plugins** (explorar e instalar) e **Instalar desde archivo** (plugins privados `.tgz`); vea [Catálogo de plugins, instalación y actualizaciones](#plugin-catalog). El menú **Complementos** de la barra lateral también abre el [Creador de plugins](./plugin-creator.md) |
+| **Complementos** | Cuatro pestañas: **Configuración de complementos** (sin aislamiento, cómo se instalan, el archivo del proyecto), **Complementos instalados** (búsqueda, píldoras de actualización, interruptor y **Desinstalar**), **Catálogo de complementos** (explorar e instalar) e **Instalar desde archivo** (complementos privados `.tgz`); consulta [Catálogo de complementos, instalación y actualizaciones](#plugin-catalog). El menú **Complementos** de la barra lateral también abre el [Creador de complementos](./plugin-creator.md) |
 | **Skills** | Skills descubiertas con su ámbito, tamaño e interruptor; las deshabilitadas salen de la paleta `/`. **Nueva skill** abre el [Creador de skills](./skill-builder.md) |
-| **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita. La pestaña **Explorar** recorre el catálogo MCP guardado en este equipo (búsqueda, categoría, dónde se ejecuta, filtro de listos para instalar, 24 por página, actualizar ahora); **Instalar** o **Conectar** abre un formulario compacto (solo lo que Alisio no puede decidir: claves como campos de contraseña y el consentimiento MCP existente sin marcar), permite elegir **Solo este proyecto** o **Todos mis proyectos**, muestra el progreso con **Cancelar** y termina con **Instalar y comprobar** / **Conectar y comprobar**. La lista **Conectados** muestra dónde se ejecuta cada servidor (**En este equipo** / **Servicio remoto**) y dónde está disponible (**Global** / **Proyecto**) como distintivos separados y, en un servidor web o sin interfaz, dice **En el equipo donde se ejecuta Alisio** en lugar de atribuirlo al equipo del navegador. Cada fila ofrece **Comprobar conexión** (una comprobación aislada que lista lo que anuncia el servicio sin llamar a ninguna herramienta, con sus etapas y una vía de recuperación), **Configurar** (un formulario tipado donde una clave guardada solo aparece como *Clave guardada*), **Actualizar** para paquetes instalados, **Iniciar sesión** / **Cerrar sesión** para servicios con OAuth, y un **Quitar** / **Desconectar** según el ámbito que nunca promete cancelar una cuenta. **Detalles** en una ficha del catálogo muestra quién lo ofrece, dónde se ejecuta, qué necesita y qué le pedirá. Las fichas PyPI, OCI, MCPB y SSE lo dicen y remiten a la configuración manual (véase [Configuración](/es/configuration#instalar-desde-el-catalogo)). Hay una guía paso a paso con capturas en [Catálogo MCP](/es/mcp-catalog) |
-| **Presets de agente** | `build`, `plan` y los agentes de usuario o de plugins aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
+| **Servidores MCP** | Estado, transporte y contadores de cada servidor configurado, interruptor y **Conectar**; **Conceder acceso MCP** pide antes una confirmación explícita. La pestaña **Explorar** recorre el catálogo MCP guardado en este equipo (búsqueda, categoría, dónde se ejecuta, filtro de listos para instalar, 24 por página, actualizar ahora); **Instalar** o **Conectar** abre un formulario compacto (solo lo que Alisio no puede decidir: claves como campos de contraseña y el consentimiento MCP existente sin marcar), permite elegir **Solo este proyecto** o **Todos mis proyectos**, muestra el progreso con **Cancelar** y termina con **Instalar y comprobar** / **Conectar y comprobar**. La lista **Conectados** muestra dónde se ejecuta cada servidor (**En este equipo** / **Servicio remoto**) y dónde está disponible (**Global** / **Proyecto**) como distintivos separados y, en un servidor web o sin interfaz, dice **En el equipo donde se ejecuta Alisio** en lugar de atribuirlo al equipo del navegador. Cada fila ofrece **Comprobar conexión** (una comprobación aislada que lista lo que anuncia el servicio sin llamar a ninguna herramienta, con sus etapas y una vía de recuperación), **Configurar** (un formulario tipado donde una clave guardada solo aparece como *Clave guardada*), **Actualizar** para paquetes instalados, **Iniciar sesión** / **Cerrar sesión** para servicios con OAuth, y un **Quitar** / **Desconectar** según el ámbito que nunca promete cancelar una cuenta. **Detalles** en una ficha del catálogo muestra quién lo ofrece, dónde se ejecuta, qué necesita y qué le pedirá. Las fichas PyPI, OCI, MCPB y SSE lo dicen y remiten a la configuración manual (consulta [Configuración](/es/configuration#instalar-desde-el-catalogo)). Hay una guía paso a paso con capturas en [Catálogo MCP](/es/mcp-catalog) |
+| **Presets de agente** | `build`, `plan` y los agentes de usuario o de complementos aptos para la sesión principal, con instrucciones y modelo sugerido; **Usar en esta sesión** cambia la sesión abierta |
 | **Apariencia** | Tema (oscuro, claro o sistema) y si las filas de herramientas empiezan plegadas o desplegadas, guardado en este navegador |
 
 ### Iniciar sesión en un proveedor {#provider-sign-in}
 
-Un proveedor cuyo plugin declara métodos de inicio de sesión muestra un bloque **Iniciar sesión** en la
-tarjeta de su perfil, con un botón por método (la etiqueta y la descripción las aporta el plugin).
+Un proveedor cuyo complemento declara métodos de inicio de sesión muestra un bloque **Iniciar sesión** en la
+tarjeta de su perfil, con un botón por método (la etiqueta y la descripción las aporta el complemento).
 Mientras corre un inicio de sesión, el bloque consulta al servidor cada segundo y muestra lo que pide
-el plugin: un código de dispositivo y su dirección con botones **Copiar**, un botón que abre la página
-de autorización en una pestaña nueva, líneas de progreso y un campo para la respuesta que el plugin te
-pide pegar (enmascarado si es secreto), rotulado con el propio mensaje del plugin. **Cancelar** detiene
+el complemento: un código de dispositivo y su dirección con botones **Copiar**, un botón que abre la página
+de autorización en una pestaña nueva, líneas de progreso y un campo para la respuesta que el complemento te
+pide pegar (enmascarado si es secreto), rotulado con el propio mensaje del complemento. **Cancelar** detiene
 el inicio de sesión. Un proveedor que solo inicia sesión no muestra campo de clave de API; con la
 sesión iniciada, la tarjeta ofrece **Cerrar sesión**, y una sesión vencida muestra **Sesión caducada** e
 **Iniciar sesión de nuevo**.
@@ -264,7 +264,7 @@ sesión iniciada, la tarjeta ofrece **Cerrar sesión**, y una sesión vencida mu
   **Entiendo el riesgo**.
 - Los enlaces se abren únicamente con `window.open(url, "_blank", "noopener,noreferrer")` y solo si son
   `https:` (o `http:` en `localhost`/`127.0.0.1`); cualquier otro enlace se bloquea y nunca se abre.
-- El texto del plugin (etiquetas, descripciones, instrucciones y mensajes de petición) se muestra
+- El texto del complemento (etiquetas, descripciones, instrucciones y mensajes de petición) se muestra
   siempre como texto plano, nunca como HTML ni Markdown.
 - Si el servidor se reinicia mientras corre un inicio de sesión, el flujo desaparece: el bloque dice
   **Inicio de sesión interrumpido, empieza de nuevo** y ofrece empezar otra vez. Cuando termina un
@@ -275,11 +275,11 @@ sesión iniciada, la tarjeta ofrece **Cerrar sesión**, y una sesión vencida mu
 
 <figure class="doc-shot">
   <img src="../assets/web-ui/provider_oauth_web_ui.webp" alt="Ajustes, Modelos: un perfil con un método de inicio de sesión no oficial, marcado como tal, y un perfil con un inicio de sesión en curso con un código de dispositivo, su dirección con botones Copiar y Abrir enlace, una línea de progreso, un campo para el código de confirmación y un botón Cancelar." width="1060" height="960" loading="lazy" decoding="async" />
-  <figcaption>Inicio de sesión desde Ajustes → Modelos, con un proveedor falso programado: el código y la dirección, un campo enmascarado para la respuesta que pide el plugin y Cancelar.</figcaption>
+  <figcaption>Inicio de sesión desde Ajustes → Modelos, con un proveedor falso programado: el código y la dirección, un campo enmascarado para la respuesta que pide el complemento y Cancelar.</figcaption>
 </figure>
 
 **Abrir archivo de configuración** (arriba a la derecha) muestra el archivo de configuración
-efectivo del workspace, su archivo de ajustes de usuario y el de perfiles de proveedor, cada uno con
+efectivo del workspace, tu archivo de ajustes de usuario y el de perfiles de proveedor, cada uno con
 un botón de copiar. El servidor nunca abre un editor. La versión de Alisio (la del servidor, la que imprime `alisio --version`) se
 muestra en **Ajustes → Acerca de** y, de forma discreta, al pie de la barra lateral.
 
@@ -288,45 +288,45 @@ Las credenciales son de solo escritura. El campo de una credencial es de tipo co
 entorno y, para valores guardados de 16 caracteres o más, los tres últimos caracteres
 (`Guardada · termina en …71B`). Ninguna respuesta de la API contiene un secreto.
 
-Habilitar o deshabilitar un plugin escribe un ajuste del proyecto (`.alisio/config.json`) y requiere
-que el workspace sea de confianza. Los plugins se cargan al arrancar la aplicación del workspace,
+Habilitar o deshabilitar un complemento escribe un ajuste del proyecto (`.alisio/config.json`) y requiere
+que el workspace sea de confianza. Los complementos se cargan al arrancar la aplicación del workspace,
 así que el servidor recarga esa aplicación en cuanto no tiene runs: de inmediato si está inactiva o,
 si no, cuando termina su último run (mientras tanto la tarjeta muestra **Requiere reinicio**). Las
 sesiones conservan su historial y todas las paletas de comandos abiertas se actualizan. Los
 interruptores de skills se aplican al momento.
 
-### Catálogo de plugins, instalación y actualizaciones {#plugin-catalog}
+### Catálogo de complementos, instalación y actualizaciones {#plugin-catalog}
 
-**Ajustes → Plugins** instala, actualiza y elimina plugins sin usar la terminal. Tiene cuatro
-pestañas: **Configuración de plugins**, **Plugins instalados**, **Catálogo de plugins** e **Instalar
+**Ajustes → Complementos** instala, actualiza y elimina complementos sin usar la terminal. Tiene cuatro
+pestañas: **Configuración de complementos**, **Complementos instalados**, **Catálogo de complementos** e **Instalar
 desde archivo**. Cada instalación muestra antes la misma advertencia que la CLI: npm se ejecuta con
-los permisos de su usuario y puede ejecutar los scripts de instalación del paquete, y los plugins no
-están aislados. **No volver a preguntar en esta sesión** la omite hasta que recargue la página (una
+los permisos de tu usuario y puede ejecutar los scripts de instalación del paquete, y los complementos no
+están aislados. **No volver a preguntar en esta sesión** la omite hasta que recargues la página (una
 versión anterior siempre pregunta). Instalar y desinstalar se rechazan con `--read-only`, y solo se
 ejecuta una operación a la vez.
 
-**Plugins instalados.** Cada tarjeta muestra la versión; **Desinstalar** (con confirmación) elimina
-los plugins de npm instalados en su directorio global de plugins. Los plugins integrados y los de
+**Complementos instalados.** Cada tarjeta muestra la versión; **Desinstalar** (con confirmación) elimina
+los complementos de npm instalados en su directorio global de complementos. Los complementos integrados y los de
 proyecto o locales no se pueden desinstalar aquí y se indica el motivo. Cuando existe una versión
 más reciente, la tarjeta muestra **Actualización disponible: vX → vY** y un botón **Actualizar**, y
 el encabezado las cuenta (**2 actualizaciones disponibles**) con un botón **Actualizar todo** que las
 actualiza todas en una sola instalación combinada de npm (así npm resuelve juntos todos los rangos
-peer de `@alisio/sdk`) y termina con un resumen. Si actualizar un solo plugin falla porque otros
-plugins instalados aún dependen del SDK anterior, Alisio reintenta una vez como una sola
-instalación de ese plugin más los demás plugins instalados que tienen una versión más reciente, y
+peer de `@alisio/sdk`) y termina con un resumen. Si actualizar un solo complemento falla porque otros
+complementos instalados aún dependen del SDK anterior, Alisio reintenta una vez como una sola
+instalación de ese complemento más los demás complementos instalados que tienen una versión más reciente, y
 te dice cuáles se actualizaron junto con él; nunca fuerza ni relaja las reglas peer. **Buscar actualizaciones** refresca el catálogo para
-ambas pestañas. Las actualizaciones se conocen solo para los plugins del catálogo; no hay consulta
-al registro para otros plugins de npm, y un plugin instalado desde un archivo no tiene origen
+ambas pestañas. Las actualizaciones se conocen solo para los complementos del catálogo; no hay consulta
+al registro para otros complementos de npm, y un complemento instalado desde un archivo no tiene origen
 remoto, así que muestra **Paquete local vX** y **Actualizar desde archivo…**, que abre **Instalar
 desde archivo** para ese paquete. Una actualización que requiere un `@alisio/sdk` más reciente que el
 de Alisio queda deshabilitada con **La actualización requiere una versión más reciente de Alisio**.
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/plugins_installed_web_ui.webp" alt="Ajustes, Plugins, Plugins instalados: una actualización disponible, la tarjeta de Context7 con la píldora Actualización disponible v0.4.0 a v0.5.0 y un botón Actualizar, y la tarjeta de Brave Search desplegada con su interruptor y el botón Desinstalar." width="1060" height="780" loading="lazy" decoding="async" />
-  <figcaption>Plugins instalados: el contador de actualizaciones, Buscar actualizaciones, el botón Actualizar y Desinstalar con el nombre del paquete.</figcaption>
+  <img src="../assets/web-ui/plugins_installed_web_ui.webp" alt="Ajustes, Complementos, Complementos instalados: una actualización disponible, la tarjeta de Context7 con la píldora Actualización disponible v0.4.0 a v0.5.0 y un botón Actualizar, y la tarjeta de Brave Search desplegada con su interruptor y el botón Desinstalar." width="1060" height="780" loading="lazy" decoding="async" />
+  <figcaption>Complementos instalados: el contador de actualizaciones, Buscar actualizaciones, el botón Actualizar y Desinstalar con el nombre del paquete.</figcaption>
 </figure>
 
-**Catálogo de plugins.** Los complementos publicados como una lista compacta, una fila por
+**Catálogo de complementos.** Los complementos publicados como una lista compacta, una fila por
 complemento: su icono, su nombre, una descripción corta (cortada con la misma longitud en todas las
 filas; el texto completo es el tooltip y la descripción accesible) y un botón con icono para la
 acción: **Instalar** (+), **Actualizar**, **Reinstalar** cuando ya está instalada la misma versión, o
@@ -336,7 +336,7 @@ que explica el motivo, y las filas llevan una insignia **Instalado**, **Actualiz
 diálogo y tres con el diálogo maximizado. La búsqueda cubre nombre, descripción, etiquetas y paquete;
 se filtra por categoría y etiquetas y, opcionalmente, se agrupa por categoría. Diez complementos por
 página, con esqueletos de carga y un estado de error con **Reintentar**. La acción nunca abre el
-detalle; haga clic en la fila (o pulse `Enter` o `Espacio` sobre ella) para abrirlo.
+detalle; haz clic en la fila (o pulsa `Enter` o `Espacio` sobre ella) para abrirlo.
 
 <figure class="doc-shot">
   <img src="../assets/web-ui/plugin_catalog_web_ui.webp" alt="Ajustes, Complementos, Catálogo de complementos: cuadro de búsqueda, Buscar actualizaciones, filtros de categoría y etiquetas, y una lista de dos columnas de complementos, cada uno con su icono, nombre, descripción corta y un botón con icono de Instalar o Reinstalar." width="1040" height="760" loading="lazy" decoding="async" />
@@ -351,7 +351,7 @@ enlaces a npm y al sitio web. Debajo van la portada, la descripción completa, u
 de `@alisio/sdk` que necesita y si esta versión de Alisio lo cumple, el paquete de npm, la fecha de
 publicación y los enlaces a npm, repositorio y sitio web; solo lo que el catálogo ofrece) y un aviso
 de que los complementos no están aislados. **Volver al catálogo** (o `Esc`) regresa a la lista con la
-misma búsqueda, filtros y página, y con el foco en la fila que abrió.
+misma búsqueda, filtros y página, y con el foco en la fila que abriste.
 
 <figure class="doc-shot">
   <img src="../assets/web-ui/plugin_catalog_detail_web_ui.webp" alt="Ajustes, Complementos, Detalle de OpenAI: icono, nombre, autor, los botones Actualizar, Desinstalar, npm y Sitio web, la portada grande, la descripción, la lista de Información y el aviso de que no está aislado." width="1068" height="1468" loading="lazy" decoding="async" />
@@ -359,9 +359,9 @@ misma búsqueda, filtros y página, y con el foco en la fila que abrió.
 </figure>
 
 **Iconos de complementos.** Junto a cada complemento aparece un icono en el catálogo, en
-**Plugins instalados**, en las confirmaciones de instalar, actualizar y desinstalar y en la vista
+**Complementos instalados**, en las confirmaciones de instalar, actualizar y desinstalar y en la vista
 previa de **Instalar desde archivo**. Es el icono del catálogo si el paquete está en el catálogo; si
-no, el icono que incluye el paquete instalado (vea [Icono del
+no, el icono que incluye el paquete instalado (consulta [Icono del
 complemento](/es/plugins)); si no, un icono predeterminado (una pieza de rompecabezas),
 que también se usa cuando un icono no carga y para los complementos integrados, de proyecto y de
 archivo aún sin instalar. Los iconos pasan por el servidor como las portadas, así que el navegador
@@ -369,7 +369,7 @@ nunca contacta el origen del catálogo.
 
 **Caché del catálogo.** El servidor descarga el catálogo (`ALISIO_PLUGIN_CATALOG_URL`, por defecto el
 catálogo publicado de `alisio-plugins`) y lo guarda en su directorio de estado. No vuelve a consultarlo
-durante 24 horas salvo que pulse **Buscar actualizaciones**; entonces envía una petición
+durante 24 horas salvo que pulses **Buscar actualizaciones**; entonces envía una petición
 condicional, así que un catálogo sin cambios cuesta un `304`. La pestaña muestra cuándo se comprobó
 por última vez y si es una copia en caché o está sin conexión. Sin conexión se muestra la copia
 guardada con un aviso; sin conexión y sin copia se muestra un error con **Reintentar**. Las portadas
@@ -377,21 +377,21 @@ pasan por el servidor (el navegador nunca contacta el origen del catálogo) y se
 campo del catálogo se valida: los enlaces deben ser `https:`, las portadas deben venir del origen del
 propio catálogo y un paquete con un nombre npm inválido se descarta.
 
-**Instalar desde el catálogo.** Un clic, un estado de carga y el plugin aparece de inmediato en
-**Plugins instalados**. Se instala la versión del catálogo; si npm aún no la publica, se instala la
+**Instalar desde el catálogo.** Un clic, un estado de carga y el complemento aparece de inmediato en
+**Complementos instalados**. Se instala la versión del catálogo; si npm aún no la publica, se instala la
 última del registro.
 
-**Instalar desde archivo.** Para plugins privados que nunca se publican: genere un tarball con
-`pnpm pack` o `npm pack` y elíjalo o suéltelo en la pestaña. El servidor lee solo
+**Instalar desde archivo.** Para complementos privados que nunca se publican: genera un tarball con
+`pnpm pack` o `npm pack` y elígelo o suéltalo en la pestaña. El servidor lee solo
 `package/package.json` (no necesita el binario `tar`) y muestra una tarjeta de validación: nombre,
 versión, descripción, autor, licencia, tamaño, el rango de `@alisio/sdk` (una discrepancia es una
-advertencia, no un bloqueo), si es un plugin de Alisio válido (la keyword `alisio-plugin`, nombre y
+advertencia, no un bloqueo), si es un complemento de Alisio válido (la keyword `alisio-plugin`, nombre y
 versión válidos, un punto de entrada), una advertencia destacada si declara scripts `preinstall`,
 `install` o `postinstall`, y si actualizará, reinstalará o instalará una versión anterior de la ya
 instalada. Límites: 50 MB para el archivo y 1 MB para `package.json`.
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/plugin_install_file_web_ui.webp" alt="Ajustes, Plugins, Instalar desde archivo: la tarjeta de validación de un plugin privado con nombre, versión, autor, licencia, tamaño, el rango del SDK y una advertencia de que esta versión de Alisio tiene un SDK más reciente, y el botón Instalar." width="1060" height="780" loading="lazy" decoding="async" />
+  <img src="../assets/web-ui/plugin_install_file_web_ui.webp" alt="Ajustes, Complementos, Instalar desde archivo: la tarjeta de validación de un complemento privado con nombre, versión, autor, licencia, tamaño, el rango del SDK y una advertencia de que esta versión de Alisio tiene un SDK más reciente, y el botón Instalar." width="1060" height="780" loading="lazy" decoding="async" />
   <figcaption>Instalar desde archivo: la tarjeta de validación con la advertencia del SDK antes de instalar nada.</figcaption>
 </figure>
 
@@ -401,7 +401,7 @@ workspace** y **Limpiando**. Si falla, la instalación se revierte por completo 
 últimas líneas de la salida de npm.
 
 <figure class="doc-shot">
-  <img src="../assets/web-ui/plugin_install_progress_web_ui.webp" alt="Ajustes, Plugins, Instalar desde archivo: el progreso de una instalación, con las tres primeras fases marcadas, Instalando dependencias en curso y el resto en espera." width="1060" height="780" loading="lazy" decoding="async" />
+  <img src="../assets/web-ui/plugin_install_progress_web_ui.webp" alt="Ajustes, Complementos, Instalar desde archivo: el progreso de una instalación, con las tres primeras fases marcadas, Instalando dependencias en curso y el resto en espera." width="1060" height="780" loading="lazy" decoding="async" />
   <figcaption>El progreso de la instalación: las fases terminadas se marcan y la actual gira.</figcaption>
 </figure>
 
@@ -413,17 +413,17 @@ quede con más de una hora se limpia. Al desinstalar se elimina la copia guardad
 
 **Actualizar en el sitio.** Instalar un paquete que ya está instalado lo reemplaza y nunca crea un
 duplicado: **Actualizar vX → vY**, **Reinstalar** o **Volver a vX (desde vY)** (con una
-advertencia). La entrada `plugins` de su configuración sigue siendo una sola y el tarball guardado
-anterior se elimina cuando el nuevo funciona. Un plugin instalado antes desde un archivo que aún
+advertencia). La entrada `plugins` de tu configuración sigue siendo una sola y el tarball guardado
+anterior se elimina cuando el nuevo funciona. Un complemento instalado antes desde un archivo que aún
 apunta fuera de `local-packages` se migra al almacén estable en su siguiente actualización. Si la
 actualización falla, se restaura la versión anterior.
 
-**Reinicio tras una actualización.** Node conserva el código de un plugin que ya cargó, así que
-reemplazar un plugin cargado no puede surtir efecto en el proceso en ejecución. Entonces el resultado
-pide un reinicio: un aviso (**Plugin actualizado. Reinicia Alisio para usar la versión nueva.**) y
+**Reinicio tras una actualización.** Node conserva el código de un complemento que ya cargó, así que
+reemplazar un complemento cargado no puede surtir efecto en el proceso en ejecución. Entonces el resultado
+pide un reinicio: un aviso (**Complemento actualizado. Reinicia Alisio para usar la versión nueva.**) y
 una píldora **Reinicio pendiente** en la tarjeta. En la [aplicación de escritorio](/desktop) el aviso
 tiene **Reiniciar ahora**, que reinicia el proceso en segundo plano y recarga la ventana. Con
-`alisio serve` no hay botón: reinicie el comando usted mismo. La primera instalación de un plugin que
+`alisio serve` no hay botón: reinicia el comando tú mismo. La primera instalación de un complemento que
 nunca se cargó no necesita reinicio.
 
 
@@ -432,7 +432,7 @@ nunca se cargó no necesita reinicio.
 El servidor está pensado para un usuario en una máquina:
 
 - Se enlaza a `127.0.0.1` por defecto. Exponerlo en una red exige `--host <address>
-  --allow-remote` y muestra una advertencia; no hay TLS, así que use un túnel SSH en su lugar.
+  --allow-remote` y muestra una advertencia; no hay TLS, así que usa un túnel SSH en su lugar.
 - Se genera un token de arranque de 256 bits por proceso que nunca se escribe en disco. El
   navegador lo canjea una vez por una cookie `HttpOnly; SameSite=Strict` que guarda otro secreto.
 - Toda petición debe nombrar a este servidor en `Host` (defensa contra DNS rebinding), y las
@@ -443,7 +443,7 @@ El servidor está pensado para un usuario en una máquina:
   la API no se cachean.
 - Las aprobaciones fallan cerradas: si ninguna pestaña del navegador observa la sesión durante 30
   segundos, si la ejecución se cancela o tras 10 minutos, la respuesta es **denegar**.
-- Los plugins no están aislados: los plugins de un proyecto de confianza se ejecutan dentro del
+- Los complementos no están aislados: los complementos de un proyecto de confianza se ejecutan dentro del
   proceso del servidor con sus permisos del sistema operativo, exactamente igual que en la
   terminal.
 - El diálogo nativo de carpetas y el explorador de carpetas integrado solo existen en loopback. El
@@ -466,11 +466,11 @@ la sesión actual o el usado más recientemente que todavía exista; si no hay n
 workspace. Las carpetas con el mismo nombre muestran junto a él una ruta padre corta, y la ruta
 completa al pasar el ratón.
 
-Archive un workspace desde su menú de acciones para ocultarlo, junto con sus sesiones, de la barra
+Archiva un workspace desde su menú de acciones para ocultarlo, junto con sus sesiones, de la barra
 lateral; **Mostrar archivados** vuelve a mostrar ambos (los workspaces archivados van al final).
 Archivar conserva todas las sesiones, que siguen visibles, cierra la aplicación inactiva del
 workspace y se rechaza con `409 runs_active` mientras haya una ejecución activa. Las sesiones nuevas
-en un workspace archivado se rechazan con `409 workspace_archived`; **Desarchívelo**, o vuelva a
+en un workspace archivado se rechazan con `409 workspace_archived`; **Desarchívalo**, o vuelve a
 abrir la misma carpeta, para usarlo. Así se oculta también un workspace cuya carpeta ya no existe.
 
 ### Abrir un proyecto
@@ -489,19 +489,19 @@ pide una carpeta de la mejor forma que admita el servidor:
      alternativa, el explorador de carpetas de Shell.
 2. **Explorador de carpetas integrado** cuando no hay herramienta de diálogo (máquina sin escritorio,
    sesión SSH, `ALISIO_NATIVE_PICKER=0`): una ventana que solo lista nombres de carpetas, empieza en
-   su carpeta personal y tiene migas de pan, un botón de carpeta superior y **Mostrar carpetas
+   tu carpeta personal y tiene migas de pan, un botón de carpeta superior y **Mostrar carpetas
    ocultas**. En Windows, el nivel superior lista las unidades.
 3. **Escribir una ruta** está siempre disponible como enlace y es la única opción cuando el servidor
    escucha para acceso remoto (`--allow-remote`), porque un diálogo o un listado de carpetas
-   mostraría la máquina del servidor y no la suya.
+   mostraría la máquina del servidor y no la tuya.
 
-Un directorio en el que no haya confiado se abre sin sus recursos de proyecto (configuración,
-plugins, agentes, skills, prompts) y se marca como no confiable. Confíe en él desde su menú **⋯** de
+Un directorio en el que no hayas confiado se abre sin sus recursos de proyecto (configuración,
+complementos, agentes, skills, prompts) y se marca como no confiable. Confía en él desde su menú **⋯** de
 la barra lateral (**Confiar en este proyecto…**) o desde el editor de [Agentes](/es/agents), tras
-una confirmación que explica lo que desbloquea la confianza; o ejecute `alisio` en ese directorio
+una confirmación que explica lo que desbloquea la confianza; o ejecuta `alisio` en ese directorio
 para responder a la pregunta de la terminal. Ambos guardan la misma decisión, ligada al contenido de
 `.alisio/config.json`: si ese archivo cambia, el workspace vuelve a no ser de confianza hasta que lo
-confirme. El workspace se reabre para que el cambio se aplique al momento (se rechaza mientras tenga
+confirmes. El workspace se reabre para que el cambio se aplique al momento (se rechaza mientras tenga
 ejecuciones activas, con `--read-only` y cuando `--trust-project`/`--config` fijan la confianza del
 servidor). **Dejar de confiar en este proyecto…** la retira.
 
@@ -517,7 +517,7 @@ Una sesión que usa otro proceso de Alisio (por ejemplo la TUI) aparece bloquead
 lectura en la web hasta que ese proceso la libere.
 
 Cada sesión tiene un preset de permisos, que también es su modo de permisos (`ask`, `auto` o
-`full`, véase [Modos de permisos](#permission-modes)). Los efectos que los flags de arranque no
+`full`, consulta [Modos de permisos](#permission-modes)). Los efectos que los flags de arranque no
 permiten siguen preguntando, sea cual sea el preset:
 
 | Preset | Modo | Permitido sin preguntar | Otros efectos |
@@ -533,7 +533,7 @@ mismo workspace.
 ### Selector de agente y Shift+Tab {#agent-cycle}
 
 La barra del compositor muestra el agente activo (**Agente: build**) junto al menú de permisos.
-Ábralo para elegir cualquier agente principal; la elección se guarda en la sesión y se aplica desde
+Ábrelo para elegir cualquier agente principal; la elección se guarda en la sesión y se aplica desde
 el siguiente prompt. **Mayús+Tab** con el foco en el cuadro de mensaje recorre la misma lista:
 `build`, `plan` y después sus agentes primarios por nombre, con vuelta al inicio. El atajo se ignora
 mientras la paleta `/` está abierta, durante una composición IME y con cualquier otro modificador, y
@@ -558,7 +558,7 @@ responden en la conversación; el menú de permisos del compositor conserva los 
 
 ### Modo plan y revisión del plan {#plan-review}
 
-Cambie un chat al agente **plan** (el selector, **Mayús+Tab** o `/agent:plan`): investiga con
+Cambia un chat al agente **plan** (el selector, **Mayús+Tab** o `/agent:plan`): investiga con
 herramientas de solo lectura y entrega su plan con `exit_plan`. El plan se abre en la conversación, se
 guarda como artefacto `plan.md` y el compositor deja paso a la pantalla de decisión: **Aceptar y
 empezar la implementación**, **Omitir por ahora** (Esc hace lo mismo) o **Añadir contexto**. La
@@ -569,19 +569,19 @@ las reglas de decisión y las revisiones, es [Modo plan y revisión del plan](/e
 
 Un plan puede llevar pequeños diagramas Mermaid. La pantalla de decisión ofrece **Abrir el visor del
 plan** y la tarjeta del plan abre el mismo visor en el panel lateral: secciones, diagramas dibujados con
-la paleta de Alisio, enlaces entre diagramas y texto, y una descarga en ZIP. Véase [El visor del
-plan](/es/plan#plan-viewer); desactive los diagramas o limítelos con [`plan.diagrams` y
+la paleta de Alisio, enlaces entre diagramas y texto, y una descarga en ZIP. Consulta [El visor del
+plan](/es/plan#plan-viewer); desactiva los diagramas o límitalos con [`plan.diagrams` y
 `plan.maxDiagrams`](/es/plan#settings).
 
 ### Tareas en segundo plano {#background-tasks}
 
 Los comandos que el agente inicia con [`bg_run`](/es/tools#background-tasks) siguen corriendo mientras
-usted conversa. El icono de panel de la cabecera abre el panel derecho, cuya pestaña **Tareas** las
+tú conversas. El icono de panel de la cabecera abre el panel derecho, cuya pestaña **Tareas** las
 lista (la pestaña indica cuántas corren y el icono de panel muestra un punto mientras haya alguna).
-Elija una para seguir su **salida en vivo**: se lee de forma incremental una vez por segundo, se
+Elige una para seguir su **salida en vivo**: se lee de forma incremental una vez por segundo, se
 muestra en la misma vista de terminal que los resultados de `shell` (colores, copiar, las últimas
 2 000 líneas) y conserva los últimos 200 000 caracteres. **Detener** termina una tarea en ejecución
-como usted (queda *Detenida*, nunca *Fallida*). La lista también muestra los
+como tú (queda *Detenida*, nunca *Fallida*). La lista también muestra los
 [subagentes](/es/subagents) de la sesión como una vista de **solo lectura** de su estado; se gestionan
 como siempre. `/tasks` en el compositor abre la pestaña, y el panel se carga bajo demanda (no forma
 parte del bundle inicial).
@@ -591,8 +591,7 @@ parte del bundle inicial).
   <figcaption>La pestaña Tareas siguiendo una tarea en ejecución: salida en vivo y el botón Detener.</figcaption>
 </figure>
 
-Cuando una tarea termina por sí sola, un aviso lo dice (no para una tarea que usted o el agente
-detuvieron) y un mensaje coalescido despierta al agente: aparece en el chat como *Background task
+Cuando una tarea termina por sí sola, un aviso lo dice (no para una tarea que detuviste tú o el agente) y un mensaje coalescido despierta al agente: aparece en el chat como *Background task
 finished: …* y el agente puede leer la salida con `bg_output`. El mensaje espera mientras la sesión
 corre, hay una aprobación o una pregunta abierta, o la TUI tiene bloqueada la sesión. Las tareas **no
 están aisladas**, **terminan cuando `alisio serve` se detiene** (o se cierra la aplicación del
@@ -608,7 +607,7 @@ sobre el cuadro de mensaje, lo muestra, se carga bajo demanda (no forma parte de
 vuelve tras recargar (el snapshot del stream lleva el objetivo). El agente marca el objetivo como
 completo o bloqueado con [`update_goal`](/es/tools#goal-tools), con evidencia; solo tú lo pausas,
 reanudas, editas o borras, o cambias su presupuesto. Los comandos, los estados y los límites son los
-mismos que en la terminal: véase [Objetivos de sesión](/es/tui#goals).
+mismos que en la terminal: consulta [Objetivos de sesión](/es/tui#goals).
 
 > **Costo.** Un objetivo sigue gastando tokens por sí solo, y cada turno vuelve a enviar todo el
 > contexto. Un objetivo **sin presupuesto de tokens solo se detiene por sus límites de turnos y de
@@ -706,7 +705,7 @@ servidores MCP del workspace de la sesión. Se rechaza (`409`) mientras el works
 ejecuciones. El servidor valida la configuración y construye la aplicación nueva junto a la actual
 antes de intercambiarlas, así que un archivo roto no cambia nada y el error explica por qué. La
 conversación muestra el informe (qué cambió por área y qué necesita un reinicio, como el código de
-plugins ya importado), un aviso lo confirma y las paletas y páginas de ajustes abiertas se
+complementos ya importado), un aviso lo confirma y las paletas y páginas de ajustes abiertas se
 actualizan con `catalog_changed`. `/changelog [version]` abre un diálogo con el changelog incluido,
 que funciona sin conexión. Tras una actualización un único aviso discreto lo dice; la última versión
 vista se guarda en el `localStorage` del navegador y nada falla si el almacenamiento está
@@ -714,8 +713,8 @@ bloqueado. Ambos comandos son solo interactivos: `alisio run` no cambia.
 
 ### Pestaña Memoria {#memory-tab}
 
-Mientras el [plugin de memoria](/es/memory#web-tab) integrado está habilitado, aparece una pestaña
-**Memoria** junto a **Conversación** y **Trayectoria**. Muestra, solo en lectura, lo que el plugin
+Mientras el [complemento de memoria](/es/memory#web-tab) integrado está habilitado, aparece una pestaña
+**Memoria** junto a **Conversación** y **Trayectoria**. Muestra, solo en lectura, lo que el complemento
 guarda para el **chat abierto**, en tres secciones:
 
 - **Guardado en este chat**: las memorias guardadas mientras este chat estaba abierto (por el modelo,
@@ -724,9 +723,9 @@ guarda para el **chat abierto**, en tres secciones:
   para leer de 20 en 20. Cada entrada muestra su tipo y título, un resumen de su contenido
   (**Ver más** / **Ver menos**), cuándo se actualizó, de dónde viene y el registro sin procesar en
   **Detalles**.
-- **Resumen de la sesión**: el resumen que el plugin guardó para este chat (uno por sesión; la
+- **Resumen de la sesión**: el resumen que el complemento guardó para este chat (uno por sesión; la
   compactación y el resumen de fin de sesión lo sobrescriben).
-- **Contexto cargado**: el contexto de memoria que el plugin añadió cuando empezó este chat, que es
+- **Contexto cargado**: el contexto de memoria que el complemento añadió cuando empezó este chat, que es
   lo primero que vio el modelo.
 
 <figure class="doc-shot">
@@ -737,13 +736,13 @@ guarda para el **chat abierto**, en tres secciones:
 Cada sección carga, falla y reintenta por separado. Nada se actualiza en vivo: **Actualizar** vuelve
 a cargar las tres secciones y conserva los filtros, y las memorias guardadas mientras se navega
 aparecen tras actualizar (la lista nunca repite ni se salta una entrada al paginar). Cambiar de chat
-recarga la pestaña y nunca muestra datos de otro chat. La pestaña existe solo mientras el plugin
-está habilitado: desactivarlo en **Ajustes → Plugins** la quita y vuelve a **Conversación**. Un chat
+recarga la pestaña y nunca muestra datos de otro chat. La pestaña existe solo mientras el complemento
+está habilitado: desactivarlo en **Ajustes → Complementos** la quita y vuelve a **Conversación**. Un chat
 vacío muestra **Aún no hay memoria guardada para este chat**.
 
 La memoria puede contener datos sensibles del proyecto. La pestaña se sirve por las mismas rutas
-de sesión autenticadas que la conversación (`GET /api/sessions/:sid/views/memory/…`, véanse las
-[vistas de datos de plugins](/es/plugins#data-views)) y se la muestra a quien tenga la cookie de
+de sesión autenticadas que la conversación (`GET /api/sessions/:sid/views/memory/…`, consulta las
+[vistas de datos de complementos](/es/plugins#data-views)) y se la muestra a quien tenga la cookie de
 sesión de este servidor. Es una vista: fijar y olvidar siguen en la TUI (`/memory`) y en las
 herramientas del modelo. De dónde sale cada sección y sus límites están en
 [Memoria](/es/memory#web-tab).
@@ -937,8 +936,8 @@ PUT|DELETE /api/providers/:profile/credentials {apiKey?, bearerToken?}   write-o
 POST /api/providers/:profile/activate {workspace, model}   GET /api/models?workspace=<wid>
 ```
 
-Las vistas de datos de plugins responden `404` ante una sesión, un plugin o una vista desconocidos
-o un plugin deshabilitado, `400` ante parámetros no válidos y `view_failed` (502), `view_too_large`
+Las vistas de datos de complementos responden `404` ante una sesión, un complemento o una vista desconocidos
+o un complemento deshabilitado, `400` ante parámetros no válidos y `view_failed` (502), `view_too_large`
 (502) o `view_timeout` (504) cuando la vista falla, responde más de 1 MiB o tarda más de 5 segundos.
 
 Una tarea en segundo plano que aparece o cambia de estado envía un frame `tasks_changed`
@@ -964,15 +963,15 @@ que aún se está generando, la hora de inicio de la ejecución, aprobaciones pe
 llevan su `eventId` como `id` de SSE, y el texto generado llega agrupado unas 30 veces por segundo.
 La versión del protocolo aparece en `/api/health` y en el primer frame del stream.
 
-## Aplicaciones de plugins
+## Aplicaciones de complementos
 
-Los plugins pueden registrar aplicaciones de página completa (vea [Aplicaciones de plugins](/es/plugins#plugin-apps)). Cuando
+Los complementos pueden registrar aplicaciones de página completa (consulta [Aplicaciones de complementos](/es/plugins#plugin-apps)). Cuando
 el proyecto abierto tiene al menos una, aparece un grupo **Aplicaciones** en el panel izquierdo
 justo encima de **Proyectos**; si no hay ninguna, el grupo no se muestra. La lista se refresca cada
 15 segundos. Abrir una aplicación sustituye toda el área del chat: el encabezado, los mensajes, el
 cuadro de escritura, las estadísticas y el panel lateral se ocultan y el panel de proyectos
 permanece. **Volver al chat** devuelve la conversación con su borrador y los adjuntos pendientes, y
-una aplicación que dejó conserva su edición sin guardar hasta que recargue la página. Otro proyecto
+una aplicación que dejaste conserva su edición sin guardar hasta que recargues la página. Otro proyecto
 es otra instancia. En pantallas estrechas, el botón **Proyectos** de la barra de la aplicación
 abre el panel habitual. Las aplicaciones siguen el idioma de la interfaz y se ejecutan en un frame
 con sandbox sin acceso a la red: solo llegan a Alisio mediante acciones autenticadas y con
@@ -999,13 +998,13 @@ permisos comprobados.
   workspaces abiertos conservan su proveedor hasta que se vuelven a abrir. Las credenciales guardadas
   se aplican la próxima vez que se activa el perfil.
 - El acceso MCP concedido desde la web dura hasta que se detiene `alisio serve` y cubre un
-  workspace, salvo que elija recordarlo para el usuario.
+  workspace, salvo que elijas recordarlo para el usuario.
 - El binario independiente sirve solo la API; los assets de la interfaz web se distribuyen con el
   paquete npm.
 - La interfaz web conserva la salida de comandos, los avisos y el razonamiento solo mientras la
   página está abierta; al recargar, la conversación se reconstruye desde los mensajes guardados.
-- Mayús+Tab alterna agentes solo desde el cuadro de mensaje (véase [Selector de agente](#agent-cycle));
-  el changelog está solo en inglés y `/reload` no puede recargar el código de plugins ya importado.
+- Mayús+Tab alterna agentes solo desde el cuadro de mensaje (consulta [Selector de agente](#agent-cycle));
+  el changelog está solo en inglés y `/reload` no puede recargar el código de complementos ya importado.
 - El panel de archivos muestra solo el workspace: los directorios añadidos con `--add-dir` no se
   pueden recorrer, los enlaces simbólicos se listan pero nunca se siguen (aunque apunten dentro del
   workspace) y el filtrado por `.gitignore` necesita `git` en el `PATH`. **Cambios** solo conoce los

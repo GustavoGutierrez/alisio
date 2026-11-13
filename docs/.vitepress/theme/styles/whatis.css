@@ -406,7 +406,8 @@ html.whatis-locked {
   border-color: var(--alisio-border-strong);
 }
 
-.whatis-facts li strong {
+/* Only the leading bold run is the tile title; bold words later in the text stay inline. */
+.whatis-facts li > strong:first-child {
   display: block;
   color: var(--vp-c-text-1);
   font-size: 0.9375rem;
@@ -649,24 +650,25 @@ html.whatis-locked {
   }
 }
 
-/* Fact tiles: the title link covers the whole tile, like the bento tiles. */
-.whatis-facts li a {
+/* Fact tiles: the title link covers the whole tile, like the bento tiles. Links inside the
+   text stay ordinary inline links. */
+.whatis-facts li > strong:first-child > a {
   color: inherit;
   text-decoration: none;
 }
 
-.whatis-facts li a::after {
+.whatis-facts li > strong:first-child > a::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: var(--whatis-radius-sm);
 }
 
-.whatis-facts li a:focus-visible {
+.whatis-facts li > strong:first-child > a:focus-visible {
   outline: none;
 }
 
-.whatis-facts li a:focus-visible::after {
+.whatis-facts li > strong:first-child > a:focus-visible::after {
   outline: 3px solid var(--alisio-focus-ring);
   outline-offset: -3px;
 }

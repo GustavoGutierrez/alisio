@@ -8,10 +8,10 @@ aprobación o está desactivada.
 | `read` | Sin efectos secundarios | Activada |
 | `write` | Modifica archivos del workspace | Requiere `--allow-write` (o aprobación en la TUI) |
 | `process` | Ejecuta procesos arbitrarios | Requiere `--allow-process` (o aprobación en la TUI) |
-| `external` | Herramientas de red (`webfetch`, `websearch`), MCP, Herdr y plugins externos | Requiere `--allow-external` (o aprobación en la TUI), `--allow-mcp`, `--allow-agents` o un plugin externo activo; nunca con `--read-only` |
-| `internal` | Escribe solo estado propio de Alisio (nunca el workspace ni la red) | Siempre permitida; solo se respeta en plugins integrados |
+| `external` | Herramientas de red (`webfetch`, `websearch`), MCP, Herdr y complementos externos | Requiere `--allow-external` (o aprobación en la TUI), `--allow-mcp`, `--allow-agents` o un complemento externo activo; nunca con `--read-only` |
+| `internal` | Escribe solo estado propio de Alisio (nunca el workspace ni la red) | Siempre permitida; solo se respeta en complementos integrados |
 
-Las operaciones desconocidas o de plugins usan `external` por defecto. `/tools` en la TUI muestra el
+Las operaciones desconocidas o de complementos usan `external` por defecto. `/tools` en la TUI muestra el
 estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 
 ## Herramientas incluidas
@@ -24,18 +24,18 @@ estado actual de cada herramienta (`enabled`, `ask`, `disabled`).
 | `git_status` | `read` | `git status --porcelain=v1` |
 | `git_diff` | `read` | `git diff --no-ext-diff --no-textconv` |
 | `skill_load`, `skill_search`, `skill_resource` | `read` | Catálogo, activación y recursos de Agent Skills |
-| `context_explain` | `read` | Explicar qué archivos `AGENTS.md` se aplican a una ruta (consulte [Contexto](/es/context)) |
-| `ask_user_question` | `read` | Preguntar al usuario de 1 a 4 preguntas de opción múltiple (véase [más abajo](#ask-user-question)) |
+| `context_explain` | `read` | Explicar qué archivos `AGENTS.md` se aplican a una ruta (consulta [Contexto](/es/context)) |
+| `ask_user_question` | `read` | Preguntar al usuario de 1 a 4 preguntas de opción múltiple (consulta [más abajo](#ask-user-question)) |
 | `write_file` | `write` | Escribir un archivo |
 | `edit_file` | `write` | Reemplazar una coincidencia exacta y única en un archivo |
 | `run_process` | `process` | Ejecutar un comando con un array de argumentos |
 | `shell` | `process` | Ejecutar un comando de shell |
-| `bg_run` | `process` | Iniciar un comando de shell en segundo plano y seguir trabajando (véase [más abajo](#background-tasks)) |
-| `bg_list`, `bg_output`, `bg_stop` | `process` | Listar las tareas en segundo plano, leer la salida de una de forma incremental, detener una (véase [más abajo](#background-tasks)) |
-| `webfetch` | `external` | Leer una URL como texto/markdown/html (véase [más abajo](#webfetch)) |
-| `websearch` | `external` | Buscar en la web (véase [más abajo](#websearch)) |
-| `execute` | `process` | Ejecutar un fragmento JS que llama a otras herramientas ("Code Mode", véase [más abajo](#execute)) |
-| `plugin_install` | `process` | Instalar un paquete de plugin npm en el directorio global de plugins (véase [más abajo](#plugin-install)) |
+| `bg_run` | `process` | Iniciar un comando de shell en segundo plano y seguir trabajando (consulta [más abajo](#background-tasks)) |
+| `bg_list`, `bg_output`, `bg_stop` | `process` | Listar las tareas en segundo plano, leer la salida de una de forma incremental, detener una (consulta [más abajo](#background-tasks)) |
+| `webfetch` | `external` | Leer una URL como texto/markdown/html (consulta [más abajo](#webfetch)) |
+| `websearch` | `external` | Buscar en la web (consulta [más abajo](#websearch)) |
+| `execute` | `process` | Ejecutar un fragmento JS que llama a otras herramientas ("Code Mode", consulta [más abajo](#execute)) |
+| `plugin_install` | `process` | Instalar un paquete de complemento npm en el directorio global de complementos (consulta [más abajo](#plugin-install)) |
 
 Las ediciones exigen una huella SHA-256 del archivo y una coincidencia exacta y única. Las escrituras
 usan un archivo temporal más un reemplazo atómico en el mismo filesystem. Las operaciones mediadas
@@ -51,7 +51,7 @@ herramientas y `alisio doctor` indican cómo instalarlo: `sudo apt install ripgr
 (Debian/Ubuntu), `brew install ripgrep` (macOS), `winget install BurntSushi.ripgrep.MSVC` o
 `scoop install ripgrep` (Windows).
 
-Los plugins integrados añaden más herramientas: `memory_*` de [Memoria persistente](/es/memory) y
+Los complementos integrados añaden más herramientas: `memory_*` de [Memoria persistente](/es/memory) y
 `task`, `task_status`, `task_wait` y `send_message` de [Subagentes](/es/subagents), todas con el
 efecto `internal`.
 
@@ -69,7 +69,7 @@ llegan a los proveedores como su proyección de texto), así que la entrada del 
 | `shell`, `run_process` | `terminal` | Línea de comando, salida estándar y después error estándar (los últimos 256 KB), código de salida y duración |
 
 Escribir un contenido idéntico no añade bloque. La TUI sigue mostrando estas herramientas como
-antes, a partir de su texto; los bloques de los mismos tipos que devuelven plugins y servidores MCP
+antes, a partir de su texto; los bloques de los mismos tipos que devuelven complementos y servidores MCP
 se siguen mostrando en la TUI.
 
 ## Preguntar al usuario {#ask-user-question}
@@ -81,7 +81,7 @@ cuando hay una bifurcación real en el enfoque. Es `effect: read`, pero está co
 [subagente](/es/subagents) bajo una TUI raíz interactiva también puede usarla—. En una ejecución
 headless (`run`, `resume <id> "prompt"`, `--json`, o cualquier sesión sin interfaz interactiva
 enlazada) la llamada falla rápido con un error estructurado que indica al modelo que pregunte en
-texto plano en su lugar; nunca se queda esperando una interfaz que no puede responder. Véase
+texto plano en su lugar; nunca se queda esperando una interfaz que no puede responder. Consulta
 [Interfaz de terminal](/es/tui#ask-user-question) para el panel, sus teclas, el comportamiento de
 Esc (omite solo la pregunta actual) y cómo se ponen en cola y se enrutan las preguntas de la raíz y
 de los subagentes hacia la sesión exacta que preguntó.
@@ -108,7 +108,7 @@ añade al plan hasta `plan.maxDiagrams` (5 por defecto) diagramas [Mermaid](http
 llamada sin él funciona exactamente como antes. `id` es un nombre estable en kebab-case (el archivo es
 `diagrams/<id>.mmd`), `section` es el encabezado del plan que ilustra el diagrama y `type` es `overview`,
 `flow`, `components`, `architecture`, `sequence`, `data`, `state` u `other` (se deduce de la palabra clave
-de Mermaid si falta). Las instrucciones del agente de plan llevan la guía de estilo (véase [Diagramas](/es/plan#diagrams)). Alisio valida cada
+de Mermaid si falta). Las instrucciones del agente de plan llevan la guía de estilo (consulta [Diagramas](/es/plan#diagrams)). Alisio valida cada
 diagrama **sin dibujarlo** (Mermaid necesita un DOM): 8 KB como máximo, un tipo entre `flowchart`/`graph`,
 `sequenceDiagram`, `stateDiagram`/`stateDiagram-v2`, `erDiagram`, `classDiagram`, `gantt`, `mindmap`,
 `timeline` y `journey`, una estimación de 40 nodos como máximo, y ninguna instrucción `click`/`link`/
@@ -126,7 +126,7 @@ del plan cubre los diagramas. La carpeta, el manifiesto y las revisiones se desc
 [Modo plan y revisión del plan](/es/plan#diagrams).
 
 La herramienta nunca cambia de agente ni inicia trabajo: registra la decisión y, cuando termina la
-ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (véase
+ejecución del plan, el anfitrión cambia a `build` e inicia un turno de implementación (consulta
 [Modo plan y revisión del plan](/es/plan)). El agente plan es de solo lectura
 porque la política de su ejecución no permite ningún efecto de escritura, proceso o externo, así que
 ningún [modo de permisos](#permission-modes) puede ampliarla. `plan_proposed` y `plan_decided` son
@@ -155,7 +155,7 @@ que `shell`: el mismo shell y la misma lista corta de variables de entorno. Una 
 sesión raíz que la inició; otra sesión, aunque sea del mismo workspace, recibe «not found».
 
 **Leer la salida.** La salida (estándar y de error, en orden de llegada) se guarda en un archivo de
-log con offsets en bytes: pase `0` la primera vez y después el `next_offset` de la llamada anterior,
+log con offsets en bytes: pasa `0` la primera vez y después el `next_offset` de la llamada anterior,
 de modo que nada se repite y el contexto del modelo no se inunda. `eof` es verdadero solo cuando la
 tarea terminó y se leyó todo. Un log conserva sus primeros `tasks.maxOutputBytes` bytes (2 MiB por
 defecto), después una línea de aviso; los **últimos 32 KiB** se añaden cuando la tarea termina, así
@@ -185,7 +185,7 @@ turno:
   queda libre;
 - la entrega se reclama en la base de datos (`delivered_at`) antes de despertar, así que no puede
   repetirse; una tarea cuya salida el modelo ya leyó después de que terminara **no** se anuncia;
-- no se envía nada por una tarea que usted o el modelo detuvieron, por una que murió con Alisio, por
+- no se envía nada por una tarea que tú o el modelo detuvieron, por una que murió con Alisio, por
   tareas de sesiones hijas (subagentes) ni por una sesión archivada.
 
 El despertar es una ejecución normal de la sesión: la terminal la inicia por su ruta de prompts y el
@@ -201,7 +201,7 @@ que deja hijos en segundo plano los pierde también. `alisio run` no espera ning
 que siguen corriendo y lo dice por stderr. Si Alisio muere de golpe (SIGKILL, corte de luz) nada puede
 ejecutarse, así que el siguiente arranque marca las tareas sin terminar como `lost` —solo aquellas
 cuyo proceso dueño ya no existe, nunca las de otro proceso de Alisio vivo— y sus procesos pueden seguir
-corriendo: deténgalos usted (la tarea muestra su `pid`). Las tareas terminadas y sus logs se borran
+corriendo: deténlos tú (la tarea muestra su `pid`). Las tareas terminadas y sus logs se borran
 tras `tasks.retentionDays` (7 por defecto). Los ids de tarea son ULID (80 bits aleatorios).
 
 Véanse [Interfaz de terminal](/es/tui#tasks) e [Interfaz web](/es/web#background-tasks) para los
@@ -239,7 +239,7 @@ de una sesión sin objetivo.
 `webfetch(url, format?, timeout?)` obtiene una URL `http(s)` y la devuelve como `markdown` (por
 defecto), `text` o `html`. Sigue redirecciones (limitadas por el valor por defecto del propio
 runtime, unos 20 saltos), y rechaza respuestas no textuales (imágenes, otros binarios) con un error
-claro en lugar de devolver basura — compruebe primero el `content-type` de la respuesta si no está
+claro en lugar de devolver basura — comprueba primero el `content-type` de la respuesta si no está
 seguro de que una URL sea legible. Las respuestas de más de 5 MiB se rechazan. `timeout` es en
 segundos, 30 por defecto, con tope de 120.
 
@@ -257,29 +257,29 @@ trunca ahí, pero el texto completo se escribe en un archivo de caché del works
 `websearch(query)` devuelve `{ title, url, snippet }[]`. No se incluye ningún proveedor como
 dependencia obligatoria; la herramienta resuelve uno, en este orden:
 
-1. **Una extensión `websearch` registrada por un plugin**
-   (`api.extensions.register("websearch", ...)`) — véase [Escribir plugins](/es/plugins#extension-points).
+1. **Una extensión `websearch` registrada por un complemento**
+   (`api.extensions.register("websearch", ...)`) — consulta [Escribir complementos](/es/plugins#extension-points).
    Reemplaza por completo lo siguiente mientras esté cargada; un proveedor que lanza excepción
    recurre a la cadena integrada con un diagnóstico.
 2. **`websearch.provider`** de la [configuración](/es/configuration), si está definido:
 
    | `provider` | Necesita | Notas |
    | --- | --- | --- |
-   | `"searxng"` | `websearch.searxngUrl` (opcional; véase abajo) | Autoalojado u otra instancia pública |
+   | `"searxng"` | `websearch.searxngUrl` (opcional; consulta abajo) | Autoalojado u otra instancia pública |
    | `"duckduckgo-instant"` | Nada | Sin clave; **solo responde consultas factuales/de infobox directas** (estilo Wikipedia) — un resultado vacío no significa que no exista nada en la web |
    | `"duckduckgo-html"` | Nada | Búsqueda web HTML **lite** de DuckDuckGo sin clave — una búsqueda web general real (a diferencia de `duckduckgo-instant`). Analiza HTML que DuckDuckGo puede cambiar en cualquier momento; la automatización intensa puede disparar verificaciones de bot. Un respaldo sólido sin clave cuando la instancia SearXNG por defecto está bloqueada como bot |
    | `"tavily"` | `TAVILY_API_KEY` (o `websearch.apiKeyEnv`) | Nivel gratuito sin tarjeta (1000 créditos/mes en el momento de escribir esto) |
    | `"brave"` | `BRAVE_SEARCH_API_KEY` | Necesita tarjeta; crédito recurrente de ~5 USD/mes ≈ 1000 consultas en el momento de escribir esto — no es gratis sin tarjeta |
-   | `"serpapi"` | `SERPAPI_API_KEY` | Consulte los precios actuales de SerpApi |
-   | `"native"` | `provider.apiMode: "responses"` | El proveedor del modelo busca del lado del servidor; véase abajo — la herramienta `websearch` ni siquiera se registra en este modo |
+   | `"serpapi"` | `SERPAPI_API_KEY` | Consulta los precios actuales de SerpApi |
+   | `"native"` | `provider.apiMode: "responses"` | El proveedor del modelo busca del lado del servidor; ver abajo — la herramienta `websearch` ni siquiera se registra en este modo |
 
 3. **Nada configurado**: una instancia pública de [SearXNG](https://docs.searxng.org/) (el valor por
    defecto de `websearch.searxngUrl`), consultada con `GET <url>/search?q=...&format=json` —
    genuinamente gratis y sin clave. **En la práctica esto es poco fiable**: al construir esta
    herramienta, casi todas las instancias públicas probadas (de [searx.space](https://searx.space))
    limitaron la tasa o bloquearon como bot una única solicitud automatizada recién hecha. Trátelo
-   como un punto de partida, no como algo de lo que depender. Si le ocurre, cambie a
-   `"duckduckgo-html"` en `/settings` → Proveedor de búsqueda web (o configure
+   como un punto de partida, no como algo de lo que depender. Si te ocurre, cambia a
+   `"duckduckgo-html"` en `/settings` → Proveedor de búsqueda web (o configura
    `websearch.provider`), o autoaloje — en cualquier caso es una línea de configuración:
 
    ```sh
@@ -294,7 +294,7 @@ dependencia obligatoria; la herramienta resuelve uno, en este orden:
    usuario y podría apuntar a cualquier sitio).
 
 Cada resultado incluye un `source`; cuando aplica, una `limitation` (por ejemplo, el alcance
-limitado de DuckDuckGo Instant Answer) y, solo cuando un proveedor de plugin falló y se recurrió a
+limitado de DuckDuckGo Instant Answer) y, solo cuando un proveedor de complemento falló y se recurrió a
 la cadena integrada, un `diagnostic`.
 
 **El paso a través `"native"`** es opcional y específico del proveedor: con
@@ -303,7 +303,7 @@ procesar (`{ type: websearch.nativeToolType }`, por defecto `"web_search"`) a la
 Responses API en lugar de implementar su propia llamada HTTP; el proveedor responde la búsqueda del
 lado del servidor, así que la herramienta `websearch` no se registra en este modo. La mayoría de
 proveedores compatibles con OpenAI —incluida la configuración de DeepSeek— **no**
-admiten esto; consulte la documentación de su proveedor para conocer el tipo exacto de herramienta
+admiten esto; consulta la documentación de tu proveedor para conocer el tipo exacto de herramienta
 que espera antes de activarlo. Una herramienta no admitida/rechazada aparece como un error normal
 del proveedor, igual que cualquier otro fallo de la petición.
 
@@ -331,7 +331,7 @@ verdad. Solo existe mientras Forja está activa (`forge.javascript.enabled`) y `
 | --- | --- |
 | `js.api` | Los globales de la VM, los límites efectivos (tiempo, llamadas, salida), el host y lo que no está disponible. |
 | `js.patterns` | Filtrar y agregar antes de devolver (`#filtering`), `parallel.map` frente a `settle`, paginación, `state`, `codePath` y el scratchpad. |
-| `js.tools` | Un resumen (nombre y efecto, máximo 40) de las herramientas que los permisos de la sesión dejan llamar a un script; las ocultas (escrituras en `ask`, por ejemplo) no aparecen. Use `catalog.describe` dentro del script para los esquemas. |
+| `js.tools` | Un resumen (nombre y efecto, máximo 40) de las herramientas que los permisos de la sesión dejan llamar a un script; las ocultas (escrituras en `ask`, por ejemplo) no aparecen. Usa `catalog.describe` dentro del script para los esquemas. |
 | `python.runtime` | `alisio_runtime`, las carpetas `ALISIO_*`, el scratchpad de solo lectura y cómo se publican las salidas. |
 | `python.data` | Datasets, `data_query` frente a Python, `inputs`, conversión de XLSX. |
 | `python.ml` | Patrones de scikit-learn, statsmodels y scipy, y qué perfil o backend los ofrece ahora. |
@@ -381,7 +381,7 @@ secuencial sencilla no tuviera ya.
 La propia documentación de Node es explícita: "el módulo vm no es un mecanismo de seguridad; no lo
 use para ejecutar código no confiable". `execute` aísla el ámbito de un fragmento y acota su tiempo
 de ejecución por corrección y ergonomía, no como frontera a nivel de sistema operativo — el mismo
-modelo de confianza que el resto de herramientas de Alisio en el mismo proceso. Véase [No es un
+modelo de confianza que el resto de herramientas de Alisio en el mismo proceso. Consulta [No es un
 sandbox](#no-es-un-sandbox).
 :::
 
@@ -390,13 +390,13 @@ clasificación nueva): ejecutar un fragmento JS es ejecución de código arbitra
 espíritu que `run_process`/`shell`, y `--allow-process` es lo que un usuario ya espera que controle
 "ejecutar cosas".
 
-## Instalar plugins: plugin_install {#plugin-install}
+## Instalar complementos: plugin_install {#plugin-install}
 
-`plugin_install(spec)` instala un paquete de plugin npm en el directorio global de plugins de Alisio
+`plugin_install(spec)` instala un paquete de complemento npm en el directorio global de complementos de Alisio
 (`<config home>/plugins`) y añade su nombre npm al array `plugins` de la configuración global — la
 misma rutina que hay detrás del comando `alisio install`. `spec` acepta `npm:<paquete>[@<versión>]` o
 un nombre de paquete pelado, validado antes de cualquier operación de red. Permite que el modelo
-instale un plugin a petición tuya en lugar de que escribas tú el comando: el agente forma la
+instale un complemento a petición tuya en lugar de que escribas tú el comando: el agente forma la
 especificación correcta e invoca la herramienta, y tú conservas la última palabra mediante el flujo
 de permisos habitual.
 
@@ -405,8 +405,8 @@ sin sandbox que puede ejecutar los scripts de ciclo de vida del paquete, así qu
 compuerta que `run_process`/`shell` — permitida directamente con `--allow-process`, preguntada de
 forma interactiva en la TUI en caso contrario, y denegada por completo (ni siquiera registrada) con
 `--read-only`. El resultado se sanea y devuelve el nombre del paquete, la versión instalada, la
-entrada de configuración, la ruta de instalación y la nota de confianza del proyecto. Consulte
-[Escribir plugins](/es/plugins#installing-plugins-from-npm) para la historia completa, incluida la
+entrada de configuración, la ruta de instalación y la nota de confianza del proyecto. Consulta
+[Escribir complementos](/es/plugins#installing-plugins-from-npm) para la historia completa, incluida la
 regla de confirmación `--yes` en headless.
 
 ## Rutas fuera del workspace {#external-directories}
@@ -436,13 +436,13 @@ Declare raíces extra de dos formas (se combinan):
 | `additionalDirectories` en la [configuración](/es/configuration#additionaldirectories) | Persistente | Se resuelve respecto al archivo de configuración que lo define, se canoniza al cargar y es aditivo entre capas |
 
 `--read-only` permanece totalmente bloqueado: no concede **ningún** acceso externo mediante el aviso,
-`--add-dir` ni `additionalDirectories`. Véase [Flags de permisos](#permission-flags).
+`--add-dir` ni `additionalDirectories`. Consulta [Flags de permisos](#permission-flags).
 
 ## Flags de permisos {#permission-flags}
 
 | Flag | Efecto |
 | --- | --- |
-| (ninguno) | Solo lectura y búsqueda en modos headless; en la TUI, `write`/`process`/`external` también se ofrecen y **preguntan siempre** (véase la tabla de verdad abajo) |
+| (ninguno) | Solo lectura y búsqueda en modos headless; en la TUI, `write`/`process`/`external` también se ofrecen y **preguntan siempre** (consulta la tabla de verdad abajo) |
 | `--allow-write` | Activa `write_file` y `edit_file` directamente, sin preguntar |
 | `--allow-process` | Activa `run_process`, `shell` y `execute` directamente, sin preguntar |
 | `--allow-analysis` | Activa directamente solo el análisis en Python (`python_run`, capability `analysis.run`); nunca `shell` ni `run_process` |
@@ -451,11 +451,11 @@ Declare raíces extra de dos formas (se combinan):
 | `--allow-mcp` | Inicia/conecta los servidores MCP configurados y expone sus capacidades |
 | `--allow-agents` | Activa las herramientas de mensajería de Herdr |
 | `--add-dir <paths...>` | Declara directorios extra que las herramientas pueden tocar fuera del workspace (repetible, solo esta ejecución) |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y plugins ejecutables (externos) — nunca se ofrecen, ni en la TUI ni en headless; también desactiva toda ruta externa |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, MCP, mensajería entre agentes y complementos ejecutables (externos) — nunca se ofrecen, ni en la TUI ni en headless; también desactiva toda ruta externa |
 
-`--read-only` prevalece sobre cualquier flag `--allow-*`. Los plugins integrados (por ejemplo
+`--read-only` prevalece sobre cualquier flag `--allow-*`. Los complementos integrados (por ejemplo
 `memory`) siguen activos con `--read-only` porque sus herramientas solo usan el efecto `internal`;
-use `--disable-plugin memory` para un modo estrictamente sin escrituras.
+usa `--disable-plugin memory` para un modo estrictamente sin escrituras.
 
 ### Tabla de verdad de write/process/external
 
@@ -488,15 +488,15 @@ En la TUI, las herramientas `write`, `process` y `external` no permitidas median
 al modelo y Alisio pregunta antes de ejecutar cada llamada: permitir una vez, permitir ese efecto
 durante la sesión o denegar. Una ruta fuera del workspace y de toda raíz extra declarada usa las
 mismas tres opciones, acotadas al directorio contenedor. Los modos headless (`run`, `resume <id> "prompt"`, `--json`) nunca
-preguntan. Consulte [Interfaz de terminal](/es/tui#interactive-approvals).
+preguntan. Consulta [Interfaz de terminal](/es/tui#interactive-approvals).
 
 ## Confianza del proyecto {#project-trust}
 
 Aparte de las aprobaciones de llamadas a herramientas, abrir un repositorio no debe cargar en
 silencio *su* configuración de Alisio (que puede apuntar su clave de API a otro endpoint) ni
-ejecutar sus plugins. La TUI pregunta una vez por directorio antes de hacerlo; la decisión persiste
+ejecutar sus complementos. La TUI pregunta una vez por directorio antes de hacerlo; la decisión persiste
 y un `.alisio/config.json` modificado vuelve a preguntar. `alisio trust list`/
-`alisio trust revoke <path>` la inspeccionan o la deshacen. Consulte [Inicio
+`alisio trust revoke <path>` la inspeccionan o la deshacen. Consulta [Inicio
 rápido](/es/quick-start#configuration-trust-model) para el flujo completo y
 [Configuración](/es/configuration) para el comando `alisio trust`.
 
@@ -573,15 +573,15 @@ directorio y la preconcesión del análisis en Python (`--allow-analysis`) no fo
 modo. `--read-only` elimina el manejador de aprobación, así que allí no se pueden elegir modos. En
 `alisio serve` los flags de arranque son el techo: un efecto que no permiten sigue preguntando sea
 cual sea el modo. El modo plan lo impone el runner, no el prompt: un agente de solo lectura no tiene
-herramientas de escritura, de procesos ni externas sea cual sea el modo elegido. Véase
+herramientas de escritura, de procesos ni externas sea cual sea el modo elegido. Consulta
 [TUI](/es/tui#permission-modes) y [Interfaz web](/es/web#permission-modes).
 
 ## No es un sandbox
 
 ::: danger
 Alisio **no** ofrece un sandbox del sistema operativo. `--allow-process` da al modelo procesos
-arbitrarios con sus privilegios de usuario. Los plugins se ejecutan en el mismo proceso con todos los
-privilegios; ni un manifiesto de plugin ni un subproceso son una frontera de aislamiento, y el campo
+arbitrarios con sus privilegios de usuario. Los complementos se ejecutan en el mismo proceso con todos los
+privilegios; ni un manifiesto de complemento ni un subproceso son una frontera de aislamiento, y el campo
 `effect` no aísla nada.
 :::
 
@@ -612,7 +612,7 @@ en diagnósticos.
   anotaciones no se considera destructiva.
 - Las herramientas conectadas usan nombres semánticos seguros para proveedores, como
   `mcp_devforge_time_diff`; solo se agrega un hash corto y determinista por colisión o truncamiento.
-  Están disponibles en el siguiente turno del modelo. El modelo aún decide si las llama: escriba
+  Están disponibles en el siguiente turno del modelo. El modelo aún decide si las llama: escribe
   «usa `devforge/time_diff`» cuando la llamada sea obligatoria, en vez de depender de la selección
   automática.
 - Las herramientas expuestas deben usar esquemas soportados por el registro. Los cambios de esquema
@@ -696,9 +696,9 @@ alisio --config /path/to/my-api.json --allow-agents
 ```
 
 Con `--allow-agents`, el modelo obtiene `herdr_agents`, `herdr_prompt`, `herdr_read` y `herdr_wait`.
-Use IDs de panel o nombres únicos de agentes. Los argumentos se envían como arrays, nunca se
+Usa IDs de panel o nombres únicos de agentes. Los argumentos se envían como arrays, nunca se
 interpolan en una shell, y los mensajes ambiguos no se reintentan.
 
-Alisio es una integración custom: no use `herdr agent start --kind alisio` (Herdr 0.9.1 no incluye
-ese kind). Inícielo en un panel existente o con `herdr pane run`, y reanude manualmente con
+Alisio es una integración custom: no uses `herdr agent start --kind alisio` (Herdr 0.9.1 no incluye
+ese kind). Inícialo en un panel existente o con `herdr pane run`, y reanuda manualmente con
 `alisio resume`.

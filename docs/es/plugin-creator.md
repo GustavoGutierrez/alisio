@@ -1,7 +1,7 @@
-# Creador de plugins
+# Creador de complementos
 
-El creador de plugins construye por ti un pequeño complemento (un plugin). Describes con palabras
-sencillas una tarea que repites, Alisio escribe el plugin, lo comprueba automáticamente y tú decides
+El creador de complementos construye por ti un pequeño complemento (un complemento). Describes con palabras
+sencillas una tarea que repites, Alisio escribe el complemento, lo comprueba automáticamente y tú decides
 cuándo instalarlo. No necesitas programar. Está en la interfaz web y en la app de escritorio:
 **Complementos** en la barra lateral y luego **Creador de complementos**. Para desarrolladores: la
 [referencia](/es/plugins#plugin-creator) lista la estructura generada, las comprobaciones y las rutas
@@ -10,7 +10,7 @@ HTTP.
 ## Abrir el creador
 
 Al final de **Aplicaciones**, el menú **Complementos** tiene dos entradas: **Buscar otros
-complementos**, que abre **Ajustes → Plugins → Catálogo de plugins**, y **Creador de complementos**,
+complementos**, que abre **Ajustes → Complementos → Catálogo de complementos**, y **Creador de complementos**,
 que abre una página completa con tus complementos a la izquierda y el panel de nueva petición a la
 derecha.
 
@@ -19,7 +19,7 @@ derecha.
   <figcaption>El menú Complementos: busca en el catálogo o crea el tuyo.</figcaption>
 </figure>
 
-## Crear un plugin, paso a paso
+## Crear un complemento, paso a paso
 
 1. Escribe lo que debe hacer en **¿Qué debe hacer el complemento?** Di qué entra (un archivo, una
    tabla, un texto) y qué debe salir; un ejemplo real ayuda. Empieza por algo pequeño: luego puedes
@@ -47,8 +47,8 @@ Ejecutar un complemento usa los permisos de tu usuario y no es un sandbox.
 ### Una pantalla en el menú Aplicaciones
 
 Pide «su propia pantalla», «una ventana», «una página» o «una sección en el menú» y el complemento
-tendrá una aplicación de plugin: una entrada en el menú **Aplicaciones** de la barra lateral que abre
-una página completa (consulta [Aplicaciones de plugins](/es/plugins#plugin-apps)). El plan de Alisio
+tendrá una aplicación de complemento: una entrada en el menú **Aplicaciones** de la barra lateral que abre
+una página completa (consulta [Aplicaciones de complementos](/es/plugins#plugin-apps)). El plan de Alisio
 registra que la petición necesita una pantalla, y la preparación falla con «Pediste una pantalla
 propia en el menú Aplicaciones, pero aún no la tiene» cuando el complemento no la añade. Justo
 después de **Instalar y activar**, **Actualizar**, desinstalar, o activar o desactivar el
@@ -62,7 +62,7 @@ Abre un complemento en **Mis complementos** para ver su estado (**Sin instalar**
 | Botón | Qué hace |
 | --- | --- |
 | **Preparar y comprobar** | Valida el complemento, hace sus comprobaciones automáticas y lo empaqueta |
-| **Instalar y activar** / **Actualizar** | Lo instala como plugin privado (local) y lo activa; tras un cambio, **Actualizar** instala la versión nueva |
+| **Instalar y activar** / **Actualizar** | Lo instala como complemento privado (local) y lo activa; tras un cambio, **Actualizar** instala la versión nueva |
 | **Pedir cambios** | Describe qué debe cambiar; Alisio edita el complemento y sube su versión |
 | **Descargar** | Guarda el complemento como un archivo `.tgz` |
 | **Compartir** | Muestra cómo compartirlo (ver abajo) |
@@ -110,8 +110,7 @@ para seguir usándolo, solo que ya no aparecerá en el creador. No se puede desh
 
 ## Descargar e instalar desde un archivo
 
-**Descargar** guarda el paquete `.tgz`. Cualquier persona puede instalarlo en Alisio desde **Ajustes →
-Plugins → Instalar desde archivo**, en cualquier equipo. Vea [Catálogo de plugins, instalación y
+**Descargar** guarda el paquete `.tgz`. Cualquier persona puede instalarlo en Alisio desde **Complementos → Instalar desde archivo**, en cualquier equipo. Consulta [Catálogo de complementos, instalación y
 actualizaciones](/es/web#plugin-catalog).
 
 ## Compartir tu complemento
@@ -123,9 +122,9 @@ actualizaciones](/es/web#plugin-catalog).
 - **Con todos en npm.** npm es una biblioteca pública y gratuita de complementos. Crea una cuenta
   gratuita en npmjs.com y, en una terminal, ejecuta `npm login`, ve a la carpeta del complemento (el
   diálogo la muestra) y ejecuta `npm publish --access public`. Para publicar una actualización,
-  ejecuta `npm version patch` y publica de nuevo. Vea [Publicación](/es/publishing) para saber cómo
+  ejecuta `npm version patch` y publica de nuevo. Consulta [Publicación](/es/publishing) para saber cómo
   se publica Alisio.
-- **En el catálogo de Alisio.** Para que aparezca en **Ajustes → Plugins → Catálogo de plugins**,
+- **En el catálogo de Alisio.** Para que aparezca en **Ajustes → Complementos → Catálogo de complementos**,
   envía el enlace de npm de tu complemento al desarrollador de Alisio; el diálogo tiene los enlaces de
   contacto.
 

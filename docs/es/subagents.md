@@ -1,6 +1,6 @@
 # Subagentes
 
-`subagents` es un plugin integrado (paquete `@alisio/plugin-subagents`). Con él, el modelo puede
+`subagents` es un complemento integrado (paquete `@alisio/plugin-subagents`). Con él, el modelo puede
 delegar trabajo en agentes especializados. Cada agente se ejecuta en su propia sesión hija, con
 contexto nuevo y permisos reducidos. Los agentes pueden ejecutarse en paralelo, en primer o en
 segundo plano, y la TUI los muestra en un árbol en vivo. Está activado por defecto; desactívelo con
@@ -38,7 +38,7 @@ style, run only the affected tests and report what you added and the results.
 | Campo | Descripción |
 | --- | --- |
 | `name` | Obligatorio (por defecto, el nombre del archivo): letras minúsculas, dígitos y guiones simples, hasta 64 caracteres |
-| `description` | Obligatorio. Se muestra al modelo en la herramienta `task`, así que indique cuándo usar el agente |
+| `description` | Obligatorio. Se muestra al modelo en la herramienta `task`, así que indica cuándo usar el agente |
 | `tools` | Lista de herramientas permitidas; `*` significa todas las herramientas del padre, incluida la delegación |
 | `disallowedTools` | Herramientas que se retiran al agente |
 | `model` | Un selector configurado `proveedor/modelo` (recomendado), un ID sin proveedor que sea único, o `inherit` (por defecto). Los alias de Claude `sonnet`, `opus` y `haiku` heredan el modelo del padre con una advertencia |
@@ -57,9 +57,9 @@ asignan a herramientas de Alisio (`read_file`, `search_text`, `list_files`, `she
 y `tools: { bash: false }` de opencode se traduce en `disallowedTools`.
 
 **Agentes principales frente a definiciones de hijos.** Alisio tiene dos sistemas de agentes: los
-SUBAGENTES delegados (este plugin — los integrados `general`, `explore` y `plan` se ejecutan en
+SUBAGENTES delegados (este complemento — los integrados `general`, `explore` y `plan` se ejecutan en
 sesiones hijas mediante la herramienta `task`) y el agente ACTIVO de la sesión PRINCIPAL
-(integrados `build` y `plan`, un planificador de solo lectura; consulte [Agente activo y
+(integrados `build` y `plan`, un planificador de solo lectura; consulta [Agente activo y
 effort](/es/tui#active-agent-and-effort)). El `plan` integrado de delegación es un agente distinto
 del `plan` de la sesión principal. Una definición marcada `mode: primary` o `all` pasa a ser
 candidata del selector `/agents` de la sesión principal **y** se excluye de `task`; todo lo demás
@@ -68,7 +68,7 @@ es solo de delegación.
 También se pueden pasar agentes adicionales en la línea de comandos como JSON (`description`,
 `prompt`, y opcionalmente `tools`, `model` y `mode`). Las definiciones marcadas
 `mode: "primary"` o `"all"` pasan a ser candidatas de agente ACTIVO en el selector `/agents` de la
-TUI (consulte [Agente activo y effort](/es/tui#active-agent-and-effort)); el valor por defecto es
+TUI (consulta [Agente activo y effort](/es/tui#active-agent-and-effort)); el valor por defecto es
 `subagent` (solo delegación):
 
 ```sh
@@ -86,7 +86,7 @@ Gana la primera definición con un nombre dado; las ocultadas se informan en `/a
 | 3 | Convención | `.agents/agents/` | Convención compartida; la escribe el gestor de [Agentes](/es/agents) (ámbito de proyecto) |
 | 4 | Compatibilidad | `.claude/agents/`, `.opencode/agent/`, `.opencode/agents/` | Leídos con compatibilidad con Claude Code y opencode |
 | 5 | Usuario | `<config home>/agents/`, `~/.agents/agents/` (gestor de Agentes, ámbito global), `~/.claude/agents/`, `~/.config/opencode/agent/`, `~/.config/opencode/agents/` | Definiciones personales |
-| 6 | Plugins | Directorios registrados con `api.resources.agents(dir)` | Con espacio de nombres `plugin:name` |
+| 6 | Complementos | Directorios registrados con `api.resources.agents(dir)` | Con espacio de nombres `plugin:name` |
 | 7 | Integrados | `general`, `explore`, `plan` | Siempre disponibles |
 
 Los orígenes de proyecto (2–4) solo se leen en proyectos de confianza: `--trust-project` o un
@@ -125,7 +125,7 @@ Se configuran en `builtinPlugins.subagents`:
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `enabled` | `true` | Activa el plugin |
+| `enabled` | `true` | Activa el complemento |
 | `maxDepth` | `3` | Anidamiento máximo; los agentes en el límite no reciben la herramienta `task` |
 | `maxConcurrentPerParent` | `4` | Hijos en ejecución por padre (1–32) |
 | `maxConcurrentTotal` | `8` | Hijos en ejecución en total (1–64) |
@@ -174,7 +174,7 @@ Un hijo que alcanza su tope de turnos (`maxTurns` en su definición o
 y un marcador `turnsExceeded`, y su informe se entrega al padre como un resultado parcial
 utilizable — envuelto con el marco habitual de `Subagent output (non-authoritative…)` más una nota
 de que el hijo llegó a su límite de turnos y el informe puede estar incompleto. El padre puede
-continuar el mismo hijo con `task task_id=<id>` para obtener el resto, o usted puede subir
+continuar el mismo hijo con `task task_id=<id>` para obtener el resto, o tú puedes subir
 `maxTurns` en la definición del agente. Solo los errores reales, las cancelaciones y los tiempos de
 espera marcan a un hijo como `failed`, `cancelled` o `interrupted`.
 
@@ -201,12 +201,12 @@ cómo se aíslan sus cambios. Con `ask`, Alisio pregunta una vez por sesión:
 
 El panel del árbol de agentes está bajo el editor. Muestra cuántos agentes están en ejecución, en
 cola y terminados y, para cada agente: un icono de estado, su nombre y color, el tiempo transcurrido,
-sus tokens y un resumen en vivo de una línea. La sangría muestra padre → hijo. Consulte
+sus tokens y un resumen en vivo de una línea. La sangría muestra padre → hijo. Consulta
 [Interfaz de terminal](/es/tui#agent-panel) para las teclas.
 
 | Comando | Función |
 | --- | --- |
-| `/agents` | Abre el selector del agente **ACTIVO** (sesión principal); la lista de tareas de subagentes es `/agents list`. Consulte [Agente activo y effort](/es/tui#active-agent-and-effort) |
+| `/agents` | Abre el selector del agente **ACTIVO** (sesión principal); la lista de tareas de subagentes es `/agents list`. Consulta [Agente activo y effort](/es/tui#active-agent-and-effort) |
 | `/agents list` | Lista las tareas de subagentes de la sesión |
 | `/agents open <id>` | Abre la conversación de una tarea en una vista de solo lectura |
 | `/agents cancel <id>`, `/agents kill <id>` | Cancela una tarea y sus descendientes |
@@ -220,7 +220,7 @@ Los IDs admiten un prefijo único.
 
 ## Ejemplos
 
-Pida exploración en paralelo en un prompt:
+Pide exploración en paralelo en un prompt:
 
 ```text
 Use two explore subagents in parallel: one maps the plugin host, the other the TUI panel code.

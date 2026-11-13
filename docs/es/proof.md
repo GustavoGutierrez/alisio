@@ -48,7 +48,7 @@ criterio (globs) limita qué ediciones caducan la evidencia; sin `scope`, cualqu
 | `file` | un `read_file` de esa ruta muestra que el archivo existe, con el `sha256` indicado y/o un `pattern` (expresión regular, bandera `m`) | hash del resultado de la lectura |
 | `data-check` | `data_query` sobre el dataset ejecuta la consulta canónica y el valor coincide con `expected` | hash del resultado, `actual` y `expected` |
 | `coverage` | (opcional) el agente ejecuta exactamente el comando de cobertura, termina con 0 y el porcentaje global que imprime alcanza `minPercent` | código de salida, hash de la salida, extracto redactado con el veredicto |
-| `plugin` | un verificador registrado por un plugin devuelve evidencia referenciable | el `outputHash` que devolvió el plugin |
+| `plugin` | un verificador registrado por un complemento devuelve evidencia referenciable | el `outputHash` que devolvió el complemento |
 | `manual` | nunca: siempre necesita tu revisión | ninguna |
 
 La evidencia se **captura** del resultado crudo de una llamada que de verdad se ejecutó; ni las
@@ -93,10 +93,10 @@ de cobertura nunca queda `verified` en silencio. Proof no genera tests. Los crit
 vienen de `--proof-file`, del campo `verifier` de la web o HTTP, o de un plan aprobado; `--verify`
 sigue siendo el atajo de `command`.
 
-Un verificador de plugin debe devolver `{ ok, outputHash, callId?, excerpt? }`. Un resultado sin
+Un verificador de complemento debe devolver `{ ok, outputHash, callId?, excerpt? }`. Un resultado sin
 `outputHash` válido, o que nombra una llamada que la sesión nunca hizo, pasa a `manual_review`; un
 verificador que lanza un error o agota el tiempo deja el criterio como estaba. Los verificadores de
-plugin no ganan permisos: sus llamadas a herramientas pasan por la misma compuerta que las del agente.
+complemento no ganan permisos: sus llamadas a herramientas pasan por la misma compuerta que las del agente.
 
 ## El objetivo y el override {#goal}
 
@@ -123,7 +123,7 @@ o con `--json` una **línea JSONL final** `{"type":"proof_ledger","schema":"proo
 | `10` | Un criterio requerido está `failed` |
 | `11` | Ninguno falló, pero uno requerido está `not_checked` o `manual_review` |
 
-Los códigos se configuran con `proof.exitCodes` (véase [configuración](/configuration#proof)). Una
+Los códigos se configuran con `proof.exitCodes` (consulta [configuración](/configuration#proof)). Una
 ejecución que falla por otra causa sale con `1`. `--criterion` y `--verify` se emparejan por
 posición; los criterios de la línea de comandos son requeridos. `--proof-file` acepta
 `{"criteria":[{"text","verify","required","scope"}]}`.
@@ -148,7 +148,7 @@ derecho tiene la lista completa, los formularios y las exportaciones.
 `proof.md` y `proof.json` en una ejecución headless con `--proof`.
 
 Las rutas siguen las mismas reglas de autenticación, Host y Origin que el resto de rutas de sesión
-(véase [Interfaz web](/web#proof)):
+(consulta [Interfaz web](/web#proof)):
 
 | Ruta | Propósito |
 | --- | --- |
@@ -166,7 +166,7 @@ ordinarios del flujo de la sesión.
 ## Configuración {#config}
 
 Tres claves, todas opcionales y fuera del menú de ajustes: `proof.ci`, `proof.exitCodes` y
-`proof.coverage.enabled`. Véase [configuración](/configuration#proof). Banderas de `alisio run`:
+`proof.coverage.enabled`. Consulta [configuración](/configuration#proof). Banderas de `alisio run`:
 `--proof`, `--criterion <text>`, `--verify <command>` y `--proof-file <path>`.
 
 ## Notas de seguridad {#security}
@@ -182,7 +182,7 @@ Tres claves, todas opcionales y fuera del menú de ajustes: `proof.ci`, `proof.e
   patrones: puede dejar pasar un secreto.
 - El ledger vive en la base de la sesión y nada sale de tu máquina salvo una exportación que pidas.
 - La evidencia es de solo anexado para Proof, pero el archivo SQLite no es a prueba de manipulación
-  para quien tenga acceso a él. Un verificador de plugin es código de confianza dentro del proceso,
+  para quien tenga acceso a él. Un verificador de complemento es código de confianza dentro del proceso,
   no un sandbox.
 
 ## Límites {#limits}
@@ -203,10 +203,10 @@ Tres claves, todas opcionales y fuera del menú de ajustes: `proof.ci`, `proof.e
 - Los verificadores `file` y `data-check` capturan evidencia cuando el agente hace la lectura o la
   consulta correspondiente. `app.verifyCriterion` (para quien integra Alisio; una acción del usuario
   que el modelo no puede iniciar) hace esa llamada por sí mismo y también ejecuta los verificadores
-  de plugin, pero esta versión no tiene comando, botón ni ruta para ello. Una verificación de
-  plugin fuera de una ejecución no emite `proof_updated`.
-- Un verificador de plugin es código de confianza dentro del proceso: no es un sandbox. Sin
-  `callId`, su evidencia es la palabra del plugin más el hash que da, con un id de verificación en
+  de complemento, pero esta versión no tiene comando, botón ni ruta para ello. Una verificación de
+  complemento fuera de una ejecución no emite `proof_updated`.
+- Un verificador de complemento es código de confianza dentro del proceso: no es un sandbox. Sin
+  `callId`, su evidencia es la palabra del complemento más el hash que da, con un id de verificación en
   lugar de una llamada del diario.
 - El verificador `coverage` se fía de lo que imprime el comando: lee un único porcentaje global
   (líneas en tablas y resúmenes) y no comprueba qué archivos cubre el informe. Con el verificador
@@ -214,4 +214,4 @@ Tres claves, todas opcionales y fuera del menú de ajustes: `proof.ci`, `proof.e
   `app.verifyCriterion`; el ledger muestra `not_checked` y no guarda el motivo.
 - El contador de intentos rechazados de `complete` que pausa un objetivo como `no_progress` vive en
   memoria y se reinicia con el proceso.
-- Véase el [estado de implementación](/limitations) para el alcance de la verificación.
+- Consulta el [estado de implementación](/limitations) para el alcance de la verificación.

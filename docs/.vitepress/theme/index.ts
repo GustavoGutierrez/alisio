@@ -4,6 +4,7 @@ import { defineComponent, h, onMounted } from "vue";
 import BentoFeatures from "./components/BentoFeatures.vue";
 import DesktopDownloads from "./components/DesktopDownloads.vue";
 import HeroArt from "./components/HeroArt.vue";
+import HomeIntro from "./components/HomeIntro.vue";
 import { initHeroMotion } from "./hero-motion";
 import { initHeroVideo } from "./hero-video";
 import { initWhatIs } from "./whatis";
@@ -11,6 +12,7 @@ import "./styles/vars.css";
 import "./styles/home.css";
 import "./styles/bento.css";
 import "./styles/whatis.css";
+import "./styles/sections.css";
 import "./styles/docs.css";
 
 /**
@@ -33,7 +35,7 @@ const Layout = defineComponent({
     return () =>
       h(DefaultTheme.Layout, null, {
         "home-hero-image": () => h(HeroArt),
-        "home-hero-after": () => h(DesktopDownloads),
+        "home-hero-after": () => [h(HomeIntro), h(DesktopDownloads)],
         "home-features-before": () => h(BentoFeatures),
       });
   },

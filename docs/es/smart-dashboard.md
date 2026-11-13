@@ -1,13 +1,13 @@
 # Smart Dashboard
 
-Adjunte un dataset, pida un dashboard y obtenga uno consistente y validado. Alisio lo planifica,
+Adjunta un dataset, pide un dashboard y obtén uno consistente y validado. Alisio lo planifica,
 consulta y dibuja con reglas fijas, así que el modelo no escribe código para ello.
 
-## Qué le aporta {#benefit}
+## Qué te aporta {#benefit}
 
 Construir un dashboard a mano obliga al modelo a decidir de una sola vez qué analizar, qué consultar,
 qué gráfico encaja, cómo maquetar y cómo escribir el script. Eso cuesta tiempo y tokens, y el
-resultado varía de una ejecución a otra. La herramienta `dashboard_generate` recibe solo su intención
+resultado varía de una ejecución a otra. La herramienta `dashboard_generate` recibe solo tu intención
 (el dataset y, opcionalmente, un objetivo) y construye el dashboard con código determinista:
 
 - **Sin código generado.** Nada que leer, aprobar ni depurar: el modelo llama a una sola herramienta.
@@ -24,25 +24,25 @@ resultado varía de una ejecución a otra. La herramienta `dashboard_generate` r
 
 ## Cómo usarlo {#usage}
 
-Pídalo en lenguaje natural, con un archivo del workspace o uno adjuntado en la [interfaz web](/es/web):
+Pídelo en lenguaje natural, con un archivo del workspace o uno adjuntado en la [interfaz web](/es/web):
 
 ```text
 Generate an executive dashboard with the sales of sales_2025.csv by channel and region
 ```
 
-Alisio ingiere el archivo como dataset (consulte [Datos tabulares](/es/analysis#data)) y el modelo
+Alisio ingiere el archivo como dataset (consulta [Datos tabulares](/es/analysis#data)) y el modelo
 llama a `dashboard_generate { datasetId }`. El dashboard se publica como un artefacto llamado
 `dashboard.html`; el resultado enumera sus componentes. La herramienta recibe estas entradas:
 
 | Entrada | Obligatoria | Significado |
 | --- | --- | --- |
 | `datasetId` | sí | Un dataset de esta sesión. |
-| `goal` | no | Para qué sirve el dashboard, hasta 2000 caracteres (un texto más largo se recorta, con una nota). Nombre las columnas que quiere ver. |
+| `goal` | no | Para qué sirve el dashboard, hasta 2000 caracteres (un texto más largo se recorta, con una nota). Nombra las columnas que quieres ver. |
 | `title` | no | El título del dashboard, hasta 120 caracteres. |
 | `locale` | no | `en` (por defecto) o `es`: el idioma de los títulos y etiquetas generados. |
 | `sheet` | no | Una hoja de una hoja de cálculo (XLSX), por nombre; la primera por defecto. |
 
-Para regenerarlo, pídalo de nuevo con otro objetivo (por ejemplo *«ahora una vista operativa»*). Cada
+Para regenerarlo, pídelo de nuevo con otro objetivo (por ejemplo *«ahora una vista operativa»*). Cada
 llamada es independiente: no edita el dashboard anterior, y las mismas entradas sobre los mismos
 datos dan el mismo resultado. El objetivo elige el propósito por las palabras que reconoce: un resumen
 o vista ejecutiva (el valor por defecto) empieza por KPI, una tendencia y rankings; un objetivo de
@@ -50,11 +50,11 @@ monitoreo o estado pone primero la tabla de detalle y los rankings; un objetivo 
 comparación añade un gráfico de correlación y la tabla. El objetivo también elige las columnas. El
 planificador lo compara con los nombres y las cabeceras de sus columnas (palabras completas, sin
 distinguir mayúsculas ni acentos, singular o plural, con sinónimos simples en inglés y español como
-*seller* y *vendedor*) y planifica para lo que encuentra: una medida que usted nombra pasa a ser un KPI
-y encabeza los gráficos, y cada dimensión que nombra recibe su propio gráfico, en el orden en que la
-escribió y antes de los gráficos por defecto. Un dashboard tiene como máximo 12 componentes, así que si
-nombra más de los que caben, los últimos se dejan fuera y aparecen en el resultado como «No mostradas».
-Los identificadores (como el id de un pedido) nunca se grafican. Los nombres de columna de sus datos se
+*seller* y *vendedor*) y planifica para lo que encuentra: una medida que tú nombras pasa a ser un KPI
+y encabeza los gráficos, y cada dimensión que nombras recibe su propio gráfico, en el orden en que la
+escribiste y antes de los gráficos por defecto. Un dashboard tiene como máximo 12 componentes, así que si
+nombras más de los que caben, los últimos se dejan fuera y aparecen en el resultado como «No mostradas».
+Los identificadores (como el id de un pedido) nunca se grafican. Los nombres de columna de tus datos se
 conservan tal cual; solo los títulos generados siguen `locale`.
 
 ## Qué construye {#what-it-builds}
@@ -71,7 +71,7 @@ conservan tal cual; solo los títulos generados siguen `locale`.
 Unos límites mantienen la página legible: como máximo 12 componentes, 6 KPI y 8 columnas de tabla, y
 de 1 a 20 categorías en un ranking (10 por defecto). Antes de planificar, Alisio perfila cada columna
 y elige listas cortas de hasta 8 medidas, 8 dimensiones y 4 columnas de tiempo. Detalles con los que
-puede contar:
+puedes contar:
 
 - **Los KPI usan números compactos.** A partir de un millón una tarjeta muestra `21.6B` (o `21,6 mil M`
   con el idioma español) para que nunca se recorte, y el valor exacto queda en la ayuda emergente de la
@@ -106,20 +106,20 @@ etiquetadas y el Laya 0.3.24 real (cerca de la mitad en español) el propósito 
 las elecciones de columna y de incluir o no un gráfico quedaron cerca del azar, y cada pregunta adicional
 hace más lenta la respuesta en CPU. La respuesta sustituye a su valor de la regla solo cuando el proveedor
 la responde. Sin proveedor el dashboard es igual de válido y
-reproducible. Es la primera función que usa decisiones; consulte
+reproducible. Es la primera función que usa decisiones; consulta
 [Decision Intelligence](/es/decision-intelligence#providers) para saber cómo se instala y se activa
 un proveedor.
 
-**Qué se envía a un proveedor:** solo su objetivo (truncado a 500 caracteres) y, por cada columna
+**Qué se envía a un proveedor:** solo tu objetivo (truncado a 500 caracteres) y, por cada columna
 preseleccionada, un ID corto y opaco, su etiqueta, su rol, su tipo inferido y un cubo de cardinalidad
 (binaria, baja, media, alta o muy alta). Nunca se envían valores de celdas, valores frecuentes,
-mínimos, máximos ni muestras. Consulte [Privacidad](/es/decision-intelligence#privacy).
+mínimos, máximos ni muestras. Consulta [Privacidad](/es/decision-intelligence#privacy).
 
 ## Seguridad {#safety}
 
 - **El modelo no escribe código.** El planificador y el renderizador son código propio de Alisio; ni el
   modelo ni un proveedor pueden inyectar HTML, JavaScript, Python o SQL.
-- **El SQL sale solo de sus columnas.** Cada componente es un `SELECT` construido con los nombres de
+- **El SQL sale solo de tus columnas.** Cada componente es un `SELECT` construido con los nombres de
   columna del propio dataset, siempre entrecomillados, sin texto del modelo ni de un proveedor. Se
   ejecuta por el mismo motor de datasets de solo lectura que `data_query`, con su tiempo límite.
 - **El texto se escapa.** Los títulos y las etiquetas se limpian y se escapan antes de llegar a la
@@ -167,7 +167,7 @@ esos textos son exactamente los de 0.3.0.
 
 Sigue las [capas de configuración](/es/configuration#analysis) habituales, con una regla que conviene
 conocer: un `false` global no puede deshacerlo un proyecto, mientras que un proyecto sí puede
-apagarlo para sí mismo. Puede cambiarlo desde **Ajustes → Análisis de datos** en la interfaz web o con
+apagarlo para sí mismo. Puedes cambiarlo desde **Ajustes → Análisis de datos** en la interfaz web o con
 `/settings` en la terminal; se aplica la próxima vez que se inicie Alisio. También requiere
 `analysis.enabled`.
 
@@ -185,8 +185,8 @@ apagarlo para sí mismo. Puede cambiarlo desde **Ajustes → Análisis de datos*
   columnas que existen en el dataset.
 
 Para cualquiera de estos casos el agente usa `python_run`, después de la herramienta o en su lugar.
-Para mantenerlo en la herramienta, pida columnas o medidas exactas que existan (por ejemplo «ventas
-netas», si el dataset tiene esa columna). Si necesita un filtro o un cruce, dígalo en el prompt: así
+Para mantenerlo en la herramienta, pide columnas o medidas exactas que existan (por ejemplo «ventas
+netas», si el dataset tiene esa columna). Si necesitas un filtro o un cruce, dilo en el prompt: así
 el agente sabe que debe pasar a Python.
 - **Solo las fechas ISO 8601** son columnas de tiempo; otros formatos de fecha no dan tendencia. Las
   horas con zona se muestran en UTC.
@@ -222,7 +222,7 @@ ejecución tuvo Laya activo (L) y la otra no tuvo proveedor de decisiones y la m
 | Ejecución completa (turnos / llamadas a herramientas / tokens de entrada + salida) | 32,3 s (6 / 10 / 77.919 + 6.223) | 45,2 s (8 / 7 / 111.240 + 9.424) |
 
 Tras la ejecución con Laya, `/decisions` informó 2 peticiones, 2 completadas, 0 fallbacks, latencia
-media de 66 ms y percentil 95 de 101 ms (véase
+media de 66 ms y percentil 95 de 101 ms (consulta
 [Decision Intelligence](/es/decision-intelligence#decisions-command)).
 
 Qué esperar:
@@ -233,14 +233,14 @@ Qué esperar:
 - En la ejecución con Laya el modelo no reconstruyó nada en Python. Sin proveedor sí lo hizo, pero
   una ejecución por configuración no puede demostrar que Laya sea la causa.
 - El dashboard tiene gráficos por canal y por región, pero no una tabla cruzada canal x región (no
-  está en el catálogo). Cuando la petición la necesita, el agente recurre a Python. Véanse las
+  está en el catálogo). Cuando la petición la necesita, el agente recurre a Python. Consulta las
   [Limitaciones](#limitations).
 - Las notas de memoria de sesiones anteriores pueden cambiar lo que hace el agente. Hubo que
   descartar una tercera ejecución (memoria activada, sin proveedor) porque una nota guardada por una
   ejecución anterior orientó al agente.
 
 Es una sesión por configuración, un dataset y un modelo; no demuestra una diferencia estadística ni
-es un benchmark. Para la comparación medida véanse los [Resultados del benchmark](#benchmark).
+es un benchmark. Para la comparación medida consulta los [Resultados del benchmark](#benchmark).
 
 A modo de comparación, la primera ejecución, con la 0.4.2 publicada, hizo dos preguntas al usuario.
 Tardó 672 s del envío al dashboard, y 607 s fueron el agente esperando las respuestas del usuario.

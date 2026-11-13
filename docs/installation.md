@@ -2,8 +2,9 @@
 
 ## Desktop app
 
-The desktop app is the easiest way to install Alisio and needs no terminal or Node.js. Pick the
-installer for your system:
+The desktop app is the easiest way to get Alisio: you install it like any other program and start
+working on your documents and data right away, with no terminal or Node.js. Pick the installer for
+your system:
 
 | System | Download |
 | --- | --- |

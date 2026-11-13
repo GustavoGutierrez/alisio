@@ -6,7 +6,7 @@ contribuir también están en `AGENTS.md` y `CONTRIBUTING.md`.
 
 ## Herramientas
 
-- **pnpm** (11.25.0) para las dependencias. Mantenga solo `pnpm-lock.yaml`; no añada otros lockfiles.
+- **pnpm** (11.25.0) para las dependencias. Mantén solo `pnpm-lock.yaml`; no añadas otros lockfiles.
 - **Bun** para el desarrollo (`pnpm dev`) y el binario independiente; los paquetes compilados se
   ejecutan en **Node.js >= 22.16** o **Bun >= 1.4.2**.
 - **Biome** para lint y formato, **Vitest** para las pruebas y **TypeScript** (`tsc`) para los tipos y
@@ -19,7 +19,7 @@ pnpm dev --help
 
 ## Comprobaciones
 
-Ejecute estas comprobaciones antes de abrir un pull request:
+Ejecuta estas comprobaciones antes de abrir un pull request:
 
 | Comando | Qué comprueba |
 | --- | --- |
@@ -37,21 +37,21 @@ Ejecute estas comprobaciones antes de abrir un pull request:
 
 ## Reglas de desarrollo
 
-- **TDD estricto**: escriba primero la prueba que falla y después la implementación.
-- Pruebe el comportamiento en los límites de los módulos. No añada pruebas de snapshot que
+- **TDD estricto**: escribe primero la prueba que falla y después la implementación.
+- Prueba el comportamiento en los límites de los módulos. No añadas pruebas de snapshot que
   simplemente repitan la implementación. Una excepción: las especificaciones golden pequeñas y
   revisadas a mano en `tests/golden/dashboard/*.json` (el `DashboardSpec` que devuelve el
   planificador para unos pocos datasets de como máximo 40 filas, o los CSV de ejemplo). Son
   comportamiento del planificador en su límite; un cambio de regla que mueva uno exige revisión
-  humana. Nunca haga una instantánea del HTML generado: compruebe su estructura.
-- Mantenga los SDKs de proveedores y los imports específicos de un runtime fuera de `@alisio/sdk` y de
+  humana. Nunca hagas una instantánea del HTML generado: comprueba su estructura.
+- Mantén los SDKs de proveedores y los imports específicos de un runtime fuera de `@alisio/sdk` y de
   los contratos del núcleo del agente.
-- Preserve los IDs de llamadas a herramientas, los datos de continuación del proveedor y la
+- Preserva los IDs de llamadas a herramientas, los datos de continuación del proveedor y la
   consistencia de las sesiones persistidas.
-- Nunca trate un manifiesto de plugin ni un subproceso como un sandbox.
+- Nunca trates un manifiesto de complemento ni un subproceso como un sandbox.
 - El código, los comentarios y las pruebas se escriben en inglés; este sitio se escribe en inglés y
   en español. `docs/implementation-status.md` se escribe en español y
-  registra las limitaciones y el alcance de la verificación; actualícelo cuando cambien.
+  registra las limitaciones y el alcance de la verificación; actualízalo cuando cambien.
 
 ## Decision Intelligence {#decision-intelligence}
 
@@ -66,7 +66,7 @@ motor de decisiones.
 ## Versionado
 
 Las versiones y los changelogs se gestionan con [changesets](https://github.com/changesets/changesets).
-Añada un changeset a cada pull request que modifique un paquete publicado:
+Añade un changeset a cada pull request que modifique un paquete publicado:
 
 ```sh
 pnpm changeset

@@ -2,8 +2,9 @@
 
 ## Aplicación de escritorio
 
-La aplicación de escritorio es la forma más sencilla de instalar Alisio y no necesita terminal ni
-Node.js. Elija el instalador de su sistema:
+La aplicación de escritorio es la forma más sencilla de tener Alisio: se instala como cualquier otro
+programa y puedes empezar a trabajar con tus documentos y datos enseguida, sin terminal ni Node.js.
+Elige el instalador de tu sistema:
 
 | Sistema | Descarga |
 | --- | --- |
@@ -35,7 +36,7 @@ Alisio guarda sesiones y memoria con `node:sqlite` y necesita FTS5. Las compilac
 :::
 
 El binario independiente incluye Bun, por lo que no necesita Node.js; Git y ripgrep siguen siendo
-dependencias externas. Ejecute `alisio doctor` después de instalar para ver el runtime, Git y ripgrep
+dependencias externas. Ejecuta `alisio doctor` después de instalar para ver el runtime, Git y ripgrep
 detectados.
 
 ## Gestores de paquetes
@@ -68,7 +69,7 @@ Esto instala el comando `alisio` (el paquete tiene scope; el binario es `alisio`
 curl -fsSL https://raw.githubusercontent.com/GustavoGutierrez/alisio/main/scripts/install.sh | sh
 ```
 
-El script detecta su sistema operativo y arquitectura, descarga el binario correspondiente desde
+El script detecta tu sistema operativo y arquitectura, descarga el binario correspondiente desde
 [GitHub Releases](https://github.com/GustavoGutierrez/alisio/releases), verifica su SHA-256 contra el
 archivo `SHA256SUMS` de la release y lo instala. Falla si la suma de verificación falta o no coincide.
 
@@ -94,7 +95,7 @@ Binarios publicados:
 | `alisio-windows-x64.exe` | Windows x64 |
 
 El script necesita `curl`, `uname` y `sha256sum` o `shasum`. Si el directorio de instalación no está
-en su `PATH`, se lo indica para que lo agregue.
+en tu `PATH`, te lo indica para que lo agregues.
 
 ## Compilar desde el código fuente
 
@@ -111,7 +112,7 @@ pnpm build:binary   # standalone binary at dist/alisio
 ```
 
 `pnpm dev` ejecuta `packages/cli/src/main.ts` con Bun y la condición de exportación `alisio-source`,
-de modo que los paquetes del workspace se resuelven a sus fuentes TypeScript. Consulte
+de modo que los paquetes del workspace se resuelven a sus fuentes TypeScript. Consulta
 [Arquitectura](/es/architecture).
 
 Siguiente: [Inicio rápido](/es/quick-start).

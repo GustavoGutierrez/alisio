@@ -1,6 +1,6 @@
 # Guía de estilo de Alisio
 
-Use esta guía al diseñar la documentación y las superficies de producto de Alisio. Define la
+Usa esta guía al diseñar la documentación y las superficies de producto de Alisio. Define la
 paleta de marca, los roles por tema, los gradientes, los estados semánticos y los límites de
 accesibilidad que mantienen una experiencia clara en modo claro y oscuro.
 
@@ -29,7 +29,7 @@ código, navegación, selección, foco y gradientes:
 
 ## Tema claro
 
-Mantenga la documentación luminosa y técnica: use un fondo blanco o ligeramente azulado, no una
+Mantén la documentación luminosa y técnica: usa un fondo blanco o ligeramente azulado, no una
 superficie general azul saturada.
 
 | Rol | Valor |
@@ -42,12 +42,12 @@ superficie general azul saturada.
 | Texto / secundario / atenuado | `#06233D` / `#45647A` / `#6F8798` |
 | Fondo de código | `#F0F8FC` |
 
-La tipografía usa los roles de texto oscuro, con `#06233D` como predeterminado. Use texto
-secundario y atenuado solo como apoyo; no use azul de marca como color general de texto.
+La tipografía usa los roles de texto oscuro, con `#06233D` como predeterminado. Usa texto
+secundario y atenuado solo como apoyo; no uses azul de marca como color general de texto.
 
 ## Tema oscuro
 
-Use azul marino en vez de negro puro para conservar profundidad. En modo oscuro, Sky es el primario
+Usa azul marino en vez de negro puro para conservar profundidad. En modo oscuro, Sky es el primario
 porque tiene mejor presencia sobre el fondo Midnight.
 
 | Rol | Valor |
@@ -62,13 +62,13 @@ porque tiene mejor presencia sobre el fondo Midnight.
 
 ## Superficies y componentes
 
-- **Páginas:** use el fondo del tema; casi blanco en modo claro y Midnight en modo oscuro.
-- **Tarjetas y áreas elevadas:** use el token de superficie, con su superficie hover y borde.
-- **Acciones primarias:** use el gradiente de marca o el rol primario. Mantenga texto azul marino
+- **Páginas:** usa el fondo del tema; casi blanco en modo claro y Midnight en modo oscuro.
+- **Tarjetas y áreas elevadas:** usa el token de superficie, con su superficie hover y borde.
+- **Acciones primarias:** usa el gradiente de marca o el rol primario. Mantén texto azul marino
   profundo sobre botones cyan claro.
-- **Enlaces y navegación activa:** use la jerarquía primario/Sky, con un hover distinguible.
-- **Código:** use el fondo específico de código, no una superficie genérica de tarjeta.
-- **Foco y selección:** conserve el tratamiento cyan claro para que usuarios de teclado ubiquen su
+- **Enlaces y navegación activa:** usa la jerarquía primario/Sky, con un hover distinguible.
+- **Código:** usa el fondo específico de código, no una superficie genérica de tarjeta.
+- **Foco y selección:** conserva el tratamiento cyan claro para que usuarios de teclado ubiquen su
   posición.
 
 ## Gradientes
@@ -89,7 +89,7 @@ linear-gradient(135deg, #031C36 0%, #06345F 45%, #01A5F7 100%)
 
 ## Estados semánticos
 
-No use azul para todos los significados. Reserve colores semánticos para el estado y cyan Alisio
+No uses azul para todos los significados. Reserve colores semánticos para el estado y cyan Alisio
 para información.
 
 | Estado | Valor | Ejemplo |
@@ -102,19 +102,19 @@ para información.
 
 ## Accesibilidad y recursos
 
-- Mantenga el texto en los roles de texto del tema y el foco visible; pruebe el contraste al crear o
+- Mantén el texto en los roles de texto del tema y el foco visible; prueba el contraste al crear o
   cambiar un token.
-- No comunique un estado solo con color: acompáñelo con texto claro y, cuando ayude, un icono.
-- Respete la preferencia de movimiento reducido. El video o la animación decorativa debe pausarse o
+- No comuniques un estado solo con color: acompáñalo con texto claro y, cuando ayude, un icono.
+- Respeta la preferencia de movimiento reducido. El video o la animación decorativa debe pausarse o
   ofrecer una alternativa visual estática.
-- Use recursos responsivos con tamaño intrínseco explícito o contenedor estable. Los videos deben
-  tener poster; las imágenes significativas, texto alternativo útil; evite texto incrustado en arte
+- Usa recursos responsivos con tamaño intrínseco explícito o contenedor estable. Los videos deben
+  tener poster; las imágenes significativas, texto alternativo útil; evita texto incrustado en arte
   decorativo.
 
 ## Qué hacer y qué evitar
 
-**Haga** de `#01A5F7` el primario claro, de `#07C4F9` el acento y de `#60E0F9` el highlight. Use
+**Haz** de `#01A5F7` el primario claro, de `#07C4F9` el acento y de `#60E0F9` el highlight. Usa
 la jerarquía oscura sobre superficies Midnight.
 
-**Evite** fondos claros azul saturado, negro puro como fondo oscuro y azul de marca en lugar de
+**Evita** fondos claros azul saturado, negro puro como fondo oscuro y azul de marca en lugar de
 estados semánticos de éxito, advertencia y error.

@@ -6,7 +6,7 @@ En la TUI, `/connect` escribe los perfiles no secretos y el proveedor/modelo act
 `<config home>/providers.json`. Los secretos se guardan por separado en
 `<config home>/credentials.json`, escrito atómicamente con modo `0600`; el directorio usa `0700`
 donde se admiten permisos POSIX. Es protección del sistema de archivos, **no cifrado**. Las claves
-nunca aparecen en `doctor`, el inicio, los eventos ni el estado de plugins.
+nunca aparecen en `doctor`, el inicio, los eventos ni el estado de complementos.
 
 Los `values` de un perfil pueden incluir un `contextWindow` opcional (en **tokens**) para el modelo
 de ese perfil. Existe para servidores locales compatibles con OpenAI (por ejemplo llama.cpp) cuyo
@@ -21,8 +21,8 @@ Cada conexión también recuerda el nombre de la variable de entorno de su clave
 del perfil guardan `apiKeyEnv` (el nombre que elegiste para esa conexión). Cuando un proveedor
 necesita una clave, la precedencia es: primero la credencial guardada en `credentials.json`, luego
 `process.env[apiKeyEnv]` usando el **nombre recordado en el perfil** y, solo si el perfil no lo
-registra, el nombre por defecto del plugin (por ejemplo `OPENAI_API_KEY` para OpenAI-compatible;
-los plugins de proveedores dedicados como DeepSeek registran su propio valor).
+registra, el nombre por defecto del complemento (por ejemplo `OPENAI_API_KEY` para OpenAI-compatible;
+los complementos de proveedores dedicados como DeepSeek registran su propio valor).
 Como el nombre se persiste con el perfil, el
 respaldo por entorno sigue funcionando aunque luego se elimine la credencial guardada. No interviene
 ningún almacén de secretos nuevo: el nombre de la variable de entorno es un valor de configuración
@@ -51,14 +51,14 @@ endpoint (`--base-url`, `--api-mode`, `OPENAI_BASE_URL`, `ALISIO_API_MODE`) o un
 confianza/explícita que defina un `provider` en la raíz utilizable — su `provider.model` analizado no
 está vacío y no es el marcador `YOUR_MODEL_ID` que escribe `alisio setup` — selecciona el proveedor
 heredado compatible con OpenAI para esa ejecución; un modelo vacío o marcador nunca anula una
-selección de `/connect`. Los ajustes de MCP, plugins, skills u otros campos por sí solos no lo hacen.
+selección de `/connect`. Los ajustes de MCP, complementos, skills u otros campos por sí solos no lo hacen.
 En caso contrario se restaura el perfil activo de `/connect`; `--model` o `ALISIO_MODEL` solo pueden
 reemplazar su modelo. El `provider` heredado global es el respaldo cuando no existe un perfil
 guardado, por lo que no anula de forma permanente una selección de `/connect`.
 Los modos headless nunca preguntan.
 
 Un proveedor de modelos está integrado y activado por defecto: **Compatible con OpenAI**. Los
-proveedores dedicados de la tabla siguiente son plugins independientes publicados desde el
+proveedores dedicados de la tabla siguiente son complementos independientes publicados desde el
 monorepo [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins): instálelos con
 `alisio install npm:@alisio/plugin-deepseek`, `alisio install npm:@alisio/plugin-opencode` y
 `alisio install npm:@alisio/plugin-opencode-go`, y aparecerán en `/connect` como el integrado:
@@ -122,7 +122,7 @@ estricta (se rechazan las claves desconocidas). La precedencia se describe en
 
 El modo chat maneja mensajes de texto y function tool calls. El modo Responses conserva los items
 opacos del proveedor, incluido el razonamiento cifrado para continuación con `store: false`. Un
-proveedor compatible puede implementar solo una parte de la API de OpenAI: valide su modelo y endpoint.
+proveedor compatible puede implementar solo una parte de la API de OpenAI: valida tu modelo y endpoint.
 
 Dentro de la configuración heredada del proveedor, la precedencia es archivo global → archivo de
 proyecto de confianza o explícito → variables de entorno → flags de la CLI. La precedencia de
@@ -131,7 +131,7 @@ selección anterior determina cuándo se usa esa configuración en lugar del per
 
 ### Proveedores con inicio de sesión {#provider-sign-in}
 
-Algunos plugins de proveedor ofrecen iniciar sesión con una cuenta en lugar de una clave de API. Su
+Algunos complementos de proveedor ofrecen iniciar sesión con una cuenta en lugar de una clave de API. Su
 perfil no tiene un valor `apiKeyEnv` que configurar: abre **Ajustes → Modelos** en la interfaz web y
 usa el bloque **Iniciar sesión** del perfil (ver [Iniciar sesión en un
 proveedor](/es/web#provider-sign-in)). Alisio guarda la sesión en `credentials.json` (modo `0600`,
@@ -180,19 +180,19 @@ servidores locales que no informan su ventana obtengan ~200k tokens en lugar de 
 conocida siempre gana, y `/settings` → Presupuesto de caracteres de contexto permite bajar el
 respaldo en cualquier momento.
 
-Consulte [Compactación de contexto](/es/compaction).
+Consulta [Compactación de contexto](/es/compaction).
 
 ## `websearch`
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `provider` | ninguno (SearXNG público) | `"searxng"`, `"duckduckgo-instant"`, `"duckduckgo-html"`, `"tavily"`, `"brave"`, `"serpapi"` o `"native"` — véase [Herramientas y permisos](/es/tools#websearch) |
+| `provider` | ninguno (SearXNG público) | `"searxng"`, `"duckduckgo-instant"`, `"duckduckgo-html"`, `"tavily"`, `"brave"`, `"serpapi"` o `"native"` — consulta [Herramientas y permisos](/es/tools#websearch) |
 | `searxngUrl` | una instancia pública | Instancia SearXNG autoalojada u otra pública; los valores que no sean loopback deben usar `https://` |
 | `apiKeyEnv` | `<PROVIDER>_API_KEY` | Variable de entorno con la clave para `tavily`/`brave`/`serpapi` |
 | `nativeToolType` | `web_search` | Solo para `provider: "native"`: el tipo de herramienta nativa del proveedor enviado al modelo |
 
 La instancia pública de SearXNG por defecto se bloquea a veces como bot para solicitudes
-automatizadas. `"duckduckgo-html"` es un respaldo sin clave que puede elegir en `/settings` →
+automatizadas. `"duckduckgo-html"` es un respaldo sin clave que puedes elegir en `/settings` →
 Proveedor de búsqueda web (o configurando `websearch.provider` directamente); autoalojar SearXNG
 (`websearch.searxngUrl`) es la opción más fiable.
 
@@ -206,34 +206,34 @@ Proveedor de búsqueda web (o configurando `websearch.provider` directamente); a
 | --- | --- | --- |
 | `claudeMdFallback` | `false` | Usar `CLAUDE.md` en directorios sin archivo `AGENTS` |
 | `maxBytes` | `32768` | Bytes totales de contenido `AGENTS.md` inyectado (1024–1048576); se conservan los archivos más cercanos |
-| `governor` | `"off"` | Modo del Context Governor: `"off"`, `"shadow"` o `"on"` (consulte [Context Governor](/es/context#context-governor)) |
+| `governor` | `"off"` | Modo del Context Governor: `"off"`, `"shadow"` o `"on"` (consulta [Context Governor](/es/context#context-governor)) |
 | `elide.minAgeTurns` | `2` | Mensajes del asistente (1–20) de antigüedad que debe superar un resultado redundante antes de que el governor lo sustituya |
 | `elide.epochMessages` | `32` | La proyección crece en pasos de este número de mensajes (0–1000); `0` es inmediato |
 | `policyVersion` | sin definir | Fijación opcional de las reglas de elisión (de 1 a la versión actual, que es 1) |
-| `invariants.maxChars` | `4000` | Tamaño máximo del bloque `<invariants>` que se reenvía tras una compactación (1000–20000); consulte [Invariantes](/es/context#context-invariants) |
+| `invariants.maxChars` | `4000` | Tamaño máximo del bloque `<invariants>` que se reenvía tras una compactación (1000–20000); consulta [Invariantes](/es/context#context-invariants) |
 
-Consulte [Contexto: AGENTS.md y skills](/es/context).
+Consulta [Contexto: AGENTS.md y skills](/es/context).
 
 ## `builtinPlugins`
 
-Opciones de los plugins integrados, indexadas por ID de plugin. Cada entrada acepta `enabled`; cada
-plugin valida el resto de su sección. Las entradas se combinan entre capas de configuración por ID
-de plugin — la entrada del proyecto o del archivo explícito gana por ID, de modo que
-`{ "memory": { "enabled": false } }` en un proyecto desactiva el plugin de memoria allí mientras
-todas las demás entradas globales se conservan. Los plugins integrados son `deepseek`, `opencode`, `opencode-go`,
+Opciones de los complementos integrados, indexadas por ID de complemento. Cada entrada acepta `enabled`; cada
+complemento valida el resto de su sección. Las entradas se combinan entre capas de configuración por ID
+de complemento — la entrada del proyecto o del archivo explícito gana por ID, de modo que
+`{ "memory": { "enabled": false } }` en un proyecto desactiva el complemento de memoria allí mientras
+todas las demás entradas globales se conservan. Los complementos integrados son `deepseek`, `opencode`, `opencode-go`,
 `openai-compatible`, `memory` y `subagents`; las
 opciones de `subagents` se detallan en [Subagentes](/es/subagents#limits). Opciones de `memory`:
 
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
-| `builtinPlugins.memory.enabled` | `true` | Activa el plugin de memoria |
+| `builtinPlugins.memory.enabled` | `true` | Activa el complemento de memoria |
 | `builtinPlugins.memory.dbPath` | `<state home>/memory.sqlite` | Ruta de la base de datos; las rutas relativas se resuelven desde el archivo de configuración |
 | `builtinPlugins.memory.injectBudgetTokens` | `1500` | Presupuesto de tokens (100–20000) para el contexto de memoria inyectado |
 | `builtinPlugins.memory.recallLimit` | `8` | Memorias recuperadas tras la compactación (0–20) |
 | `builtinPlugins.memory.autoSummary` | `true` | Escribe un resumen de sesión con `/clear`, `/exit` o al salir (TUI) |
 | `builtinPlugins.memory.defaultScope` | `project` | `project` o `personal` |
 
-Consulte [Memoria persistente](/es/memory).
+Consulta [Memoria persistente](/es/memory).
 
 ## `pluginHooks`
 
@@ -241,7 +241,7 @@ Consulte [Memoria persistente](/es/memory).
 | --- | --- | --- |
 | `timeoutMs` | `15000` | Tiempo límite (100–120000 ms) de los hooks de compactación y de inicio de sesión |
 | `sessionEndTimeoutMs` | `10000` | Tiempo límite (100–120000 ms) de los hooks de fin de sesión |
-| `disposeTimeoutMs` | `2000` | Límite por plugin (100–10000 ms) para `dispose()` y para el `deactivate()` del proveedor de decisiones activo cuando Alisio se cierra. Los plugins se liberan en paralelo, así que uno lento no retrasa a los demás. Ajustable en vivo desde **Ajustes → General** en la web; no figura en el menú `/settings` de la terminal |
+| `disposeTimeoutMs` | `2000` | Límite por complemento (100–10000 ms) para `dispose()` y para el `deactivate()` del proveedor de decisiones activo cuando Alisio se cierra. Los complementos se liberan en paralelo, así que uno lento no retrasa a los demás. Ajustable en vivo desde **Ajustes → General** en la web; no figura en el menú `/settings` de la terminal |
 
 ## `decisions` {#decisions}
 
@@ -253,7 +253,7 @@ con un aviso (`alisio doctor` lista lo ignorado).
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
 | `enabled` | `true` | `false` desactiva las decisiones: las llamadas se resuelven a nada y las funciones usan sus valores por defecto |
-| `provider` | `null` | ID del proveedor de plugin que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un plugin nunca lo activa. Solo global |
+| `provider` | `null` | ID del proveedor de complemento que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un complemento nunca lo activa. Solo global |
 | `timeoutMs` | `1500` | Límite de una llamada de decisión (50–10000 ms) |
 | `minConfidence` | `0.6` | Las respuestas con menos confianza se rechazan (0–1). Es un filtro heurístico: no se asume que la confianza esté calibrada |
 | `telemetry` | `true` | `false` deja de persistir los eventos de decisión, así que `/stats` no muestra la sección de decisiones. Solo global |
@@ -264,11 +264,11 @@ con un aviso (`alisio doctor` lista lo ignorado).
 
 Las cinco claves se pueden cambiar desde **Ajustes → General** en [`alisio serve`](/es/web) (etiquetas
 en inglés y español) y se leen en vivo: la siguiente decisión usa el nuevo valor. No figuran en el
-menú `/settings` de la terminal; allí edite el archivo.
+menú `/settings` de la terminal; allí edita el archivo.
 ## `semantic` {#semantic}
 
-Puertos de búsqueda semántica (vea [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search)):
-los plugins pueden registrar un proveedor de embeddings y un almacén vectorial, y otros plugins
+Puertos de búsqueda semántica (consulta [Proveedores y consumidores de búsqueda semántica](/es/plugins#semantic-search)):
+los complementos pueden registrar un proveedor de embeddings y un almacén vectorial, y otros complementos
 indexan y buscan texto a través de ellos. Alisio no incluye ningún motor. `embedding` y `store` son
 **solo globales**: se leen de `<config home>/config.json`, y una capa de proyecto o `--config` que las
 defina se ignora con un aviso (`alisio doctor` lista lo ignorado).
@@ -276,7 +276,7 @@ defina se ignora con un aviso (`alisio doctor` lista lo ignorado).
 | Campo | Por defecto | Descripción |
 | --- | --- | --- |
 | `enabled` | `true` | `false` desactiva la búsqueda semántica: las operaciones fallan con `unavailable` y `trySearch` devuelve `null` |
-| `embedding` | `null` | ID del proveedor de embeddings que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un plugin nunca lo activa. Solo global |
+| `embedding` | `null` | ID del proveedor de embeddings que se usa (`^[a-z0-9][a-z0-9.-]{0,63}$`); `null` significa ninguno. Instalar un complemento nunca lo activa. Solo global |
 | `store` | `null` | ID del almacén vectorial que se usa, mismo patrón; `null` significa ninguno. Solo global |
 | `embedTimeoutMs` | `60000` | Límite de una llamada de embeddings o de una escritura masiva (1000–300000 ms); el primer embedding local puede cargar un modelo |
 | `queryTimeoutMs` | `5000` | Límite de una consulta o de una llamada sobre colecciones (100–60000 ms) |
@@ -285,50 +285,50 @@ defina se ignora con un aviso (`alisio doctor` lista lo ignorado).
 { "semantic": { "embedding": "my-embed", "store": "my-store" } }
 ```
 
-`embedding` y `store` también los puede guardar el paso de configuración de un plugin tras confirmar
-una pregunta. No aparecen en los menús de ajustes; edite el archivo o confirme la pregunta del plugin.
+`embedding` y `store` también los puede guardar el paso de configuración de un complemento tras confirmar
+una pregunta. No aparecen en los menús de ajustes; edita el archivo o confirma la pregunta del complemento.
 
 ## `plugins`
 
-Lista de plugins de confianza: rutas (resueltas respecto al archivo de configuración) o nombres de
+Lista de complementos de confianza: rutas (resueltas respecto al archivo de configuración) o nombres de
 paquetes npm. Las entradas `plugins` del proyecto o del archivo explícito SE SUMAN a la lista
 global: las entradas globales se conservan primero (sin duplicados exactos) y después siguen las
 entradas nuevas de la capa seleccionada. Un array `plugins` vacío en un proyecto nunca vacía los
-plugins globales.
-Consulte [Escribir plugins](/es/plugins#loading-plugins).
+complementos globales.
+Consulta [Escribir complementos](/es/plugins#loading-plugins).
 
 ```json
 { "plugins": ["alisio-plugin-foo", "./plugins/local.js"] }
 ```
 
-Los paquetes instalados con `alisio install` aterrizan en el directorio global de plugins
+Los paquetes instalados con `alisio install` aterrizan en el directorio global de complementos
 (`<config home>/plugins`, mediante `npm install --prefix`) y sus nombres npm se añaden
-automáticamente al array `plugins` de la configuración GLOBAL — consulte
-[Instalar plugins desde npm](/es/plugins#installing-plugins-from-npm). Nunca se escriben entradas de
+automáticamente al array `plugins` de la configuración GLOBAL — consulta
+[Instalar complementos desde npm](/es/plugins#installing-plugins-from-npm). Nunca se escriben entradas de
 ruta que apunten al paquete instalado; los nombres npm siguen siendo portables.
 `pluginOverrides` de abajo puede desactivar un paquete instalado del proyecto en cada proyecto igual
-que cualquier otro plugin externo.
+que cualquier otro complemento externo.
 
 `/plugins` guarda por separado las anulaciones externas del proyecto, indexadas por el ID estable
-del plugin:
+del complemento:
 
 ```json
 { "pluginOverrides": { "acme.hello": { "enabled": false } } }
 ```
 
-Una entrada también puede llevar `options`, un objeto JSON que el plugin lee como `api.options`
-(consulte [Escribir plugins](/es/plugins#decision-intelligence)). `options` es **solo global**: una
-capa de proyecto no puede definirlo (se ignora con un aviso), porque un plugin se ejecuta con todos
+Una entrada también puede llevar `options`, un objeto JSON que el complemento lee como `api.options`
+(consulta [Escribir complementos](/es/plugins#decision-intelligence)). `options` es **solo global**: una
+capa de proyecto no puede definirlo (se ignora con un aviso), porque un complemento se ejecuta con todos
 los privilegios del proceso. Los nombres de opción empiezan por una letra y usan letras, dígitos,
-punto, guion bajo o guion; el objeto serializado ocupa como máximo 8 KB; no ponga secretos en él.
-Cambiarlo surte efecto al reiniciar. Activar o desactivar un plugin desde `/plugins` conserva sus
+punto, guion bajo o guion; el objeto serializado ocupa como máximo 8 KB; no pongas secretos en él.
+Cambiarlo surte efecto al reiniciar. Activar o desactivar un complemento desde `/plugins` conserva sus
 `options`.
 
 ```json
 { "pluginOverrides": { "acme.hello": { "options": { "device": "cpu" } } } }
 ```
 
-Los cambios de plugins integrados usan el campo existente `builtinPlugins.<id>.enabled`. Ambas
+Los cambios de complementos integrados usan el campo existente `builtinPlugins.<id>.enabled`. Ambas
 formas se aplican tras reiniciar. No modifican los perfiles globales de proveedores ni el almacén
 separado de credenciales.
 
@@ -344,7 +344,7 @@ raíces globales.
 ```
 
 También se buscan las raíces de proyecto (`.agents/skills`, `.alisio/skills`, `.claude/skills`, solo
-en proyectos de confianza), las raíces de usuario y las skills de plugins. Consulte
+en proyectos de confianza), las raíces de usuario y las skills de complementos. Consulta
 [Contexto: AGENTS.md y skills](/es/context#skills).
 
 `/skills` escribe las decisiones de activación locales del proyecto sin cambiar las raíces:
@@ -353,8 +353,8 @@ en proyectos de confianza), las raíces de usuario y las skills de plugins. Cons
 { "skillOverrides": { "review": { "enabled": false } } }
 ```
 
-Las anulaciones se aplican a la skill efectiva del proyecto actual. Las skills propiedad de plugins
-están bloqueadas y siguen el ciclo de vida de su plugin.
+Las anulaciones se aplican a la skill efectiva del proyecto actual. Las skills propiedad de complementos
+están bloqueadas y siguen el ciclo de vida de su complemento.
 
 ## `additionalDirectories`
 
@@ -372,7 +372,7 @@ configuración que la definió y se canoniza al cargar.
 En una sesión interactiva, una ruta externa no declarada pide aprobación acotada a su directorio
 contenedor en lugar de fallar; en ejecuciones headless se deniega con la ruta resuelta y los remedios
 exactos (`--add-dir` o esta clave). `--read-only` ignora tanto esta clave como `--add-dir`, así que
-una sesión bloqueada nunca gana acceso externo. Véase
+una sesión bloqueada nunca gana acceso externo. Consulta
 [Rutas fuera del workspace](/es/tools#external-directories).
 
 ## `agents`
@@ -566,7 +566,7 @@ terminal:
 | Ajustes del agente (página General) | `<config home>/config.json`, con el mismo escritor validado que `/settings`; solo se aceptan las claves configurables |
 | Perfiles de proveedor (página Modelos) | `<config home>/providers.json` (solo valores no secretos, `0600`) |
 | Credenciales (página Modelos) | `<config home>/credentials.json` (`0600`, escrituras atómicas); la web puede guardarlas o borrarlas pero nunca las vuelve a leer |
-| Interruptores de plugins y skills | El `.alisio/config.json` del proyecto (solo workspaces de confianza) |
+| Interruptores de complementos y skills | El `.alisio/config.json` del proyecto (solo workspaces de confianza) |
 | Interruptores de servidores MCP | La capa de configuración que define el servidor |
 | Consentimiento MCP con **Recordar para este usuario** | `mcp.allow` en `<config home>/config.json` |
 
@@ -577,7 +577,7 @@ no abre editores. Activar un perfil desde la web también lo convierte en el per
 ## Plantillas de prompts
 
 No hay una clave de configuración para las plantillas. Se leen de `<config home>/prompts/` y, en
-proyectos de confianza, de `.alisio/prompts/`. Consulte [Plantillas de prompts](/es/prompt-templates).
+proyectos de confianza, de `.alisio/prompts/`. Consulta [Plantillas de prompts](/es/prompt-templates).
 
 ## Servidores MCP
 
@@ -650,7 +650,7 @@ si existe `url`:
 }
 ```
 
-No defina el mismo nombre en `mcp.servers` y `mcpServers` dentro de un archivo. Se validan de forma
+No definas el mismo nombre en `mcp.servers` y `mcpServers` dentro de un archivo. Se validan de forma
 estricta nombres, transportes, URL, comandos, argumentos y valores de entorno. Los diagnósticos nunca
 muestran esos valores. Los valores directos de `env` se pasan solo a ese subproceso y prevalecen
 sobre una variable del mismo nombre reenviada con `envAllow`; úselos para opciones no secretas o
@@ -660,15 +660,15 @@ permanece desconectado hasta que se solicita. La TUI interactiva puede conceder 
 proceso/red para la sesión actual de la aplicación tras una confirmación clara; ese permiso no se
 guarda en la configuración. Los modos no TUI y los consumidores programáticos aún requieren
 `--allow-mcp` o `allowMcp`; `--read-only` siempre prohíbe MCP. Un servidor stdio es un
-subproceso con sus privilegios de usuario, **no un sandbox**. Confíe únicamente en la configuración y
-el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
+subproceso con sus privilegios de usuario, **no un sandbox**. Confía únicamente en la configuración y
+el ejecutable que uses. Consulta [Herramientas y permisos](/es/tools#mcp).
 
 ### Instalar desde el catálogo
 
 Ajustes → MCP → **Explorar** instala servidores sin editar JSON. La guía paso a paso para personas no
 técnicas, con capturas, es [Catálogo MCP](/es/mcp-catalog). Las entradas instaladas se escriben en
-`mcp.servers` de la capa que elija (**Solo este proyecto** escribe `<proyecto>/.alisio/config.json` y
-mantiene la confianza del proyecto; **Todos mis proyectos** escribe su configuración de usuario) y Alisio
+`mcp.servers` de la capa que elijas (**Solo este proyecto** escribe `<proyecto>/.alisio/config.json` y
+mantiene la confianza del proyecto; **Todos mis proyectos** escribe tu configuración de usuario) y Alisio
 registra lo que posee en `<state home>/mcp/installations.sqlite`.
 
 - Los **servidores npm** se instalan en privado en `<state home>/mcp/artifacts/<id>` con la versión
@@ -680,7 +680,7 @@ registra lo que posee en `<state home>/mcp/installations.sqlite`.
   Alisio (la app de escritorio es Electron actuando como Node, igual que su npm incluido).
 - Los **servicios remotos** (Streamable HTTP) con dirección HTTPS pública se guardan como `type: "http"`.
   Una dirección del catálogo debe ser HTTPS pública (sin credenciales, ni direcciones de bucle local,
-  privadas o de enlace local, también tras resolver el DNS); las direcciones que escribe usted mismo no
+  privadas o de enlace local, también tras resolver el DNS); las direcciones que escribes tú mismo no
   se restringen. La dirección se comprueba al hacer el plan, no se fija después.
 - **Los secretos nunca van a la configuración.** Las claves que pide el formulario se guardan tras un
   `SecretStore` en `<config home>/mcp-secrets.json` (modo `0600`, mismo bloqueo que `credentials.json`):
@@ -691,8 +691,8 @@ registra lo que posee en `<state home>/mcp/installations.sqlite`.
   (no se siguen redirecciones). Una clave que falta deja el servidor en *requiere autenticación*.
 - Instalar nunca concede permiso para ejecutar: el consentimiento MCP existente se integra en el mismo
   formulario, sin marcar por defecto, y **Recordar** es una elección aparte, también sin marcar.
-- La descarga inicial tiene un plazo de 180 segundos; defina
-  `"mcp": { "install": { "timeoutSeconds": 300 } }` en su configuración de **usuario** (de 30 a 600; un
+- La descarga inicial tiene un plazo de 180 segundos; define
+  `"mcp": { "install": { "timeoutSeconds": 300 } }` en tu configuración de **usuario** (de 30 a 600; un
   valor de proyecto se ignora) para cambiarlo. Cancelar detiene todo el árbol de procesos y elimina lo que
   creó el trabajo.
 - Los métodos no compatibles (PyPI, OCI, MCPB, SSE heredado) se muestran con honestidad y con
@@ -700,9 +700,9 @@ registra lo que posee en `<state home>/mcp/installations.sqlite`.
 
 #### Iniciar sesión en un servicio (OAuth)
 
-Un servicio remoto que no usa clave puede pedirle que inicie sesión. La fila de **Conectados** dice
+Un servicio remoto que no usa clave puede pedirte que inicies sesión. La fila de **Conectados** dice
 entonces **Falta iniciar sesión** y ofrece **Iniciar sesión**: Alisio descubre el servidor de autorización
-del servicio (RFC 9728 y RFC 8414), se registra, abre la página de inicio de sesión en su navegador con PKCE
+del servicio (RFC 9728 y RFC 8414), se registra, abre la página de inicio de sesión en tu navegador con PKCE
 y un `state` aleatorio, y recibe la respuesta en un oyente de un solo uso ligado a `127.0.0.1` (el mismo
 ayudante de bucle local que el inicio de sesión de proveedores). Comprueba el emisor del servidor de
 autorización y de la respuesta, vincula el token al recurso protegido para el que se concedió y lo renueva
@@ -712,7 +712,7 @@ devuelve la API, nunca se registran en logs y solo se envían al origen al que p
 redirecciones). Un servidor de autorización en otro origen debe ser HTTPS público, como toda dirección que
 viene de un catálogo. **Cerrar sesión** borra solo los tokens locales: **no** se pide al servicio que los
 revoque. Un servidor local (stdio) nunca usa este flujo. Límites: el inicio de sesión vuelve al equipo donde
-se ejecuta Alisio, así que no puede terminar si su navegador está en otro equipo; se aplica a servidores
+se ejecuta Alisio, así que no puede terminar si tu navegador está en otro equipo; se aplica a servidores
 instalados desde el catálogo.
 
 #### Comprobar, editar y actualizar
@@ -726,14 +726,14 @@ instalados desde el catálogo.
   correcta demuestra que se conectó ahora, no que sea segura.
 - **Configurar** edita los campos que pidió la ficha del catálogo. Una clave guardada solo aparece como
   *Clave guardada*; dejarla vacía la conserva, **Sustituir clave** guarda una nueva y cada valor se vuelve a
-  validar en el servidor. Si la configuración cambió mientras editaba, no se escribe nada y puede recargar
-  los cambios conservando su borrador no secreto.
+  validar en el servidor. Si la configuración cambió mientras editabas, no se escribe nada y puedes recargar
+  los cambios conservando tu borrador no secreto.
 - **Actualizar** (paquetes instalados) planifica la versión nueva junto a la actual, la comprueba y
   restaura la anterior si no conecta. Los servicios remotos se actualizan solos.
 
 ### Consentimiento global (`mcp.allow`)
 
-Defina `"mcp": { "allow": true }` en **su configuración de usuario**
+Define `"mcp": { "allow": true }` en **tu configuración de usuario**
 (`<config home>/config.json`, por defecto `~/.config/alisio/config.json`) para conceder
 consentimiento de proceso/red MCP **entre sesiones para este usuario**: cada inicio de Alisio (TUI
 interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, la cabecera muestra
@@ -760,11 +760,11 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
 - `--read-only` siempre bloquea MCP por completo, independientemente de `mcp.allow`; ni siquiera se
   ofrece.
 - Concederlo persiste entre sesiones y auto-conecta los servidores activados. Los servidores MCP
-  se ejecutan sin sandbox con sus privilegios de usuario: active el consentimiento global solo si
-  confía en cada servidor que configure.
-- El gestor `/mcps` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulte
+  se ejecutan sin sandbox con sus privilegios de usuario: activa el consentimiento global solo si
+  confías en cada servidor que configures.
+- El gestor `/mcps` de la TUI puede definirlo (Conceder y recordar) y revocarlo; consulta
   [Interfaz de terminal](/es/tui#mcp). En la interfaz web, **Ajustes → Servidores MCP → Conceder
-  acceso MCP** pide una confirmación explícita y puede recordar la concesión del mismo modo; consulte
+  acceso MCP** pide una confirmación explícita y puede recordar la concesión del mismo modo; consulta
   [Interfaz web](/es/web).
 
 ### Fuente del catálogo MCP (`mcp.catalog`)
@@ -772,7 +772,7 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
 Ajustes → MCP → **Explorar** lista servidores MCP desde un índice local que Alisio guarda en
 `<state home>/mcp/catalog.sqlite` y actualiza en segundo plano (como máximo una vez por hora, nunca al
 iniciar). Por defecto la fuente es el registro oficial (`https://registry.modelcontextprotocol.io`);
-la fuente y su URL base se definen solo en **su configuración de usuario**.
+la fuente y su URL base se definen solo en **tu configuración de usuario**.
 
 ```json
 {
@@ -818,8 +818,8 @@ Flags globales (válidos para todos los comandos):
 | --- | --- |
 | `--cwd <path>` | Directorio de trabajo |
 | `--config <path>` | Archivo de configuración de confianza explícita |
-| `--trust-project` | Carga la configuración y los plugins ejecutables del proyecto (todos los privilegios del proceso) |
-| `--plugin <path...>` | Carga plugins de confianza explícita (rutas o nombres de paquete) |
+| `--trust-project` | Carga la configuración y los complementos ejecutables del proyecto (todos los privilegios del proceso) |
+| `--plugin <path...>` | Carga complementos de confianza explícita (rutas o nombres de paquete) |
 | `--model <id>` | ID del modelo del proveedor |
 | `--base-url <url>` | URL base de la API compatible con OpenAI, incluyendo `/v1` si hace falta |
 | `--api-mode <mode>` | `chat` o `responses` |
@@ -832,11 +832,11 @@ Flags globales (válidos para todos los comandos):
 | `--allow-agents` | Permite enviar mensajes a agentes vecinos mediante Herdr |
 | `--add-dir <paths...>` | Directorios adicionales que las herramientas pueden tocar fuera del workspace (repetible, solo esta ejecución) |
 | `--no-herdr` | Desactiva los reportes automáticos de ciclo de vida a Herdr |
-| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, plugins ejecutables, MCP y toda ruta externa |
+| `--read-only` | Desactiva escrituras, procesos arbitrarios, herramientas de red, complementos ejecutables, MCP y toda ruta externa |
 | `--db <path>` | Base de datos de sesiones |
 | `--json` | Emite eventos JSONL versionados |
 | `--no-tui` | Usa el modo interactivo readline sencillo en lugar de la TUI |
-| `--disable-plugin <ids...>` | Desactiva plugins integrados (`memory`, `subagents`) |
+| `--disable-plugin <ids...>` | Desactiva complementos integrados (`memory`, `subagents`) |
 | `--agents <json>` | Definiciones adicionales de subagentes en JSON: `{"name":{"description":"...","prompt":"..."}}` |
 | `--no-banner` | No muestra la pantalla de inicio |
 | `--quiet` | Suprime la salida no esencial (pantalla de inicio, sugerencias) |
@@ -850,7 +850,7 @@ Comandos:
 | `alisio` | TUI interactiva (o readline con `--no-tui`) |
 | `alisio run <prompt>` | Ejecución headless; `/name args` ejecuta una [plantilla de prompt](/es/prompt-templates) |
 | `alisio resume <session> [prompt]` | Reanuda una sesión (TUI sin prompt, headless con prompt) |
-| `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, use `/init`) |
+| `alisio setup` | Escribe un `.alisio/config.json` de ejemplo sin secretos (para `AGENTS.md`, usa `/init`) |
 | `alisio doctor` | Diagnóstico del entorno y del proveedor; avisa cuando no hay modelo configurado; muestra el Python de `python_run` (o cómo instalarlo) |
 | `alisio analysis status` | Modo y política de aislamiento, una tabla de los backends de Python (contenedor, WebAssembly, host), el intérprete Python descubierto, los extras instalados, el motor e imagen de contenedor, límites y retención, y la guía de instalación si falta Python |
 | `alisio analysis setup --extras analysis\|science` | Opcional: instala extras con hashes fijados (pandas…) en un entorno virtual privado; necesita red y falla limpiamente sin ella |
@@ -864,8 +864,8 @@ Comandos:
 | `alisio context explain <path>` | Muestra qué archivos `AGENTS.md` se aplican a una ruta |
 | `alisio skills list [path]` | Lista las skills descubiertas |
 | `alisio skills validate [path]` | Valida skills (código de salida distinto de cero si hay diagnósticos) |
-| `alisio plugins list` | Lista los plugins globales, de proyecto y explícitos |
-| `alisio plugins doctor` | Carga los plugins y muestra sus herramientas y comandos |
+| `alisio plugins list` | Lista los complementos globales, de proyecto y explícitos |
+| `alisio plugins doctor` | Carga los complementos y muestra sus herramientas y comandos |
 | `alisio mcp list` | Lista los servidores MCP configurados |
 | `alisio mcp doctor <server>` | Se conecta a un servidor (requiere `--allow-mcp`) |
 | `alisio serve` | Arranca el [servidor de la interfaz web](/es/web) local |

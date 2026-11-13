@@ -1,7 +1,9 @@
 # Alisio
 
+**English** · [Español](README.es.md)
+
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Alisio — your assistant for everyday work, on the model you choose" width="720">
+  <img src="docs/assets/banner.png" alt="Alisio — AI that works with you" width="720">
 </p>
 
 [![CI](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml)
@@ -9,45 +11,167 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-EN%20%7C%20ES-8A2BE2)](https://gustavogutierrez.github.io/alisio/)
 
-**Alisio — your assistant for everyday work, on the model you choose.** It is a desktop AI harness
-for the everyday work of non-technical people: teachers, students, secretaries and office staff,
-accountants and the home. It installs with one click, works on your own files and always asks
-permission. It specializes through plugins per profession and delivers ready-to-use results: PDFs,
-spreadsheets, charts, reports and dashboards. It connects to any OpenAI-compatible model (DeepSeek,
-OpenRouter and others). Programming is still possible, as an advanced, secondary use: a terminal UI,
-a headless mode for scripts and CI, subagents, code editing and **Forja** code mode.
+**Alisio — AI that works with you. Your work, with more possibilities.** Alisio is a desktop app
+with artificial intelligence that helps you with tasks from your work, your studies and your daily
+life. Describe what you need: Alisio organizes the steps, uses the tools available and helps you
+reach a result you can review and use, such as a PDF, a spreadsheet, a chart, a report or a
+dashboard. Find apps for your tasks in the plugin catalog, build your own with the plugin creator by
+describing what you need, and connect tools and services from the MCP catalog. It is made for
+teachers, students, office staff, accountants and the home, and it works with the model you choose.
+Programming is still possible, as an [advanced use](#advanced-use).
+
+**[Download Alisio](https://gustavogutierrez.github.io/alisio/#download)** ·
+[See how it works](https://gustavogutierrez.github.io/alisio/#how-it-works) ·
+[Documentation (EN/ES)](https://gustavogutierrez.github.io/alisio/)
+
+## What can it help you with?
+
+- **Turn a spreadsheet into a report.** Attach a CSV or Excel table and ask for a summary with
+  charts. You get a dashboard or a report you can open, check and share
+  ([Smart Dashboard](https://gustavogutierrez.github.io/alisio/smart-dashboard)).
+- **Prepare a printable exam.** With the Evalúa plugin, a teacher prepares a school **math** exam as
+  a printable document, reviews it and reuses its format. Today it covers school math only.
+- **Make certificates and cards.** With the Cardsmith plugin, office staff prepare certificates,
+  cards and charts from their own data.
+
+What exists today, by person:
+
+| Who | What Alisio can do today | What it uses |
+| --- | --- | --- |
+| Students | Draft a thesis, research sources, study | `@alisio/plugin-thesis` (plans, researches, drafts and typesets university theses into PDF), `@alisio/plugin-literature-research` and the built-in memory |
+| Teachers | Create printable exams (school **math** only for now) | `@alisio/plugin-evalua` |
+| Accountants | Working papers and spreadsheet analysis | Built-in data analysis |
+| Office and secretaries | Analyze Excel and CSV data, charts, certificates, reports | Built-in data analysis, `@alisio/plugin-cardsmith` |
+| Home | Budgets, charts, organizing information | Built-in data analysis (no dedicated plugin) |
+
+## What you need and what you get
+
+**You need:**
+
+- A computer with Windows 10 or 11 (x64), macOS (Apple Silicon or Intel) or Linux (x86_64).
+- A model to work with: a key from an online model service, or a compatible model server on your
+  own computer. You connect it once in **Settings → Models**.
+- The folder with the files you want to work on.
+- For some tasks, an extra program: for example Python 3.10 or newer to read Excel files. Alisio
+  tells you what is missing.
+
+**You get:** documents, tables, charts, reports, dashboards and designed PDFs that you can review,
+ask to correct, then save, print or share. The conversation helps you ask and clarify; the result is
+the file you keep.
+
+## How you work with Alisio
+
+1. **Choose.** Open the folder you want to work on and describe the task in your own words, or open
+   an app from the **Apps** menu.
+2. **Provide.** Add the files and data that are missing. Alisio reads the folder you opened and, in
+   the **Ask** permission mode, asks before it changes a file, runs a program or uses the internet.
+3. **Review.** The result appears as a document, table, chart or app. Check it, ask for corrections,
+   then save, print or share it. You keep the final word.
+
+<p align="center">
+  <img src="docs/assets/alisio-harness-web-ui.webp" alt="The Alisio interface showing the project list, an active conversation and the file explorer" width="860">
+</p>
+
+The desktop app shows this interface in its own window; it also opens in your browser.
+
+### Apps for your work
+
+Plugins add tools and apps for a profession.
+
+- **Find tools for your work.** Open **Settings → Plugins → Plugin catalog** and install what you
+  need in one click. Installed plugins can be updated or removed from the same screen, and you can
+  install a private plugin from a file. Browse the
+  [plugin catalog](https://gustavogutierrez.github.io/alisio-plugins/) online.
+- **Build a helper made for you.** Open **Plugin creator** and describe a task you repeat. It builds
+  the plugin, checks it and lets you decide when to install it, even with its own screen in the
+  **Apps** menu ([Plugin creator](https://gustavogutierrez.github.io/alisio/plugin-creator)).
+- **Connect a tool or service.** **Settings → MCP servers → Explore** lists tools and services you
+  can connect, with guided sign-in, a connection check and one-click removal. Appearing in that list
+  is not a security review, and some services still need manual setup
+  ([MCP catalog](https://gustavogutierrez.github.io/alisio/mcp-catalog)).
+
+| What you want to do | What it uses | Status |
+| --- | --- | --- |
+| Analyze CSV and Excel tables, charts, reports and dashboards | Built in | Included |
+| Designed PDF documents | Built in | Included |
+| Printable exams | `@alisio/plugin-evalua` | Plugin to install; school math only |
+| Thesis writing and literature research | `@alisio/plugin-thesis`, `@alisio/plugin-literature-research` | Plugins to install |
+| Certificates, cards and charts | `@alisio/plugin-cardsmith` | Plugin to install |
+| A helper for your own task | Plugin creator | Included |
+| Connect a tool or service | MCP catalog | Included |
+
+The profession plugins live in the public
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) repository and are **not bundled
+in the desktop app yet**: you install them from the catalog. The quality of a result depends on the
+plugin, the model and the services you use. In health, accounting, education or any sensitive
+decision, Alisio supports your work; it does not replace your professional judgment.
+
+## Your data and permissions
+
+- **You choose the folder.** Alisio works with the folder you open. In the **Ask** permission mode
+  it asks before it changes a file, runs a program or uses the internet; other modes let more run
+  without asking, and you can switch at any time. See
+  [Permission modes](https://gustavogutierrez.github.io/alisio/tools#permission-modes).
+- **Working with local files is not the same as keeping everything on your computer.** Your
+  conversations and settings are saved on your computer, but what Alisio reads to answer you is sent
+  to the model you configured. With an online service, that service receives it; connected tools
+  and services receive what they need for their task. With a model on your own computer, that
+  content stays on it, except for tools that use the internet.
+- **Keys stay protected.** Keys are stored as credentials, never in plain configuration files.
+- **Not a sandbox.** Plugins and programs run with your user's permissions; install only what you
+  trust.
+
+## What it does not do yet
+
+- **No scheduled or unsupervised routines.** Alisio works when you ask it to; it does not run tasks
+  on a schedule or on its own.
+- **Evalúa covers school math only.**
+- **The desktop app has no automatic update yet**: you install a new version with its installer,
+  and the installers are not signed. See the
+  [desktop app limits](https://gustavogutierrez.github.io/alisio/desktop#limitations) and
+  [Known limitations](https://gustavogutierrez.github.io/alisio/limitations).
+- **Checks help, they do not guarantee.** Review every result before you use it.
+
+## Download and requirements
+
+Download the desktop app from the
+[Alisio 0.11.11 release](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11):
+
+- Windows 10/11 (x64): [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe)
+- macOS Apple Silicon: [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) · Intel: [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg)
+- Linux: [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb)
+
+The installers are not signed, so Windows SmartScreen and macOS Gatekeeper ask for one extra step the
+first time (see [docs/desktop.md](docs/desktop.md)). Then connect a model in **Settings → Models**,
+open a folder and describe the task.
+
+**Is it free?** Alisio is free and open source, under the MIT license. The model you connect may
+have its own cost: online model services charge according to their own prices, and some connected
+services require an account. A model running on your own computer has no service fee.
+
+**Does it work without internet?** It depends on the model and the tool. With an online model you
+need internet. With a model on your own computer, Alisio can work offline, but installing plugins,
+refreshing the catalogs, web search and online services need a connection.
 
 > **Status: stable, tested and documented, still pre-1.0.** Until 1.0.0 the usual 0.x semver rules
-> apply: fixes ship as patch releases and a new minor release may include breaking changes. The npm badge above always shows the latest published version; see the
+> apply: fixes ship as patch releases and a new minor release may include breaking changes. The npm
+> badge above always shows the latest published version; see the
 > [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
 > [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
 
-## Everyday work
+## Advanced use
 
-Alisio is built around five ideas: it is **easy** (a desktop app, no terminal needed), it keeps
-**your files under your control** (local-first, with explicit permissions), it specializes through
-**plugins per profession**, it delivers **results you can use** (documents, spreadsheets, charts and
-dashboards) and it works with **any model**. This is what exists today, no more:
+Everything above works from the desktop app without a terminal. This part is for developers and
+people who want more control: the command line, scripts, code mode, writing plugins in code and the
+technical details.
 
-| Who | What Alisio can do today | Backed by |
-| --- | --- | --- |
-| Students | Draft a thesis, research sources, study | `@alisio/plugin-thesis` (plans, researches, drafts and typesets university theses into PDF with Typst), `@alisio/plugin-literature-research` and the built-in persistent memory |
-| Teachers | Create printable exams (school **math** only for now) | `@alisio/plugin-evalua` |
-| Accountants | Working papers and spreadsheet analysis | Forja Python analysis |
-| Office and secretaries | Analyze Excel and CSV data, charts, certificates, reports | Forja and analysis, `@alisio/plugin-cardsmith` |
-| Home | Budgets, charts, organizing information | Forja (no dedicated plugin) |
-
-The profession plugins live in the public [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins)
-repository and install with `alisio install npm:<package>`. They are **not bundled in the desktop app
-yet**. See the [desktop app guide](docs/desktop.md).
-
-## Highlights for developers and advanced use
+### Highlights for developers
 
 - **Terminal UI**: streaming Markdown, tool blocks with spinners, durations and diffs, a context/token
   bar, slash commands with autocomplete, model switching, interactive approvals and copy-on-select.
 - **Web UI**: `alisio serve` opens a local, token-protected browser workspace for several workspaces
   and sessions, with streaming conversations, approvals, files, changes, artifacts and the plan
-  viewer, on the same agent core.
+  viewer, on the same agent core. The desktop app is a thin Electron shell around this same server.
 - **Any OpenAI-compatible provider**: Chat Completions and Responses APIs, DeepSeek-style endpoints, local servers.
   Keys are read from environment variables only. Dedicated DeepSeek, OpenCode Console (Zen) and
   OpenCode Go providers are separate plugins: `alisio install npm:@alisio/plugin-deepseek`,
@@ -87,26 +211,16 @@ yet**. See the [desktop app guide](docs/desktop.md).
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned
-  `plugin_install` tool).
-- **Also**: headless JSONL mode, MCP servers (with an optional persistent global `mcp.allow` consent
-  that auto-connects enabled servers on every start, or per-session grants from the TUI), AGENTS.md
-  scopes, Agent Skills, Herdr integration.
+  `plugin_install` tool). See [Writing plugins](https://gustavogutierrez.github.io/alisio/plugins).
+- **Also**: headless JSONL mode, subagents, MCP servers (with an optional persistent global
+  `mcp.allow` consent that auto-connects enabled servers on every start, or per-session grants from
+  the TUI), AGENTS.md scopes, Agent Skills, Herdr integration.
 - **Runs on Node.js >= 22.16 or Bun**; standalone binaries for Linux, macOS and Windows. The Pyodide
   (`wasm`) Python backend needs Node.js >= 22.22, >= 24.13 or >= 25.3.
 
-## Install
+### Install from the command line
 
-The main way to install Alisio is the **desktop app**. Download it from the
-[Alisio 0.11.11 release](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11):
-
-- Windows 10/11 (x64): [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe)
-- macOS Apple Silicon: [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) · Intel: [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg)
-- Linux: [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb)
-
-The installers are not signed, so Windows SmartScreen and macOS Gatekeeper ask for one extra step the
-first time (see [docs/desktop.md](docs/desktop.md)).
-
-**For developers:** the command line below is the advanced path (Node.js >= 22.16).
+The command line is the advanced path (Node.js >= 22.16).
 
 ```sh
 npm install -g @alisio/alisio-code   # or: pnpm add -g @alisio/alisio-code · bun add -g @alisio/alisio-code
@@ -115,7 +229,7 @@ alisio                                  # the CLI binary is installed as `alisio
 curl -fsSL https://raw.githubusercontent.com/GustavoGutierrez/alisio/main/scripts/install.sh | sh
 ```
 
-## Quick start
+### Quick start
 
 ```sh
 alisio setup                                 # writes .alisio/config.json without secrets
@@ -135,17 +249,7 @@ alisio run "Explain this repository" --config .alisio/config.json --read-only
 }
 ```
 
-## Documentation
-
-- [English docs](https://gustavogutierrez.github.io/alisio/)
-- [Documentación en español](https://gustavogutierrez.github.io/alisio/es/)
-- [Product specification](docs/specification.md): the product direction, kept in the repository.
-- [Validation log](docs/validation.txt) and [benchmark data](docs/benchmark.json): raw validation output.
-
-The documentation site is bilingual (English and Spanish). The detailed implementation status
-([docs/implementation-status.md](docs/implementation-status.md)) is maintained in Spanish.
-
-## Packages
+### Packages
 
 All packages are published under the [alisio npm organization](https://www.npmjs.com/settings/alisio/packages):
 
@@ -164,7 +268,10 @@ Dedicated model providers are independent plugins published from the
 separately: `alisio install npm:@alisio/plugin-deepseek`,
 `alisio install npm:@alisio/plugin-opencode`, `alisio install npm:@alisio/plugin-opencode-go`.
 
-## Development
+The desktop app is built from this repository and is not published to npm; see
+[docs/desktop.md](docs/desktop.md) to run it from a checkout or build the installers.
+
+### Development
 
 ```sh
 pnpm install --frozen-lockfile
@@ -178,7 +285,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [Publishing](https://gustavogutierrez
 Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability, and follow
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) when participating.
 
-## License
+## Documentation
+
+- [English docs](https://gustavogutierrez.github.io/alisio/)
+- [Documentación en español](https://gustavogutierrez.github.io/alisio/es/)
+- [Product specification](docs/specification.md): the product direction, kept in the repository.
+- [Validation log](docs/validation.txt) and [benchmark data](docs/benchmark.json): raw validation output.
+
+The documentation site is bilingual (English and Spanish). The detailed implementation status
+([docs/implementation-status.md](docs/implementation-status.md)) is maintained in Spanish.
+
+## Author and license
+
+Alisio is **developed in Bogotá, Colombia** by **Ing. Gustavo Gutiérrez Mercado**
+([GitHub](https://github.com/GustavoGutierrez) ·
+[LinkedIn](https://www.linkedin.com/in/gustavo-gutierrez-mercado)).
 
 [MIT](LICENSE) · Maintainer: **Gustavo Gutiérrez**
 

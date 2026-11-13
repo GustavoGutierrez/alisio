@@ -96,7 +96,7 @@ todo el historial). Si el presupuesto corta un resumen:
   apunta a `compaction.maxOutputTokens`.
 
 Un checkpoint parcial conserva todo lo que el modelo produjo antes del corte, pero puede omitir
-contexto posterior; trátelo como un respaldo degradado, no como un resumen completo.
+contexto posterior; trátalo como un respaldo degradado, no como un resumen completo.
 
 ## Reducción de una cola conservada descomunal
 
@@ -150,7 +150,7 @@ sesiones fallaban con el error fatal «Context budget exceeded» incluso con un 
 vacío — la falla reportada en subagentes y exploraciones en repositorios con varios servidores
 MCP.
 
-- El tamaño del catálogo es una decisión de **`/plugins`**, no crecimiento de sesión: desactive allí
+- El tamaño del catálogo es una decisión de **`/plugins`**, no crecimiento de sesión: desactiva allí
   los servidores MCP innecesarios (`/mcps` muestra el recuento de herramientas de cada servidor), en
   lugar de que el runner corrompa un transcript sano para «caber» un catálogo que no puede
   reducir.
@@ -164,12 +164,12 @@ MCP.
 | Evento | Cuándo |
 | --- | --- |
 | `compaction_started` | Comienza la compactación |
-| `compaction_completed` | Terminó; incluye estimaciones `before`/`after`, el tamaño del tramo resumido y del checkpoint, informes de plugins y `partial: true` cuando el resumen se cortó pero se conservó |
+| `compaction_completed` | Terminó; incluye estimaciones `before`/`after`, el tamaño del tramo resumido y del checkpoint, informes de complementos y `partial: true` cuando el resumen se cortó pero se conservó |
 | `compaction_skipped` | No hay historia suficiente para compactar |
 | `context_reduced` | Tras la compactación los mensajes conservados seguían superando `maxContextChars` y se recortaron hasta un objetivo total de caracteres (`messages` = cuántos, `reason: "budget"`, `tokensSaved` = estimación). El Context Governor nunca informa aquí de la elisión |
 | `context_governed` | Context Governor en `shadow` o `on`: uno por petición al modelo, con recuentos, estimaciones de tokens y los ids de llamada recién elididos (ver [Context Governor](/es/context#context-events)) |
 | `compaction_failed` | Falló la llamada al resumidor (incluido un resumen cortado sin nada aprovechable) |
-| `plugin_hook_failed` | Un hook de plugin falló o agotó su tiempo; la compactación continúa sin él |
+| `plugin_hook_failed` | Un hook de complemento falló o agotó su tiempo; la compactación continúa sin él |
 
 Con `--json` los eventos se emiten como JSONL versionado.
 
@@ -178,23 +178,23 @@ Con `--json` los eventos se emiten como JSONL versionado.
 En modo Responses, los items opacos de continuación (por ejemplo, el razonamiento cifrado) del tramo
 resumido se descartan junto con esos mensajes. Los mensajes conservados mantienen los suyos sin cambios.
 
-## Hooks de plugins
+## Hooks de complementos
 
-Los plugins pueden ampliar la compactación con `compaction.register({ beforeCompact, afterCompact })`:
+Los complementos pueden ampliar la compactación con `compaction.register({ beforeCompact, afterCompact })`:
 
 - `beforeCompact` añade instrucciones y campos JSON adicionales (`outputFields`) a la **misma** llamada
   al resumidor.
-- `afterCompact` recibe el checkpoint y los campos extraídos propios del plugin, y puede devolver
+- `afterCompact` recibe el checkpoint y los campos extraídos propios del complemento, y puede devolver
   `injectContext` (texto añadido tras el checkpoint) y un `report` (su `summary` se muestra en la TUI).
 
 Los hooks se ejecutan con el tiempo límite del host `pluginHooks.timeoutMs`. El
-[plugin de memoria](/es/memory) integrado usa estos hooks. Consulte
-[Escribir plugins](/es/plugins#compaction-hooks).
+[complemento de memoria](/es/memory) integrado usa estos hooks. Consulta
+[Escribir complementos](/es/plugins#compaction-hooks).
 
 ## Resultados inciertos de herramientas {#uncertain-tool-results}
 
 Si una caída deja una herramienta con un resultado incierto, Alisio no la repite automáticamente.
-Inspeccione sus efectos y después ejecute:
+Inspecciona sus efectos y después ejecuta:
 
 ```sh
 alisio sessions recover <session> --acknowledge

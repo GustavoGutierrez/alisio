@@ -1,21 +1,23 @@
 # Quick start
 
-The quickest way to start is the [desktop app](/desktop): install it, open it, connect a model and
-open a folder. No terminal is needed. The rest of this page covers the command line, which is the
-advanced path.
+Your first useful result takes four steps in the [desktop app](/desktop): install it, connect a
+model, open the folder with your files and describe the task in your own words, for example
+"Prepare a report with charts from sales.csv". No terminal is needed, and Alisio asks before it
+changes anything. The rest of this page covers the command line, which is the advanced path.
 
 ## Desktop app
 
 1. Install Alisio Desktop for your system (Windows installer, macOS `.dmg`, Linux `AppImage` or
    `.deb`); see [Download and install](/desktop#download-and-install). The installers are not
    signed, so Windows SmartScreen and macOS Gatekeeper warn the first time.
-2. Open Alisio, then go to **Settings**, then **Models**, add a profile for your provider and
-   activate a model.
+2. Open Alisio, then go to **Settings**, then **Models**, add a profile for your model service
+   (or a model server on your computer) and activate a model.
 3. Open the folder you want to work on and describe the task. Alisio asks before it changes
-   anything.
-4. Optionally install a profession plugin from
-   [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); see
-   [Install profession plugins](/desktop#install-profession-plugins).
+   anything. Review the result, ask for corrections and save it.
+4. Optionally add tools for your work: install a plugin from **Settings → Plugins → Plugin
+   catalog** (see [Install profession plugins](/desktop#install-profession-plugins)), build your own
+   with the [plugin creator](/plugin-creator) or connect a service from the
+   [MCP catalog](/mcp-catalog).
 
 ## Command line (advanced)
 

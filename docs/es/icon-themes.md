@@ -1,14 +1,14 @@
-# Cómo crear un plugin de tema de iconos
+# Cómo crear un complemento de tema de iconos
 
 Un tema de iconos reemplaza los iconos de archivo y carpeta del panel web por SVG de un conjunto
-estilo VSCode. Un plugin aporta un tema; el usuario activa como máximo uno a la vez con el ajuste
+estilo VSCode. Un complemento aporta un tema; el usuario activa como máximo uno a la vez con el ajuste
 `web.iconTheme`, y el servidor sirve solo los archivos del tema activo. Alisio no incluye ningún
-conjunto de iconos, así que el plugin es dueño de sus recursos.
+conjunto de iconos, así que el complemento es dueño de sus recursos.
 
 ## El punto de extensión `icon-theme`
 
 Registre un proveedor en el punto de extensión `icon-theme`. Las rutas son absolutas porque el host
-las resuelve contra la instalación del plugin, no contra el workspace.
+las resuelve contra la instalación del complemento, no contra el workspace.
 
 ```ts
 interface IconThemeProvider {
@@ -23,9 +23,9 @@ interface IconThemeProvider {
 }
 ```
 
-## Un plugin mínimo
+## Un complemento mínimo
 
-`setup` registra el proveedor una vez. Resuelva ambas rutas desde la ubicación del propio plugin
+`setup` registra el proveedor una vez. Resuelva ambas rutas desde la ubicación del propio complemento
 para que funcionen tanto desde `src/` como desde `dist/`.
 
 ```ts
@@ -52,7 +52,7 @@ export default definePlugin({
 ```
 
 ::: tip Un proveedor, un tema
-Un plugin puede registrar varios proveedores, pero el usuario activa como máximo uno. Mantenga `id`
+Un complemento puede registrar varios proveedores, pero el usuario activa como máximo uno. Mantén `id`
 estable: es el valor que se guarda en `web.iconTheme`.
 :::
 
@@ -95,12 +95,12 @@ GET /api/icon-theme/icons/:name   -> un image/svg+xml con ETag fuerte (404 si no
 ```
 
 Los nombres de icono se validan contra `^[A-Za-z0-9][A-Za-z0-9._-]*\.svg$` y se confinan a
-`iconsDir`, así que `..`, las rutas absolutas y los nombres que no son SVG se rechazan. Consulte el
-[contrato de plugin](/es/plugins) para el resto de la API.
+`iconsDir`, así que `..`, las rutas absolutas y los nombres que no son SVG se rechazan. Consulta el
+[contrato de complemento](/es/plugins) para el resto de la API.
 
 ## Instalar y seleccionar un tema
 
-Instale un plugin de tema como cualquier otro y elíjalo en **Ajustes → Apariencia → Tema de
+Instala un complemento de tema como cualquier otro y elígelo en **Ajustes → Apariencia → Tema de
 iconos**.
 
 ```bash
@@ -113,7 +113,7 @@ línea.
 
 ## Licencias y atribución
 
-Un conjunto de iconos es trabajo de otra persona. Siga su licencia: copie el `LICENSE` y la
-atribución originales en el plugin y su README, mantenga las rutas originales de los iconos y no
-relicencie los iconos. Alisio no incluye ningún conjunto de iconos y no se pronuncia sobre los que
-usted instale.
+Un conjunto de iconos es trabajo de otra persona. Sigue su licencia: copia el `LICENSE` y la
+atribución originales en el complemento y su README, mantén las rutas originales de los iconos y no
+relicencies los iconos. Alisio no incluye ningún conjunto de iconos y no se pronuncia sobre los que
+tú instales.

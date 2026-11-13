@@ -1,0 +1,443 @@
+/*
+ * Home sections after "What is Alisio?": intro band, section rhythm, steps, the apps table,
+ * data and permissions, requirements and the FAQ accordion. Same language as whatis.css and
+ * bento.css: large pieces at 22px with a tinted shadow, compact ones at 10px and flat, brand
+ * glyphs on a soft box. Markup lives in the home markdown, so EN and ES share one stylesheet.
+ */
+
+/* ---------- Intro band: the long tagline, right after the hero ---------- */
+
+.alisio-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 56px 24px 8px;
+  text-align: center;
+}
+
+.intro-mark {
+  fill: none;
+  stroke: var(--vp-c-brand-1);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.alisio-intro .intro-lead {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--vp-c-text-1);
+  font-size: 1.1875rem;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+/* The downloads follow the intro, so they need less top room of their own. */
+.alisio-intro + .dl-wrap {
+  padding-top: 32px;
+}
+
+/* ---------- Section rhythm ---------- */
+
+.alisio-whatis h2 {
+  scroll-margin-top: calc(var(--vp-nav-height, 64px) + 16px);
+}
+
+.alisio-whatis > h2:not(:first-child) {
+  margin-top: 56px;
+}
+
+.alisio-whatis .home-lead p {
+  max-width: 68ch;
+  color: var(--vp-c-text-2);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.alisio-whatis .home-lead + .home-table {
+  margin-top: 20px;
+}
+
+/* ---------- How it works: three steps ---------- */
+
+.home-steps li:nth-child(1) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z'/%3E%3C/svg%3E");
+}
+
+.home-steps li:nth-child(2) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h8l4 4v14H6zM14 3v4h4M12 11v6M9 14h6'/%3E%3C/svg%3E");
+}
+
+.home-steps li:nth-child(3) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21a9 9 0 100-18 9 9 0 000 18zM8 12.5l2.7 2.7L16 10'/%3E%3C/svg%3E");
+}
+
+/* ---------- Apps table: one card, header band, readable rows ---------- */
+
+.alisio-whatis .home-table table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-lg);
+  background: var(--vp-c-bg-elv);
+  box-shadow: 0 14px 34px -20px rgba(3, 28, 54, 0.35);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.dark .alisio-whatis .home-table table {
+  box-shadow: 0 16px 36px -20px rgba(0, 0, 0, 0.6);
+}
+
+.alisio-whatis .home-table tr {
+  border: 0;
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.alisio-whatis .home-table tbody tr:hover {
+  background: var(--alisio-surface-hover);
+}
+
+.alisio-whatis .home-table th,
+.alisio-whatis .home-table td {
+  padding: 12px 18px;
+  border: 0;
+  border-top: 1px solid var(--vp-c-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.alisio-whatis .home-table th {
+  border-top: 0;
+  background: var(--alisio-code-bg);
+  color: var(--vp-c-text-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.alisio-whatis .home-table td {
+  color: var(--vp-c-text-2);
+}
+
+.alisio-whatis .home-table td:first-child {
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+}
+
+.alisio-whatis .home-table td:last-child {
+  color: var(--vp-c-text-1);
+}
+
+/* Small screens: each row becomes a compact card instead of a sideways-scrolling table. */
+@media (max-width: 639px) {
+  .alisio-whatis .home-table table,
+  .alisio-whatis .home-table tbody,
+  .alisio-whatis .home-table tr,
+  .alisio-whatis .home-table td {
+    display: block;
+  }
+
+  .alisio-whatis .home-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .alisio-whatis .home-table tr {
+    padding: 12px 16px;
+    border-top: 1px solid var(--vp-c-divider);
+  }
+
+  .alisio-whatis .home-table tbody tr:first-child {
+    border-top: 0;
+  }
+
+  .alisio-whatis .home-table td {
+    padding: 2px 0;
+    border: 0;
+  }
+
+  /* Without the header row, the status reads as a small pill under each row. */
+  .alisio-whatis .home-table td:last-child {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--vp-c-brand-soft);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+}
+
+/* ---------- Notes ---------- */
+
+.alisio-whatis .home-note {
+  position: relative;
+  margin-top: 16px;
+  padding: 14px 18px 14px 50px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-sm);
+  background: var(--alisio-info-soft);
+}
+
+.alisio-whatis .home-note::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 18px;
+  width: 20px;
+  height: 20px;
+  background: var(--vp-c-brand-1);
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5M12 8h.01'/%3E%3C/svg%3E")
+    center / 20px 20px no-repeat;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5M12 8h.01'/%3E%3C/svg%3E")
+    center / 20px 20px no-repeat;
+}
+
+.alisio-whatis .home-note p {
+  max-width: 82ch;
+  color: var(--vp-c-text-1);
+  font-size: 0.875rem;
+}
+
+/* ---------- Data and permissions: four roomier tiles ---------- */
+
+.home-trust li,
+.home-reqs li {
+  padding-top: 14px;
+  padding-bottom: 16px;
+  font-size: 0.875rem;
+}
+
+.home-trust li > strong:first-child,
+.home-reqs li > strong:first-child {
+  margin-bottom: 4px;
+}
+
+.home-trust li:nth-child(1) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z'/%3E%3C/svg%3E");
+}
+
+.home-trust li:nth-child(2) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 3L10 14M21 3l-7 18-4-7-7-4z'/%3E%3C/svg%3E");
+}
+
+.home-trust li:nth-child(3) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 9a3 3 0 11-.01 0zM12.8 11.2L4 20M7 17l2 2M5.5 18.5l1.5 1.5'/%3E%3C/svg%3E");
+}
+
+.home-trust li:nth-child(4) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6zM12 8v5M12 16h.01'/%3E%3C/svg%3E");
+}
+
+/* The fourth tile is the warning: amber glyph instead of brand blue. */
+.home-trust li:nth-child(4)::before {
+  background: var(--alisio-warning-soft);
+}
+
+.home-trust li:nth-child(4)::after {
+  background: #a86b00;
+}
+
+.dark .home-trust li:nth-child(4)::after {
+  background: var(--alisio-warning);
+}
+
+/* ---------- Requirements ---------- */
+
+.home-reqs li:nth-child(1) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4h18v12H3zM8 20h8M12 16v4'/%3E%3C/svg%3E");
+}
+
+.home-reqs li:nth-child(2) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4'/%3E%3C/svg%3E");
+}
+
+.home-reqs li:nth-child(3) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9'/%3E%3C/svg%3E");
+}
+
+.home-reqs li:nth-child(4) {
+  --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 15l-3-3c1-4 4-8 10-9-1 6-5 9-9 10zM9 12H5l2-4h4M12 15v4l4-2v-4M6 18l-2 2'/%3E%3C/svg%3E");
+}
+
+.home-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.home-chips > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  background: var(--vp-c-bg-alt);
+  color: var(--vp-c-text-1);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* ---------- FAQ: native <details> accordion (works without JS) ---------- */
+
+.home-faq {
+  display: grid;
+  gap: 10px;
+}
+
+.home-faq-item {
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--whatis-radius-sm);
+  background: var(--vp-c-bg-elv);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.home-faq-item:hover,
+.home-faq-item[open] {
+  border-color: var(--alisio-border-strong);
+}
+
+.alisio-whatis .home-faq-item > summary {
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 14px 52px 14px 18px;
+  color: var(--vp-c-text-1);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  list-style: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.home-faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-faq-item > summary:hover {
+  background: var(--alisio-surface-hover);
+}
+
+.home-faq-item > summary:focus-visible {
+  outline: 3px solid var(--alisio-focus-ring);
+  outline-offset: -3px;
+  border-radius: var(--whatis-radius-sm);
+}
+
+/* Chevron in a soft box, like the tile glyphs; turns when the answer is open. */
+.home-faq-item > summary::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 8px;
+  background: var(--vp-c-brand-soft);
+}
+
+.home-faq-item > summary::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  background: var(--vp-c-brand-1);
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / 16px 16px no-repeat;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / 16px 16px no-repeat;
+  transition: transform 0.25s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.home-faq-item[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.home-faq-item[open] > summary {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.alisio-whatis .home-faq-item > p {
+  max-width: 76ch;
+  padding: 14px 18px 16px;
+  color: var(--vp-c-text-2);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* The advanced blocks after the FAQ start a new topic: give them section-level room. */
+.alisio-whatis .home-faq + .whatis-sub {
+  margin-top: 56px;
+}
+
+/* ---------- Breakpoints ---------- */
+
+@media (min-width: 640px) {
+  .alisio-intro {
+    padding-inline: 48px;
+  }
+
+  .home-trust ul,
+  .home-reqs ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .alisio-intro {
+    padding: 72px 64px 8px;
+  }
+
+  .alisio-intro .intro-lead {
+    font-size: 1.375rem;
+  }
+
+  .alisio-whatis > h2:not(:first-child) {
+    margin-top: 72px;
+  }
+
+  /* Keep the 2 x 2 grids two-wide on desktop (whatis.css sets three columns for facts). */
+  .home-trust ul,
+  .home-reqs ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-faq {
+    gap: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-faq-item > summary::after {
+    transition: none;
+  }
+}

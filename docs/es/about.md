@@ -1,46 +1,52 @@
 # Acerca de Alisio
 
-**Alisio es un arnés de IA de escritorio para el trabajo de todos los días de personas no
-técnicas:** docentes, estudiantes, secretarias y personal de oficina, contadores y el hogar. Se
-instala con un clic, trabaja sobre sus propios archivos y siempre pide permiso. Se especializa
-mediante plugins por profesión y entrega resultados listos para usar: PDF, hojas de cálculo,
-gráficos, informes y dashboards. Programar sigue siendo posible, pero es un uso avanzado y
-secundario.
+**Alisio es una aplicación de escritorio con inteligencia artificial que te ayuda a realizar tareas
+de tu trabajo, tus estudios y tu vida diaria.** Describe lo que necesitas: Alisio organiza los pasos,
+utiliza las herramientas disponibles y te ayuda a obtener un resultado que puedas revisar y usar,
+como un PDF, una hoja de cálculo, un gráfico, un informe o un panel. Está pensada para personas que
+conocen su oficio (docentes, estudiantes, personal de oficina, contadores y cualquier persona en su
+hogar) y quieren una forma sencilla de aprovechar la inteligencia artificial, sin aprender
+ingeniería primero. Programar sigue siendo posible, pero es un uso avanzado y secundario.
 
-Por dentro es un arnés con núcleo propio en TypeScript. Se conecta a cualquier endpoint compatible
-con OpenAI y controla su propio ciclo de herramientas. Se ejecuta en la aplicación de escritorio, en
-su terminal (como TUI interactiva o en modo headless para scripts y CI) o en su navegador con
-`alisio serve`.
+En el nivel avanzado, Alisio tiene un núcleo propio en TypeScript. Se conecta a cualquier servicio
+de modelos compatible con OpenAI y controla su propio ciclo de herramientas. Se ejecuta en la
+aplicación de escritorio, en tu terminal (como TUI interactiva o en modo headless para scripts y CI)
+o en tu navegador con `alisio serve`.
 
 ## Pilares
 
-1. **Fácil.** Una aplicación de escritorio, sin terminal. Consulte
+1. **Fácil para empezar.** Una aplicación de escritorio, sin terminal. Consulta
    [Aplicación de escritorio](/es/desktop).
-2. **Sus archivos, su control.** Local primero, con permisos explícitos: lee por defecto y escribir
-   pide aprobación. Consulte [Herramientas y permisos](/es/tools#permission-flags).
-3. **Plugins por profesión.** Tesis, exámenes, contabilidad, certificados, investigación. Consulte
-   [Escribir plugins](/es/plugins).
-4. **Resultados entregables.** Documentos, hojas de cálculo, gráficos y dashboards. Consulte
-   [Forja](/es/forja) y [Análisis de datos](/es/analysis).
-5. **Cualquier modelo.** Endpoints compatibles con OpenAI, DeepSeek, OpenRouter y otros. Consulte
+2. **Tus archivos, tus decisiones.** Tú eliges la carpeta y Alisio pregunta antes de cambiar
+   archivos o ejecutar programas. Trabajar con archivos locales no significa que nada salga de tu
+   equipo: lo que Alisio lee se envía al modelo que configuraste. Consulta
+   [Herramientas y permisos](/es/tools#permission-flags).
+3. **Aplicaciones para tu oficio.** Instala complementos desde el catálogo o crea los tuyos con el
+   [creador de complementos](/es/plugin-creator); conecta herramientas y servicios desde el
+   [catálogo MCP](/es/mcp-catalog). Consulta [Escribir complementos](/es/plugins).
+4. **Resultados que puedes usar.** Documentos, hojas de cálculo, gráficos y paneles que tú revisas
+   y ajustas. Consulta [Forja](/es/forja) y [Análisis de datos](/es/analysis).
+5. **El modelo que elijas.** Un servicio en línea (compatible con OpenAI, DeepSeek, OpenRouter y
+   otros) o un servidor de modelos compatible en tu propio equipo. Consulta
    [Configuración](/es/configuration).
 
 ## Para quién es
 
-Esta tabla recoge solo lo que existe hoy. Los plugins externos viven en el repositorio público
-[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins) y se instalan con
+Esta tabla recoge solo lo que existe hoy. Los complementos externos viven en el repositorio público
+[alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins). Se instalan con un clic desde
+**Ajustes → Complementos → Catálogo de complementos** en la aplicación, o con
 `alisio install npm:<paquete>`; **todavía no vienen incluidos en la aplicación de escritorio**
-(consulte [Aplicación de escritorio](/es/desktop#limitations)).
+(consulta [Aplicación de escritorio](/es/desktop#limitations)).
 
 | Quién | Qué puede hacer Alisio hoy | Respaldado por |
 | --- | --- | --- |
 | Estudiantes | Redactar una tesis, investigar fuentes y estudiar | `@alisio/plugin-thesis` (planifica, investiga, redacta y compone tesis universitarias en PDF con Typst), `@alisio/plugin-literature-research` (búsqueda de metadatos académicos) y la [memoria persistente](/es/memory) integrada |
-| Docentes | Crear exámenes imprimibles. Hoy el plugin cubre solo exámenes escolares de **matemáticas** | `@alisio/plugin-evalua` |
+| Docentes | Crear exámenes imprimibles. Hoy el complemento cubre solo exámenes escolares de **matemáticas** | `@alisio/plugin-evalua` |
 | Contadores | Papeles de trabajo y análisis de hojas de cálculo | Análisis con Python de Forja ([Forja](/es/forja), [Análisis de datos](/es/analysis)) |
 | Oficina y secretarías | Analizar datos de Excel y CSV, gráficos, certificados e informes | Forja y análisis, más `@alisio/plugin-cardsmith` (certificados, tarjetas y gráficos) |
-| Hogar | Presupuestos, gráficos y organización de información | Forja; no hay un plugin dedicado |
+| Hogar | Presupuestos, gráficos y organización de información | Forja; no hay un complemento dedicado |
 
-También pueden existir plugins privados específicos de una profesión. Por ejemplo, existe un plugin
+También pueden existir complementos privados específicos de una profesión. Por ejemplo, existe un complemento
 de papel de trabajo de ICA para contadores colombianos, pero no está disponible públicamente.
 
 ## Quién lo hizo
@@ -60,7 +66,7 @@ Todos los paquetes se publican bajo la
   comando `alisio`
 - Núcleo: [`@alisio/core`](https://www.npmjs.com/package/@alisio/core)
 - SDK: [`@alisio/sdk`](https://www.npmjs.com/package/@alisio/sdk)
-- Plugins: `@alisio/plugin-memory`, `@alisio/plugin-subagents`,
+- Complementos: `@alisio/plugin-memory`, `@alisio/plugin-subagents`,
   `@alisio/plugin-openai-compatible`
 
 Los proveedores dedicados de modelos (`@alisio/plugin-deepseek`, `@alisio/plugin-opencode`,

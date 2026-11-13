@@ -5,7 +5,7 @@ escoger un nivel) sin una generación completa del LLM, y todas las funciones si
 uno. El modelo de lenguaje escribe y razona; un proveedor de decisiones solo selecciona y clasifica
 entre opciones que la función ya conoce; el código determinista hace el resto.
 
-## Qué le aporta {#benefit}
+## Qué te aporta {#benefit}
 
 Muchas decisiones pequeñas dentro de una función tienen un conjunto cerrado de respuestas: qué tipo
 de gráfico encaja con estos datos, si una serie debe apilarse, qué densidad debe tener un diseño.
@@ -13,7 +13,7 @@ Pedirle al modelo que genere texto para cada una cuesta tokens, tiempo y variabi
 de decisiones las responde en milisegundos y, cuando no puede, la función usa su propio valor fijo
 por defecto y continúa.
 
-Lo que obtiene:
+Lo que obtienes:
 
 - **Menos espera y menos coste.** Una elección cerrada no necesita una generación.
 - **Ninguna forma nueva de fallar.** Un proveedor ausente, lento o equivocado nunca bloquea una
@@ -25,20 +25,20 @@ Lo que obtiene:
 Decision Intelligence añade el contrato de proveedor, el servicio, la configuración y las métricas.
 Alisio no incluye ningún proveedor. La primera función integrada que consume decisiones es
 [Smart Dashboard](/es/smart-dashboard#how-it-decides), que funciona igual sin uno. Las herramientas
-de plugins también pueden usar decisiones (consulte
-[Escribir un plugin de proveedor](#writing-a-provider)).
+de complementos también pueden usar decisiones (consulta
+[Escribir un complemento de proveedor](#writing-a-provider)).
 :::
 
 ## Proveedores {#providers}
 
-Un proveedor es un [plugin](/es/plugins) que registra un `DecisionProvider` con
-`api.decisions.registerProvider`. **Alisio no incluye ningún proveedor.** El oficial es el plugin
+Un proveedor es un [complemento](/es/plugins) que registra un `DecisionProvider` con
+`api.decisions.registerProvider`. **Alisio no incluye ningún proveedor.** El oficial es el complemento
 de Laya, publicado como `@alisio/plugin-laya` 0.1.x desde el repositorio
 [alisio-plugins](https://github.com/GustavoGutierrez/alisio-plugins); nada de lo descrito aquí
-depende de él. Cualquier plugin puede aportar un proveedor. Véase
-[Instalar el plugin de Laya](#laya).
+depende de él. Cualquier complemento puede aportar un proveedor. Consulta
+[Instalar el complemento de Laya](#laya).
 
-### Instalar el plugin de Laya {#laya}
+### Instalar el complemento de Laya {#laya}
 
 ```bash
 alisio install npm:@alisio/plugin-laya --yes
@@ -46,50 +46,50 @@ alisio install npm:@alisio/plugin-laya --yes
 
 Después, dentro de Alisio:
 
-1. `/laya:setup` pide primero su consentimiento. Descarga unos 678 MB de modelo y requiere Python
+1. `/laya:setup` pide primero tu consentimiento. Descarga unos 678 MB de modelo y requiere Python
    3.10 o superior. El runtime gestionado ocupa unos 6 GB de disco en máquinas que instalan las
    ruedas de PyTorch con CUDA y unos 1 GB en máquinas solo con CPU. Al terminar la configuración,
    Laya funciona sin conexión en `127.0.0.1`.
 2. Al final de una configuración correcta Alisio pregunta una vez si activar Laya y escribe él mismo
    `decisions.provider` (core 0.4.2 o superior; con «Sí» preseleccionado desde el core 0.4.3). Si lo
-   rechaza o falla, `/laya:activate` lo reintenta.
-3. Compruébelo con `/laya:status` y `/decisions`.
+   rechazas o falla, `/laya:activate` lo reintenta.
+3. Compruébalo con `/laya:status` y `/decisions`.
 
-Definir `decisions.provider` como `laya` a mano sigue funcionando (véase
+Definir `decisions.provider` como `laya` a mano sigue funcionando (consulta
 [Activar un proveedor](#activating)).
 
 En esta versión Laya refina solo el propósito del dashboard, donde midió un 90 % de acierto; las
 elecciones de columna y de sí/no quedaron cerca del azar, así que las reglas las deciden.
 
-Si `alisio install` falla con un conflicto de peer `@alisio/sdk` (`ERESOLVE`) porque hay plugins
-antiguos instalados, ejecute `alisio install --update`. Justo después de una nueva versión en npm, la
+Si `alisio install` falla con un conflicto de peer `@alisio/sdk` (`ERESOLVE`) porque hay complementos
+antiguos instalados, ejecuta `alisio install --update`. Justo después de una nueva versión en npm, la
 primera instalación puede obtener la versión anterior durante unos minutos; `alisio install --update`
 también lo resuelve.
 
 ### Activar un proveedor {#activating}
 
-**Instalar un plugin no activa su proveedor.** Solo la configuración global decide qué proveedor
-registrado se usa, por su ID, de modo que ningún proyecto ni ningún plugin puede elegir el motor por
-usted:
+**Instalar un complemento no activa su proveedor.** Solo la configuración global decide qué proveedor
+registrado se usa, por su ID, de modo que ningún proyecto ni ningún complemento puede elegir el motor por
+ti:
 
 ```json
 { "decisions": { "provider": "my-provider" } }
 ```
 
-Defínalo en `<config home>/config.json`, o con `/settings` en la [interfaz web](/es/web) (Ajustes →
+Defínelo en `<config home>/config.json`, o con `/settings` en la [interfaz web](/es/web) (Ajustes →
 General); `decisions.provider` se edita como texto y se borra para desactivar el proveedor. El
-cambio se aplica a la siguiente decisión, sin reiniciar. Un ID que ningún plugin registró no impide
+cambio se aplica a la siguiente decisión, sin reiniciar. Un ID que ningún complemento registró no impide
 que Alisio arranque: `/decisions` informa `provider "x" is not registered`.
 
-Editar el archivo a mano siempre funciona. Un plugin proveedor también puede ofrecerse a hacerlo por
-usted desde un paso que usted inicia (por ejemplo un comando de configuración), véase
+Editar el archivo a mano siempre funciona. Un complemento proveedor también puede ofrecerse a hacerlo por
+ti desde un paso que tú inicias (por ejemplo un comando de configuración), consulta
 [pedir la activación](#requesting-activation).
 
 ### Pedir la activación {#requesting-activation}
 
-Un plugin proveedor puede llamar al miembro opcional y detectable por presencia
+Un complemento proveedor puede llamar al miembro opcional y detectable por presencia
 `api.decisions.activate(providerId)` desde un paso iniciado por el usuario. Quien decide qué ocurre es
-Alisio, no el plugin:
+Alisio, no el complemento:
 
 ```ts
 const result = await api.decisions?.activate?.("my-provider");
@@ -97,14 +97,14 @@ const result = await api.decisions?.activate?.("my-provider");
 //   | "needs_confirmation" | "disabled" | "unavailable"
 ```
 
-- Solo se acepta un proveedor que registró el propio plugin que llama; cualquier otro da `unavailable`.
+- Solo se acepta un proveedor que registró el propio complemento que llama; cualquier otro da `unavailable`.
 - `decisions.enabled: false` da `disabled`. Un proveedor ya configurado da `already_active`, o
   `other_provider_active` (con `active`) si es otro distinto: su elección nunca se sobrescribe.
-- Si no hay nada configurado, Alisio le pregunta una sola vez (el texto se muestra en inglés): "Plugin
+- Si no hay nada configurado, Alisio te pregunta una sola vez (el texto se muestra en inglés): "Complemento
   my-provider wants to become the decision provider. Dashboards will send your request goal and column
   names, never values, to it. Activate it?" (Yes/No). Sin superficie interactiva (`alisio run`) la
   respuesta es `needs_confirmation` y no cambia nada; responder No da `declined`.
-- Pase `{ recommend: true }` como segundo argumento (`activate("my-provider", { recommend: true })`)
+- Pasa `{ recommend: true }` como segundo argumento (`activate("my-provider", { recommend: true })`)
   solo cuando la llamada sigue directamente a una acción explícita del usuario, como un comando de
   configuración. La pregunta es la misma y se sigue haciendo, pero Yes aparece recomendado y
   preseleccionado en lugar de No. Sin la indicación, No sigue siendo la respuesta recomendada y
@@ -113,8 +113,8 @@ const result = await api.decisions?.activate?.("my-provider");
   conservando el resto de ajustes) y lo aplica en vivo. Si el guardado falla, el resultado es
   `unavailable` y no se activa nada.
 
-Esto no añade ninguna frontera de confianza nueva: un plugin que usted instaló ya se ejecuta con sus
-permisos, y la confirmación es la salvaguarda. Instalar un plugin sigue sin activarlo nunca por sí
+Esto no añade ninguna frontera de confianza nueva: un complemento que tú instalaste ya se ejecuta con sus
+permisos, y la confirmación es la salvaguarda. Instalar un complemento sigue sin activarlo nunca por sí
 solo.
 
 ## Sin proveedor {#without-a-provider}
@@ -153,7 +153,7 @@ opcionales.
 | Clave | Por defecto | Rango | Ámbito |
 | --- | --- | --- | --- |
 | `decisions.enabled` | `true` | booleano | Capa global o de proyecto |
-| `decisions.provider` | `null` | ID de plugin (`^[a-z0-9][a-z0-9.-]{0,63}$`) o `null` | **Solo global** |
+| `decisions.provider` | `null` | ID de complemento (`^[a-z0-9][a-z0-9.-]{0,63}$`) o `null` | **Solo global** |
 | `decisions.timeoutMs` | `1500` | 50 a 10000 ms | Capa global o de proyecto |
 | `decisions.minConfidence` | `0.6` | 0 a 1 | Capa global o de proyecto |
 | `decisions.telemetry` | `true` | booleano | **Solo global** |
@@ -164,8 +164,8 @@ lista entre lo ignorado. Con `telemetry: false` los eventos de decisión no se p
 sección de `/stats` no aparece; `/decisions` sigue mostrando las métricas en memoria del proceso.
 
 Las cinco claves pueden cambiarse en vivo desde **Ajustes → General** en la interfaz web y se leen
-en la siguiente decisión. El cierre de plugins tiene su propia clave relacionada,
-`pluginHooks.disposeTimeoutMs` (consulte [Ciclo de vida](#lifecycle)).
+en la siguiente decisión. El cierre de complementos tiene su propia clave relacionada,
+`pluginHooks.disposeTimeoutMs` (consulta [Ciclo de vida](#lifecycle)).
 
 ## `/decisions` y `/stats` {#commands}
 
@@ -209,12 +209,12 @@ llamada, el pack, el ID del proveedor, la latencia, los recuentos, la confianza 
 de la alternativa. **Nunca** guardan el `state` enviado al proveedor, las instrucciones, las
 etiquetas de las opciones ni los valores que una función deriva de las respuestas.
 
-Trate lo que una función pone en `state` como datos que pueden salir del proceso: un proveedor puede
+Trata lo que una función pone en `state` como datos que pueden salir del proceso: un proveedor puede
 ser remoto. Las funciones deben enviar lo mínimo, y Alisio no decide por el adaptador si envía esos
 datos a algún sitio. Por ejemplo, una función de dashboards envía el objetivo del usuario y los
 metadatos de las columnas, nunca valores de celdas.
 
-## Escribir un plugin de proveedor {#writing-a-provider}
+## Escribir un complemento de proveedor {#writing-a-provider}
 
 El contrato vive en [`@alisio/sdk`](/es/plugins), es aditivo y es **opcional en el anfitrión**:
 `api.decisions`, `api.paths` y `api.options` no existen en un núcleo anterior, así que deben
@@ -263,16 +263,16 @@ Una petición tiene de 1 a 16 decisiones, como máximo 20 opciones por `select` 
 `ordinal`, un `state` de como máximo 16 KB y 32 KB en total. El `id` de una petición es una etiqueta
 no sensible del sitio de llamada que pasa a ser el `decisionId` de los eventos.
 
-Un plugin también puede leer `api.paths` (los directorios `state`, `config` y `cache` creados para
-él, con modo `0700`) y `api.options`, las opciones dadas en `pluginOverrides[id].options`. Consulte
-[Escribir plugins](/es/plugins#decision-intelligence).
+Un complemento también puede leer `api.paths` (los directorios `state`, `config` y `cache` creados para
+él, con modo `0700`) y `api.options`, las opciones dadas en `pluginOverrides[id].options`. Consulta
+[Escribir complementos](/es/plugins#decision-intelligence).
 
 ### Errores y disyuntor {#errors}
 
-Lance `DecisionProviderError` con uno de estos códigos. Alisio compara por `code` y `name`, no por
+Lanza `DecisionProviderError` con uno de estos códigos. Alisio compara por `code` y `name`, no por
 `instanceof`, así que una copia empaquetada del SDK también funciona.
 
-| Código | Úselo cuando | Cuenta para el disyuntor |
+| Código | Úsalo cuando | Cuenta para el disyuntor |
 | --- | --- | --- |
 | `not_ready` | El motor aún está arrancando (arranque en frío) | No |
 | `unavailable` | No se puede llegar al motor ahora mismo | No |
@@ -280,7 +280,7 @@ Lance `DecisionProviderError` con uno de estos códigos. Alisio compara por `cod
 | `invalid_response` | El motor respondió algo inutilizable | Sí |
 | `internal` | Cualquier otro fallo del proveedor | Sí |
 
-Un error que no sea un `DecisionProviderError` también cuenta. Falle rápido con `not_ready` o
+Un error que no sea un `DecisionProviderError` también cuenta. Falla rápido con `not_ready` o
 `unavailable` en lugar de esperar: la llamada recurre al valor por defecto de inmediato y el
 circuito sigue cerrado.
 
@@ -290,27 +290,27 @@ circuito sigue cerrado.
 ser el activo (al arrancar, cuando cambia `decisions.provider` o cuando un proveedor configurado se
 registra tarde) y a `deactivate()` cuando deja de serlo. Ambos tienen límite de tiempo, nunca son
 fatales, se serializan para el mismo proveedor y nunca se esperan en el arranque. Una decisión no
-espera a `activate()`: hasta que el motor esté listo, lance `not_ready`. El trabajo del arranque en
+espera a `activate()`: hasta que el motor esté listo, lanza `not_ready`. El trabajo del arranque en
 frío pertenece a `activate()`.
 
-El `dispose()` de un plugin se ejecuta **solo cuando Alisio se cierra**, no al deshabilitar un
-plugin ni con `/reload` (ambos requieren reiniciar). Al cerrar, los plugins se liberan en paralelo,
+El `dispose()` de un complemento se ejecuta **solo cuando Alisio se cierra**, no al deshabilitar un
+complemento ni con `/reload` (ambos requieren reiniciar). Al cerrar, los complementos se liberan en paralelo,
 cada uno limitado por `pluginHooks.disposeTimeoutMs` (2000 ms por defecto, de 100 a 10000), y el
 proveedor activo se desactiva primero. Un `dispose()` colgado no retrasa a los demás. Cubierto: salir
 de la interfaz de terminal, `SIGINT`, `SIGTERM` y `SIGHUP` en la interfaz de terminal, en
 `alisio serve` y en `alisio run`, y el final de una ejecución. Una muerte súbita (`SIGKILL`, una
-caída) no está cubierta: un plugin que posee un proceso del sistema operativo debe limpiar por sí
+caída) no está cubierta: un complemento que posee un proceso del sistema operativo debe limpiar por sí
 mismo los que queden huérfanos.
 
 ## Regla para colaboradores: la regla de admisión {#admission-rule}
 
 El motor de decisiones es para elecciones cerradas que el código determinista no puede tomar bien.
-Antes de añadir un pack de decisiones o cualquier uso de `ctx.decisions`, responda en orden:
+Antes de añadir un pack de decisiones o cualquier uso de `ctx.decisions`, responde en orden:
 
-1. ¿La decisión tiene un conjunto cerrado de resultados? Si no, use el LLM o código normal.
-2. ¿Aparece con suficiente frecuencia? Si no, no la añada.
-3. ¿Resolverla aquí reduce tokens, coste, latencia o variabilidad? Si no, no la añada.
-4. ¿Existe un valor por defecto seguro? Si no, no la automatice.
+1. ¿La decisión tiene un conjunto cerrado de resultados? Si no, usa el LLM o código normal.
+2. ¿Aparece con suficiente frecuencia? Si no, no la añadas.
+3. ¿Resolverla aquí reduce tokens, coste, latencia o variabilidad? Si no, no la añadas.
+4. ¿Existe un valor por defecto seguro? Si no, no la automatices.
 
 La pull request también debe responder por escrito ocho preguntas:
 

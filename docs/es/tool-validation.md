@@ -8,7 +8,7 @@ Registra el alcance de la verificación de herramientas; los límites de runtime
 
 ## Alcance
 
-- Cubre las herramientas que Alisio trae: el conjunto integrado y las que añaden los plugins
+- Cubre las herramientas que Alisio trae: el conjunto integrado y las que añaden los complementos
   integrados `memory` y `subagents`.
 - Las herramientas MCP de terceros quedan fuera, salvo por el hecho de que dependen de su servidor:
   la lista es la que exponga el servidor conectado.
@@ -36,9 +36,9 @@ Registra el alcance de la verificación de herramientas; los límites de runtime
 | `execute` | `process` | Llamar una herramienta de lectura en un snippet | El resultado de esa herramienta como JSON |
 | `webfetch` | `external` | Descargar `https://example.com` | Estado 200 y el texto de la página |
 | `websearch` | `external` | Buscar cualquier consulta | Resultados ordenados, o un error del proveedor |
-| `plugin_install` | `process` | Instalar un plugin npm conocido | La ruta instalada y la entrada en la configuración |
+| `plugin_install` | `process` | Instalar un complemento npm conocido | La ruta instalada y la entrada en la configuración |
 
-## Herramientas de plugin
+## Herramientas de complemento
 
 | Herramienta | Efecto | Validación | Resultado esperado |
 | --- | --- | --- | --- |
@@ -102,7 +102,7 @@ verde el typecheck, el lint, las pruebas, el end-to-end de la CLI y los gates de
 ## Última ejecución
 
 Instantánea del 2026-09-27 (Node v22.19.0, commit `ace8def`): todas las herramientas integradas y de
-plugin anteriores respondieron como se esperaba, salvo `websearch`, que falló porque la instancia
+complemento anteriores respondieron como se esperaba, salvo `websearch`, que falló porque la instancia
 pública por defecto de SearXNG devolvió una página de verificación anti-bots — un problema del
 proveedor, no de la herramienta. `ask_user_question` se ejecutó en la TUI interactiva y devolvió
 respuestas. `plugin_install` no se ejecutó porque cambia estado global.

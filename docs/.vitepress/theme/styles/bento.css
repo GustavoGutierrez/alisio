@@ -184,6 +184,14 @@
   object-position: top left;
 }
 
+/* Plugin creator: anchor the crop on the right, where the creator panel is, not the sidebar. */
+.visual-creator img {
+  left: auto;
+  right: 0;
+  object-position: right top;
+  transform-origin: top right;
+}
+
 .visual-terminal {
   display: flex;
   align-items: flex-start;

@@ -82,7 +82,7 @@ proyecto o de usuario tienen una; si no, Alisio usa su guía `create-agent` incl
 ## Cambiar de agente
 
 Cada agente cargado es también un comando, `/agent:<id>`; el prefijo `agent:` nunca choca con
-comandos integrados, comandos de plugins, plantillas de prompts ni skills. `/agents` abre un
+comandos integrados, comandos de complementos, plantillas de prompts ni skills. `/agents` abre un
 selector con búsqueda que marca el agente actual y ofrece `build` para volver al agente
 predeterminado de Alisio. En la web, la insignia del agente en la cabecera del chat abre el mismo
 selector.
@@ -94,7 +94,7 @@ agente se aplica en el mismo chat solo si pertenece al proveedor del chat; si no
 nuevo con el agente.
 
 El agente integrado `plan` termina con la herramienta `exit_plan`: el usuario revisa el plan y, si lo
-acepta, el chat cambia a `build` y lo implementa. Véase [Modo plan y revisión del plan](/es/plan).
+acepta, el chat cambia a `build` y lo implementa. Consulta [Modo plan y revisión del plan](/es/plan).
 
 ## Terminal: `/agents`
 
@@ -136,7 +136,7 @@ curl -X POST http://127.0.0.1:4317/api/agents \
 
 Las escrituras responden `{ agent, live }`. `live: true` significa que el Alisio en ejecución ya usa
 el cambio: tras cada escritura se recarga el registro de agentes y los clientes reciben
-`catalog_changed`. `live: false` (el plugin de subagentes está desactivado, el workspace no es de
+`catalog_changed`. `live: false` (el complemento de subagentes está desactivado, el workspace no es de
 confianza u otra ubicación tapa el archivo) significa que el archivo se guardó y que Alisio debe
 reiniciarse para usarlo; la interfaz lo indica.
 
