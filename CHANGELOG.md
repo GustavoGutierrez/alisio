@@ -4,6 +4,24 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.11] - 2026-11-12
+
+An MCP server catalog you can browse and install from.
+
+### Added
+
+- Settings now has an Explore tab for MCP servers: search a catalog of public servers by name or
+  category, read what each one does and install it with one click, for you or for one project.
+- Servers that need a key or a sign-in ask for it while installing. Keys are kept in a private file
+  on your computer, and servers that use a sign-in open your browser to connect.
+- Each installed server has a detail page where you can test the connection, sign in again, turn it
+  off or remove it.
+
+### Improved
+
+- MCP servers can be set up for all your projects or just one, and the project setting wins when
+  both exist.
+
 ## [0.11.10] - 2026-11-12
 
 Plugin apps from the plugin creator and a clean quit.
