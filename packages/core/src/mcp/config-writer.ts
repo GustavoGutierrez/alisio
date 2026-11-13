@@ -153,6 +153,25 @@ interface Edit {
   changed: boolean;
 }
 
+/**
+ * Whether a project target may be written, and whether the stored trust must be re-sealed
+ * afterwards. Throws `mcp_scope_untrusted` for a project whose trust is not stored (or whose stored
+ * hash no longer matches) unless it is trusted for this run only.
+ */
+export async function assertProjectWritable(
+  workspace: string,
+  sessionTrusted = false,
+): Promise<{ seal: boolean }> {
+  const stored = await getTrust(workspace);
+  const seal = !!stored?.trusted && stored.configHash === (await hashProjectConfig(workspace));
+  if (!seal && !sessionTrusted)
+    throw new McpConfigError(
+      "mcp_scope_untrusted",
+      "This project is not trusted: trust it before changing its MCP configuration",
+    );
+  return { seal };
+}
+
 async function mutate(
   target: McpConfigTarget,
   expectedRevision: string | undefined,
@@ -163,16 +182,8 @@ async function mutate(
     return await withFileLock(`${file}.lock`, { waitMs: LOCK_WAIT_MS }, async () => {
       // Trust is decided before touching the file: a refused write leaves no trace.
       let seal = false;
-      if (target.scope === "project") {
-        const stored = await getTrust(target.workspace);
-        seal =
-          !!stored?.trusted && stored.configHash === (await hashProjectConfig(target.workspace));
-        if (!seal && !target.sessionTrusted)
-          throw new McpConfigError(
-            "mcp_scope_untrusted",
-            "This project is not trusted: trust it before changing its MCP configuration",
-          );
-      }
+      if (target.scope === "project")
+        seal = (await assertProjectWritable(target.workspace, target.sessionTrusted)).seal;
       const text = await readText(file);
       const previousRevision = revisionOf(text);
       if (expectedRevision !== undefined && expectedRevision !== previousRevision)
@@ -230,10 +241,17 @@ export async function writeMcpServer(input: {
   server: Record<string, unknown>;
   form?: Form;
   expectedRevision?: string;
+  /** Refuse to replace an entry that already exists (`mcp_config_conflict`): used by installs. */
+  create?: boolean;
 }): Promise<McpConfigWriteResult> {
   assertServer(input.name, input.server);
   return mutate(input.target, input.expectedRevision, (raw) => {
     const { canonical, alias } = containers(raw);
+    if (input.create && ((canonical && input.name in canonical) || (alias && input.name in alias)))
+      throw new McpConfigError(
+        "mcp_config_conflict",
+        `An MCP server named "${input.name}" already exists in this configuration`,
+      );
     if (canonical && alias && input.name in canonical && input.name in alias)
       throw new McpConfigError(
         "mcp_config_invalid",

@@ -214,6 +214,11 @@ const configObjectSchema = z
           })
           .strict()
           .optional(),
+        /** Global-only: installer limits. `timeoutSeconds` bounds the initial download (30–600). */
+        install: z
+          .object({ timeoutSeconds: z.number().int().min(30).max(600).optional() })
+          .strict()
+          .optional(),
       })
       .strict()
       .default({ servers: {} }),

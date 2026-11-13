@@ -522,6 +522,7 @@ export {
   type McpConfigErrorCode,
   type McpConfigTarget,
   type McpConfigWriteResult,
+  mcpConfigFile,
   readMcpConfigRevision,
   removeMcpServer,
   setMcpServerEnabled,
@@ -533,6 +534,32 @@ export {
   type McpStatus,
   type McpToolInfo,
 } from "./mcp/connector.ts";
+export {
+  type AttachContext,
+  type BindingRecord,
+  type BindingTestRecord,
+  type ConnectResult,
+  createMcpInstaller,
+  FileSecretStore,
+  type InstallJobView,
+  type InstallPlan,
+  type JobHooks,
+  McpInstallError,
+  type McpInstallErrorCode,
+  McpInstaller,
+  type McpInstallerOptions,
+  MemorySecretStore,
+  type NpmRunner,
+  type PlanInput,
+  type PlanRequest,
+  type ReconcileReport,
+  type SecretStore,
+  type StartRequest,
+  type UninstallResult,
+  type UnsupportedReason,
+} from "./mcp/installation/index.ts";
+export { createUrlGuard, permissiveUrlGuard, type UrlGuard } from "./mcp/net-guard.ts";
+export { findOnPath, type NodeRuntime, npmAvailable, resolveNodeRuntime } from "./mcp/runtime.ts";
 export {
   createProjectOverride,
   type McpRemovalPreview,

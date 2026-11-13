@@ -663,6 +663,40 @@ guarda en la configuración. Los modos no TUI y los consumidores programáticos 
 subproceso con sus privilegios de usuario, **no un sandbox**. Confíe únicamente en la configuración y
 el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
 
+### Instalar desde el catálogo
+
+Ajustes → MCP → **Explorar** instala servidores sin editar JSON. Las entradas instaladas se escriben en
+`mcp.servers` de la capa que elija (**Solo este proyecto** escribe `<proyecto>/.alisio/config.json` y
+mantiene la confianza del proyecto; **Todos mis proyectos** escribe su configuración de usuario) y Alisio
+registra lo que posee en `<state home>/mcp/installations.sqlite`.
+
+- Los **servidores npm** se instalan en privado en `<state home>/mcp/artifacts/<id>` con la versión
+  exacta fijada, `--ignore-scripts`, lockfile, nunca de forma global y nunca con `npx`. Un paquete cuyo
+  lockfile muestre scripts de instalación, sin versión exacta, de otro registro o con varios ejecutables
+  entre los que Alisio no puede elegir **no** se instala automáticamente y la ficha explica por qué. La
+  entrada se guarda como `command: "node"` más la ruta absoluta del programa dentro del artefacto; el
+  runtime real se elige al conectar: el Node que haya en el `PATH` o, si no, el runtime sobre el que corre
+  Alisio (la app de escritorio es Electron actuando como Node, igual que su npm incluido).
+- Los **servicios remotos** (Streamable HTTP) con dirección HTTPS pública se guardan como `type: "http"`.
+  Una dirección del catálogo debe ser HTTPS pública (sin credenciales, ni direcciones de bucle local,
+  privadas o de enlace local, también tras resolver el DNS); las direcciones que escribe usted mismo no
+  se restringen. La dirección se comprueba al hacer el plan, no se fija después.
+- **Los secretos nunca van a la configuración.** Las claves que pide el formulario se guardan tras un
+  `SecretStore` en `<config home>/mcp-secrets.json` (modo `0600`, mismo bloqueo que `credentials.json`):
+  protegidas por los permisos de su usuario, **no cifradas**. La entrada solo guarda referencias:
+  `"secretEnv": { "API_KEY": { "secret": "<id>" } }` para stdio y
+  `"headers": { "X-Api-Key": { "secret": "<id>" } }` (o `{ "env": "NOMBRE" }`) para HTTP. Se resuelven solo
+  al conectar el servidor, solo para esa conexión, y una cabecera solo se envía al origen de su vínculo
+  (no se siguen redirecciones). Una clave que falta deja el servidor en *requiere autenticación*.
+- Instalar nunca concede permiso para ejecutar: el consentimiento MCP existente se integra en el mismo
+  formulario, sin marcar por defecto, y **Recordar** es una elección aparte, también sin marcar.
+- La descarga inicial tiene un plazo de 180 segundos; defina
+  `"mcp": { "install": { "timeoutSeconds": 300 } }` en su configuración de **usuario** (de 30 a 600; un
+  valor de proyecto se ignora) para cambiarlo. Cancelar detiene todo el árbol de procesos y elimina lo que
+  creó el trabajo.
+- Los métodos no compatibles (PyPI, OCI, MCPB, SSE heredado) y los servicios que exigen iniciar sesión
+  (OAuth llega en una fase posterior) se muestran con honestidad y con indicaciones manuales.
+
 ### Consentimiento global (`mcp.allow`)
 
 Defina `"mcp": { "allow": true }` en **su configuración de usuario**

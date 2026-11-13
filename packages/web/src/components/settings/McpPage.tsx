@@ -13,25 +13,10 @@ import { Icon } from "../icons.tsx";
 import { nextTab } from "./catalog-model.ts";
 import css from "./mcp-explore/explore.module.css";
 import { xs } from "./mcp-explore/strings.ts";
+import { MineRow, RemoveDialog } from "./mcp-install/MineRows.tsx";
+import { ms } from "./mcp-install/strings.ts";
 import styles from "./settings.module.css";
-import {
-  errorMessage,
-  PageIntro,
-  Pill,
-  type PillTone,
-  Status,
-  Switch,
-  settingsWorkspace,
-  useLoad,
-} from "./shared.tsx";
-
-const TONE: Record<string, PillTone> = {
-  connected: "ok",
-  connecting: "warn",
-  failed: "danger",
-  "needs-authentication": "warn",
-  "restart-required": "warn",
-};
+import { errorMessage, PageIntro, Status, settingsWorkspace, useLoad } from "./shared.tsx";
 
 function ConsentDialog(props: { onCancel: () => void; onGrant: (remember: boolean) => void }) {
   const [remember, setRemember] = useState(false);
@@ -122,10 +107,15 @@ export function McpPage() {
   );
 }
 
+const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
 function ConnectedServers() {
   const workspace = settingsWorkspace();
+  const workspaceName = workspace ? baseName(workspace.path) : "";
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
+  const [testing, setTesting] = useState<string | undefined>();
+  const [removing, setRemoving] = useState<McpServerWire | undefined>();
   const overview = useLoad(
     workspace ? () => api.mcp(workspace.id) : undefined,
     [workspace?.id],
@@ -147,6 +137,38 @@ function ConnectedServers() {
       replace(updated);
       if (connect && updated.status !== "connected" && updated.diagnostic)
         showToast(updated.diagnostic);
+    } catch (error) {
+      showToast(errorMessage(error));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+  const test = async (server: McpServerWire) => {
+    if (!workspace || !server.binding) return;
+    setTesting(server.name);
+    try {
+      replace(
+        await api.request<McpServerWire>("POST", `/api/mcp/bindings/${server.binding.id}/test`, {
+          workspace: workspace.id,
+        }),
+      );
+    } catch (error) {
+      showToast(errorMessage(error));
+    } finally {
+      setTesting(undefined);
+    }
+  };
+  const remove = async (server: McpServerWire, removeSecrets: boolean) => {
+    if (!workspace || !server.binding) return;
+    setRemoving(undefined);
+    setBusy(server.name);
+    try {
+      await api.request(
+        "DELETE",
+        `/api/mcp/bindings/${server.binding.id}?workspace=${encodeURIComponent(workspace.id)}&scope=${server.binding.scope}&removeSecrets=${removeSecrets}`,
+      );
+      showToast(ms("removed.toast", { name: server.displayName }));
+      overview.reload();
     } catch (error) {
       showToast(errorMessage(error));
     } finally {
@@ -199,48 +221,39 @@ function ConnectedServers() {
       />
       <ul class={styles.rows}>
         {(data?.servers ?? []).map((server) => (
-          <li key={server.name} class={styles.row}>
-            <div class={styles.rowMain}>
-              <div class={styles.rowTitle}>
-                <span class={styles.cardName}>{server.displayName}</span>
-                <Pill tone={TONE[server.status] ?? "off"}>
-                  {t("mcp.status", { status: server.status })}
-                </Pill>
-              </div>
-              <p class={styles.meta}>
-                {t("mcp.meta", {
-                  transport: server.transport,
-                  source: server.source,
-                  tools: server.counts.tools,
-                  resources: server.counts.resources,
-                  prompts: server.counts.prompts,
-                })}
-              </p>
-              {server.diagnostic ? <p class={styles.diagnostic}>{server.diagnostic}</p> : null}
-            </div>
-            <div class={styles.rowActions}>
-              {server.enabled && server.status !== "connected" ? (
-                <button
-                  type="button"
-                  class={styles.secondary}
-                  disabled={!granted || busy === server.name}
-                  title={granted ? undefined : t("mcp.needsGrant")}
-                  onClick={() => void change(server, true, true)}
-                >
-                  {t("mcp.connect")}
-                </button>
-              ) : null}
-              <Switch
-                checked={server.enabled}
-                label={t("plugins.enableNamed", { name: server.displayName })}
-                disabled={data?.permission === "read-only"}
-                busy={busy === server.name}
-                onChange={(enabled) => void change(server, enabled, false)}
-              />
-            </div>
-          </li>
+          <MineRow
+            key={server.name}
+            server={server}
+            workspaceName={workspaceName}
+            granted={granted}
+            readOnly={data?.permission === "read-only"}
+            busy={busy === server.name}
+            testing={testing === server.name}
+            meta={t("mcp.meta", {
+              transport: server.transport,
+              source: server.source,
+              tools: server.counts.tools,
+              resources: server.counts.resources,
+              prompts: server.counts.prompts,
+            })}
+            connectLabel={t("mcp.connect")}
+            switchLabel={t("plugins.enableNamed", { name: server.displayName })}
+            needsGrantHint={t("mcp.needsGrant")}
+            onConnect={() => void change(server, true, true)}
+            onToggle={(enabled) => void change(server, enabled, false)}
+            onTest={() => void test(server)}
+            onRemove={() => setRemoving(server)}
+          />
         ))}
       </ul>
+      {removing ? (
+        <RemoveDialog
+          server={removing}
+          workspaceName={workspaceName}
+          onConfirm={(secrets) => void remove(removing, secrets)}
+          onCancel={() => setRemoving(undefined)}
+        />
+      ) : null}
     </>
   );
 }

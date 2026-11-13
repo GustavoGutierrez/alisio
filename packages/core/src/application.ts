@@ -31,7 +31,9 @@ import {
   configFile,
   configHome,
   loadConfigWithProvenance,
+  type McpServerSource,
   overridesSavedProviderProfile,
+  parseMcpServerEntry,
   type SettableSettingKey,
   setConfigValue,
   setGlobalMcpAllow,
@@ -70,6 +72,11 @@ import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
 import { setMcpServerEnabled } from "./mcp/config-writer.ts";
 import { McpConnector } from "./mcp/connector.ts";
+import {
+  FileSecretStore,
+  resolveSecretReference,
+  type SecretStore,
+} from "./mcp/installation/secrets.ts";
 import { currentPlan } from "./plan/state.ts";
 import { pluginCreatorProjectOf } from "./plugins/creator/paths.ts";
 import { PluginCreatorProjects } from "./plugins/creator/projects.ts";
@@ -124,6 +131,11 @@ export interface AppOptions {
   /** Allow network tools (webfetch, websearch) and a provider-native search tool. */
   allowExternal?: boolean;
   allowMcp?: boolean;
+  /**
+   * Where MCP secrets referenced by `secretEnv`/`headers` are read from (default: the 0600 file
+   * under the config home). The server passes the instance the installer writes to.
+   */
+  mcpSecretStore?: SecretStore;
   readOnly?: boolean;
   /**
    * Document engines supplied by the host (Alisio Desktop prints through Electron, spec 026 D7).
@@ -413,12 +425,14 @@ export async function createApplication(options: AppOptions = {}) {
       registry: semanticRegistry,
       config: () => config.semantic,
     }),
+    mcpSecretStore = options.mcpSecretStore ?? new FileSecretStore(),
     mcp = new McpConnector(
       config.mcp.servers,
       registry,
       workspace,
       options.readOnly ? "read-only" : options.allowMcp || mcpAllow ? "allowed" : "disabled",
       config.mcpSources,
+      (reference) => resolveSecretReference(reference, mcpSecretStore),
     );
   let mcpRuntimePermission: "granted" | "not-granted" | "read-only" = options.readOnly
     ? "read-only"
@@ -1719,6 +1733,27 @@ export async function createApplication(options: AppOptions = {}) {
         return { ...updated, categories: [...updated.categories] };
       },
       mcp,
+      /** Where this application's MCP secret references are resolved from. */
+      mcpSecretStore,
+      /**
+       * What an installer needs to write this workspace's MCP configuration: the workspace and
+       * whether the project is trusted for this run only (it is then written without sealing).
+       */
+      mcpWriteContext() {
+        return {
+          workspace,
+          sessionTrusted: !!options.trustProject || !!options.config,
+          readOnly: !!options.readOnly,
+        };
+      },
+      /** Puts a just-written entry on the live connector so it works without a restart. */
+      async mcpAttach(name: string, entry: unknown, source: McpServerSource) {
+        await mcp.addServer(name, parseMcpServerEntry(entry), source);
+      },
+      /** Takes a removed entry off the live connector (disconnecting it first). */
+      async mcpDetach(name: string) {
+        await mcp.removeServer(name);
+      },
       /** Current-process MCP grant; deliberately independent from persisted server enablement. */
       mcpRuntimePermission() {
         return mcpRuntimePermission;

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { McpCatalogDetail, McpCatalogPage, McpCatalogSyncStatus } from "@alisio/sdk";
 import { stateHome } from "../../config.ts";
 import { type CategoryClassifier, createRuleClassifier } from "./classifier.ts";
-import type { CatalogSource } from "./source.ts";
+import type { CatalogEntry, CatalogSource } from "./source.ts";
 import {
   type CatalogSourceConfig,
   createSourceFactory,
@@ -41,6 +41,8 @@ export interface McpCatalogService {
   readonly sourceId: string;
   list(query: CatalogQuery): McpCatalogPage;
   detail(name: string, version?: string): McpCatalogDetail | undefined;
+  /** The domain entry of one version (latest when omitted), for the installer's planner. */
+  entry(name: string, version?: string): CatalogEntry | undefined;
   status(): McpCatalogSyncStatus;
   /** Starts a background walk unless one runs or the budget forbids it; returns the new state. */
   sync(): McpCatalogSyncStatus;
@@ -173,6 +175,9 @@ export function createCatalogService(options: CatalogServiceOptions = {}): McpCa
     detail(name, version) {
       const entry = source ? db().detail(source.sourceId, name, version) : undefined;
       return entry ? toDetail(entry, classifier) : undefined;
+    },
+    entry(name, version) {
+      return source ? db().detail(source.sourceId, name, version) : undefined;
     },
     status,
     sync() {

@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.2 |
+| Versión | 1.5 |
 | Fecha | 2026-11-13 UTC |
 | Proyecto | GustavoGutierrez/alisio |
-| Estado | **Aprobada por el propietario 2026-11-12 para ejecución; fase 0 completada 2026-11-12; fase 1 completada 2026-11-12; fase 2 completada 2026-11-12** (ver §19, §19.9 y §19.10). Fases 3–5 no implementadas. Q1–Q3 cerradas por el propietario (O8–O10, §19.9) |
+| Estado | **Aprobada por el propietario 2026-11-12 para ejecución; fase 0 completada 2026-11-12; fase 1 completada 2026-11-12; fase 2 completada 2026-11-12; fase 3 completada 2026-11-12** (ver §19, §19.9, §19.10 y §19.11). Fases 4–5 no implementadas. Q1–Q3 cerradas por el propietario (O8–O10, §19.9) |
 | Base inspeccionada | Commit `179e68694163ea6b2f51013ea4b56a8fe193a64f`, paquete core 0.11.10 |
 | Paquetes afectados | core, sdk, server, web; superficies CLI/TUI existentes para compatibilidad |
 | Paquetes nuevos | Ninguno obligatorio |
@@ -425,6 +425,7 @@ Los enlaces latest/main pueden cambiar. Al ejecutar la fase 0, registrar revisio
 
 ## 18. Historial de cambios
 
+- 1.5 (2026-11-12): fase 3 completada (§19.11): planificador e instalador npm/stdio y HTTP con clave referenciada, trabajos con diario y reconciliación, almacén de secretos (O8), runtime `node` resuelto al conectar (O9), desinstalación por ámbito con recuento de referencias y UI de instalar y «Conectados».
 - 1.4 (2026-11-12): fase 2 completada (§19.10): catálogo intercambiable (O7), índice SQLite/FTS5, sincronización y Explorar sin instalar.
 - 1.3 (2026-11-12): fase 1 completada (§19.9) y Q1–Q3 cerradas como decisiones O8–O10.
 - 1.2 (2026-11-12): aprobación del propietario para ejecución y fase 0 completada. Añade O7 (fuente de catálogo intercambiable), D14, D15–D20, MCP-CAT-26–31 y el addendum §19 (deriva del código, sondeo FTS5, matriz cliente/servidor MCP, hechos de la API Registry, estrategia npm, fases refinadas y preguntas abiertas). No implementa código de producción.
@@ -624,3 +625,34 @@ Catálogo intercambiable, índice local y pestaña Explorar sin instalación. Al
 - La sincronización automática se dispara con la primera consulta del catálogo (no hay temporizador horario) y se desactiva con `--read-only`, que además rechaza `POST …/sync`.
 - Cambiar la fuente en la configuración exige reiniciar `alisio serve`; `setSource` del servicio cubre el cambio en caliente que usan las pruebas.
 
+### 19.11 Fase 3 completada (2026-11-12)
+
+Planificador e instalador para npm/stdio y Streamable HTTP público o con clave referenciada, trabajos con
+diario, almacén de secretos, desinstalación por ámbito y UI de instalar en Explorar y de «Conectados».
+Alcance: core, sdk, server y web. OAuth HTTP sigue siendo la fase 4.
+
+| Pieza | Archivo |
+|---|---|
+| Plan no ejecutable (alias, ámbito, entradas requeridas sin valor seguro, prerrequisitos, consentimiento, digest, 10 min) y almacén de planes | `packages/core/src/mcp/installation/planner.ts`, `entry.ts` (validación de respuestas y construcción de la entrada) |
+| Instalación npm privada (`--ignore-scripts --save-exact`, lockfile, bin sin adivinar, ruta dentro del artefacto) | `installation/npm-installer.ts`, `bin-resolver.ts` |
+| Servicio: jobs y estados del §9, plazo, cancelación, idempotencia, diario, reconciliación, desinstalación, actualización | `installation/installer.ts`, `lifecycle.ts` (limpieza segura, recuento de referencias), `store.ts` (`<stateHome>/mcp/installations.sqlite`), `config.ts` (`mcp.install.timeoutSeconds`) |
+| `SecretStore` y adaptador de archivo 0600 (`<configHome>/mcp-secrets.json`, O8) | `installation/secrets.ts` |
+| Resolución de referencias al conectar; cabeceras solo al origen del vínculo; `node` → runtime real (O9); `needs-authentication` ante 401/403; `addServer`/`removeServer` en caliente | `mcp/connector.ts`, `mcp/runtime.ts`, `application.ts` (`mcpSecretStore`, `mcpWriteContext`, `mcpAttach`, `mcpDetach`) |
+| Guardia SSRF (D20) | `mcp/net-guard.ts` |
+| Escritura «solo crear» y `assertProjectWritable` | `mcp/config-writer.ts` |
+| Rutas `POST /api/mcp/install/plans`, `POST /api/mcp/install/jobs`, `GET …/jobs/:id`, `POST …/jobs/:id/{consent,cancel}`, `DELETE /api/mcp/bindings/:id`, `POST /api/mcp/bindings/:id/{update-plan,test}`; `GET /api/mcp` añade `execution` y `binding` | `packages/server/src/routes/mcp-install.ts`, `management.ts` |
+| DTO aditivos (`McpInstallPlan`, `McpInstallJob`, `McpBindingInfo`, `McpUninstallResult`, códigos `mcp_method_unsupported`, `mcp_runtime_missing`, `mcp_input_required`, `mcp_plan_expired`, `mcp_secret_unavailable`) | `packages/sdk/src/index.ts` |
+| UI: modelo puro, textos EN/ES, formulario y progreso (`InstallPanel`, chunk perezoso), filas de «Conectados» e insignias, diálogo de quitar | `packages/web/src/components/settings/mcp-install/*`, `mcp-explore/ExploreView.tsx`, `McpPage.tsx` |
+
+**Cobertura de AC (`tests/`):** MCP-CAT-08 (`mcp-installation.test.ts`: «installs the exact version privately, resolves the bin and writes a node command», «explains a missing npm and writes nothing», «refuses unsupported methods with an honest reason before anything starts», «never runs a command a catalog card supplies»); MCP-CAT-09 (`mcp-secrets.test.ts`, bloque MCP-CAT-09; `mcp-installation.test.ts` «stores a header value as a protected reference and keeps it out of every shareable place»; `mcp-catalog-api.test.ts` «asks for the key, stores it protected, sends it only to its service and never returns it»); MCP-CAT-10 (`mcp.test.ts`, bloque MCP-CAT-10; `mcp-catalog-api.test.ts` «plans, consents in the same flow, installs, connects and lists the integration, then uninstalls», con un servidor MCP stdio real lanzado como `node <bin>`); MCP-CAT-12 («shares one artifact between scopes and deletes it only with the last binding», «removes only in the scope asked for…», «keeps an artifact it cannot prove is its own…»); MCP-CAT-13 («cancelling a download stops the whole process tree and leaves nothing behind», «stops a download that exceeds the deadline», «answers the same idempotency key with the same job…», «two requests for the same integration leave one binding…», «undoes a job that a crash interrupted, from its journal, on the next start»); MCP-CAT-15 («returns a conflict, writing nothing…», «an edit that lands while the job runs is never reverted…», «updates to a newer version in parallel…», «restores the previous version when the new one does not connect»); MCP-CAT-16 (`mcp-catalog-api.test.ts`, bloque «authorization and workspace resolution»: workspace ajeno, validación por campos, plan manipulado/caducado, SSRF, metacaracteres de shell); MCP-CAT-29 (`mcp-secrets.test.ts`, bloque MCP-CAT-29, incluida la negativa a seguir redirecciones); MCP-CAT-31 (bloque «MCP-CAT-31»: versión no fijada, otro registro, `hasInstallScript`, bin ambiguo). D5: «downloads and writes nothing until the caller has obtained MCP consent». MCP-CAT-28 con instalaciones: «writes a project entry to the workspace and keeps the project trusted». Parciales para la fase 4: MCP-CAT-19 (validación servidor + modelo web; falta E2E), MCP-CAT-23 (insignias por combinación en `web-mcp-install.test.ts`; falta E2E y la variante servidor/navegador), MCP-CAT-24 (quitar y ámbito; faltan editar y actualizar desde la UI).
+
+**Desviaciones:**
+- `awaiting-input` no es un estado de job observable: las entradas se piden en el plan (`requiredInputs`) y el job solo se crea con ellas completas (`mcp_input_required` en caso contrario). `awaiting-consent` sí existe y precede a la descarga.
+- La actualización (`update-plan` + job `update`, con restauración automática de la versión anterior si la nueva no conecta) existe en core y API pero la UI no la ofrece todavía. Un fallo del proceso entre escribir la entrada actualizada y anotarla en el diario no restaura la versión anterior.
+- «Comprobar conexión» reutiliza el conector existente (conecta si no estaba conectado, no reconecta uno vivo ni activa uno desactivado); la sesión diagnóstica aislada de 30 s y el resultado tipado `McpConnectionTestResult` (MCP-CAT-20–22) siguen en la fase 4. El último resultado se guarda en el vínculo.
+- El planificador lee la ficha del índice local (`McpCatalogService.entry`) en lugar de volver a pedir el detalle al registro; el digest de la ficha detecta cambios entre plan y job. Una cabecera `Authorization` sin esquema se envía como `Bearer`.
+- El diario conserva los últimos 200 trabajos terminados (se poda al crear uno nuevo; no hay purga por antigüedad). Los artefactos huérfanos se listan en la reconciliación y se borran solo con `cleanupOrphans()`, que la UI no expone.
+- Un job cancelado deja el sistema como antes de empezar, también durante la conexión (no conserva una instalación a medias). Un fallo solo de conexión deja el job `completed` con `result.connected: false` y la instalación conservada (INST-06).
+- `UX-02` en web/headless: las insignias dicen «En este equipo» sin distinguir el equipo donde corre el servidor. No hay E2E de navegador, capturas ni documentación visual (fase 5).
+- El reemplazo de la copia «temporal + rename» fuera de MCP sigue sin migrarse; `mcp-secrets.json` repite el patrón (fuera del alcance de la fase 3).
+- Honestidad sobre las pruebas: el instalador se escribió y se probó en el mismo ciclo de trabajo (las pruebas se escribieron junto al código, no antes); el único rojo previo verificado fue el de secretos/conector, los de rutas y web, y los fallos que las pruebas destaparon (reversión de una entrada idéntica de otro job concurrente, 401 sin estado `needs-authentication`).

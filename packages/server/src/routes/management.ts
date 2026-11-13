@@ -8,6 +8,7 @@ import { isAbsolute, join } from "node:path";
 import {
   agentCatalogFromState,
   analysisStatus,
+  type BindingRecord,
   CommandCatalog,
   configFile,
   configHome,
@@ -27,6 +28,7 @@ import type {
   AgentInfo,
   AnalysisStatus,
   ForgeOverview,
+  McpBindingInfo,
   McpOverview,
   McpServerWire,
   PluginInfo,
@@ -52,6 +54,8 @@ export interface ManagementContext {
   tasksLive?: (workspaceId: string) => boolean;
   base: ServerAppOptions;
   broadcast: (frame: ServerFrame) => void;
+  /** Reads the installer's bindings to label servers it owns (never opens a missing database). */
+  bindings?: () => BindingRecord[];
 }
 
 /** Resolves `?workspace=` / `{workspace}` (an opaque id or an absolute path) to its open app. */
@@ -103,6 +107,17 @@ export class WorkspaceRecycler {
   idle(id: string): void {
     if (!this.pending.has(id) || this.busy(id)) return;
     void this.request(id).catch(() => {});
+  }
+
+  /**
+   * After an install or removal of a GLOBAL MCP entry: recycles every other open workspace so it
+   * reads the new configuration (a busy one is deferred until it is idle).
+   */
+  async requestOthers(exceptId: string): Promise<void> {
+    for (const entry of this.ctx.workspaces.entries()) {
+      if (entry.id === exceptId) continue;
+      await this.request(entry.id).catch(() => undefined);
+    }
   }
 
   /**
@@ -210,15 +225,49 @@ function skillInfo(skill: ReturnType<OpenWorkspace["app"]["skillCatalog"]>[numbe
   };
 }
 
+/** The installer's record of a server, with nothing that identifies a command, URL or path. */
+function bindingInfo(
+  binding: BindingRecord,
+  shadowed: McpShadowedServer[] | undefined,
+): McpBindingInfo {
+  return {
+    id: binding.id,
+    scope: binding.scope,
+    registryName: binding.registryName,
+    registryVersion: binding.registryVersion,
+    method: binding.method,
+    execution: binding.execution,
+    ...(binding.origin ? { origin: binding.origin } : {}),
+    ...(binding.scope === "project" && shadowed?.some((s) => s.source.kind === "global")
+      ? { revealsGlobal: true }
+      : {}),
+    hasSavedKeys: binding.secretIds.length > 0,
+    ...(binding.lastTest ? { lastTest: binding.lastTest } : {}),
+  };
+}
+
 /** MCP server status without the command line, arguments or URL (they may carry tokens). */
-function mcpWire(info: McpServerInfo, shadowed: McpShadowedServer[] = []): McpServerWire {
+export function mcpWire(
+  info: McpServerInfo,
+  shadowed: McpShadowedServer[] = [],
+  bindings: BindingRecord[] = [],
+  workspacePath?: string,
+): McpServerWire {
+  // Only the binding that owns the entry in force is shown: the same layer, this workspace.
+  const owner = bindings.find(
+    (b) =>
+      b.alias === info.name &&
+      b.scope === info.source.kind &&
+      (b.scope === "global" || b.workspacePath === workspacePath),
+  );
   return {
     name: info.name,
-    displayName: info.displayName,
+    displayName: owner?.title ?? info.displayName,
     source: info.source.kind,
     status: info.status,
     enabled: info.enabled,
     transport: info.transport,
+    execution: info.transport === "stdio" ? "local" : "remote",
     capabilities: [...info.capabilities],
     counts: { ...info.counts },
     ...(info.diagnostic ? { diagnostic: info.diagnostic } : {}),
@@ -233,16 +282,19 @@ function mcpWire(info: McpServerInfo, shadowed: McpShadowedServer[] = []): McpSe
           })),
         }
       : {}),
+    ...(owner ? { binding: bindingInfo(owner, shadowed) } : {}),
   };
 }
 
-function mcpOverview(opened: OpenWorkspace): McpOverview {
+function mcpOverview(opened: OpenWorkspace, bindings: BindingRecord[]): McpOverview {
   return {
     permission: opened.app.mcpRuntimePermission(),
     persisted: opened.app.mcpAllowPersisted(),
     servers: opened.app.mcp
       .list()
-      .map((info) => mcpWire(info, opened.app.config.mcpShadowed?.[info.name])),
+      .map((info) =>
+        mcpWire(info, opened.app.config.mcpShadowed?.[info.name], bindings, opened.path),
+      ),
   };
 }
 
@@ -332,7 +384,7 @@ export function registerManagementRoutes(
   // ---- MCP ----------------------------------------------------------------------------------
   router.get("/api/mcp", async ({ url }) => {
     const opened = await open(url.searchParams.get("workspace"));
-    return { body: mcpOverview(opened) };
+    return { body: mcpOverview(opened, ctx.bindings?.() ?? []) };
   });
 
   router.patch("/api/mcp/:name", async ({ req, url, params }) => {
@@ -372,7 +424,12 @@ export function registerManagementRoutes(
     if (global) await recycler.requestSharing(opened.id, name);
     recycler.announce(opened.id, ["mcp"]);
     return {
-      body: mcpWire(opened.app.mcp.info(name), opened.app.config.mcpShadowed?.[name]),
+      body: mcpWire(
+        opened.app.mcp.info(name),
+        opened.app.config.mcpShadowed?.[name],
+        ctx.bindings?.() ?? [],
+        opened.path,
+      ),
     };
   });
 
@@ -396,7 +453,7 @@ export function registerManagementRoutes(
       throw new HttpError("mcp_not_permitted", message(error));
     }
     recycler.announce(opened.id, ["mcp"]);
-    return { body: mcpOverview(opened) };
+    return { body: mcpOverview(opened, ctx.bindings?.() ?? []) };
   });
 
   // ---- Agent presets ------------------------------------------------------------------------

@@ -284,15 +284,47 @@ describe("ExploreResults", () => {
     expect(text).toContain("pypi");
   });
 
-  it("offers a disabled install control with its reason: installing is not enabled yet", () => {
+  it("offers Install or Connect only for entries that can be installed and explains the others", () => {
+    const opened: string[] = [];
+    const rows = [
+      item({ name: "io.example/local", execution: "local", ready: true }),
+      item({ name: "io.example/cloud", execution: "remote", ready: true }),
+      item({
+        name: "io.example/python",
+        ready: false,
+        blocked: { reason: "method_unsupported", detail: "pypi" },
+        methods: ["pypi"],
+      }),
+    ];
+    const data = page({ items: rows, total: 3 });
     const tree = render({
-      page: page(),
+      page: data,
       filters: DEFAULT_FILTERS,
-      view: exploreView({ loading: false, filters: DEFAULT_FILTERS, page: page() }),
+      view: exploreView({ loading: false, filters: DEFAULT_FILTERS, page: data }),
+      install: { onOpen: (entry: { name: string }) => opened.push(entry.name) },
     });
-    const install = buttons(tree).find((b) => textOf(b.props.children).includes("Install"));
-    expect(install?.props.disabled).toBe(true);
-    expect(textOf(tree)).toContain("Installing arrives in a later update");
+    const labels = buttons(tree)
+      .map((b) => textOf(b.props.children))
+      .filter((label) => label === "Install" || label === "Connect");
+    expect(labels).toEqual(["Install", "Connect"]);
+    for (const b of buttons(tree).filter((x) =>
+      ["Install", "Connect"].includes(textOf(x.props.children)),
+    )) {
+      expect(b.props.disabled).toBeFalsy();
+      (b.props.onClick as () => void)();
+    }
+    expect(opened).toEqual(["io.example/local", "io.example/cloud"]);
+    // The blocked entry says why and how to continue by hand, with no install control.
+    expect(textOf(tree)).toContain("Python (PyPI) servers cannot be installed automatically yet");
+    // Without install hooks (a read-only view) no card offers installing.
+    const plain = render({
+      page: data,
+      filters: DEFAULT_FILTERS,
+      view: exploreView({ loading: false, filters: DEFAULT_FILTERS, page: data }),
+    });
+    expect(
+      buttons(plain).some((b) => ["Install", "Connect"].includes(textOf(b.props.children))),
+    ).toBe(false);
   });
 
   it.each([

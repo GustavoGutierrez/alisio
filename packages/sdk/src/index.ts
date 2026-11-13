@@ -2665,6 +2665,16 @@ export type ApiErrorCode =
   | "mcp_scope_untrusted"
   /** The MCP catalog index could not be opened (503). */
   | "mcp_catalog_unavailable"
+  /** The entry cannot be installed automatically (422); `details.reason` says why. Additive. */
+  | "mcp_method_unsupported"
+  /** A needed runtime (Node.js / npm) is missing (424). Additive. */
+  | "mcp_runtime_missing"
+  /** Required install inputs are missing or invalid (422); `details.fields` names them. */
+  | "mcp_input_required"
+  /** The install plan expired (410): review it again. Additive. */
+  | "mcp_plan_expired"
+  /** A protected secret could not be read or stored (503). Additive. */
+  | "mcp_secret_unavailable"
   | "runs_active"
   | "provider_unavailable"
   | "protocol_mismatch"
@@ -3171,6 +3181,32 @@ export interface McpServerWire {
    * ignore unknown fields.
    */
   shadows?: McpServerShadowWire[];
+  /** Where the server runs: on this machine (`stdio`) or as a remote service (`http`). */
+  execution?: "local" | "remote";
+  /** Present when Alisio's installer owns this entry (installed from the catalog). */
+  binding?: McpBindingInfo;
+}
+/** The installer's record of an MCP server, without commands, URLs, paths or secrets. */
+export interface McpBindingInfo {
+  id: string;
+  scope: "global" | "project";
+  registryName: string;
+  registryVersion: string;
+  method: "npm" | "remote";
+  execution: "local" | "remote";
+  /** Scheme and host of a remote service. */
+  origin?: string;
+  /** Removing this binding makes a global entry of the same name effective again. */
+  revealsGlobal?: boolean;
+  /** Keys saved for this integration (never their values). */
+  hasSavedKeys: boolean;
+  lastTest?: {
+    status: "passed" | "failed" | "needs-authentication";
+    at: string;
+    diagnostic?: string;
+    counts?: { tools: number; resources: number; prompts: number };
+    capabilities?: string[];
+  };
 }
 /** A hidden MCP entry of a lower configuration layer. */
 export interface McpServerShadowWire {
@@ -3331,6 +3367,82 @@ export interface McpCatalogDetail extends McpCatalogItem {
   }>;
   /** Remote services with the origin only (paths and queries may carry tokens). */
   remotes: Array<{ transport: string; origin: string; inputs: McpCatalogInputInfo[] }>;
+}
+/** A parameter an install plan asks the user for (the key of the answer is `id`). */
+export interface McpInstallInputInfo {
+  id: string;
+  kind: "env" | "header" | "variable";
+  name: string;
+  secret: boolean;
+  required: boolean;
+  description?: string;
+  format?: string;
+  choices?: string[];
+  default?: string;
+}
+/** `POST /api/mcp/install/plans`: what an install would do. Never executable, never a secret. */
+export interface McpInstallPlan {
+  planId: string;
+  digest: string;
+  expiresAt: string;
+  kind: "install" | "update";
+  alias: string;
+  scope: "global" | "project";
+  registryName: string;
+  registryVersion: string;
+  title?: string;
+  method: "npm" | "remote";
+  execution: "local" | "remote";
+  package?: { identifier: string; version: string };
+  origin?: string;
+  requiredInputs: McpInstallInputInfo[];
+  optionalInputs: McpInstallInputInfo[];
+  prerequisites: { runtime: "system" | "bundled"; npm: boolean };
+  /** Connecting needs the existing MCP consent, which is not granted in this workspace yet. */
+  requiresConsent: boolean;
+  bindingId?: string;
+  fromVersion?: string;
+}
+export type McpInstallJobState =
+  | "planned"
+  | "awaiting-input"
+  | "awaiting-consent"
+  | "installing"
+  | "configuring"
+  | "connecting"
+  | "completed"
+  | "failed"
+  | "cancelled";
+/** An install or update job. `completed` with `result.connected: false` keeps the installation. */
+export interface McpInstallJob {
+  id: string;
+  kind: "install" | "update";
+  state: McpInstallJobState;
+  alias: string;
+  registryName: string;
+  registryVersion: string;
+  scope: "global" | "project";
+  bindingId?: string;
+  error?: { code: string; message: string };
+  result?: {
+    connected: boolean;
+    status?: string;
+    diagnostic?: string;
+    /** The service wants the user to sign in, which is not supported yet. */
+    signIn?: "coming-soon";
+    counts?: { tools: number; resources: number; prompts: number };
+    capabilities?: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+}
+/** `DELETE /api/mcp/bindings/:id`. */
+export interface McpUninstallResult {
+  alias: string;
+  removedConfig: boolean;
+  secretsRemoved: boolean;
+  artifact: "none" | "kept" | "deleted" | "orphaned";
 }
 /** `GET /api/agents`: a selectable main-session agent. */
 export interface AgentInfo {

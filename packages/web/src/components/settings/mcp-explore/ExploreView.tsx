@@ -1,16 +1,28 @@
 /**
  * Settings → MCP → Explore (specs/030 phase 2, UX-01): browse, search (300 ms debounce, local
  * index only), filter, page by 24, with distinct states and a useful action for each. Installing
- * is not enabled yet: the control is shown disabled with its reason. `ExploreResults` is hook-free
- * so the web tests can walk it as a VNode tree; `ExploreView` is the thin stateful shell.
+ * (phase 3) opens `InstallPanel` (a lazy chunk) under the card; entries that cannot be installed
+ * automatically say why and how to continue by hand. `ExploreResults` is hook-free so the web
+ * tests can walk it as a VNode tree; `ExploreView` is the thin stateful shell.
  */
 import type { McpCatalogItem, McpCatalogPage } from "@alisio/sdk";
+import type { ComponentChildren, ComponentType } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { locale } from "../../../i18n/index.ts";
 import { api, showToast } from "../../../store/app.ts";
 import { ageLabel } from "../catalog-model.ts";
+import type { InstallPanelProps } from "../mcp-install/InstallPanel.tsx";
+import {
+  actionKey,
+  blockedReason,
+  defaultScope,
+  type Scope,
+  scopeOptions,
+  unsupportedKey,
+} from "../mcp-install/model.ts";
+import { ms } from "../mcp-install/strings.ts";
 import styles from "../settings.module.css";
-import { errorMessage, Pill } from "../shared.tsx";
+import { errorMessage, Pill, settingsWorkspace } from "../shared.tsx";
 import css from "./explore.module.css";
 import {
   DEFAULT_FILTERS,
@@ -38,9 +50,26 @@ function blockedText(item: McpCatalogItem): string | undefined {
   return xs(`blocked.${item.blocked.reason}` as ExploreStringKey);
 }
 
-function Card(props: { item: McpCatalogItem }) {
-  const { item } = props;
+/** What the cards need to offer installing; absent in tests that only walk the list. */
+export interface InstallHooks {
+  /** `name@version` of the card whose panel is open. */
+  open?: string;
+  onOpen: (item: McpCatalogItem) => void;
+  /** The panel of the open card (rendered under it). */
+  panel?: ComponentChildren;
+  disabled?: boolean;
+}
+
+const cardKey = (item: McpCatalogItem) => `${item.name}@${item.version}`;
+
+function Card(props: { item: McpCatalogItem; install?: InstallHooks }) {
+  const { item, install } = props;
   const reason = blockedText(item);
+  const open = install?.open === cardKey(item);
+  const guidance =
+    item.blocked?.reason === "method_unsupported" || item.blocked?.reason === "schema_unsupported"
+      ? ms(unsupportedKey(blockedReason(item)))
+      : undefined;
   return (
     <li class={css.card}>
       <div class={css.cardMain}>
@@ -56,13 +85,22 @@ function Card(props: { item: McpCatalogItem }) {
           {item.ready ? <Pill tone="ok">{xs("ready.yes")}</Pill> : null}
         </div>
         {reason ? <p class={css.reason}>{reason}</p> : null}
+        {guidance ? <p class={css.reason}>{guidance}</p> : null}
+        {open ? install?.panel : null}
       </div>
-      <div class={css.install}>
-        <button type="button" class={styles.secondary} disabled aria-disabled="true">
-          {xs("install.button")}
-        </button>
-        <span>{xs("install.soon")}</span>
-      </div>
+      {item.ready && install ? (
+        <div class={css.install}>
+          <button
+            type="button"
+            class={styles.secondary}
+            disabled={install.disabled}
+            aria-expanded={open}
+            onClick={() => install.onOpen(item)}
+          >
+            {ms(actionKey(item.execution === "remote" ? "remote" : "local"))}
+          </button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -76,6 +114,7 @@ export interface ExploreResultsProps {
   onRetry: () => void;
   onClear: () => void;
   onPage: (page: number) => void;
+  install?: InstallHooks;
 }
 
 /** The body of Explore: a notice, then exactly one of the states or the list with its pager. */
@@ -135,12 +174,22 @@ export function ExploreResults(props: ExploreResultsProps) {
           {filtersActive(filters) ? action("filter.clear", props.onClear) : null}
         </div>
       ) : null}
-      {view.body === "list" && page ? <CatalogList page={page} onPage={props.onPage} /> : null}
+      {view.body === "list" && page ? (
+        <CatalogList
+          page={page}
+          onPage={props.onPage}
+          {...(props.install ? { install: props.install } : {})}
+        />
+      ) : null}
     </>
   );
 }
 
-function CatalogList(props: { page: McpCatalogPage; onPage: (page: number) => void }) {
+function CatalogList(props: {
+  page: McpCatalogPage;
+  onPage: (page: number) => void;
+  install?: InstallHooks;
+}) {
   const { page } = props;
   const range = pageRange(page.page, page.pageSize, page.total);
   const to = range.from + page.items.length - 1;
@@ -151,7 +200,11 @@ function CatalogList(props: { page: McpCatalogPage; onPage: (page: number) => vo
       </p>
       <ul class={css.cards} aria-label={xs("results.label")}>
         {page.items.map((item) => (
-          <Card key={`${item.name}@${item.version}`} item={item} />
+          <Card
+            key={cardKey(item)}
+            item={item}
+            {...(props.install ? { install: props.install } : {})}
+          />
         ))}
       </ul>
       {range.pages > 1 ? (
@@ -181,8 +234,41 @@ function CatalogList(props: { page: McpCatalogPage; onPage: (page: number) => vo
   );
 }
 
+/** «Solo este proyecto» / «Todos mis proyectos» (SCP-01): one choice for every install on the page. */
+export function ScopePicker(props: {
+  workspaceName: string | undefined;
+  value: Scope;
+  onChange: (scope: Scope) => void;
+}) {
+  const options = scopeOptions(props.workspaceName);
+  return (
+    <fieldset class={css.scope}>
+      <legend class={css.scopeLegend}>{ms("scope.label")}</legend>
+      {options.map((option) => (
+        <label key={option.id} class={css.scopeOption}>
+          <input
+            type="radio"
+            name="mcp-install-scope"
+            value={option.id}
+            checked={props.value === option.id}
+            onChange={() => props.onChange(option.id)}
+          />
+          <span>
+            {ms(option.labelKey, option.params)}
+            <small>{ms(option.hintKey)}</small>
+          </span>
+        </label>
+      ))}
+      {!props.workspaceName ? <p class={css.scopeNote}>{ms("scope.noProject")}</p> : null}
+    </fieldset>
+  );
+}
+
+const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
 // Filters survive switching tabs and reopening Settings during the session (UX-01).
 let saved: ExploreFilters = DEFAULT_FILTERS;
+let savedScope: Scope | undefined;
 
 interface Loaded {
   page?: McpCatalogPage;
@@ -196,6 +282,24 @@ export function ExploreView() {
   const [state, setState] = useState<Loaded>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState(false);
+  const workspace = settingsWorkspace();
+  const workspaceName = workspace ? baseName(workspace.path) : undefined;
+  const [scope, setScopeState] = useState<Scope>(savedScope ?? defaultScope(!!workspace));
+  const [openKey, setOpenKey] = useState<string | undefined>();
+  const [Panel, setPanel] = useState<ComponentType<InstallPanelProps> | undefined>();
+  const setScope = (next: Scope) => {
+    savedScope = next;
+    setScopeState(next);
+  };
+  const openItem = (item: McpCatalogItem) => {
+    setOpenKey(openKey === cardKey(item) ? undefined : cardKey(item));
+    if (!Panel)
+      void import("../mcp-install/InstallPanel.tsx").then((m) => setPanel(() => m.InstallPanel));
+  };
+  const effectiveScope: Scope = workspaceName ? scope : "global";
+  const where = ms(effectiveScope === "project" ? "scope.project" : "scope.global", {
+    name: workspaceName ?? "",
+  });
   const apply = (next: ExploreFilters) => {
     saved = next;
     setFilters(next);
@@ -280,6 +384,7 @@ export function ExploreView() {
           }}
         />
       </label>
+      <ScopePicker workspaceName={workspaceName} value={effectiveScope} onChange={setScope} />
       <div class={css.filters}>
         <label class={css.field}>
           {xs("filter.category")}
@@ -370,6 +475,32 @@ export function ExploreView() {
           apply(DEFAULT_FILTERS);
         }}
         onPage={(page) => apply(setFilter(filters, { page }))}
+        install={{
+          ...(openKey ? { open: openKey } : {}),
+          onOpen: openItem,
+          disabled: !workspace,
+          panel:
+            Panel && openKey
+              ? (() => {
+                  const item = state.page?.items.find((i) => cardKey(i) === openKey);
+                  return item ? (
+                    <Panel
+                      key={`${openKey}|${effectiveScope}`}
+                      item={item}
+                      scope={effectiveScope}
+                      workspace={
+                        workspace && workspaceName
+                          ? { id: workspace.id, name: workspaceName }
+                          : undefined
+                      }
+                      where={where}
+                      onClose={() => setOpenKey(undefined)}
+                      onChooseGlobal={() => setScope("global")}
+                    />
+                  ) : null;
+                })()
+              : undefined,
+        }}
       />
     </section>
   );

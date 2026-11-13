@@ -16,12 +16,16 @@ import {
   BlobStore,
   CapabilityGrants,
   createCatalogService,
+  createMcpInstaller,
+  FileSecretStore,
   GoalStore,
   type McpCatalogService,
+  type McpInstaller,
   PROCESS_SWEEP_GRACE_MS,
   ProviderSettingsStore,
   readGlobalCatalogConfig,
   redactCredentials,
+  type SecretStore,
   SQLiteStore,
   stateHome,
   type TaskWakeRequest,
@@ -67,6 +71,7 @@ import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
 import { registerMcpCatalogRoutes } from "./routes/mcp-catalog.ts";
+import { registerMcpInstallRoutes } from "./routes/mcp-install.ts";
 import { registerPluginAppRoutes } from "./routes/plugin-apps.ts";
 import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
 import { registerPluginCreatorRoutes } from "./routes/plugin-creator.ts";
@@ -148,6 +153,14 @@ export interface ServerOptions {
    * fake source.
    */
   mcpCatalog?: McpCatalogService;
+  /**
+   * The MCP installer (specs/030 phase 3): plans, install jobs, bindings and uninstall. Defaults to
+   * one that plans from the catalog index and stores secrets in `mcpSecrets`; tests inject one with
+   * a fake npm.
+   */
+  mcpInstaller?: McpInstaller;
+  /** Protected store of MCP secrets (default: the 0600 file under the config home). */
+  mcpSecrets?: SecretStore;
   /** Listed as a workspace even before it has sessions (the CLI passes its cwd). */
   defaultWorkspace?: string;
   /**
@@ -251,12 +264,21 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const router = new Router();
   let guard: AuthGuard | undefined;
   let closing = false;
-  const base = options.app ?? {};
+  const mcpSecrets = options.mcpSecrets ?? new FileSecretStore();
+  // Every workspace application resolves MCP secret references from the store the installer writes.
+  const base = {
+    ...(options.app ?? {}),
+    mcpSecretStore: options.app?.mcpSecretStore ?? mcpSecrets,
+  };
   // The MCP catalog index opens on first use and syncs in the background: it never delays startup.
   // Under --read-only it only serves what is already saved.
   const mcpCatalog =
     options.mcpCatalog ??
     createCatalogService({ source: readGlobalCatalogConfig(), autoSync: !base.readOnly });
+  const mcpInstaller =
+    options.mcpInstaller ?? createMcpInstaller({ secrets: mcpSecrets, entries: mcpCatalog });
+  // Undo what an earlier run left half-done (a no-op when nothing was ever installed).
+  if (!options.mcpInstaller) void mcpInstaller.reconcile().catch(() => {});
   // Server-level connection to the shared session database (lists, metadata, snapshots).
   const dbPath = base.db ?? join(stateHome(), "sessions.sqlite");
   const catalog = new SQLiteStore(dbPath);
@@ -612,6 +634,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     tasksLive,
     base,
     broadcast: (frame: ServerFrame) => hub.broadcast(frame),
+    bindings: () => mcpInstaller.bindings(),
   };
   recycler = new WorkspaceRecycler(management);
   const reloader = recycler;
@@ -630,6 +653,12 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerManagementRoutes(router, management, recycler);
   registerMcpCatalogRoutes(router, {
     catalog: mcpCatalog,
+    ...(base.readOnly ? { readOnly: true } : {}),
+  });
+  registerMcpInstallRoutes(router, {
+    installer: mcpInstaller,
+    management,
+    recycler,
     ...(base.readOnly ? { readOnly: true } : {}),
   });
   const supervised = options.restart?.supervised ?? process.env.ALISIO_SUPERVISED === "1";
@@ -816,6 +845,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         interactions?.cancelAll();
         await settling;
         hub.closeAll();
+        // Running installs stop and undo themselves before their workspaces go away.
+        await mcpInstaller.close().catch(() => {});
         await workspaces.closeAll();
         // No command may outlive the server: groups that ignored SIGTERM (or that a command left
         // running with `&`) get a short grace, then SIGKILL, before close resolves.

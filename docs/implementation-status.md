@@ -307,8 +307,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `effective`, `editable` y `shadows` (capa global oculta, sin comando/URL), un cambio de una entrada
   global recicla los demás workspaces abiertos que la usan, y los hijos stdio de MCP se registran en
   el registro de procesos. El esquema acepta `headers` (HTTP) y `secretEnv` (stdio) como referencias a
-  secretos, pero NADA las resuelve todavía: un servidor que las declare queda `failed` y nunca se
-  conecta sin credenciales (el `SecretStore` llega en la fase 3). Sin UI, instalador ni catálogo aún:
+  secretos (en la fase 1 nada las resolvía y el servidor quedaba `failed`; la fase 3 las resuelve con
+  el `SecretStore`). Sin UI, instalador ni catálogo aún:
   verificado solo con pruebas de comportamiento (`mcp-scopes`, `mcp-installation`,
   `mcp-close-timeout`), sin E2E de navegador. Las demás copias del bloque "temporal + rename"
   (`setGlobalMcpAllow`, ajustes, plugins) siguen sin migrar.
@@ -333,6 +333,44 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (el humo contra el registro real es opcional: `ALISIO_LIVE_MCP_REGISTRY=1`); no hay recomendados
   curados (el mecanismo existe y está vacío); sin capturas de pantalla (fase 5) ni ficha de detalle en
   la UI; la clasificación por reglas es aproximada; cambiar la fuente exige reiniciar `alisio serve`.
+- Catálogo MCP, fase 3 (spec 030): planificador e instalador para npm/stdio y Streamable HTTP público o
+  con clave referenciada. `mcp/installation/` tiene el planificador no ejecutable (`planner.ts`: plan con
+  resumen, digest, caducidad de 10 min y solo las entradas sin valor seguro), el instalador npm privado
+  (`npm-installer.ts`: `<stateHome>/mcp/artifacts/<id>`, versión exacta, `--ignore-scripts`, lockfile,
+  nunca `-g` ni `npx`; `hasInstallScript`, versión no fijada, otro registro o varios bin ambiguos se
+  rechazan con motivo), jobs con la máquina de estados del §9 (planned → awaiting-consent → installing →
+  configuring → connecting → completed; failed/cancelled), plazo de 180 s configurable hasta 600
+  (`mcp.install.timeoutSeconds`, solo capa global), cancelación que mata el árbol de procesos con el
+  registro de procesos, idempotencia por clave, serialización por archivo y por artefacto,
+  diario en `<stateHome>/mcp/installations.sqlite` con reconciliación al arrancar (deshace jobs
+  interrumpidos, borra temporales, descarta vínculos cuya entrada se quitó a mano y lista artefactos
+  huérfanos sin borrarlos) y desinstalación por ámbito con recuento de referencias (el artefacto
+  compartido solo se borra con el último vínculo y solo si su ruta real está dentro de la raíz gestionada).
+  Secretos (O8): `SecretStore` con adaptador de archivo 0600 `<configHome>/mcp-secrets.json` (mismo
+  patrón y bloqueo que `credentials.json`; **no está cifrado**: protegido por permisos de usuario), listo
+  para un adaptador `safeStorage` de Electron; las referencias `secretEnv`/`headers` se resuelven solo al
+  conectar y una cabecera secreta solo viaja al origen de su vínculo (no se siguen redirecciones). Runtime
+  (O9): la entrada es `node <bin>` y el ejecutable real se resuelve al conectar (Node del sistema, si no
+  el runtime de Alisio con `ELECTRON_RUN_AS_NODE`). Guardia SSRF (D20) para direcciones del catálogo
+  (HTTPS público, sin credenciales ni rangos privados, con resolución DNS); no se fija la resolución
+  al conectar (ventana de rebinding abierta) y las direcciones escritas a mano no se restringen.
+  Rutas `POST /api/mcp/install/plans`, `POST /api/mcp/install/jobs`, `GET …/jobs/:id`,
+  `POST …/jobs/:id/{consent,cancel}`, `DELETE /api/mcp/bindings/:id`, `POST /api/mcp/bindings/:id/update-plan`
+  y `POST /api/mcp/bindings/:id/test` (solo para workspaces que el servidor ya conoce; `--read-only` las
+  rechaza); `GET /api/mcp` añade `execution` y `binding` (sin comando, ruta ni URL). Web: Explorar instala
+  (selector «Solo este proyecto»/«Todos mis proyectos», formulario único con validación cliente y
+  servidor, consentimiento integrado sin marcar, progreso con cancelar) y «Conectados» muestra insignias
+  de ejecución y ámbito por separado, resultado de la última comprobación y quitar/desconectar según el
+  ámbito, todo en chunks perezosos (el JS inicial no cambia). Límites: la actualización (`update-plan`)
+  existe en la API pero la UI aún no la ofrece; la comprobación de conexión es el conector existente (la
+  sesión diagnóstica aislada, MCP-CAT-20–22, es de la fase 4); OAuth HTTP no existe (un servicio que lo
+  pide se muestra como «iniciar sesión llegará pronto»); `awaiting-input` se resuelve en el plan (el job
+  solo se crea con las entradas completas); un fallo del proceso entre escribir una actualización y
+  anotarla en el diario no restaura la versión anterior; PyPI/OCI/MCPB/SSE se muestran como no
+  compatibles; sin capturas (fase 5) ni E2E de navegador (fases 4–5); en web/headless las insignias dicen
+  «En este equipo» sin distinguir el equipo servidor (UX-02 pendiente). Verificado con pruebas de
+  comportamiento con un npm falso y un servidor MCP stdio/HTTP reales en local (`mcp-installation`,
+  `mcp-secrets`, `mcp-catalog-api`, `web-mcp-install`), sin red.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 
 ### CLI, runtime y empaquetado

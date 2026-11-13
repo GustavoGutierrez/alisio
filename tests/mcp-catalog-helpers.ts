@@ -113,7 +113,7 @@ function entryFor(sourceId: string, r: DatasetRecord): CatalogEntry {
         ? [
             {
               method: npm ? "npm" : "pypi",
-              identifier: `pkg-${r.name}`,
+              identifier: `pkg-${r.name.replace("/", "-")}`,
               version: r.version,
               transport: "stdio",
               inputs: [],
@@ -229,14 +229,14 @@ function rawServer(r: DatasetRecord, index: number) {
     const pkg: Record<string, unknown> = legacy
       ? {
           registry_type: type,
-          identifier: `pkg-${r.name}`,
+          identifier: `pkg-${r.name.replace("/", "-")}`,
           version: r.version,
           transport: { type: "stdio" },
           environment_variables: [{ name: "API_KEY", is_required: true, is_secret: true }],
         }
       : {
           registryType: type,
-          identifier: `pkg-${r.name}`,
+          identifier: `pkg-${r.name.replace("/", "-")}`,
           version: r.version,
           transport: { type: "stdio" },
           environmentVariables: [{ name: "API_KEY", isRequired: true, isSecret: true }],

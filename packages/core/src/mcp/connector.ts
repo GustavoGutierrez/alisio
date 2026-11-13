@@ -7,7 +7,12 @@ import type { ToolRegistry } from "../core/registry.ts";
 import { trackProcess } from "../runtime/process-registry.ts";
 import { objectSchema } from "../tools/standard.ts";
 import { loadVersion } from "../version.ts";
+import type { SecretReference } from "./installation/secrets.ts";
 import { mapMcpCallResult, mapMcpResourceResult } from "./rich.ts";
+import { resolveNodeRuntime } from "./runtime.ts";
+
+/** Resolves a configuration secret reference to its value (`undefined` = not available). */
+export type McpSecretResolver = (reference: SecretReference) => Promise<string | undefined>;
 
 /**
  * The SDK's stdio transport, with its child registered in the live process registry (D18) so a
@@ -76,6 +81,23 @@ type Connected = {
   registeredNames: string[];
 };
 
+/**
+ * A `fetch` that only talks to `origin` and never follows a redirect: a secret header travels to
+ * the origin of its binding and nowhere else (MCP-CAT-29).
+ */
+function sameOriginFetch(origin: string): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+    if (url.origin !== origin) throw new Error("Request to another origin refused");
+    const response = await fetch(input, { ...init, redirect: "manual" });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel().catch(() => {});
+      throw new Error("The service redirected the request; redirects are not followed");
+    }
+    return response;
+  };
+}
+
 const TOOL_NAME_LIMIT = 64;
 /**
  * Per-server client close cap used ONLY by the terminal `close()`: the MCP SDK's stdio close can
@@ -140,6 +162,9 @@ const readable = (value: string, limit = 160) =>
 
 const safeFailure = (error: unknown): string => {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  // The SDK reports an HTTP refusal as `SdkHttpError` with the status in `data`, not in the text.
+  const status = (error as { data?: { status?: unknown } } | undefined)?.data?.status;
+  if (status === 401 || status === 403) return "Authentication is required or was rejected";
   if (message.includes("timeout") || message.includes("timed out")) return "Connection timed out";
   if (message.includes("abort")) return "Connection cancelled";
   if (message.includes("auth") || message.includes("token") || message.includes("401"))
@@ -164,6 +189,7 @@ export class McpConnector {
     private workspace: string,
     private availability: "allowed" | "disabled" | "read-only" = "allowed",
     private sources: Record<string, McpServerSource> = {},
+    private secrets?: McpSecretResolver,
   ) {
     for (const [name, server] of Object.entries(servers))
       this.statuses.set(name, server.enabled ? "disconnected" : "disabled");
@@ -262,6 +288,26 @@ export class McpConnector {
     if (this.availability === "disabled")
       throw new Error("MCP is configured but disabled; restart with --allow-mcp");
   }
+  /** The env and headers of one server with every reference resolved; `undefined` if one is missing. */
+  private async resolveSecrets(
+    config: ServerConfig,
+  ): Promise<{ env: Record<string, string>; headers: Record<string, string> } | undefined> {
+    const resolve: McpSecretResolver =
+      this.secrets ??
+      (async (reference) => ("env" in reference ? process.env[reference.env] : undefined));
+    const env: Record<string, string> = {};
+    const headers: Record<string, string> = {};
+    const wanted =
+      config.transport === "stdio"
+        ? Object.entries(config.secretEnv ?? {}).map(([key, ref]) => ["env", key, ref] as const)
+        : Object.entries(config.headers ?? {}).map(([key, ref]) => ["header", key, ref] as const);
+    for (const [kind, key, reference] of wanted) {
+      const value = await resolve(reference as SecretReference).catch(() => undefined);
+      if (!value) return undefined;
+      (kind === "env" ? env : headers)[key] = value;
+    }
+    return { env, headers };
+  }
   private client(name: string): Client {
     const item = this.clients.get(name);
     if (!item) throw new Error("MCP server disconnected; reconnect explicitly");
@@ -321,18 +367,13 @@ export class McpConnector {
       );
       throw new Error(`MCP server "${name}" needs authentication; set ${config.bearerTokenEnv}`);
     }
-    if (
-      (config.transport === "stdio" && Object.keys(config.secretEnv ?? {}).length) ||
-      (config.transport === "http" && Object.keys(config.headers ?? {}).length)
-    ) {
-      // Secret references are accepted by the schema (D17) but nothing resolves them yet: never
-      // connect without the credentials the entry declares.
-      this.statuses.set(name, "failed");
-      this.diagnostics.set(
-        name,
-        "This server needs protected secrets, which this version cannot provide yet",
-      );
-      throw new Error(`MCP server "${name}" needs protected secrets that are not available yet`);
+    // Secret references (D17) are resolved only now, only for this connection, and never through
+    // `process.env`: a missing one stops the connection before any process or request starts.
+    const resolved = await this.resolveSecrets(config);
+    if (!resolved) {
+      this.statuses.set(name, "needs-authentication");
+      this.diagnostics.set(name, "A saved key is missing: open its settings and enter it again");
+      throw new Error(`MCP server "${name}" needs authentication; a saved key is missing`);
     }
     this.statuses.set(name, "connecting");
     this.diagnostics.delete(name);
@@ -351,9 +392,12 @@ export class McpConnector {
                   process.env[key] ? [[key, process.env[key] as string]] : [],
                 ),
               );
-              Object.assign(env, config.env);
+              Object.assign(env, config.env, resolved.env);
+              // `node` is resolved to the system Node or Alisio's own runtime (O9).
+              const runtime = config.command === "node" ? resolveNodeRuntime() : undefined;
+              if (runtime) Object.assign(env, runtime.env);
               return {
-                command: config.command,
+                command: runtime?.command ?? config.command,
                 args: config.args,
                 cwd: this.workspace,
                 env,
@@ -363,6 +407,12 @@ export class McpConnector {
             })(),
           )
         : new StreamableHTTPClientTransport(new URL(config.url), {
+            ...(Object.keys(resolved.headers).length
+              ? {
+                  requestInit: { headers: resolved.headers },
+                  fetch: sameOriginFetch(new URL(config.url).origin),
+                }
+              : {}),
             reconnectionOptions: {
               maxRetries: 0,
               maxReconnectionDelay: 1000,
@@ -479,10 +529,38 @@ export class McpConnector {
       await client.close().catch(() => {});
       this.catalogs.delete(name);
       this.details.delete(name);
-      if (this.statuses.get(name) !== "needs-authentication") this.statuses.set(name, "failed");
-      this.diagnostics.set(name, safeFailure(error));
+      // A service that refuses the credentials (or asks for a sign-in) needs attention, not a retry.
+      const failure = safeFailure(error);
+      this.statuses.set(
+        name,
+        failure.startsWith("Authentication") ? "needs-authentication" : "failed",
+      );
+      this.diagnostics.set(name, failure);
       throw new Error(`MCP server "${name}" failed to connect: ${safeFailure(error)}`);
     }
+  }
+  /**
+   * Adds (or replaces) one server on the live connector, as an install does: the shared `servers`
+   * and `sources` records are updated in place, so the owning application sees it too. A replaced
+   * server is disconnected first; nothing connects until `connect` is called.
+   */
+  async addServer(name: string, server: ServerConfig, source: McpServerSource): Promise<void> {
+    if (this.servers[name]) await this.disconnect(name);
+    this.servers[name] = server;
+    this.sources[name] = source;
+    this.statuses.set(name, server.enabled ? "disconnected" : "disabled");
+    this.diagnostics.delete(name);
+  }
+  /** Disconnects and forgets one server (an uninstall); unknown names are ignored. */
+  async removeServer(name: string): Promise<void> {
+    if (!this.servers[name]) return;
+    await this.disconnect(name).catch(() => {});
+    delete this.servers[name];
+    delete this.sources[name];
+    this.statuses.delete(name);
+    this.diagnostics.delete(name);
+    this.catalogs.delete(name);
+    this.details.delete(name);
   }
   async disconnect(name: string): Promise<void> {
     const connected = this.clients.get(name);

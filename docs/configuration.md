@@ -641,6 +641,39 @@ not written to configuration. Non-TUI and programmatic callers still require `--
 your user privileges, **not a sandbox**. Only trust the configuration and executable you run. See
 [Tools & permissions](/tools#mcp).
 
+### Installing from the catalog
+
+Settings → MCP → **Explore** installs servers without editing JSON. Installed entries are written to
+`mcp.servers` of the layer you pick (**Only this project** writes `<project>/.alisio/config.json` and
+keeps the project trusted; **All my projects** writes your user configuration) and Alisio records what it
+owns in `<state home>/mcp/installations.sqlite`.
+
+- **npm servers** are installed privately into `<state home>/mcp/artifacts/<id>` with the exact pinned
+  version, `--ignore-scripts`, a lockfile, never globally and never through `npx`. A package whose
+  lockfile shows install scripts, without an exact version, from another registry or with several
+  executables Alisio cannot choose between is **not** installed automatically and the card says why. The
+  entry is stored as `command: "node"` plus the absolute path of the program inside the artifact;
+  the real runtime is chosen when the server connects: the Node found on the `PATH`, otherwise the
+  runtime Alisio runs on (the desktop app is Electron acting as Node, like its bundled npm).
+- **Remote services** (Streamable HTTP) with a public HTTPS address are stored as `type: "http"`. A
+  catalog address must be public HTTPS (no credentials, loopback, private or link-local addresses, also
+  after DNS resolution); addresses you type yourself are not restricted. The address is checked when the
+  plan is made, not pinned afterwards.
+- **Secrets never go into the configuration.** Keys the form asks for are stored behind a `SecretStore`
+  in `<config home>/mcp-secrets.json` (mode `0600`, same lock as `credentials.json`): protected by your
+  file permissions, **not encrypted**. The entry only holds references:
+  `"secretEnv": { "API_KEY": { "secret": "<id>" } }` for a stdio server and
+  `"headers": { "X-Api-Key": { "secret": "<id>" } }` (or `{ "env": "NAME" }`) for HTTP. They are resolved
+  only when the server connects, only for that connection, and a header is sent only to the origin of its
+  binding (redirects are not followed). A missing key leaves the server as *needs authentication*.
+- Installing never grants permission to run: the existing MCP consent is integrated in the same form,
+  unchecked by default, and **Remember** is a separate unchecked choice.
+- The initial download has a deadline of 180 seconds; set `"mcp": { "install": { "timeoutSeconds": 300 } }`
+  in your **user** configuration (30 to 600; a project value is ignored) to change it. Cancelling stops
+  the whole process tree and removes what the job created.
+- Unsupported methods (PyPI, OCI, MCPB, legacy SSE) and services that need to sign in (OAuth arrives in a
+  later phase) are shown honestly with manual guidance.
+
 ### Global consent (`mcp.allow`)
 
 Set `"mcp": { "allow": true }` in **your user configuration**
