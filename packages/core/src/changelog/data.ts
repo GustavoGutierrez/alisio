@@ -6,6 +6,18 @@ export const CHANGELOG_DATA: { schema: 1; entries: ChangelogEntry[] } = {
   schema: 1,
   entries: [
     {
+      version: "0.11.12",
+      date: "2026-11-13",
+      sections: [
+        {
+          title: "Improved",
+          items: [
+            "The plugin catalog now loads from plugins.alisioair.com, the new address of the Alisio plugin site.",
+          ],
+        },
+      ],
+    },
+    {
       version: "0.11.11",
       date: "2026-11-12",
       sections: [

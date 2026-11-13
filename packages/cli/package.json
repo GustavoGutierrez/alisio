@@ -1,6 +1,6 @@
 {
   "name": "@alisio/alisio-code",
-  "version": "0.11.11",
+  "version": "0.11.12",
   "description": "Alisio: your assistant for everyday work, on the model you choose. A provider-agnostic AI harness with a desktop app, a terminal UI, OpenAI-compatible providers, permissioned local tools, profession plugins, context compaction, persistent memory and a typed plugin SDK.",
   "author": "Gustavo Gutiérrez",
   "license": "MIT",

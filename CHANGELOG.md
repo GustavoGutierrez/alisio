@@ -4,6 +4,15 @@ User-visible changes to Alisio, newest first. Each release is listed under the v
 `@alisio/alisio-code` package (all packages share one version). Internal refactors, tests and documentation-only changes are left
 out. `/changelog` (terminal and web) shows these entries offline.
 
+## [0.11.12] - 2026-11-13
+
+The plugin catalog moves to its new home.
+
+### Improved
+
+- The plugin catalog now loads from plugins.alisioair.com, the new address of the Alisio plugin
+  site.
+
 ## [0.11.11] - 2026-11-12
 
 An MCP server catalog you can browse and install from.
