@@ -22,9 +22,22 @@ import { errorMessage, PageIntro, Status, settingsWorkspace, useLoad } from "./s
 
 function ConsentDialog(props: { onCancel: () => void; onGrant: (remember: boolean) => void }) {
   const [remember, setRemember] = useState(false);
+  const title = useRef<HTMLHeadingElement>(null);
+  // The question takes the focus (UX-10); Escape cancels like the Cancel button.
+  useEffect(() => title.current?.focus(), []);
   return (
-    <div class={styles.confirm} role="alertdialog" aria-labelledby="mcp-consent-title">
-      <h4 id="mcp-consent-title" class={styles.confirmTitle}>
+    <div
+      class={styles.confirm}
+      role="alertdialog"
+      aria-labelledby="mcp-consent-title"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          props.onCancel();
+        }
+      }}
+    >
+      <h4 id="mcp-consent-title" class={styles.confirmTitle} ref={title} tabIndex={-1}>
         <Icon name="alert" size={17} />
         {t("mcp.consentTitle")}
       </h4>
@@ -100,11 +113,20 @@ export function McpPage() {
       >
         <ConnectedServers />
       </div>
-      {tab === "explore" ? (
-        <div role="tabpanel" id="mcp-panel-explore" aria-labelledby="mcp-tab-explore">
-          {Explore ? <Explore /> : <p class={styles.note}>{xs("state.loading")}</p>}
-        </div>
-      ) : null}
+      <div
+        role="tabpanel"
+        id="mcp-panel-explore"
+        aria-labelledby="mcp-tab-explore"
+        hidden={tab !== "explore"}
+      >
+        {tab === "explore" ? (
+          Explore ? (
+            <Explore />
+          ) : (
+            <p class={styles.note}>{xs("state.loading")}</p>
+          )
+        ) : null}
+      </div>
     </>
   );
 }
@@ -276,14 +298,26 @@ function ConnectedServers() {
                 : t("mcp.notGranted")}
           </span>
           {data.permission === "not-granted" && !asking ? (
-            <button type="button" class={styles.primary} onClick={() => setAsking(true)}>
+            <button
+              type="button"
+              id="mcp-grant-button"
+              class={styles.primary}
+              onClick={() => setAsking(true)}
+            >
               {t("mcp.grant")}
             </button>
           ) : null}
         </div>
       ) : null}
       {asking ? (
-        <ConsentDialog onCancel={() => setAsking(false)} onGrant={(r) => void grant(r)} />
+        <ConsentDialog
+          onCancel={() => {
+            setAsking(false);
+            // The question is gone: the focus goes back to the button that asked it.
+            queueMicrotask(() => document.getElementById("mcp-grant-button")?.focus());
+          }}
+          onGrant={(r) => void grant(r)}
+        />
       ) : null}
       <Status
         loading={overview.loading && !data}

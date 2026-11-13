@@ -2,14 +2,14 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.6 |
+| Versión | 1.7 |
 | Fecha | 2026-11-13 UTC |
 | Proyecto | GustavoGutierrez/alisio |
-| Estado | **Aprobada por el propietario 2026-11-12 para ejecución; fase 0 completada 2026-11-12; fase 1 completada 2026-11-12; fase 2 completada 2026-11-12; fase 3 completada 2026-11-12; fase 4 completada 2026-11-12** (ver §19, §19.9–§19.12). Fase 5 no implementada. Q1–Q3 cerradas por el propietario (O8–O10, §19.9) |
+| Estado | **Implementada (fases 0-5)**. Ver `docs/implementation-status.md` |
 | Base inspeccionada | Commit `179e68694163ea6b2f51013ea4b56a8fe193a64f`, paquete core 0.11.10 |
 | Paquetes afectados | core, sdk, server, web; superficies CLI/TUI existentes para compatibilidad |
 | Paquetes nuevos | Ninguno obligatorio |
-| Ubicación propuesta | ~~`specs/backlog/030-catalogo-mcp-v1.md`; recalcular número si el repositorio avanzó~~ (sustituido 2026-11-12: la especificación está en ejecución en `specs/030-catalogo-mcp-v1.md`; el número 030 sigue siendo el siguiente libre verificado) |
+| Ubicación propuesta | ~~`specs/backlog/030-catalogo-mcp-v1.md`; recalcular número si el repositorio avanzó~~ (sustituido 2026-11-12: la especificación está en ejecución en `specs/030-catalogo-mcp-v1.md`; el número 030 sigue siendo el siguiente libre verificado; archivada el 2026-11-12 en `specs/archive/030-catalogo-mcp-v1.md`, ver §19.13) |
 | Relaciones | Complementa `specs/014-trust-boundaries-v1.md`, `specs/018-perimeter-v1.md` y `specs/029-semantic-ports-v1.md`; no depende de búsqueda vectorial |
 | Política de versión | Cambios aditivos; preservar configuraciones y API existentes |
 
@@ -425,6 +425,7 @@ Los enlaces latest/main pueden cambiar. Al ejecutar la fase 0, registrar revisio
 
 ## 18. Historial de cambios
 
+- 1.7 (2026-11-12): fase 5 completada (§19.13): auditoría de cobertura AC/UX/D, revisión de accesibilidad, capturas EN/ES, página de documentación EN/ES, alcance de verificación y limitaciones en `docs/implementation-status.md`. Especificación implementada (fases 0-5) y archivada.
 - 1.6 (2026-11-12): fase 4 completada (§19.12): OAuth HTTP con el SDK y el bucle local, comprobación de conexión aislada, formulario de configuración, actualizar, ficha de detalle, UX-02 de servidor y E2E de navegador opcional (O10).
 - 1.5 (2026-11-12): fase 3 completada (§19.11): planificador e instalador npm/stdio y HTTP con clave referenciada, trabajos con diario y reconciliación, almacén de secretos (O8), runtime `node` resuelto al conectar (O9), desinstalación por ámbito con recuento de referencias y UI de instalar y «Conectados».
 - 1.4 (2026-11-12): fase 2 completada (§19.10): catálogo intercambiable (O7), índice SQLite/FTS5, sincronización y Explorar sin instalar.
@@ -702,3 +703,88 @@ MCP-CAT-17/18/23/24/25 con `e2e/mcp-catalog.e2e.ts` (5 recorridos) y `web-mcp-ma
 - La comprobación no reutiliza una conexión viva: abre siempre una sesión diagnóstica propia (D12 permitía ambas); así nunca se altera la sesión del usuario.
 - Honestidad sobre las pruebas: las pruebas se escribieron antes que el código y el rojo previo fue «módulo inexistente» (OAuth, comprobación, web) o 404/aserción (rutas); los fallos del E2E eran de selectores y de un defecto real (tras corregir una clave el servidor no se reconectaba: ahora una edición guardada reconecta una integración activada).
 
+### 19.13 Fase 5 completada (2026-11-12): documentación, accesibilidad y regresión
+
+Alcance: web (pase de accesibilidad), E2E, documentación EN/ES con capturas reales, auditoría de cobertura y cierre de la
+especificación. Sin cambios en core, sdk ni server.
+
+**Cobertura de AC (auditoría contra código y pruebas).** Clave: A = prueba automática (Vitest o E2E de navegador).
+
+| AC | Cobertura | Dónde |
+|---|---|---|
+| MCP-CAT-01 | A | `mcp-catalog.test.ts` «walks two pages…», «is idempotent…» |
+| MCP-CAT-02 | A | `mcp-catalog.test.ts` «keeps the checkpoint, then applies updates and deletions on retry…» |
+| MCP-CAT-03 | A | `mcp-catalog.test.ts` «serves the last index with its date…», «with no index at all…»; `server-mcp-catalog.test.ts` |
+| MCP-CAT-04 | A | `mcp-catalog.test.ts` «assigns Alisio's own categories…», «combines text, category, execution and ready filters…», «marks a deprecated latest as not installable…» |
+| MCP-CAT-05 | A | `mcp-installation.test.ts` bloque MCP-CAT-05 (4) |
+| MCP-CAT-06 | A | `mcp-scopes.test.ts` bloque MCP-CAT-06 (3) |
+| MCP-CAT-07 | A | `mcp-scopes.test.ts` bloque MCP-CAT-07; `mcp-installation.test.ts` «downloads and writes nothing until the caller has obtained MCP consent», «refuses to plan under --read-only»; `mcp-runtime-consent.test.ts` (consentimiento de conexión, existente) |
+| MCP-CAT-08 | A | `mcp-installation.test.ts` bloque MCP-CAT-08 (6) |
+| MCP-CAT-09 | A | `mcp-secrets.test.ts` bloque MCP-CAT-09; `mcp-installation.test.ts` «stores a header value as a protected reference…»; `mcp-catalog-api.test.ts` «asks for the key, stores it protected…» |
+| MCP-CAT-10 | A | `mcp.test.ts` bloque MCP-CAT-10; `mcp-catalog-api.test.ts` «plans, consents in the same flow, installs, connects and lists the integration…» (servidor stdio real) |
+| MCP-CAT-11 | A | `mcp-auth.test.ts` (16); `mcp-catalog-api.test.ts` «offers a sign-in…». Servidor de autorización local, **sin proveedores reales** |
+| MCP-CAT-12 | A | `mcp-installation.test.ts` bloque MCP-CAT-12 (3) |
+| MCP-CAT-13 | A | `mcp-installation.test.ts` bloque MCP-CAT-13 (8); `mcp-catalog-api.test.ts` «answers a double click with the same job» |
+| MCP-CAT-14 | A | `mcp-scopes.test.ts` bloque MCP-CAT-14 (3); `mcp-catalog-api.test.ts` «shows a global install in another open workspace…» |
+| MCP-CAT-15 | A | `mcp-installation.test.ts` bloque MCP-CAT-15 (6) |
+| MCP-CAT-16 | A | `mcp-catalog-api.test.ts` bloque «authorization and workspace resolution (MCP-CAT-16)» (7) |
+| MCP-CAT-17 | A | `e2e/mcp-catalog.e2e.ts` (explorar → instalar con clave → comprobar → cambiar clave → quitar; EN y ES) |
+| MCP-CAT-18 | A | `e2e/mcp-catalog.e2e.ts` `startInstall` (un clic, sin formulario vacío); `mcp-catalog-api.test.ts` «answers a double click…» |
+| MCP-CAT-19 | A | `web-mcp-install.test.ts` «form validation…», `InstallForm`; `web-mcp-manage.test.ts` `ConfigureForm`; `mcp-catalog-api.test.ts` «editing an integration»; E2E (foco en el error, borrador conservado) |
+| MCP-CAT-20 | A | `mcp-connection-test.test.ts` bloque MCP-CAT-20 (3) |
+| MCP-CAT-21 | A | `mcp-connection-test.test.ts` bloque MCP-CAT-21 (8) |
+| MCP-CAT-22 | A | `mcp-connection-test.test.ts` bloque MCP-CAT-22 (3) |
+| MCP-CAT-23 | A | `e2e/mcp-catalog.e2e.ts` («On the computer running Alisio»); `web-mcp-install.test.ts` «two separate dimensions…»; `web-mcp-manage.test.ts` «says the computer running Alisio…» |
+| MCP-CAT-24 | A (parcial) | E2E y `mcp-catalog-api.test.ts` «editing an integration»: editar, actualizar, quitar. El override global se prueba en `mcp-scopes.test.ts`, no en navegador; no existe la acción «cambiar disponibilidad» (§19.12) |
+| MCP-CAT-25 | A (parcial) | E2E: sin resultados, método no compatible, teclado, 360 px, clave inválida. «Tiempo agotado» y «requisito ausente» solo en `mcp-connection-test.test.ts` / `mcp-installation.test.ts`, no en navegador |
+| MCP-CAT-26 | A | `mcp-catalog-source.test.ts` bloque MCP-CAT-26 (3) |
+| MCP-CAT-27 | A | `mcp-catalog-source-contract.test.ts` |
+| MCP-CAT-28 | A | `mcp-scopes.test.ts` bloque MCP-CAT-28 (3) |
+| MCP-CAT-29 | A | `mcp-secrets.test.ts` bloque MCP-CAT-29 (3) |
+| MCP-CAT-30 | A | `mcp-close-timeout.test.ts` bloque MCP-CAT-30 (2) |
+| MCP-CAT-31 | A | `mcp-installation.test.ts` bloque MCP-CAT-31 (5) |
+
+Resumen: 31 de 31 AC con prueba automática (29 completas, 2 parciales: 24 y 25); 0 solo manuales; 0 sin cubrir.
+La accesibilidad y el contraste se comprobaron además a mano (abajo).
+
+**UX-01 a UX-10.**
+
+| UX | Estado | Observación |
+|---|---|---|
+| UX-01 | Parcial | Resultados al abrir, estados, filtros, debounce 300 ms y paginación probados (`web-mcp-explore.test.ts`, E2E). **No cubierto:** «recomendados diferenciados» (no se publica ninguna lista; §19.10) |
+| UX-02 | Cubierto | `web-mcp-install.test.ts`, `web-mcp-manage.test.ts`, E2E |
+| UX-03 | Parcial | Selector de ámbito probado. **No cubierto:** «Opciones avanzadas» para alias, binario, transporte o versión (se resuelven solos; `mcp/alias.ts` admite alias manual en core, sin UI) |
+| UX-04 | Cubierto | E2E, `web-mcp-install.test.ts` (`JobView`), «answers a double click…» |
+| UX-05 | Cubierto | `InstallForm`, E2E de OAuth («Conectar mi cuenta») |
+| UX-06 | Parcial | Etiquetas, tipos, errores enlazados, foco y borrador probados. **No cubierto:** selector de carpeta o archivo (no hay campos de ruta en el formulario; una entrada que los pida no es instalable desde la UI) |
+| UX-07 | Cubierto | `mcp-connection-test.test.ts`, `TestPanelView`, E2E |
+| UX-08 | Parcial | Causa y siguiente acción probadas (`web-mcp-install.test.ts` «maps API errors…», `TestPanelView`). **No cubierto:** «Detalles técnicos» opcionales y copiables (la cadena `outcome.details` existe sin uso) |
+| UX-09 | Parcial | Configurar, probar, activar, actualizar y quitar con texto por ámbito probados. **No cubierto:** mover la disponibilidad entre ámbitos como acción propia; entradas manuales sin vínculo no ofrecen «Iniciar sesión» |
+| UX-10 | Cubierto | `e2e/mcp-accessibility.e2e.ts` (foco, Escape, orden de teclado con nombre accesible en cada parada, reflujo a 360 y 640 px), `e2e/mcp-catalog.e2e.ts` (restauración del foco, filas sin comprimir, forma del interruptor). Contraste y movimiento reducido: revisión manual; **lectores de pantalla no verificados** |
+
+**D1 a D20.** D1: CAT-01–04. D2: CAT-08/12/13. D3: CAT-06/14. D4: CAT-06/17. D5: CAT-07/21. D6: CAT-05. D7: CAT-09/19.
+D8: CAT-08/13/15/16/31. D9: CAT-10/11. D10: CAT-12/14/24. D11: CAT-17–19/23–25 (E2E). D12: CAT-20–22. D13: CAT-23.
+D14: CAT-26/27. D15: CAT-04. D16: CAT-28. D17: CAT-29. D18: CAT-30. D19: CAT-31. D20: CAT-16 y los bloques «SSRF guard» y
+«remote services» de `mcp-installation.test.ts`. Ninguna decisión queda sin cobertura; la de D20 no fija la resolución DNS
+(ventana de rebinding abierta, registrado en `docs/implementation-status.md`).
+
+**Pase de accesibilidad (UX-10).** Hallazgos corregidos, cada uno con una comprobación E2E escrita antes (roja por la causa correcta):
+
+- La pregunta de acceso MCP (alertdialog en línea) no recibía el foco y no se cerraba con Escape: ahora enfoca su título, Escape cancela y el foco vuelve a «Conceder acceso MCP».
+- `ConfirmDialog` (quitar, desinstalar, instalar plugin) no devolvía el foco al botón que lo abrió: ahora lo restaura si sigue en el documento.
+- El panel de pestañas «Explorar» no existía en el DOM mientras no estaba activa, y la pestaña apuntaba con `aria-controls` a un id inexistente: ahora el panel siempre existe (oculto).
+- El nombre del registro de la tarjeta usaba `--faint` (3,4:1 sobre el panel, por debajo de AA): ahora usa `--muted` (≥ 5,4:1 en claro y oscuro). Los demás pares usados en MCP (`muted`, `accent`, `ok`, `warn`, `danger`) calculados ≥ 4,7:1 en ambos temas.
+- Fila de «Conectados»: con muchas acciones (por ejemplo «Iniciar sesión») la columna de texto quedaba aplastada a unos píxeles de ancho y los distintivos se partían en dos líneas; el interruptor se convertía en un círculo de 44 px por la regla de áreas táctiles. Ahora las acciones bajan a otra línea y el interruptor conserva su forma. Hallazgo hecho al tomar las capturas.
+- Los botones de acción de las tarjetas de Explorar heredaban el color atenuado de su columna y parecían desactivados: ahora usan el color de texto.
+
+Sin hallazgos: orden de teclado de Explorar (búsqueda → ámbito → filtros → resultados → Detalles), nombres accesibles, `aria-live` moderado
+del progreso y de los resultados de comprobación, errores enlazados con `aria-describedby`, foco en el primer error.
+
+**Capturas.** Doce WebP (EN y ES, 1148×968, 40–51 KB) en `docs/assets/web-ui/`: `mcp_explore_web_ui`, `mcp_detail_web_ui`,
+`mcp_install_form_web_ui`, `mcp_check_web_ui`, `mcp_connected_web_ui`, `mcp_signin_web_ui` (las ES con sufijo `_es`). Tomadas con
+Playwright contra el servidor construido y el montaje del E2E (catálogo falso, npm falso, servidor de autorización local), con homes temporales; las rutas y direcciones locales se sustituyeron por datos de ejemplo.
+
+**Documentación.** Nueva página `docs/mcp-catalog.md` y `docs/es/mcp-catalog.md` (Integraciones en el menú lateral, enlazada desde `web.md` y `configuration.md`): uso para personas no técnicas, ámbito y ejecución, métodos
+compatibles y no compatibles, seguridad y límites, y la sección técnica para cambiar la fuente (O7). `docs/implementation-status.md` recoge el alcance de la verificación y las limitaciones.
+
+**Desviaciones:** no se escribió prueba nueva en Vitest para los arreglos de accesibilidad (el comportamiento depende del DOM y de CSS, y el proyecto no tiene entorno DOM; se cubren en E2E opcional, que no está en el checklist por defecto). No se probó con lectores de pantalla, ni en Firefox o Safari, ni con proveedores OAuth reales. La mutación acotada (§14) no se ejecutó en esta fase.

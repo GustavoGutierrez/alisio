@@ -400,7 +400,17 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (ventana de rebinding abierta, como D20); el E2E usa un npm falso y un catálogo falso (no hay red);
   «cambiar la disponibilidad» entre ámbitos como acción propia no existe (se logra instalándolo en el otro
   ámbito y quitando el anterior); la cobertura E2E de «requisito ausente» (sin npm) y de tiempo agotado
-  se prueba en pruebas de módulo, no en navegador; sin capturas de pantalla (fase 5).
+  se prueba en pruebas de módulo, no en navegador (capturas y documentación: fase 5).
+- Catálogo MCP, fase 5 (spec 030, archivada en `specs/archive/030-catalogo-mcp-v1.md`): documentación, accesibilidad y regresión.
+  Página de usuario `docs/mcp-catalog.md` / `docs/es/mcp-catalog.md` (buscar, instalar global o de proyecto, iniciar
+  sesión, comprobar, actualizar, quitar; «En este equipo»/«Servicio remoto» frente a «Global»/«Proyecto»; métodos compatibles
+  y no compatibles; límites de seguridad; sección técnica para cambiar la fuente, O7) con seis capturas reales por idioma
+  (`docs/assets/web-ui/mcp_*_web_ui[_es].webp`). Pase de accesibilidad con arreglos y comprobación E2E: la pregunta de acceso MCP
+  toma el foco y se cierra con Escape; `ConfirmDialog` devuelve el foco al botón que lo abrió; el panel «Explorar» existe
+  siempre (sin `aria-controls` roto); el nombre del registro usa `--muted` (AA); las filas de «Conectados» ya no aplastan el
+  texto ni deforman el interruptor; los botones de las tarjetas ya no parecen desactivados. Auditoría de cobertura AC/UX/D en
+  §19.13 de la spec: 31 de 31 AC con prueba automática (29 completas, MCP-CAT-24 y 25 parciales). Alcance de la verificación y
+  límites: sección «Catálogo MCP: alcance de la verificación» al final de este archivo.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 
 ### CLI, runtime y empaquetado
@@ -1643,8 +1653,10 @@ contrato; el escenario de dos agentes bajo un servidor Herdr real quedó bloquea
   (dist-tag `latest`); SemVer de rangos de plugins (`@alisio/sdk` como peer `^0.2.0`) y recarga en
   sesión inactiva.
 - Discovery automático de rutas Pi y watch incremental.
-- OAuth MCP interactivo y capacidades multimedia MCP. `/mcps` permite reconexión explícita y bearer
-  mediante referencia a variable de entorno, pero no flujos de autenticación en navegador.
+- OAuth MCP interactivo para entradas sin vínculo del catálogo, DPoP, `client_credentials`, revocación remota y
+  capacidades multimedia MCP. El inicio de sesión en navegador existe en la web para servidores instalados desde el
+  catálogo (spec 030); `/mcps` permite reconexión explícita y bearer mediante referencia a variable de entorno,
+  pero no flujos de autenticación en navegador.
   El comportamiento de consentimiento repetido es ahora configurable: la preferencia global
   `mcp.allow` concede consentimiento MCP de forma persistente y auto-conecta los servidores
   activados en cada inicio; la concesión por sesión en la TUI es la alternativa cuando `mcp.allow`
@@ -5117,3 +5129,54 @@ y reindexar es tarea del consumidor, que es quien conserva el texto fuente (el h
 `model_mismatch` / `dimension_mismatch`); `minScore` depende del modelo; el texto de `/semantic` es solo
 en inglés (como `/decisions`); `embedTimeoutMs` también acota las escrituras masivas (`upsert`); no se
 probó ningún proveedor real (LanceDB, ONNX): eso es el Anexo A, en `alisio-plugins`.
+
+## Catálogo MCP: alcance de la verificación
+
+Spec 030 (archivada), fases 0 a 5. Esta sección separa lo verificado de lo que no lo está.
+
+**Verificado (pruebas automáticas, sin red).** Pruebas de comportamiento en `tests/` con fuentes de catálogo
+falsas, un npm falso, servidores MCP stdio y HTTP locales y un servidor de autorización OAuth local:
+sincronización, índice y filtros (`mcp-catalog*.test.ts`), alcance global/proyecto, confianza y escritura segura
+(`mcp-scopes.test.ts`), planificador, instalador, ciclo de vida y reconciliación (`mcp-installation.test.ts`),
+secretos y cabeceras (`mcp-secrets.test.ts`), OAuth (`mcp-auth.test.ts`), comprobación de conexión
+(`mcp-connection-test.test.ts`), rutas HTTP con un conector real (`mcp-catalog-api.test.ts`) y modelos de vista de
+la web (`web-mcp-*.test.ts`). Navegador: `pnpm test:e2e` (Playwright, Chromium, **fuera** del checklist por
+defecto) ejecuta nueve recorridos contra el servidor y la web construidos, EN y ES, incluida la accesibilidad por
+teclado, el foco y el reflujo a 360 y 640 px. Un humo opcional contra el registro oficial real
+(`ALISIO_LIVE_MCP_REGISTRY=1`) se ejecutó una vez durante la fase 2. Las capturas de la documentación se
+tomaron con el mismo montaje del E2E.
+
+**No verificado.**
+
+- Proveedores OAuth reales (solo un servidor de autorización local); DPoP, `client_credentials`, revocación remota y
+  enlace del DNS del servidor de autorización (ventana de rebinding abierta, como en D20).
+- Instalación de paquetes npm reales desde el registro público; el instalador se probó con un `npm` falso y un paquete
+  fixture local. Métodos PyPI, OCI, MCPB y SSE: no existen; la UI los muestra como no compatibles con guía manual.
+- Lectores de pantalla, Firefox y Safari, zoom real del navegador al 200 % (se prueba un ancho de 640 px) y la
+  preferencia de movimiento reducido (solo revisión de código y CSS). Contraste: pares de tokens calculados a mano
+  (≥ 4,7:1 en los textos del catálogo) sin herramienta automática.
+- Pruebas con personas usuarias reales: no se hicieron.
+- El E2E no arranca `alisio serve` como proceso (monta el servidor en el proceso de pruebas con catálogo, npm y
+  proveedor inyectados); «tiempo agotado» y «requisito ausente» se prueban en módulo, no en navegador.
+- La mutación acotada de la spec (selección de ámbito, validación de plan, recuento de referencias) no se ejecutó.
+- Windows y macOS: solo Linux. El desktop usa el runtime de Electron como Node (O9); no se verificó en una instalación limpia.
+
+**Limitaciones conocidas.**
+
+- Los secretos (claves, tokens OAuth) viven en `<config home>/mcp-secrets.json` con modo 0600: protegidos por
+  permisos de usuario, no cifrados (O8); no hay adaptador `safeStorage` ni llavero del sistema.
+- El catálogo del registro oficial publica metadatos y comprueba espacios de nombres; no audita código. Instalar un
+  paquete npm o conectar un servicio ejecuta o contacta código de terceros con los privilegios del usuario: no hay
+  sandbox. `--ignore-scripts`, versión exacta y carpeta privada reducen el riesgo, no lo eliminan.
+- Solo se instalan solos npm/stdio y Streamable HTTP público. Paquetes con scripts de instalación, sin versión exacta o
+  con binarios ambiguos requieren configuración manual.
+- La sincronización ocurre con la primera consulta y como máximo una vez por hora con la aplicación abierta; no hay
+  temporizador ni sincronización con la aplicación cerrada. Cambiar la fuente exige reiniciar `alisio serve`.
+- El inicio de sesión OAuth vuelve al equipo donde corre Alisio y solo se ofrece a integraciones instaladas desde el
+  catálogo. «Cerrar sesión» solo borra los tokens locales.
+- Sin UI para: «Opciones avanzadas» (alias, binario, versión), selector de carpeta o archivo, «Detalles técnicos»
+  copiables, lista de «recomendados» (el mecanismo existe, no se publica ninguna) y mover la disponibilidad entre
+  ámbitos como acción propia (se instala en el otro ámbito y se quita el anterior).
+- Los textos que genera el servidor o vienen del catálogo (descripciones, algunos diagnósticos como «Sign in to
+  continue») aparecen en inglés también en la interfaz en español.
+- La comprobación de conexión abre siempre una sesión diagnóstica propia: no reutiliza una conexión viva.

@@ -643,7 +643,8 @@ your user privileges, **not a sandbox**. Only trust the configuration and execut
 
 ### Installing from the catalog
 
-Settings → MCP → **Explore** installs servers without editing JSON. Installed entries are written to
+Settings → MCP → **Explore** installs servers without editing JSON. The step-by-step guide for
+non-technical users, with screenshots, is [MCP catalog](/mcp-catalog). Installed entries are written to
 `mcp.servers` of the layer you pick (**Only this project** writes `<project>/.alisio/config.json` and
 keeps the project trusted; **All my projects** writes your user configuration) and Alisio records what it
 owns in `<state home>/mcp/installations.sqlite`.

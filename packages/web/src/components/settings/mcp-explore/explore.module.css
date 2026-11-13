@@ -150,7 +150,8 @@
 
 .cardName {
   margin: 2px 0 0;
-  color: var(--faint);
+  /* --faint is 3.4:1 on the panel; the registry name is real text, so it uses --muted (AA). */
+  color: var(--muted);
   font-family: var(--mono);
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -188,6 +189,8 @@
 .install button {
   min-height: 44px;
   min-width: 44px;
+  /* The column is muted text; the actions are not, or they read as disabled. */
+  color: var(--text);
 }
 
 .pager {

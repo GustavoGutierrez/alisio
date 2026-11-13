@@ -251,6 +251,10 @@
 .rowWrap {
   flex-wrap: wrap;
 }
+/* The text column keeps a readable width; the actions drop below it instead of squeezing it. */
+.rowWrap .mainCol {
+  flex: 1 1 300px;
+}
 .panelSlot {
   flex: 1 0 100%;
   min-width: 0;
@@ -259,7 +263,8 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.actionsWrap button,
+/* The switch keeps its own track shape; a 44 px minimum would turn it into a blob. */
+.actionsWrap button:not([role="switch"]),
 .actions button {
   min-height: 44px;
   min-width: 44px;

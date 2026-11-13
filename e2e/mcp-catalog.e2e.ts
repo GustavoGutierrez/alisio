@@ -54,6 +54,9 @@ test("search, read the details, install with a required key, check, change the k
   await expect(mine).toContainText("Project · Contabilidad");
   await expect(mine).toContainText("Ready to use");
   await expect(mine).not.toContainText(NOTES_KEY);
+  // The enable switch keeps its track shape (wider than tall) next to the 44 px action buttons.
+  const track = await mine.getByRole("switch").boundingBox();
+  expect(track && track.width > track.height * 1.4).toBe(true);
 
   // Check the connection: isolated, with its stages, and no tool is called.
   await mine.getByRole("button", { name: "Check connection" }).click();
@@ -94,6 +97,11 @@ test("search, read the details, install with a required key, check, change the k
   const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog", { name: /Disconnect/ }));
   await expect(dialog).toContainText("only from Contabilidad");
   await expect(dialog).toContainText("does not delete your account");
+  // Escape cancels and the focus returns to the button that opened the dialog (UX-10).
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(mine.getByRole("button", { name: "Disconnect" })).toBeFocused();
+  await mine.getByRole("button", { name: "Disconnect" }).click();
   await dialog.getByRole("button", { name: "Disconnect service" }).click();
   await expect(mine).toHaveCount(0);
 });
@@ -146,6 +154,11 @@ test("sign in to a service with its own authorization server (OAuth)", async ({
   // Sign out removes the local sign-in only, and the row asks for it again.
   await mine.getByRole("button", { name: "Sign out" }).click();
   await expect(mine).toContainText("Sign-in needed", { timeout: 30_000 });
+  // The row with the most actions never squeezes its text: the name and the badges stay on one line each (UX-10).
+  const name = await mine.getByText("Ledger Cloud", { exact: true }).first().boundingBox();
+  expect(name?.height ?? 99).toBeLessThan(30);
+  const badge = await mine.getByText("Remote service", { exact: true }).boundingBox();
+  expect(badge?.height ?? 99).toBeLessThan(34);
   await expect(mine.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
   await mine.getByRole("button", { name: "Disconnect" }).click();
   await page.getByRole("button", { name: "Disconnect service" }).click();

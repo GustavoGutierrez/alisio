@@ -22,7 +22,12 @@ export function ConfirmDialog(props: {
   const cancel = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    // The dialog takes the focus and gives it back to the control that opened it (UX-10).
+    const opener = document.activeElement as HTMLElement | null;
     (props.danger ? cancel : confirm).current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
   }, []);
   const keys = (event: KeyboardEvent) => {
     if (event.key === "Escape") {

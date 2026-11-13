@@ -457,6 +457,20 @@ the page then says the sign-in was interrupted.
 - **Downgrading.** Alisio 0.10 or older keeps the stored session but neither uses it nor takes the
   lock, and it can rewrite a stale copy of `credentials.json`; signing in again recovers.
 
+**MCP catalog (spec 030).** The catalog is a list of metadata from the official registry, which checks who owns
+a name and does not audit code: installing an npm package or connecting a service runs or contacts third-party
+code with your privileges, with no sandbox (exact version, `--ignore-scripts` and a private folder reduce the
+risk, not remove it). Only npm programs (stdio) and public Streamable HTTP services install by themselves; PyPI,
+OCI, MCPB, legacy SSE, packages with install scripts and ambiguous programs need manual setup. Keys and sign-in
+tokens are stored in `<config home>/mcp-secrets.json` (mode `0600`): protected by file permissions, not
+encrypted. The sign-in returns to the computer running Alisio, only for servers installed from the catalog, and
+signing out removes the local tokens only. The catalog refreshes at most once an hour while Alisio is open and a
+source change needs a restart. There is no UI yet for advanced options (alias, program, version), a folder picker,
+copyable technical details, a recommended list or moving a server between scopes. Verified without network
+against fake catalogs, a fake npm, local MCP servers and a local authorization server; real OAuth providers,
+real npm packages, screen readers, Firefox and Safari, Windows and macOS were not verified. See
+[MCP catalog](/mcp-catalog#security-and-limits).
+
 ## Verification scope
 
 The source file records a dedicated verification-scope section for each area below; the summary
@@ -470,6 +484,7 @@ here links to it with an absolute GitHub URL (the file is excluded from this sit
 - **Agent output-token budget** — truncation handling across the four adapters.
 - **Context limit versus tool catalog and output speed** — what the post-compaction budget counts.
 - **Memory and plugins** — FTS5 search, end-of-session summary, plugin install.
+- **MCP catalog (spec 030)** — fake catalogs, a fake npm, local MCP servers and a local authorization server; the optional browser E2E (`pnpm test:e2e`) covers keyboard, focus and 360 px; real OAuth providers and screen readers were not verified.
 - **Paste and image attachments** — clipboard helpers per platform and limits.
 - **`ask_user_question`** — the shared interactive queue and stepped prompts.
 - **Network tools (webfetch, websearch, execute)** — mocked providers and no network sandbox.

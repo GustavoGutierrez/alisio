@@ -49,6 +49,7 @@ function sidebar(prefix: string, labels: Record<string, string>): DefaultTheme.S
       text: labels.groupIntegrations ?? "Integrations",
       items: [
         { text: labels.mcp ?? "MCP", link: `${prefix}/tools#mcp` },
+        item("mcp-catalog"),
         { text: labels.herdr ?? "Herdr", link: `${prefix}/tools#herdr` },
       ],
     },
@@ -98,6 +99,7 @@ const en = {
   "icon-themes": "Icon themes",
   architecture: "Architecture",
   mcp: "MCP",
+  "mcp-catalog": "MCP catalog",
   herdr: "Herdr",
   publishing: "Publishing",
   about: "About",
@@ -141,6 +143,7 @@ const es = {
   "icon-themes": "Temas de iconos",
   architecture: "Arquitectura",
   mcp: "MCP",
+  "mcp-catalog": "Catálogo MCP",
   herdr: "Herdr",
   publishing: "Publicación",
   about: "Acerca de",

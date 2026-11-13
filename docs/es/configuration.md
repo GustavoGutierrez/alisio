@@ -665,7 +665,8 @@ el ejecutable que use. Consulte [Herramientas y permisos](/es/tools#mcp).
 
 ### Instalar desde el catálogo
 
-Ajustes → MCP → **Explorar** instala servidores sin editar JSON. Las entradas instaladas se escriben en
+Ajustes → MCP → **Explorar** instala servidores sin editar JSON. La guía paso a paso para personas no
+técnicas, con capturas, es [Catálogo MCP](/es/mcp-catalog). Las entradas instaladas se escriben en
 `mcp.servers` de la capa que elija (**Solo este proyecto** escribe `<proyecto>/.alisio/config.json` y
 mantiene la confianza del proyecto; **Todos mis proyectos** escribe su configuración de usuario) y Alisio
 registra lo que posee en `<state home>/mcp/installations.sqlite`.

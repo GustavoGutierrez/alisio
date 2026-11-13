@@ -59,7 +59,7 @@ export function MineRow(props: MineRowProps) {
   const diagnostic = server.diagnostic ?? server.binding?.lastTest?.diagnostic;
   return (
     <li class={`${styles.row} ${css.rowWrap}`}>
-      <div class={styles.rowMain}>
+      <div class={`${styles.rowMain} ${css.mainCol}`}>
         <div class={styles.rowTitle}>
           <span class={styles.cardName}>{server.displayName}</span>
           <Pill tone={STATE_TONE[badges.install] ?? "off"}>{ms(badges.install)}</Pill>
