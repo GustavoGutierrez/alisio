@@ -5,6 +5,7 @@ import DesktopDownloads from "./components/DesktopDownloads.vue";
 import HeroArt from "./components/HeroArt.vue";
 import HeroWind from "./components/HeroWind.vue";
 import HomeIntro from "./components/HomeIntro.vue";
+import ShowcaseSlider from "./components/ShowcaseSlider.vue";
 import TerminalInstall from "./components/TerminalInstall.vue";
 import { initHeroMotion } from "./hero-motion";
 import { initHeroVideo } from "./hero-video";
@@ -48,6 +49,7 @@ export default {
     // Used inside the home markdown (docs/index.md, docs/es/index.md).
     app.component("DesktopDownloads", DesktopDownloads);
     app.component("TerminalInstall", TerminalInstall);
+    app.component("ShowcaseSlider", ShowcaseSlider);
     if (typeof window === "undefined") return;
 
     const afterRouteChange = router.onAfterRouteChange;

@@ -162,12 +162,14 @@ export function initWhatIs(): void {
     const source =
       kind === "video"
         ? frame?.querySelector<HTMLVideoElement>("video")
-        : frame?.querySelector<HTMLImageElement>("img");
+        : (frame?.querySelector<HTMLImageElement>("img[data-active]") ??
+          frame?.querySelector<HTMLImageElement>("img"));
     if (!source) return;
 
     // Title: the heading of the section or offer row around the media, else the image alt text.
     const owner = trigger.closest(".offer-row, section");
     const title =
+      trigger.dataset.title ||
       owner?.querySelector("h3")?.textContent?.trim() ||
       (source instanceof HTMLImageElement ? source.alt : "");
     const dialog = document.createElement("dialog");
@@ -209,10 +211,11 @@ export function initWhatIs(): void {
       // Shown at its natural resolution, scaled down only to fit the viewport (lightbox CSS), so it
       // is never smaller than the inline copy.
       const big = document.createElement("img");
-      big.src = source.currentSrc || source.src;
+      // `data-full` names the full-resolution file when the inline copy may be a small variant.
+      big.src = source.dataset.full || source.currentSrc || source.src;
       big.alt = source.alt;
-      big.width = source.naturalWidth || source.width;
-      big.height = source.naturalHeight || source.height;
+      big.width = source.dataset.full ? source.width : source.naturalWidth || source.width;
+      big.height = source.dataset.full ? source.height : source.naturalHeight || source.height;
       body.append(big);
     }
     dialog.append(bar, body);

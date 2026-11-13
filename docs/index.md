@@ -18,6 +18,44 @@ hero:
 
 # Lead paragraph right after the hero (rendered by HomeIntro.vue).
 intro: "Work with documents and data, find apps for your tasks and build your own plugins by describing what you need. Alisio brings artificial intelligence to your daily work, from a desktop app."
+
+# Showcase carousel (rendered by ShowcaseSlider.vue). `image` names docs/assets/web-ui/showcase_<image>_web_ui.webp.
+# Keep EN and ES identical in order and images.
+showcase:
+  label: "Alisio at work"
+  slides:
+    - image: spreadsheet_viewer
+      title: "Bring your spreadsheet"
+      description: "Attach an Excel file and ask for what you need; the table opens beside the chat so you can filter it while Alisio works through the steps."
+      alt: "Alisio with an attached Excel file of 1,276 rows, the assistant's steps in the conversation and the spreadsheet open in a side table with a filter box"
+    - image: data_questions
+      title: "Ask questions about your data"
+      description: "Ask in your own words and get clear tables and rankings, with your project's files listed on the right."
+      alt: "An answer with tables of orders and sales by year and a top 8 of cities, next to the project's file list"
+    - image: census_dashboard
+      title: "From data to a dashboard"
+      description: "Alisio summarizes what it found in a national archives census and opens the dashboard with charts beside the chat."
+      alt: "A summary of a national archives census in the conversation and a dashboard with bar and donut charts beside it"
+    - image: sales_report_pdf
+      title: "A report ready to share"
+      description: "An executive sales report is created as a PDF and previewed next to the conversation."
+      alt: "The conversation that created an executive sales report and the PDF open in a preview panel"
+    - image: scribe_article
+      title: "Write with Scribe"
+      description: "The Scribe app drafts a scientific article section by section, with a diagram and a PDF preview you can export."
+      alt: "The Scribe app with the sections of an article on neural networks and a PDF preview showing a network diagram"
+    - image: thesis_studio
+      title: "Plan your thesis"
+      description: "Thesis Studio guides you from a short interview to the final PDF, one step at a time."
+      alt: "The Thesis Studio app home: steps from interview to build and submit, and a form to start a thesis"
+    - image: lumbre_website
+      title: "Build a website by talking"
+      description: "The Lumbre app builds a bakery website from a conversation and shows a preview beside it."
+      alt: "The Lumbre app with the conversation on the left and a preview of a bakery website on the right"
+    - image: trajectory
+      title: "See what Alisio did"
+      description: "The Trajectory tab shows the timeline of each step, how much text the model read and wrote per turn and the time each tool took."
+      alt: "The Trajectory tab with an execution timeline, charts per turn and time per tool, next to an analytics dashboard"
 ---
 
 <div class="alisio-home" data-component="whatis">
@@ -38,13 +76,9 @@ without learning new technical terms; programming is still possible, as an advan
 <section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading" class="home-showcase">
   <h3 id="alisio-web-ui-heading">Conversation, files and approvals in one window</h3>
   <p>Ask in your own words, see what Alisio is doing and approve each change. The desktop app shows this interface in its own window; it also opens in your browser.</p>
-  <figure>
-    <div class="shot-frame home-frame">
-    <img src="/assets/alisio-harness-web-ui.webp" alt="The Alisio interface showing the project list, an active conversation about code and the file explorer" width="1833" height="990" loading="lazy" decoding="async" />
-    <button type="button" class="media-btn media-expand" data-expand="image" hidden data-label-close="Close" aria-label="View the Web UI screenshot larger"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg></button>
-    </div>
-    <figcaption>The Alisio interface: your projects on the left, the conversation in the middle and your files on the right.</figcaption>
-  </figure>
+
+<ShowcaseSlider />
+
 </section>
 
 <div class="home-band home-band-soft">

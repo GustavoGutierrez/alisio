@@ -264,11 +264,24 @@ function main(): void {
       }
     }
     const preview = text.match(/<section data-component="web-ui-preview"[\s\S]*?<\/section>/);
-    if (!preview?.[0].includes('src="/assets/alisio-harness-web-ui.webp"')) {
-      problems.push({ file, line: 1, message: "home structure: Web UI preview image is missing" });
+    if (!preview?.[0].includes("<ShowcaseSlider")) {
+      problems.push({ file, line: 1, message: "home structure: Web UI preview slider is missing" });
     }
-    if (!preview?.[0].match(/<img\b[^>]*\balt="[^"]+"/)) {
-      problems.push({ file, line: 1, message: "home structure: Web UI preview needs alt text" });
+    // Every showcase slide (front matter) needs its screenshot pair and alt text.
+    const slides = [...text.matchAll(/- image: (\S+)\n(?:\s+\w+: .*\n)*/g)];
+    if (slides.length === 0) {
+      problems.push({ file, line: 1, message: "home structure: showcase has no slides" });
+    }
+    for (const [block, image] of slides) {
+      for (const suffix of ["", "_small"]) {
+        const shot = join(DOCS, "assets", "web-ui", `showcase_${image}_web_ui${suffix}.webp`);
+        if (!existsSync(shot)) {
+          problems.push({ file, line: 1, message: `showcase: image not found: ${shot}` });
+        }
+      }
+      if (!/\balt: "[^"]+"/.test(block)) {
+        problems.push({ file, line: 1, message: `showcase: slide ${image} needs alt text` });
+      }
     }
     const headingId = preview?.[0].match(/aria-labelledby="([^"]+)"/)?.[1];
     if (!headingId || !preview?.[0].includes(`id="${headingId}"`)) {

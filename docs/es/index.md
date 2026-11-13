@@ -18,6 +18,44 @@ hero:
 
 # Lead paragraph right after the hero (rendered by HomeIntro.vue).
 intro: "Trabaja con documentos y datos, encuentra aplicaciones para tus tareas y crea tus propios complementos describiendo lo que necesitas. Alisio acerca la inteligencia artificial a tu trabajo diario, desde una aplicación de escritorio."
+
+# Showcase carousel (rendered by ShowcaseSlider.vue). `image` names docs/assets/web-ui/showcase_<image>_web_ui.webp.
+# Keep EN and ES identical in order and images.
+showcase:
+  label: "Alisio en acción"
+  slides:
+    - image: spreadsheet_viewer
+      title: "Trae tu hoja de cálculo"
+      description: "Adjunta un archivo de Excel y pide lo que necesitas; la tabla se abre junto a la conversación para que la filtres mientras Alisio avanza paso a paso."
+      alt: "Alisio con un archivo de Excel adjunto de 1.276 filas, los pasos del asistente en la conversación y la hoja abierta en una tabla lateral con un filtro"
+    - image: data_questions
+      title: "Pregunta sobre tus datos"
+      description: "Pregunta con tus palabras y obtén tablas y listas claras, con los archivos de tu proyecto a la derecha."
+      alt: "Una respuesta con tablas de pedidos y ventas por año y las 8 ciudades principales, junto a la lista de archivos del proyecto"
+    - image: census_dashboard
+      title: "De los datos a un panel"
+      description: "Alisio resume lo que encontró en un censo nacional de archivos y abre el panel con gráficos junto a la conversación."
+      alt: "Un resumen de un censo nacional de archivos en la conversación y un panel con gráficos de barras y de dona al lado"
+    - image: sales_report_pdf
+      title: "Un informe listo para compartir"
+      description: "Se genera un informe ejecutivo de ventas en PDF y lo ves junto a la conversación."
+      alt: "La conversación que generó un informe ejecutivo de ventas y el PDF abierto en un panel de vista previa"
+    - image: scribe_article
+      title: "Escribe con Scribe"
+      description: "La aplicación Scribe redacta un artículo científico por secciones, con un diagrama y una vista previa en PDF que puedes exportar."
+      alt: "La aplicación Scribe con las secciones de un artículo sobre redes neuronales y una vista previa en PDF con un diagrama de la red"
+    - image: thesis_studio
+      title: "Planea tu tesis"
+      description: "Thesis Studio te guía desde una breve entrevista hasta el PDF final, paso a paso."
+      alt: "El inicio de la aplicación Thesis Studio: pasos desde la entrevista hasta la entrega y un formulario para empezar una tesis"
+    - image: lumbre_website
+      title: "Crea un sitio web conversando"
+      description: "La aplicación Lumbre crea el sitio web de una panadería a partir de una conversación y te muestra una vista previa al lado."
+      alt: "La aplicación Lumbre con la conversación a la izquierda y la vista previa del sitio web de una panadería a la derecha"
+    - image: trajectory
+      title: "Mira lo que hizo Alisio"
+      description: "La pestaña Trayectoria muestra la línea de tiempo de cada paso, cuánto texto leyó y escribió el modelo en cada turno y el tiempo de cada herramienta."
+      alt: "La pestaña Trayectoria con la línea de tiempo de ejecución, gráficos por turno y tiempo por herramienta, junto a un panel analítico"
 ---
 
 <div class="alisio-home" data-component="whatis">
@@ -39,13 +77,9 @@ técnicos nuevos; programar sigue siendo posible, como uso avanzado.
 <section data-component="web-ui-preview" aria-labelledby="alisio-web-ui-heading" class="home-showcase">
   <h3 id="alisio-web-ui-heading">Conversación, archivos y aprobaciones en una sola ventana</h3>
   <p>Pide lo que necesitas con tus palabras, mira qué está haciendo Alisio y aprueba cada cambio. La aplicación de escritorio muestra esta interfaz en su propia ventana; también se abre en tu navegador.</p>
-  <figure>
-    <div class="shot-frame home-frame">
-    <img src="/assets/alisio-harness-web-ui.webp" alt="La interfaz de Alisio con la lista de proyectos, una conversación activa sobre código y el explorador de archivos" width="1833" height="990" loading="lazy" decoding="async" />
-    <button type="button" class="media-btn media-expand" data-expand="image" hidden data-label-close="Cerrar" aria-label="Ver la captura de la interfaz web en grande"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg></button>
-    </div>
-    <figcaption>La interfaz de Alisio: tus proyectos a la izquierda, la conversación en el centro y tus archivos a la derecha.</figcaption>
-  </figure>
+
+<ShowcaseSlider />
+
 </section>
 
 <div class="home-band home-band-soft">
