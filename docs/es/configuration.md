@@ -699,6 +699,29 @@ interactiva y headless) comienza con el permiso de ejecución MCP ya concedido, 
   acceso MCP** pide una confirmación explícita y puede recordar la concesión del mismo modo; consulte
   [Interfaz web](/es/web).
 
+### Fuente del catálogo MCP (`mcp.catalog`)
+
+Ajustes → MCP → **Explorar** lista servidores MCP desde un índice local que Alisio guarda en
+`<state home>/mcp/catalog.sqlite` y actualiza en segundo plano (como máximo una vez por hora, nunca al
+iniciar). Por defecto la fuente es el registro oficial (`https://registry.modelcontextprotocol.io`);
+la fuente y su URL base se definen solo en **su configuración de usuario**.
+
+```json
+{
+  "mcp": {
+    "catalog": { "source": "official", "baseUrl": "https://registry.modelcontextprotocol.io" }
+  }
+}
+```
+
+- Ambas claves son opcionales. `source` elige el adaptador del catálogo (hoy solo existe `official`)
+  y `baseUrl` debe ser `https` (se acepta `http` simple para réplicas en `localhost`) y no puede
+  contener credenciales.
+- Un `.alisio/config.json` de proyecto no puede cambiarlas: se leen solo de la capa global.
+- Cambiar la fuente requiere reiniciar `alisio serve`; la siguiente actualización reemplaza el índice
+  guardado sin mezclar fichas de la fuente anterior.
+
+
 ## Variables de entorno
 
 | Variable | Función |

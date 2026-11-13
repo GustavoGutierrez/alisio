@@ -297,6 +297,42 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   `mcp_devforge_time_diff` para el siguiente turno, limpia al desconectar y persiste la activación de
   forma atómica en la forma y archivo que definieron el servidor. El modelo conserva la decisión de
   llamar una herramienta; el nombre semántico mejora, pero no garantiza, la selección automática.
+- Catálogo MCP, fase 1 (spec 030): escritor compartido de entradas MCP (`mcp/config-writer.ts`) con
+  bloqueo por archivo, revisión sha256 (`mcp_config_conflict` si el archivo cambió fuera), formas
+  canónica/alias preservadas y re-sellado de la confianza del proyecto en la misma operación (también
+  en el interruptor de activación, que antes dejaba el proyecto en `needsPrompt` al siguiente
+  arranque); escribir en un proyecto sin confianza falla con `mcp_scope_untrusted`. Alias internos
+  `slug-hash` separados del nombre del registro (`mcp/alias.ts`), override de proyecto mínimo sin copiar
+  `env` literales y vista previa de lo que revela quitarlo (`mcp/scopes.ts`), `GET /api/mcp` añade
+  `effective`, `editable` y `shadows` (capa global oculta, sin comando/URL), un cambio de una entrada
+  global recicla los demás workspaces abiertos que la usan, y los hijos stdio de MCP se registran en
+  el registro de procesos. El esquema acepta `headers` (HTTP) y `secretEnv` (stdio) como referencias a
+  secretos, pero NADA las resuelve todavía: un servidor que las declare queda `failed` y nunca se
+  conecta sin credenciales (el `SecretStore` llega en la fase 3). Sin UI, instalador ni catálogo aún:
+  verificado solo con pruebas de comportamiento (`mcp-scopes`, `mcp-installation`,
+  `mcp-close-timeout`), sin E2E de navegador. Las demás copias del bloque "temporal + rename"
+  (`setGlobalMcpAllow`, ajustes, plugins) siguen sin migrar.
+- Catálogo MCP, fase 2 (spec 030): fuente intercambiable (O7). El puerto `CatalogSource` y el modelo
+  de dominio propio (`mcp/catalog/source.ts`) son lo único que conocen el almacén, la sincronización,
+  las rutas y la web; `OfficialRegistrySource` (`mcp/catalog/sources/official-registry.ts`) es el
+  adaptador anticorrupción del registro oficial (`/v0.1`, esquemas 2025-07-09/2025-09-29/2025-12-11,
+  otro `$schema` se rechaza como `schema_unsupported`; 15 s por petición, 2 reintentos con
+  `Retry-After`, 5 MiB por respuesta, 128 KiB por ficha, sin redirecciones, `https` salvo bucle local).
+  Índice propio `<stateHome>/mcp/catalog.sqlite` con FTS5 (`unicode61` sin diacríticos, prefijos),
+  filas con `sourceId`, sincronización acotada (tope de páginas y plazo, cancelable, un solo recorrido
+  a la vez, presupuesto de una hora y 60 s tras un fallo, checkpoint solo si termina el recorrido,
+  solape de 5 min, eliminadas/obsoletas aplicadas) que nunca bloquea el arranque. Categorías propias
+  de Alisio con `CategoryClassifier` (reglas EN/ES; el registro no tiene categorías; la pista del
+  publicador es una señal débil; el resto es `other`) y procedencia visible. Rutas `GET /api/mcp/catalog`,
+  `GET /api/mcp/catalog/detail` y `POST /api/mcp/catalog/sync` (esta última se rechaza con `--read-only`);
+  `mcp.catalog.source`/`mcp.catalog.baseUrl` solo en la capa global. Web: pestaña Explorar en Ajustes →
+  MCP en un chunk perezoso (búsqueda con debounce de 300 ms sobre el índice local, filtros antes de
+  paginar, páginas de 24 con total, estados cargando/catálogo vacío/sin coincidencias/sin red con
+  copia/error/sincronización parcial, EN/ES); el botón Instalar se muestra desactivado. Límites: las
+  fichas de prueba del adaptador oficial están construidas a mano a partir de las formas documentadas
+  (el humo contra el registro real es opcional: `ALISIO_LIVE_MCP_REGISTRY=1`); no hay recomendados
+  curados (el mecanismo existe y está vacío); sin capturas de pantalla (fase 5) ni ficha de detalle en
+  la UI; la clasificación por reglas es aproximada; cambiar la fuente exige reiniciar `alisio serve`.
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 
 ### CLI, runtime y empaquetado

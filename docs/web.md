@@ -226,7 +226,7 @@ resources act on the workspace of the open session (or the first workspace when 
 | **Models** | Provider profiles with their non-secret values, credentials and **Activate in this workspace** with a model of that profile; **Add a profile** creates one |
 | **Plugins** | Four tabs: **Plugin configuration** (not sandboxed, how plugins are installed, the project file), **Installed plugins** (search, update pills, switch and **Uninstall**), **Plugin catalog** (browse and install) and **Install from file** (private `.tgz` plugins); see [Plugin catalog, install and updates](#plugin-catalog). The sidebar **Plugins** menu also opens the [Plugin creator](./plugin-creator.md) |
 | **Skills** | Discovered skills with scope, size and a switch; disabled skills leave the `/` palette. **New skill** opens the [Skill Builder](./skill-builder.md) |
-| **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first |
+| **MCP servers** | Status, transport and counts of each configured server, enable switch and **Connect**; **Grant MCP access** asks for an explicit confirmation first. The **Explore** tab browses the MCP catalog saved on this computer (search, category, where it runs, ready-to-install filter, 24 per page, update now); installing from it is not available yet |
 | **Agent presets** | `build`, `plan` and main-capable user or plugin agents, with instructions and suggested model; **Use in this session** switches the open session |
 | **Appearance** | Theme (dark, light or system) and whether tool rows start collapsed or expanded, stored in this browser |
 
@@ -873,6 +873,8 @@ GET  /api/skills?workspace=<wid>       PATCH /api/skills/:id {workspace, enabled
 POST /api/workspaces/:wid/skills/draft {idea, ...}   POST /api/workspaces/:wid/skills {scope, draft, overwrite?}
 GET  /api/mcp?workspace=<wid>          PATCH /api/mcp/:name {workspace, enabled, connect?}
 POST /api/mcp/consent {workspace, confirmed: true, remember?}
+GET  /api/mcp/catalog?q&category&execution&ready&status&page&pageSize   GET /api/mcp/catalog/detail?name&version?
+POST /api/mcp/catalog/sync   (starts one background update; 403 mcp_not_permitted under --read-only)
 GET  /api/agents?workspace=<wid>       GET /api/settings?workspace=<wid>  PATCH /api/settings {workspace, key, value}
 GET  /api/changelog?version=&lastSeen= POST /api/workspaces/:wid/reload   409 runs_active while it has runs
 GET  /api/providers?workspace=<wid>    PUT /api/providers/:profile {workspace, provider, values, model}

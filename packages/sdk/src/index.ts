@@ -2659,6 +2659,12 @@ export type ApiErrorCode =
   | "capability_ceiling"
   | "not_manageable"
   | "mcp_not_permitted"
+  /** An MCP configuration file changed since it was read (409). Additive. */
+  | "mcp_config_conflict"
+  /** The project is not trusted, so its MCP configuration cannot be written (403). Additive. */
+  | "mcp_scope_untrusted"
+  /** The MCP catalog index could not be opened (503). */
+  | "mcp_catalog_unavailable"
   | "runs_active"
   | "provider_unavailable"
   | "protocol_mismatch"
@@ -3155,6 +3161,23 @@ export interface McpServerWire {
   capabilities: string[];
   counts: { tools: number; resources: number; prompts: number };
   diagnostic?: string;
+  /** This entry is the one in force (always true here; a hidden layer is listed in `shadows`). */
+  effective?: boolean;
+  /** Alisio can change this entry (false for plugin/built-in entries owned elsewhere). */
+  editable?: boolean;
+  /**
+   * Lower-layer entries of the same name that this one hides (a project entry over a global one),
+   * so removing this entry reveals them. Never carries a command, argument or URL. Consumers must
+   * ignore unknown fields.
+   */
+  shadows?: McpServerShadowWire[];
+}
+/** A hidden MCP entry of a lower configuration layer. */
+export interface McpServerShadowWire {
+  /** Layer that defines it (`global`, ...). */
+  source: string;
+  enabled: boolean;
+  transport: "stdio" | "http";
 }
 /**
  * `GET /api/analysis`: the state of the data-analysis runtime for Settings (read only). Never
@@ -3216,6 +3239,98 @@ export interface McpOverview {
   /** Global consent (`mcp.allow`) is persisted for this user. */
   persisted: boolean;
   servers: McpServerWire[];
+}
+/** Why a catalog entry cannot be installed automatically (specs/030 phase 2; additive). */
+export type McpCatalogBlockedReason =
+  | "deprecated"
+  | "deleted"
+  | "schema_unsupported"
+  | "method_unsupported";
+/** Where a catalog entry runs: on this machine, as a remote service, or either. */
+export type McpCatalogExecution = "local" | "remote" | "both" | "unknown";
+/** How a category was assigned: a curated mapping, a keyword rule or a publisher hint. */
+export type McpCatalogCategoryMethod = "curated" | "rule" | "source";
+/** One entry of the MCP catalog (the latest version of a server), from the local index. */
+export interface McpCatalogItem {
+  sourceId: string;
+  /** The provider's stable identity of the server (not the internal MCP alias). */
+  name: string;
+  title?: string;
+  description: string;
+  version: string;
+  status: "active" | "deprecated";
+  execution: McpCatalogExecution;
+  /** Install methods the entry offers (`npm`, `remote`, `pypi`...). */
+  methods: string[];
+  /** Stable category id of Alisio's taxonomy (`other` when nothing matched) and its provenance. */
+  category: { id: string; method: McpCatalogCategoryMethod; confidence: number };
+  /** An automatic install method exists for this entry (installing itself ships in a later phase). */
+  ready: boolean;
+  blocked?: { reason: McpCatalogBlockedReason; detail?: string };
+  recommended?: boolean;
+  publishedAt?: string;
+  updatedAt?: string;
+}
+/** Counts of the current query by category, execution and readiness. */
+export interface McpCatalogFacets {
+  categories: Array<{ id: string; count: number }>;
+  execution: Array<{ id: "local" | "remote"; count: number }>;
+  ready: number;
+}
+/** `GET /api/mcp/catalog/sync` state of the active source. Never carries URLs or raw errors. */
+export interface McpCatalogSyncStatus {
+  sourceId: string;
+  syncing: boolean;
+  entryCount: number;
+  /** Entries the adapter refused (unknown schema, invalid, too large); never installable. */
+  rejectedCount: number;
+  lastSuccessAt?: string;
+  lastAttemptAt?: string;
+  /** The last attempt failed, or stopped before the whole walk finished. */
+  lastError?: { code: string; message: string };
+  /** The last attempt applied some pages and then stopped. */
+  partial: boolean;
+  /** A new sync may start from this moment (the per-source budget). */
+  nextSyncAllowedAt?: string;
+  /** `POST /api/mcp/catalog/sync` only: the request was held back by the budget. */
+  throttled?: boolean;
+}
+/** `GET /api/mcp/catalog`: one page of the filtered list plus the same query's facets. */
+export interface McpCatalogPage {
+  items: McpCatalogItem[];
+  /** Matches of the whole query (filters applied before paging). */
+  total: number;
+  page: number;
+  pageSize: number;
+  /** The text search was applied (two characters or more); otherwise the plain list is shown. */
+  queryApplied: boolean;
+  facets: McpCatalogFacets;
+  syncStatus: McpCatalogSyncStatus;
+}
+/** A parameter a catalog entry asks for (secret defaults are never sent). */
+export interface McpCatalogInputInfo {
+  name: string;
+  kind: "env" | "header" | "variable";
+  description?: string;
+  isRequired: boolean;
+  isSecret: boolean;
+  format?: string;
+  choices?: string[];
+  default?: string;
+}
+/** `GET /api/mcp/catalog/detail`: the public card of one version, without credentials. */
+export interface McpCatalogDetail extends McpCatalogItem {
+  websiteUrl?: string;
+  repositoryUrl?: string;
+  packages: Array<{
+    method: string;
+    identifier: string;
+    version?: string;
+    transport: string;
+    inputs: McpCatalogInputInfo[];
+  }>;
+  /** Remote services with the origin only (paths and queries may carry tokens). */
+  remotes: Array<{ transport: string; origin: string; inputs: McpCatalogInputInfo[] }>;
 }
 /** `GET /api/agents`: a selectable main-session agent. */
 export interface AgentInfo {

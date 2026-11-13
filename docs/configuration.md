@@ -674,6 +674,29 @@ prompt on every restart.
   [Terminal UI](/tui#mcp). In the web UI, **Settings → MCP servers → Grant MCP access** asks for
   an explicit confirmation and can remember the grant the same way; see [Web UI](/web).
 
+### MCP catalog source (`mcp.catalog`)
+
+Settings → MCP → **Explore** lists MCP servers from a local index that Alisio keeps in
+`<state home>/mcp/catalog.sqlite` and refreshes in the background (at most once an hour, never at
+startup). By default the source is the official registry (`https://registry.modelcontextprotocol.io`);
+the source and its base URL are set in **your user configuration** only.
+
+```json
+{
+  "mcp": {
+    "catalog": { "source": "official", "baseUrl": "https://registry.modelcontextprotocol.io" }
+  }
+}
+```
+
+- Both keys are optional. `source` selects the catalog adapter (only `official` ships today) and
+  `baseUrl` must be `https` (plain `http` is accepted for `localhost` mirrors) and must not contain
+  credentials.
+- A project `.alisio/config.json` cannot change them: they are read from the global layer only.
+- Changing the source needs a restart of `alisio serve`; the next update replaces the saved index
+  without mixing entries of the old source.
+
+
 ## Environment variables
 
 | Variable | Purpose |

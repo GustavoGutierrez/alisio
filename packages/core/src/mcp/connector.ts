@@ -4,9 +4,40 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type { McpServerSource, ServerConfig } from "../config.ts";
 import type { ToolRegistry } from "../core/registry.ts";
+import { trackProcess } from "../runtime/process-registry.ts";
 import { objectSchema } from "../tools/standard.ts";
 import { loadVersion } from "../version.ts";
 import { mapMcpCallResult, mapMcpResourceResult } from "./rich.ts";
+
+/**
+ * The SDK's stdio transport, with its child registered in the live process registry (D18) so a
+ * cancelled connection or a shutdown that skips `close()` still takes the MCP server with it. The
+ * entry is released when the child exits or the transport closes, never before: a stale entry
+ * could point at a reused pid.
+ */
+class TrackedStdioTransport extends StdioClientTransport {
+  private release: (() => void) | undefined;
+  override async start(): Promise<void> {
+    await super.start();
+    const pid = this.pid;
+    if (pid === null) return;
+    this.release = trackProcess(pid);
+    const child = (this as unknown as { _process?: { once(event: string, fn: () => void): void } })
+      ._process;
+    child?.once("exit", () => this.untrack());
+  }
+  override async close(): Promise<void> {
+    try {
+      await super.close();
+    } finally {
+      this.untrack();
+    }
+  }
+  private untrack(): void {
+    this.release?.();
+    this.release = undefined;
+  }
+}
 
 export type McpStatus =
   | "disabled"
@@ -290,6 +321,19 @@ export class McpConnector {
       );
       throw new Error(`MCP server "${name}" needs authentication; set ${config.bearerTokenEnv}`);
     }
+    if (
+      (config.transport === "stdio" && Object.keys(config.secretEnv ?? {}).length) ||
+      (config.transport === "http" && Object.keys(config.headers ?? {}).length)
+    ) {
+      // Secret references are accepted by the schema (D17) but nothing resolves them yet: never
+      // connect without the credentials the entry declares.
+      this.statuses.set(name, "failed");
+      this.diagnostics.set(
+        name,
+        "This server needs protected secrets, which this version cannot provide yet",
+      );
+      throw new Error(`MCP server "${name}" needs protected secrets that are not available yet`);
+    }
     this.statuses.set(name, "connecting");
     this.diagnostics.delete(name);
     const client = new Client(
@@ -300,7 +344,7 @@ export class McpConnector {
     const generation = Symbol(name);
     const transport =
       config.transport === "stdio"
-        ? new StdioClientTransport(
+        ? new TrackedStdioTransport(
             (() => {
               const env = Object.fromEntries(
                 ["PATH", "HOME", "SystemRoot", ...config.envAllow].flatMap((key) =>

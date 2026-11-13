@@ -14,7 +14,9 @@ import {
   cycleableAgents,
   hashProjectConfig,
   isSettableSettingKey,
+  McpConfigError,
   type McpServerInfo,
+  type McpShadowedServer,
   type PluginCatalogEntry,
   pluginPrefix,
   resolveActiveAgent,
@@ -101,6 +103,19 @@ export class WorkspaceRecycler {
   idle(id: string): void {
     if (!this.pending.has(id) || this.busy(id)) return;
     void this.request(id).catch(() => {});
+  }
+
+  /**
+   * After a change to a GLOBAL MCP entry: recycles every other open workspace that runs that
+   * entry (a busy one is deferred until it is idle). Each workspace keeps its own connector, so
+   * only the configuration is shared, never a process or a session.
+   */
+  async requestSharing(exceptId: string, name: string): Promise<void> {
+    for (const entry of this.ctx.workspaces.entries()) {
+      if (entry.id === exceptId) continue;
+      if (entry.app.config.mcpSources[name]?.kind !== "global") continue;
+      await this.request(entry.id).catch(() => undefined);
+    }
   }
 
   announce(workspaceId: string, scopes: CatalogScope[]): void {
@@ -196,7 +211,7 @@ function skillInfo(skill: ReturnType<OpenWorkspace["app"]["skillCatalog"]>[numbe
 }
 
 /** MCP server status without the command line, arguments or URL (they may carry tokens). */
-function mcpWire(info: McpServerInfo): McpServerWire {
+function mcpWire(info: McpServerInfo, shadowed: McpShadowedServer[] = []): McpServerWire {
   return {
     name: info.name,
     displayName: info.displayName,
@@ -207,6 +222,17 @@ function mcpWire(info: McpServerInfo): McpServerWire {
     capabilities: [...info.capabilities],
     counts: { ...info.counts },
     ...(info.diagnostic ? { diagnostic: info.diagnostic } : {}),
+    effective: true,
+    editable: !!info.source.file,
+    ...(shadowed.length
+      ? {
+          shadows: shadowed.map((hidden) => ({
+            source: hidden.source.kind,
+            enabled: hidden.enabled,
+            transport: hidden.transport,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -214,7 +240,9 @@ function mcpOverview(opened: OpenWorkspace): McpOverview {
   return {
     permission: opened.app.mcpRuntimePermission(),
     persisted: opened.app.mcpAllowPersisted(),
-    servers: opened.app.mcp.list().map(mcpWire),
+    servers: opened.app.mcp
+      .list()
+      .map((info) => mcpWire(info, opened.app.config.mcpShadowed?.[info.name])),
   };
 }
 
@@ -328,13 +356,24 @@ export function registerManagementRoutes(
         "mcp_not_permitted",
         "Grant MCP access for this workspace first (MCP servers run with your user privileges)",
       );
+    const global = opened.app.config.mcpSources[name]?.kind === "global";
     try {
       await opened.app.setMcpEnabled(name, input.enabled, connect);
-    } catch {
-      // A failed connection is reported through the server's status and diagnostic.
+    } catch (error) {
+      // A refused write is the caller's answer; a failed connection is reported through the
+      // server's status and diagnostic.
+      if (error instanceof McpConfigError)
+        throw new HttpError(
+          error.code === "mcp_config_invalid" ? "validation_failed" : error.code,
+          error.message,
+        );
     }
+    // A global entry is shared: every other open workspace that uses it picks the change up.
+    if (global) await recycler.requestSharing(opened.id, name);
     recycler.announce(opened.id, ["mcp"]);
-    return { body: mcpWire(opened.app.mcp.info(name)) };
+    return {
+      body: mcpWire(opened.app.mcp.info(name), opened.app.config.mcpShadowed?.[name]),
+    };
   });
 
   router.post("/api/mcp/consent", async ({ req }) => {

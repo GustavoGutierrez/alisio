@@ -34,6 +34,17 @@ const safeUrl = z
     { message: "must be an HTTP(S) URL without credentials" },
   );
 const environment = z.record(z.string(), z.string());
+/**
+ * A reference to a secret held outside the configuration file (D17): `secret` names an entry of
+ * the protected secret store, `env` names an environment variable. The file never carries the
+ * value. Parsed and preserved today; resolved only by the installer phases that add the store.
+ */
+const secretReference = z.union([
+  z.object({ secret: z.string().trim().min(1) }).strict(),
+  z.object({ env: z.string().trim().min(1) }).strict(),
+]);
+const secretEnvironment = z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), secretReference);
+const secretHeaders = z.record(z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/), secretReference);
 const stdioServerSchema = z
   .object({
     transport: z.literal("stdio"),
@@ -42,6 +53,7 @@ const stdioServerSchema = z
     args: z.array(z.string()).default([]),
     envAllow: z.array(z.string()).default([]),
     env: environment.default({}),
+    secretEnv: secretEnvironment.optional(),
   })
   .strict();
 const httpServerSchema = z
@@ -50,6 +62,7 @@ const httpServerSchema = z
     enabled: z.boolean().default(true),
     url: safeUrl,
     bearerTokenEnv: z.string().trim().min(1).optional(),
+    headers: secretHeaders.optional(),
   })
   .strict();
 const serverSchema = z.discriminatedUnion("transport", [stdioServerSchema, httpServerSchema]);
@@ -62,6 +75,7 @@ const compatibleServerSchema = z.union([
       args: z.array(z.string()).default([]),
       envAllow: z.array(z.string()).default([]),
       env: environment.default({}),
+      secretEnv: secretEnvironment.optional(),
     })
     .strict()
     .transform((server) => ({ ...server, transport: "stdio" as const })),
@@ -70,6 +84,7 @@ const compatibleServerSchema = z.union([
       url: safeUrl,
       enabled: z.boolean().default(true),
       bearerTokenEnv: z.string().trim().min(1).optional(),
+      headers: secretHeaders.optional(),
     })
     .strict()
     .transform((server) => ({ ...server, transport: "http" as const })),
@@ -188,6 +203,17 @@ const configObjectSchema = z
          * Only the user (global) configuration layer is consulted; a project value is ignored.
          */
         allow: z.boolean().optional(),
+        /**
+         * Global-only: which catalog source feeds Settings → MCP → Explore (default: the official
+         * registry) and its base URL (HTTPS). A project layer cannot set these.
+         */
+        catalog: z
+          .object({
+            source: z.string().trim().min(1).optional(),
+            baseUrl: z.string().trim().min(1).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .default({ servers: {} }),
@@ -797,7 +823,25 @@ export interface McpServerSource {
   file?: string;
   form: "canonical" | "alias";
 }
-export type LoadedConfig = Config & { mcpSources: Record<string, McpServerSource> };
+/** A lower-layer MCP entry hidden by a higher layer of the same name (project over global). */
+export interface McpShadowedServer {
+  source: McpServerSource;
+  enabled: boolean;
+  transport: "stdio" | "http";
+}
+export type LoadedConfig = Config & {
+  mcpSources: Record<string, McpServerSource>;
+  /** Entries a project/explicit layer hides, by name; absent when nothing is hidden. */
+  mcpShadowed?: Record<string, McpShadowedServer[]>;
+};
+/** Validates one raw `mcp.servers` entry (canonical or compatible form) as the loader does. */
+export function parseMcpServerEntry(value: unknown): ServerConfig {
+  return compatibleServerSchema.parse(value);
+}
+/** The shape of a valid MCP server name (`mcp.servers` key). */
+export function isValidMcpServerName(name: string): boolean {
+  return serverName.test(name);
+}
 export interface ConfigProvenance {
   selectedLayer?: {
     kind: "project" | "explicit";
@@ -1042,6 +1086,7 @@ export async function loadConfigWithProvenance(
   global.config.skillOverrides = {};
   let config = global.config;
   let mcpSources = global.sources;
+  const mcpShadowed: Record<string, McpShadowedServer[]> = {};
   // Parsed `provider.model` of the selected layer itself (before env/CLI overrides), used to
   // decide whether its legacy root `provider` is usable against a saved `/connect` profile.
   let selectedLegacyModel = "";
@@ -1179,6 +1224,15 @@ export async function loadConfigWithProvenance(
         ...config.mcp,
         servers: { ...config.mcp.servers, ...selected.config.mcp.servers },
       };
+    for (const name of Object.keys(selected.sources)) {
+      const hidden = global.config.mcp.servers[name];
+      const hiddenSource = global.sources[name];
+      if (hidden && hiddenSource)
+        mcpShadowed[name] = [
+          ...(mcpShadowed[name] ?? []),
+          { source: hiddenSource, enabled: hidden.enabled, transport: hidden.transport },
+        ];
+    }
     mcpSources = { ...mcpSources, ...selected.sources };
     config = overlaid;
   } else if (selectedFile) {
@@ -1197,7 +1251,11 @@ export async function loadConfigWithProvenance(
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("baseURL must be an HTTP(S) URL without credentials");
   return {
-    config: { ...config, mcpSources },
+    config: {
+      ...config,
+      mcpSources,
+      ...(Object.keys(mcpShadowed).length ? { mcpShadowed } : {}),
+    },
     provenance: {
       ...(selectedFile
         ? {
@@ -1223,56 +1281,6 @@ export async function loadConfig(
   } = {},
 ): Promise<LoadedConfig> {
   return (await loadConfigWithProvenance(workspace, options)).config;
-}
-
-/** Atomically toggles one MCP server in the form and file that defined it. */
-export async function setMcpServerEnabled(input: {
-  source: McpServerSource;
-  name: string;
-  enabled: boolean;
-}): Promise<string> {
-  if (!input.source.file) throw new Error("This MCP server is managed by its registering plugin");
-  const file = input.source.file;
-  const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    throw new Error("Alisio configuration must be a JSON object");
-  const raw = parsed as Record<string, unknown>;
-  const container =
-    input.source.form === "alias"
-      ? raw.mcpServers
-      : raw.mcp && typeof raw.mcp === "object" && !Array.isArray(raw.mcp)
-        ? (raw.mcp as Record<string, unknown>).servers
-        : undefined;
-  if (!container || typeof container !== "object" || Array.isArray(container))
-    throw new Error(
-      `MCP server "${input.name}" is no longer present in its defining configuration`,
-    );
-  const current = (container as Record<string, unknown>)[input.name];
-  if (!current || typeof current !== "object" || Array.isArray(current))
-    throw new Error(
-      `MCP server "${input.name}" is no longer present in its defining configuration`,
-    );
-  (container as Record<string, unknown>)[input.name] = {
-    ...(current as Record<string, unknown>),
-    enabled: input.enabled,
-  };
-  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  const handle = await open(temporary, "wx", 0o600);
-  try {
-    await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await rename(temporary, file);
-    await chmod(file, 0o600);
-  } catch (error) {
-    await unlink(temporary).catch(() => {});
-    throw error;
-  }
-  return file;
 }
 
 /** Atomically sets or clears the global `mcp.allow` consent preference in the user config file. */

@@ -54,7 +54,11 @@ function unknownKey(
  * configuration hash, so overriding them would change behavior without changing `configHash`).
  */
 export function applyConfigOverrides(base: Config, overrides: Record<string, unknown>): Config {
-  const { mcpSources: _sources, ...plain } = base as Config & { mcpSources?: unknown };
+  const {
+    mcpSources: _sources,
+    mcpShadowed: _shadowed,
+    ...plain
+  } = base as Config & { mcpSources?: unknown; mcpShadowed?: unknown };
   const draft = JSON.parse(JSON.stringify(plain)) as Record<string, unknown>;
   const reference = JSON.parse(JSON.stringify(plain)) as Record<string, unknown>;
   for (const [key, value] of Object.entries(overrides)) {

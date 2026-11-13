@@ -35,7 +35,6 @@ import {
   type SettableSettingKey,
   setConfigValue,
   setGlobalMcpAllow,
-  setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
   stateHome,
@@ -69,6 +68,7 @@ import { SqliteStateStore } from "./forge/state-store.ts";
 import { GoalService } from "./goal/service.ts";
 import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
+import { setMcpServerEnabled } from "./mcp/config-writer.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import { currentPlan } from "./plan/state.ts";
 import { pluginCreatorProjectOf } from "./plugins/creator/paths.ts";
@@ -1784,7 +1784,13 @@ export async function createApplication(options: AppOptions = {}) {
         if (options.readOnly) throw new Error("MCP changes are unavailable under --read-only");
         const source = config.mcpSources[id];
         if (!source) throw new Error(`Unknown MCP server: ${id}`);
-        await setMcpServerEnabled({ source, name: id, enabled });
+        await setMcpServerEnabled({
+          source,
+          name: id,
+          enabled,
+          workspace,
+          sessionTrusted: !!options.trustProject || !!options.config,
+        });
         await mcp.setEnabled(
           id,
           enabled,

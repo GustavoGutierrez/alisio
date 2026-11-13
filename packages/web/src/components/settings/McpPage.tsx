@@ -5,10 +5,14 @@
  * tokens); the server does not send them.
  */
 import type { McpServerWire } from "@alisio/sdk";
-import { useState } from "preact/hooks";
+import type { ComponentType } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, showToast } from "../../store/app.ts";
 import { Icon } from "../icons.tsx";
+import { nextTab } from "./catalog-model.ts";
+import css from "./mcp-explore/explore.module.css";
+import { xs } from "./mcp-explore/strings.ts";
 import styles from "./settings.module.css";
 import {
   errorMessage,
@@ -58,7 +62,67 @@ function ConsentDialog(props: { onCancel: () => void; onGrant: (remember: boolea
   );
 }
 
+type McpTab = "mine" | "explore";
+const MCP_TABS: readonly McpTab[] = ["mine", "explore"];
+
+/** Settings → MCP: the connected servers and, in a lazily loaded chunk, the catalog to explore. */
 export function McpPage() {
+  const workspace = settingsWorkspace();
+  const [tab, setTab] = useState<McpTab>("mine");
+  const [Explore, setExplore] = useState<ComponentType | undefined>();
+  useEffect(() => {
+    if (tab !== "explore" || Explore) return;
+    void import("./mcp-explore/ExploreView.tsx").then((m) => setExplore(() => m.ExploreView));
+  }, [tab, Explore]);
+  const select = (next: McpTab) => {
+    setTab(next);
+    queueMicrotask(() => document.getElementById(`mcp-tab-${next}`)?.focus());
+  };
+  return (
+    <>
+      <PageIntro title={t("settings.mcp")} body={t("mcp.lead")} workspace={workspace?.path} />
+      <div class={css.tabs} role="tablist" aria-label={xs("tab.label")}>
+        {MCP_TABS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`mcp-tab-${id}`}
+            class={css.tab}
+            aria-selected={tab === id}
+            aria-controls={`mcp-panel-${id}`}
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => setTab(id)}
+            onKeyDown={(event) => {
+              const next = nextTab(MCP_TABS, tab, event.key);
+              if (next) {
+                event.preventDefault();
+                select(next);
+              }
+            }}
+          >
+            {xs(id === "mine" ? "tab.mine" : "tab.explore")}
+          </button>
+        ))}
+      </div>
+      <div
+        role="tabpanel"
+        id="mcp-panel-mine"
+        aria-labelledby="mcp-tab-mine"
+        hidden={tab !== "mine"}
+      >
+        <ConnectedServers />
+      </div>
+      {tab === "explore" ? (
+        <div role="tabpanel" id="mcp-panel-explore" aria-labelledby="mcp-tab-explore">
+          {Explore ? <Explore /> : <p class={styles.note}>{xs("state.loading")}</p>}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ConnectedServers() {
   const workspace = settingsWorkspace();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
@@ -101,7 +165,6 @@ export function McpPage() {
   const granted = data?.permission === "granted";
   return (
     <>
-      <PageIntro title={t("settings.mcp")} body={t("mcp.lead")} workspace={workspace?.path} />
       {data ? (
         <div class={styles.banner} data-tone={granted ? "ok" : "warn"}>
           <span>

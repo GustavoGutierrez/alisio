@@ -15,9 +15,12 @@ import {
   BackgroundTaskStore,
   BlobStore,
   CapabilityGrants,
+  createCatalogService,
   GoalStore,
+  type McpCatalogService,
   PROCESS_SWEEP_GRACE_MS,
   ProviderSettingsStore,
+  readGlobalCatalogConfig,
   redactCredentials,
   SQLiteStore,
   stateHome,
@@ -63,6 +66,7 @@ import { registerGoalRoutes } from "./routes/goal.ts";
 import { registerHealthRoutes, type ServerStats } from "./routes/health.ts";
 import { registerIconThemeRoutes } from "./routes/icon-theme.ts";
 import { registerManagementRoutes, WorkspaceRecycler } from "./routes/management.ts";
+import { registerMcpCatalogRoutes } from "./routes/mcp-catalog.ts";
 import { registerPluginAppRoutes } from "./routes/plugin-apps.ts";
 import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.ts";
 import { registerPluginCreatorRoutes } from "./routes/plugin-creator.ts";
@@ -138,6 +142,12 @@ export interface ServerOptions {
    * policy flags are the capability ceiling of every web session.
    */
   app?: ServerAppOptions;
+  /**
+   * The MCP catalog service (specs/030). Defaults to the configured source (the official registry)
+   * with its index under the state home, opened lazily on first use. Tests inject one backed by a
+   * fake source.
+   */
+  mcpCatalog?: McpCatalogService;
   /** Listed as a workspace even before it has sessions (the CLI passes its cwd). */
   defaultWorkspace?: string;
   /**
@@ -242,6 +252,11 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   let guard: AuthGuard | undefined;
   let closing = false;
   const base = options.app ?? {};
+  // The MCP catalog index opens on first use and syncs in the background: it never delays startup.
+  // Under --read-only it only serves what is already saved.
+  const mcpCatalog =
+    options.mcpCatalog ??
+    createCatalogService({ source: readGlobalCatalogConfig(), autoSync: !base.readOnly });
   // Server-level connection to the shared session database (lists, metadata, snapshots).
   const dbPath = base.db ?? join(stateHome(), "sessions.sqlite");
   const catalog = new SQLiteStore(dbPath);
@@ -613,6 +628,10 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerTaskRoutes(router, { sessions });
   registerApprovalRoutes(router, { approvals, interactions });
   registerManagementRoutes(router, management, recycler);
+  registerMcpCatalogRoutes(router, {
+    catalog: mcpCatalog,
+    ...(base.readOnly ? { readOnly: true } : {}),
+  });
   const supervised = options.restart?.supervised ?? process.env.ALISIO_SUPERVISED === "1";
   registerRestartRoutes(router, {
     ...(base.readOnly ? { readOnly: true } : {}),
@@ -766,6 +785,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     });
   } catch (error) {
     clearInterval(sweeper);
+    mcpCatalog.close();
     catalog.close();
     throw error;
   }
@@ -804,6 +824,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
           server.closeAllConnections();
           server.close(() => resolve());
         });
+        mcpCatalog.close();
         catalog.close();
         logger.info("server stopped", { ms: Date.now() - began });
       })();

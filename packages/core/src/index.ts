@@ -230,13 +230,14 @@ export {
   loadConfig,
   loadConfigWithProvenance,
   type McpServerSource,
+  type McpShadowedServer,
   OCI_IMAGE_PATTERN,
   overridesSavedProviderProfile,
+  parseMcpServerEntry,
   type SettableSettingInfo,
   type SettableSettingKey,
   setConfigValue,
   setGlobalMcpAllow,
-  setMcpServerEnabled,
   setProjectPluginEnabled,
   setProjectSkillEnabled,
   settableSettings,
@@ -490,12 +491,53 @@ export {
 } from "./forge/scratch-files.ts";
 export * from "./goal/index.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
+export { type McpIdentity, mcpIdentity } from "./mcp/alias.ts";
+export { assessEntry } from "./mcp/catalog/availability.ts";
+export { CATEGORY_IDS, CATEGORY_LABELS, type CategoryId } from "./mcp/catalog/categories.ts";
+export { type CategoryClassifier, createRuleClassifier } from "./mcp/catalog/classifier.ts";
+export { readGlobalCatalogConfig } from "./mcp/catalog/config.ts";
+export {
+  type CatalogServiceOptions,
+  createCatalogService,
+  type McpCatalogService,
+} from "./mcp/catalog/service.ts";
+export {
+  type CatalogEntry,
+  type CatalogSource,
+  CatalogSourceError,
+  type CatalogSourcePage,
+  type ListPageRequest,
+  type RejectedEntry,
+} from "./mcp/catalog/source.ts";
+export {
+  type CatalogSourceConfig,
+  createSourceFactory,
+  type SourceBuilder,
+  type SourceFactory,
+} from "./mcp/catalog/source-factory.ts";
+export { OfficialRegistrySource } from "./mcp/catalog/sources/official-registry.ts";
+export type { CatalogQuery } from "./mcp/catalog/store.ts";
+export {
+  McpConfigError,
+  type McpConfigErrorCode,
+  type McpConfigTarget,
+  type McpConfigWriteResult,
+  readMcpConfigRevision,
+  removeMcpServer,
+  setMcpServerEnabled,
+  writeMcpServer,
+} from "./mcp/config-writer.ts";
 export {
   McpConnector,
   type McpServerInfo,
   type McpStatus,
   type McpToolInfo,
 } from "./mcp/connector.ts";
+export {
+  createProjectOverride,
+  type McpRemovalPreview,
+  previewMcpRemoval,
+} from "./mcp/scopes.ts";
 export {
   describePermissionStatus,
   type EffectState,
