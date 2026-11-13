@@ -16,8 +16,9 @@
 import { existsSync } from "node:fs";
 import { mkdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { stateHome } from "../../config.ts";
+import { parseMcpServerEntry, stateHome } from "../../config.ts";
 import { isProcessAlive } from "../../runtime/process.ts";
+import { oauthSecretIds } from "../auth/oauth-provider.ts";
 import type { CatalogEntry } from "../catalog/source.ts";
 import {
   McpConfigError,
@@ -26,9 +27,18 @@ import {
   removeMcpServer,
   writeMcpServer,
 } from "../config-writer.ts";
+import { connectionFingerprint } from "../connection-test.ts";
 import { createUrlGuard, type UrlGuard, UrlRejectedError } from "../net-guard.ts";
 import type { RuntimeEnvironment } from "../runtime.ts";
 import { MAX_INSTALL_TIMEOUT_MS, readInstallTimeoutMs } from "./config.ts";
+import {
+  type BindingConfiguration,
+  type ConfigurationContext,
+  type ConfigurationPatch,
+  type ConfigurationSaved,
+  readConfiguration,
+  saveConfiguration,
+} from "./configure.ts";
 import { buildNpmEntry, buildRemoteEntry, collectAnswers, hasPlaceholder } from "./entry.ts";
 import { McpInstallError } from "./errors.ts";
 import {
@@ -700,6 +710,7 @@ export class McpInstaller {
             secretIds: [...new Set([...(previousBinding?.secretIds ?? []), ...secretIds])],
             ...(origin ? { origin } : {}),
             ...(plan.title ? { title: plan.title } : {}),
+            credentialRevision: previousBinding?.credentialRevision ?? 0,
             createdAt: previousBinding?.createdAt ?? now,
             updatedAt: now,
           },
@@ -757,6 +768,16 @@ export class McpInstaller {
       ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
       counts: result.counts,
       capabilities: result.capabilities,
+      // What this result describes, so a later edit, key change or update marks it out of date.
+      ...(record.journal.config?.entry
+        ? {
+            fingerprint: connectionFingerprint({
+              server: parseMcpServerEntry(record.journal.config.entry),
+              version: plan.registryVersion,
+              credentialRevision: this.store.binding(bindingId)?.credentialRevision ?? 0,
+            }),
+          }
+        : {}),
     };
     this.store.setBindingTest(bindingId, test);
     const binding = this.store.binding(bindingId);
@@ -773,12 +794,12 @@ export class McpInstaller {
         status: result.status,
         ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
         // A remote service that refuses without any saved credential probably wants a sign-in,
-        // which arrives in a later phase: say so honestly instead of "failed".
+        // (OAuth, phase 4): say so honestly instead of "failed".
         ...(!connected &&
         result.status === "needs-authentication" &&
         plan.method === "remote" &&
         !binding?.secretIds.length
-          ? { signIn: "coming-soon" as const }
+          ? { signIn: "available" as const }
           : {}),
         counts: result.counts,
         capabilities: result.capabilities,
@@ -801,8 +822,57 @@ export class McpInstaller {
     return this.present ? this.store.binding(id) : undefined;
   }
 
+  /**
+   * Keeps the newest result as the binding's last test (with the date of the last PASS, which a
+   * later failure never erases) and adds it to the history (20 results, 30 days).
+   */
   recordTest(bindingId: string, test: BindingTestRecord): void {
-    if (this.binding(bindingId)) this.store.setBindingTest(bindingId, test);
+    const previous = this.binding(bindingId)?.lastTest;
+    if (!this.binding(bindingId)) return;
+    const lastPassedAt =
+      test.status === "passed"
+        ? test.at
+        : (previous?.lastPassedAt ?? (previous?.status === "passed" ? previous.at : undefined));
+    const record: BindingTestRecord = { ...test, ...(lastPassedAt ? { lastPassedAt } : {}) };
+    this.store.transaction(() => {
+      this.store.setBindingTest(bindingId, record);
+      this.store.addTest(bindingId, record);
+    });
+  }
+
+  private configurationDeps() {
+    return {
+      secrets: this.options.secrets,
+      entries: this.options.entries,
+      binding: (id: string) => this.binding(id),
+      locked: <T>(key: string, fn: () => Promise<T>) => this.mutex.run(key, fn),
+      saveBinding: (binding: BindingRecord) => this.store.putBinding(binding, { replace: true }),
+      bumpCredentialRevision: (id: string) => this.store.bumpCredentialRevision(id),
+    };
+  }
+
+  /** The typed settings form of an installed integration (secrets only as saved / not saved). */
+  configuration(bindingId: string, context: ConfigurationContext): Promise<BindingConfiguration> {
+    return readConfiguration(this.configurationDeps(), bindingId, context);
+  }
+
+  /** Validates and saves an edit under the revision the form was read from. */
+  configure(
+    bindingId: string,
+    patch: ConfigurationPatch,
+    context: ConfigurationContext,
+  ): Promise<ConfigurationSaved> {
+    return saveConfiguration(this.configurationDeps(), bindingId, patch, context);
+  }
+
+  /** Past results of one binding, newest first. */
+  testHistory(bindingId: string): BindingTestRecord[] {
+    return this.present ? this.store.tests(bindingId) : [];
+  }
+
+  /** A saved key was replaced: earlier test results no longer describe the current credentials. */
+  bumpCredentialRevision(bindingId: string): void {
+    if (this.binding(bindingId)) this.store.bumpCredentialRevision(bindingId);
   }
 
   /**
@@ -838,7 +908,15 @@ export class McpInstaller {
     );
     await input.hooks.detach(binding.alias).catch(() => {});
     this.store.deleteBinding(binding.id);
-    if (input.removeSecrets) await this.options.secrets.deleteMany(binding.secretIds);
+    if (input.removeSecrets)
+      await this.options.secrets.deleteMany([
+        ...binding.secretIds,
+        ...oauthSecretIds({
+          scope: binding.scope,
+          alias: binding.alias,
+          ...(binding.workspacePath ? { workspacePath: binding.workspacePath } : {}),
+        }),
+      ]);
     const artifact = await releaseArtifact(this.store, this.artifactsRoot, binding.artifactId);
     return {
       alias: binding.alias,

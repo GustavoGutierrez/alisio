@@ -495,7 +495,7 @@ describe("remote services (public or referenced HTTP)", () => {
     const { job } = await install(installer, hooks, globalRequest("io.example/cloud"));
     expect(job).toMatchObject({
       state: "completed",
-      result: { connected: false, status: "needs-authentication", signIn: "coming-soon" },
+      result: { connected: false, status: "needs-authentication", signIn: "available" },
     });
     expect(installer.bindings()).toHaveLength(1);
   });

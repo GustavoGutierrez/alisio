@@ -21,6 +21,7 @@ import {
   GoalStore,
   type McpCatalogService,
   type McpInstaller,
+  McpOAuth,
   PROCESS_SWEEP_GRACE_MS,
   ProviderSettingsStore,
   readGlobalCatalogConfig,
@@ -161,6 +162,11 @@ export interface ServerOptions {
   mcpInstaller?: McpInstaller;
   /** Protected store of MCP secrets (default: the 0600 file under the config home). */
   mcpSecrets?: SecretStore;
+  /**
+   * OAuth sign-in of remote MCP servers, shared by every workspace (default: public https
+   * authorization servers only, tokens in `mcpSecrets`). Tests inject one with a permissive guard.
+   */
+  mcpOAuth?: McpOAuth;
   /** Listed as a workspace even before it has sessions (the CLI passes its cwd). */
   defaultWorkspace?: string;
   /**
@@ -266,9 +272,14 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   let closing = false;
   const mcpSecrets = options.mcpSecrets ?? new FileSecretStore();
   // Every workspace application resolves MCP secret references from the store the installer writes.
+  const mcpOAuth =
+    options.mcpOAuth ??
+    options.app?.mcpOAuth ??
+    new McpOAuth({ store: options.app?.mcpSecretStore ?? mcpSecrets });
   const base = {
     ...(options.app ?? {}),
     mcpSecretStore: options.app?.mcpSecretStore ?? mcpSecrets,
+    mcpOAuth,
   };
   // The MCP catalog index opens on first use and syncs in the background: it never delays startup.
   // Under --read-only it only serves what is already saved.
@@ -635,6 +646,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     base,
     broadcast: (frame: ServerFrame) => hub.broadcast(frame),
     bindings: () => mcpInstaller.bindings(),
+    ...(options.localBrowser ? { localBrowser: true } : {}),
   };
   recycler = new WorkspaceRecycler(management);
   const reloader = recycler;
@@ -653,12 +665,14 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   registerManagementRoutes(router, management, recycler);
   registerMcpCatalogRoutes(router, {
     catalog: mcpCatalog,
+    ...(options.localBrowser ? { localBrowser: true } : {}),
     ...(base.readOnly ? { readOnly: true } : {}),
   });
   registerMcpInstallRoutes(router, {
     installer: mcpInstaller,
     management,
     recycler,
+    oauth: mcpOAuth,
     ...(base.readOnly ? { readOnly: true } : {}),
   });
   const supervised = options.restart?.supervised ?? process.env.ALISIO_SUPERVISED === "1";
@@ -847,6 +861,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         hub.closeAll();
         // Running installs stop and undo themselves before their workspaces go away.
         await mcpInstaller.close().catch(() => {});
+        await mcpOAuth.close().catch(() => {});
         await workspaces.closeAll();
         // No command may outlive the server: groups that ignored SIGTERM (or that a command left
         // running with `&`) get a short grace, then SIGKILL, before close resolves.

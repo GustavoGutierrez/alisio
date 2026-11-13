@@ -208,14 +208,14 @@ export function jobSteps(
   }));
 }
 
-export type JobAction = "cancel" | "close" | "retry" | "test";
+export type JobAction = "cancel" | "close" | "retry" | "test" | "sign-in";
 export interface Outcome {
   kind:
     | "waiting-consent"
     | "running"
     | "connected"
     | "needs-attention"
-    | "sign-in-soon"
+    | "sign-in"
     | "failed"
     | "cancelled";
   actions: JobAction[];
@@ -227,7 +227,8 @@ export function jobOutcome(job: McpInstallJob): Outcome {
       return { kind: "waiting-consent", actions: ["cancel"] };
     case "completed":
       if (job.result?.connected) return { kind: "connected", actions: ["close"] };
-      if (job.result?.signIn === "coming-soon") return { kind: "sign-in-soon", actions: ["close"] };
+      if (job.result?.signIn === "available")
+        return { kind: "sign-in", actions: ["sign-in", "close"] };
       return { kind: "needs-attention", actions: ["test", "close"] };
     case "failed":
       return { kind: "failed", actions: ["retry", "close"] };
@@ -249,7 +250,11 @@ export interface Badges {
   testedAt?: string;
 }
 
-export function badgesOf(server: McpServerWire, workspaceName: string): Badges {
+export function badgesOf(
+  server: McpServerWire,
+  workspaceName: string,
+  options: { serverHost?: boolean } = {},
+): Badges {
   const execution: Execution =
     server.binding?.execution ??
     server.execution ??
@@ -260,7 +265,11 @@ export function badgesOf(server: McpServerWire, workspaceName: string): Badges {
     execution:
       execution === "remote"
         ? { key: "badge.remote", icon: "cloud" }
-        : { key: "badge.local", icon: "computer" },
+        : {
+            // A web or headless server runs the program on ITS computer, not the browser's (UX-02).
+            key: options.serverHost ? "badge.localServer" : "badge.local",
+            icon: "computer",
+          },
     scope:
       scopeKind === "project"
         ? { key: "badge.scopeProject", params: { name: workspaceName } }
@@ -268,14 +277,18 @@ export function badgesOf(server: McpServerWire, workspaceName: string): Badges {
     install:
       server.status === "connected"
         ? "state.connected"
-        : server.status === "failed" || server.status === "needs-authentication"
-          ? "state.pending"
-          : "state.installed",
+        : server.status === "needs-authentication" && server.auth
+          ? "state.signInNeeded"
+          : server.status === "failed" || server.status === "needs-authentication"
+            ? "state.pending"
+            : "state.installed",
     test: !test
       ? "test.unchecked"
-      : test.status === "passed" && server.status === "connected"
-        ? "test.ready"
-        : "test.attention",
+      : test.stale
+        ? "test.stale"
+        : test.status === "passed" && server.status === "connected"
+          ? "test.ready"
+          : "test.attention",
     ...(test ? { testedAt: test.at } : {}),
   };
 }

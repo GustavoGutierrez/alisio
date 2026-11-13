@@ -33,12 +33,27 @@ export interface ArtifactRecord {
   createdAt: string;
 }
 
+/** One step of a connection test, as stored (specs/030 UX-07). */
+export interface TestStepRecord {
+  id: "prepare" | "connect" | "authenticate" | "discover";
+  status: "passed" | "failed" | "skipped";
+}
+
 export interface BindingTestRecord {
-  status: "passed" | "failed" | "needs-authentication";
+  status: "passed" | "failed" | "cancelled" | "needs-authentication";
   at: string;
   diagnostic?: string;
   counts?: { tools: number; resources: number; prompts: number };
   capabilities?: string[];
+  /** Phase 4: identity of the run, its steps, what to do next and what it proved. */
+  testId?: string;
+  startedAt?: string;
+  steps?: TestStepRecord[];
+  recoveryAction?: "retry" | "sign-in" | "change-key" | "install-runtime" | "configure" | "turn-on";
+  /** Hash of the settings, version and credential revision this result was obtained with. */
+  fingerprint?: string;
+  /** The last time a test passed (kept when a later one fails). */
+  lastPassedAt?: string;
 }
 
 export interface BindingRecord {
@@ -59,6 +74,8 @@ export interface BindingRecord {
   origin?: string;
   title?: string;
   lastTest?: BindingTestRecord;
+  /** Bumped when a saved key is replaced, so an earlier test no longer counts as current. */
+  credentialRevision: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -102,7 +119,7 @@ export interface JobRecord {
     connected: boolean;
     status?: string;
     diagnostic?: string;
-    signIn?: "coming-soon";
+    signIn?: "available";
     counts?: { tools: number; resources: number; prompts: number };
     capabilities?: string[];
   };
@@ -165,6 +182,17 @@ const MIGRATIONS = [
     finished_at TEXT
   );
   `,
+  // Phase 4: connection-test history (at most 20 per binding, 30 days) and the credential revision.
+  `
+  ALTER TABLE bindings ADD COLUMN credential_rev INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE connection_tests(
+    id TEXT PRIMARY KEY,
+    binding_id TEXT NOT NULL,
+    at TEXT NOT NULL,
+    result TEXT NOT NULL
+  );
+  CREATE INDEX connection_tests_binding ON connection_tests(binding_id, at);
+  `,
 ];
 
 const json = <T>(value: unknown): T | undefined => {
@@ -206,6 +234,7 @@ function bindingOf(r: Row): BindingRecord {
     ...(text(r.origin) ? { origin: text(r.origin) as string } : {}),
     ...(text(r.title) ? { title: text(r.title) as string } : {}),
     ...(test ? { lastTest: test } : {}),
+    credentialRevision: Number(r.credential_rev ?? 0),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -323,7 +352,7 @@ export class InstallStore {
       .prepare(
         `${options.replace ? "INSERT OR REPLACE" : "INSERT"} INTO bindings(id, alias, registry_name, registry_version,
            source_id, method, execution, artifact_id, scope, workspace_path, secret_ids, origin, title,
-           last_test, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           last_test, credential_rev, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         b.id,
@@ -340,6 +369,7 @@ export class InstallStore {
         b.origin ?? null,
         b.title ?? null,
         b.lastTest ? JSON.stringify(b.lastTest) : null,
+        b.credentialRevision,
         b.createdAt,
         b.updatedAt,
       );
@@ -351,7 +381,40 @@ export class InstallStore {
       .run(JSON.stringify(test), test.at, id);
   }
 
+  bumpCredentialRevision(id: string): void {
+    this.db
+      .prepare("UPDATE bindings SET credential_rev = credential_rev + 1, updated_at=? WHERE id=?")
+      .run(new Date().toISOString(), id);
+  }
+
+  /** Stores a result, keeping the last 20 per binding and nothing older than 30 days. */
+  addTest(bindingId: string, test: BindingTestRecord, keep = 20, days = 30): void {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO connection_tests(id, binding_id, at, result) VALUES(?,?,?,?)",
+      )
+      .run(test.testId ?? crypto.randomUUID(), bindingId, test.at, JSON.stringify(test));
+    this.db
+      .prepare(
+        `DELETE FROM connection_tests WHERE binding_id=? AND (at < ? OR id NOT IN
+           (SELECT id FROM connection_tests WHERE binding_id=? ORDER BY at DESC, id DESC LIMIT ?))`,
+      )
+      .run(bindingId, new Date(Date.now() - days * 86_400_000).toISOString(), bindingId, keep);
+  }
+
+  /** Newest first. */
+  tests(bindingId: string): BindingTestRecord[] {
+    return this.db
+      .prepare("SELECT result FROM connection_tests WHERE binding_id=? ORDER BY at DESC, id DESC")
+      .all(bindingId)
+      .flatMap((row) => {
+        const parsed = json<BindingTestRecord>(row.result);
+        return parsed ? [parsed] : [];
+      });
+  }
+
   deleteBinding(id: string): void {
+    this.db.prepare("DELETE FROM connection_tests WHERE binding_id=?").run(id);
     this.db.prepare("DELETE FROM bindings WHERE id=?").run(id);
   }
 

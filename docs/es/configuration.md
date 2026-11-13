@@ -694,8 +694,41 @@ registra lo que posee en `<state home>/mcp/installations.sqlite`.
   `"mcp": { "install": { "timeoutSeconds": 300 } }` en su configuración de **usuario** (de 30 a 600; un
   valor de proyecto se ignora) para cambiarlo. Cancelar detiene todo el árbol de procesos y elimina lo que
   creó el trabajo.
-- Los métodos no compatibles (PyPI, OCI, MCPB, SSE heredado) y los servicios que exigen iniciar sesión
-  (OAuth llega en una fase posterior) se muestran con honestidad y con indicaciones manuales.
+- Los métodos no compatibles (PyPI, OCI, MCPB, SSE heredado) se muestran con honestidad y con
+  indicaciones manuales.
+
+#### Iniciar sesión en un servicio (OAuth)
+
+Un servicio remoto que no usa clave puede pedirle que inicie sesión. La fila de **Conectados** dice
+entonces **Falta iniciar sesión** y ofrece **Iniciar sesión**: Alisio descubre el servidor de autorización
+del servicio (RFC 9728 y RFC 8414), se registra, abre la página de inicio de sesión en su navegador con PKCE
+y un `state` aleatorio, y recibe la respuesta en un oyente de un solo uso ligado a `127.0.0.1` (el mismo
+ayudante de bucle local que el inicio de sesión de proveedores). Comprueba el emisor del servidor de
+autorización y de la respuesta, vincula el token al recurso protegido para el que se concedió y lo renueva
+solo. Los tokens, el cliente registrado y el verificador PKCE se guardan en el mismo `SecretStore` que las
+claves (`mcp-secrets.json`, modo `0600`, **sin cifrar**); nunca se escriben en la configuración, nunca los
+devuelve la API, nunca se registran en logs y solo se envían al origen al que pertenecen (no se siguen
+redirecciones). Un servidor de autorización en otro origen debe ser HTTPS público, como toda dirección que
+viene de un catálogo. **Cerrar sesión** borra solo los tokens locales: **no** se pide al servicio que los
+revoque. Un servidor local (stdio) nunca usa este flujo. Límites: el inicio de sesión vuelve al equipo donde
+se ejecuta Alisio, así que no puede terminar si su navegador está en otro equipo; se aplica a servidores
+instalados desde el catálogo.
+
+#### Comprobar, editar y actualizar
+
+- **Comprobar conexión** ejecuta una sesión diagnóstica aislada (30 segundos, cancelable): se conecta y
+  lista lo que el servicio anuncia (herramientas, recursos, plantillas) sin llamar a ninguna herramienta,
+  leer sus archivos ni enviar nada. Necesita el consentimiento MCP, porque un servidor local es un programa
+  que se ejecuta. Nunca toca la conexión activa, nunca registra herramientas dos veces y nunca activa una
+  integración desactivada. Se conservan los últimos 20 resultados (30 días); un resultado se marca
+  **desactualizado** cuando cambian la configuración, una clave guardada o la versión. Una comprobación
+  correcta demuestra que se conectó ahora, no que sea segura.
+- **Configurar** edita los campos que pidió la ficha del catálogo. Una clave guardada solo aparece como
+  *Clave guardada*; dejarla vacía la conserva, **Sustituir clave** guarda una nueva y cada valor se vuelve a
+  validar en el servidor. Si la configuración cambió mientras editaba, no se escribe nada y puede recargar
+  los cambios conservando su borrador no secreto.
+- **Actualizar** (paquetes instalados) planifica la versión nueva junto a la actual, la comprueba y
+  restaura la anterior si no conecta. Los servicios remotos se actualizan solos.
 
 ### Consentimiento global (`mcp.allow`)
 

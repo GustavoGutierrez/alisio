@@ -21,8 +21,10 @@ import {
   unsupportedKey,
 } from "../mcp-install/model.ts";
 import { ms } from "../mcp-install/strings.ts";
+import { mgs } from "../mcp-manage/strings.ts";
 import styles from "../settings.module.css";
 import { errorMessage, Pill, settingsWorkspace } from "../shared.tsx";
+import type { DetailCardProps } from "./DetailCard.tsx";
 import css from "./explore.module.css";
 import {
   DEFAULT_FILTERS,
@@ -58,11 +60,21 @@ export interface InstallHooks {
   /** The panel of the open card (rendered under it). */
   panel?: ComponentChildren;
   disabled?: boolean;
+  /** `name@version` of the card whose details are open, the toggle and the card (lazy). */
+  detailOpen?: string;
+  onDetails?: (item: McpCatalogItem) => void;
+  detail?: ComponentChildren;
 }
 
 const cardKey = (item: McpCatalogItem) => `${item.name}@${item.version}`;
 
-function Card(props: { item: McpCatalogItem; install?: InstallHooks }) {
+/** A web or headless server runs programs on ITS computer, not the browser's (UX-02). */
+const execKey = (execution: string, serverHost: boolean): ExploreStringKey =>
+  (execution === "local" && serverHost
+    ? "exec.localServer"
+    : `exec.${execution}`) as ExploreStringKey;
+
+function Card(props: { item: McpCatalogItem; install?: InstallHooks; serverHost?: boolean }) {
   const { item, install } = props;
   const reason = blockedText(item);
   const open = install?.open === cardKey(item);
@@ -77,7 +89,7 @@ function Card(props: { item: McpCatalogItem; install?: InstallHooks }) {
         <p class={css.cardName}>{item.name}</p>
         {item.description ? <p class={css.desc}>{item.description}</p> : null}
         <div class={css.badges}>
-          <Pill tone="off">{xs(`exec.${item.execution}` as ExploreStringKey)}</Pill>
+          <Pill tone="off">{xs(execKey(item.execution, !!props.serverHost))}</Pill>
           <span title={xs(`category.${item.category.method}` as ExploreStringKey)}>
             <Pill tone="off">{xs(`cat.${item.category.id}` as ExploreStringKey)}</Pill>
           </span>
@@ -86,19 +98,32 @@ function Card(props: { item: McpCatalogItem; install?: InstallHooks }) {
         </div>
         {reason ? <p class={css.reason}>{reason}</p> : null}
         {guidance ? <p class={css.reason}>{guidance}</p> : null}
+        {install?.detailOpen === cardKey(item) ? install.detail : null}
         {open ? install?.panel : null}
       </div>
-      {item.ready && install ? (
+      {install ? (
         <div class={css.install}>
-          <button
-            type="button"
-            class={styles.secondary}
-            disabled={install.disabled}
-            aria-expanded={open}
-            onClick={() => install.onOpen(item)}
-          >
-            {ms(actionKey(item.execution === "remote" ? "remote" : "local"))}
-          </button>
+          {install.onDetails ? (
+            <button
+              type="button"
+              class={styles.secondary}
+              aria-expanded={install.detailOpen === cardKey(item)}
+              onClick={() => install.onDetails?.(item)}
+            >
+              {mgs(install.detailOpen === cardKey(item) ? "detail.close" : "detail.open")}
+            </button>
+          ) : null}
+          {item.ready ? (
+            <button
+              type="button"
+              class={styles.secondary}
+              disabled={install.disabled}
+              aria-expanded={open}
+              onClick={() => install.onOpen(item)}
+            >
+              {ms(actionKey(item.execution === "remote" ? "remote" : "local"))}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -203,6 +228,7 @@ function CatalogList(props: {
           <Card
             key={cardKey(item)}
             item={item}
+            serverHost={!page.localBrowser}
             {...(props.install ? { install: props.install } : {})}
           />
         ))}
@@ -287,6 +313,8 @@ export function ExploreView() {
   const [scope, setScopeState] = useState<Scope>(savedScope ?? defaultScope(!!workspace));
   const [openKey, setOpenKey] = useState<string | undefined>();
   const [Panel, setPanel] = useState<ComponentType<InstallPanelProps> | undefined>();
+  const [detailKey, setDetailKey] = useState<string | undefined>();
+  const [Detail, setDetail] = useState<ComponentType<DetailCardProps> | undefined>();
   const setScope = (next: Scope) => {
     savedScope = next;
     setScopeState(next);
@@ -295,6 +323,10 @@ export function ExploreView() {
     setOpenKey(openKey === cardKey(item) ? undefined : cardKey(item));
     if (!Panel)
       void import("../mcp-install/InstallPanel.tsx").then((m) => setPanel(() => m.InstallPanel));
+  };
+  const detailsOf = (item: McpCatalogItem) => {
+    setDetailKey(detailKey === cardKey(item) ? undefined : cardKey(item));
+    if (!Detail) void import("./DetailCard.tsx").then((m) => setDetail(() => m.DetailCard));
   };
   const effectiveScope: Scope = workspaceName ? scope : "global";
   const where = ms(effectiveScope === "project" ? "scope.project" : "scope.global", {
@@ -418,7 +450,7 @@ export function ExploreView() {
             }
           >
             <option value="">{xs("filter.executionAll")}</option>
-            <option value="local">{xs("exec.local")}</option>
+            <option value="local">{xs(execKey("local", !state.page?.localBrowser))}</option>
             <option value="remote">{xs("exec.remote")}</option>
           </select>
         </label>
@@ -479,6 +511,27 @@ export function ExploreView() {
           ...(openKey ? { open: openKey } : {}),
           onOpen: openItem,
           disabled: !workspace,
+          ...(detailKey ? { detailOpen: detailKey } : {}),
+          onDetails: detailsOf,
+          detail:
+            Detail && detailKey
+              ? (() => {
+                  const item = state.page?.items.find((i) => cardKey(i) === detailKey);
+                  return item ? (
+                    <Detail
+                      key={detailKey}
+                      item={item}
+                      installLabel={ms(actionKey(item.execution === "remote" ? "remote" : "local"))}
+                      {...(workspace ? {} : { disabled: true })}
+                      onInstall={() => {
+                        setDetailKey(undefined);
+                        openItem(item);
+                      }}
+                      onClose={() => setDetailKey(undefined)}
+                    />
+                  ) : null;
+                })()
+              : undefined,
           panel:
             Panel && openKey
               ? (() => {

@@ -8,26 +8,42 @@
  */
 import { isAbsolute } from "node:path";
 import {
+  connectionFingerprint,
   type InstallJobView,
   type JobHooks,
   McpConfigError,
+  McpConnectionTestError,
   McpInstallError,
   type McpInstaller,
+  McpOAuth,
+  McpOAuthError,
   mcpConfigFile,
+  resolveSecretReference,
+  runConnectionTest,
+  type SignInView,
 } from "@alisio/core";
-import type { McpInstallJob, McpInstallPlan, McpUninstallResult } from "@alisio/sdk";
+import type {
+  McpBindingConfiguration,
+  McpConnectionTestResult,
+  McpInstallJob,
+  McpInstallPlan,
+  McpSignInFlow,
+  McpUninstallResult,
+} from "@alisio/sdk";
 import type { OpenWorkspace } from "../host/workspace-host.ts";
 import { readJson } from "../http/body.ts";
 import { HttpError } from "../http/errors.ts";
 import type { Router } from "../http/router.ts";
 import { is, validate } from "../schemas.ts";
 import type { ManagementContext, WorkspaceRecycler } from "./management.ts";
-import { mcpWire } from "./management.ts";
+import { mcpWireFor } from "./management.ts";
 
 export interface McpInstallContext {
   installer: McpInstaller;
   management: ManagementContext;
   recycler: WorkspaceRecycler;
+  /** Shared sign-in service (the flows are not tied to one workspace). */
+  oauth: McpOAuth;
   readOnly?: boolean;
 }
 
@@ -71,7 +87,7 @@ function toHttp(error: unknown): never {
 }
 
 export function registerMcpInstallRoutes(router: Router, ctx: McpInstallContext): void {
-  const { installer, management, recycler } = ctx;
+  const { installer, management, recycler, oauth } = ctx;
   const { workspaces } = management;
 
   const refuseReadOnly = () => {
@@ -318,54 +334,273 @@ export function registerMcpInstallRoutes(router: Router, ctx: McpInstallContext)
     }
   });
 
-  router.post("/api/mcp/bindings/:id/test", async ({ req, params }) => {
-    const input = validate<{ workspace: string }>(await readJson(req), {
-      workspace: { check: is.nonEmpty(4096), required: true },
-    });
-    refuseReadOnly();
-    const opened = await known(input.workspace);
+  // ---- Connection test (isolated diagnostic session) ------------------------------------------
+  const tests = new Map<string, { controller: AbortController; done: Promise<unknown> }>();
+
+  /** The binding of this workspace's server, or 404; never reveals another workspace's. */
+  function bindingOf(opened: OpenWorkspace, id: string) {
     const app = live(opened);
-    const binding = installer.binding(params.id ?? "");
+    const binding = installer.binding(id);
     if (
       !binding ||
       (binding.scope === "project" && binding.workspacePath !== opened.path) ||
       !app.config.mcpSources[binding.alias]
     )
       throw new HttpError("not_found", "MCP binding not found");
+    return { app, binding };
+  }
+
+  const wire = async (opened: OpenWorkspace, alias: string) =>
+    mcpWireFor(workspaces.get(opened.id) ?? opened, alias, installer.bindings());
+
+  router.post("/api/mcp/bindings/:id/test", async ({ req, params }) => {
+    const input = validate<{ workspace: string }>(await readJson(req), {
+      workspace: { check: is.nonEmpty(4096), required: true },
+    });
+    refuseReadOnly();
+    const opened = await known(input.workspace);
+    const { app, binding } = bindingOf(opened, params.id ?? "");
     if (app.mcpRuntimePermission() !== "granted")
       throw new HttpError(
         "mcp_not_permitted",
         "Grant MCP access for this workspace first (MCP servers run with your user privileges)",
       );
-    const before = app.mcp.info(binding.alias);
-    // A test never switches a disabled server on and never drops a connection that works.
-    if (before.enabled && before.status !== "connected")
-      await app.mcp.connect(binding.alias, AbortSignal.timeout(30_000)).catch(() => undefined);
-    const info = app.mcp.info(binding.alias);
-    installer.recordTest(binding.id, {
-      status:
-        info.status === "connected"
-          ? "passed"
-          : info.status === "needs-authentication"
-            ? "needs-authentication"
-            : "failed",
-      at: new Date().toISOString(),
-      ...(!info.enabled
-        ? { diagnostic: "Turn the integration on to test it" }
-        : info.diagnostic
-          ? { diagnostic: info.diagnostic }
+    const server = app.config.mcp.servers[binding.alias];
+    if (!server) throw new HttpError("not_found", "MCP binding not found");
+    // One check at a time per integration: a second click joins the one in progress.
+    const running = tests.get(binding.id);
+    if (running) await running.done;
+    else {
+      const controller = new AbortController();
+      const key = app.mcp.oauthKey(binding.alias);
+      const run = runConnectionTest({
+        server,
+        workspace: opened.path,
+        permission: app.mcpRuntimePermission(),
+        secrets: (reference) => resolveSecretReference(reference, app.mcpSecretStore),
+        ...(key && app.mcp.oauthCapable(binding.alias)
+          ? { oauth: app.mcpOAuth, oauthKey: key }
           : {}),
-      counts: info.counts,
-      capabilities: info.capabilities,
-    });
+        signal: controller.signal,
+      })
+        .then((outcome) => {
+          installer.recordTest(binding.id, {
+            status: outcome.status,
+            at: outcome.finishedAt,
+            testId: crypto.randomUUID(),
+            startedAt: outcome.startedAt,
+            steps: outcome.steps,
+            ...(outcome.status === "passed" ? {} : { diagnostic: outcome.safeMessage }),
+            ...(outcome.recoveryAction ? { recoveryAction: outcome.recoveryAction } : {}),
+            counts: outcome.counts,
+            capabilities: outcome.capabilities,
+            fingerprint: connectionFingerprint({
+              server,
+              version: binding.registryVersion,
+              credentialRevision: binding.credentialRevision,
+            }),
+          });
+        })
+        .catch((error: unknown) => {
+          if (error instanceof McpConnectionTestError)
+            throw new HttpError("mcp_not_permitted", error.message);
+          throw error;
+        })
+        .finally(() => tests.delete(binding.id));
+      tests.set(binding.id, { controller, done: run });
+      await run;
+    }
     recycler.announce(opened.id, ["mcp"]);
-    return {
-      body: mcpWire(
-        info,
-        app.config.mcpShadowed?.[binding.alias],
-        installer.bindings(),
-        opened.path,
-      ),
+    return { body: await wire(opened, binding.alias) };
+  });
+
+  router.post("/api/mcp/bindings/:id/test/cancel", async ({ req, params }) => {
+    const input = validate<{ workspace: string }>(await readJson(req), {
+      workspace: { check: is.nonEmpty(4096), required: true },
+    });
+    refuseReadOnly();
+    const opened = await known(input.workspace);
+    const { binding } = bindingOf(opened, params.id ?? "");
+    tests.get(binding.id)?.controller.abort();
+    return { body: { cancelled: tests.has(binding.id) } };
+  });
+
+  router.get("/api/mcp/bindings/:id/test", async ({ url, params }) => {
+    const opened = await known(url.searchParams.get("workspace") ?? "");
+    const { app, binding } = bindingOf(opened, params.id ?? "");
+    const last = binding.lastTest;
+    if (!last) throw new HttpError("not_found", "This integration has not been checked yet");
+    const server = app.config.mcp.servers[binding.alias];
+    const current = server
+      ? connectionFingerprint({
+          server,
+          version: binding.registryVersion,
+          credentialRevision: binding.credentialRevision,
+        })
+      : undefined;
+    const status = last.status === "needs-authentication" ? "failed" : last.status;
+    const recoveryAction =
+      last.recoveryAction ?? (last.status === "needs-authentication" ? "sign-in" : undefined);
+    const result: McpConnectionTestResult = {
+      testId: last.testId ?? `${binding.id}:${last.at}`,
+      bindingId: binding.id,
+      configRevision: last.fingerprint ?? "",
+      artifactVersion: binding.registryVersion,
+      status,
+      steps: last.steps ?? [],
+      startedAt: last.startedAt ?? last.at,
+      finishedAt: last.at,
+      safeMessage:
+        last.diagnostic ??
+        (status === "passed"
+          ? "Connected, and the capabilities it announces were listed"
+          : "The check did not pass"),
+      ...(recoveryAction ? { recoveryAction } : {}),
+      capabilities: last.capabilities ?? [],
+      counts: last.counts ?? { tools: 0, resources: 0, prompts: 0 },
+      stale: !!(last.fingerprint && current && last.fingerprint !== current),
+      ...(last.lastPassedAt ? { lastPassedAt: last.lastPassedAt } : {}),
     };
+    return { body: result };
+  });
+
+  // ---- Sign in (OAuth) ---------------------------------------------------------------------------
+  /** The remote server of a binding that can ask the user to sign in; refuses everything else. */
+  function signInTarget(opened: OpenWorkspace, id: string) {
+    const { app, binding } = bindingOf(opened, id);
+    const server = app.config.mcp.servers[binding.alias];
+    const key = app.mcp.oauthKey(binding.alias);
+    if (!server || server.transport !== "http" || !key || !app.mcp.oauthCapable(binding.alias))
+      throw new HttpError("validation_failed", "This integration does not use a sign-in", {
+        fields: ["binding"],
+      });
+    return { app, binding, key, url: server.url };
+  }
+
+  const signInView = (view: SignInView): McpSignInFlow => ({
+    id: view.id,
+    state: view.state,
+    ...(view.authorizationUrl ? { authorizationUrl: view.authorizationUrl } : {}),
+    ...(view.error ? { error: view.error } : {}),
+  });
+
+  router.post("/api/mcp/bindings/:id/auth", async ({ req, params }) => {
+    const input = validate<{ workspace: string }>(await readJson(req), {
+      workspace: { check: is.nonEmpty(4096), required: true },
+    });
+    refuseReadOnly();
+    const opened = await known(input.workspace);
+    const { app, binding, key, url } = signInTarget(opened, params.id ?? "");
+    try {
+      const view = await app.mcpOAuth.start({ key, serverUrl: url });
+      // When the browser comes back, the server connects and every window learns of it.
+      void app.mcpOAuth
+        .wait(view.id)
+        .then(async (done) => {
+          if (done.state === "completed") {
+            const info = app.mcp.info(binding.alias);
+            if (info.enabled && app.mcpRuntimePermission() === "granted")
+              await app.mcp
+                .reconnect(binding.alias, AbortSignal.timeout(20_000))
+                .catch(() => undefined);
+            if (binding.scope === "global") await recycler.requestOthers(opened.id);
+          }
+          recycler.announce(opened.id, ["mcp"]);
+        })
+        .catch(() => undefined);
+      return { body: signInView(view) };
+    } catch (error) {
+      if (error instanceof McpOAuthError)
+        throw new HttpError(
+          error.code === "loopback_unavailable" ? "internal" : "validation_failed",
+          error.message,
+          { reason: error.code },
+        );
+      throw error;
+    }
+  });
+
+  router.get("/api/mcp/auth/flows/:id", ({ params }) => {
+    const view = oauth.flow(params.id ?? "");
+    if (!view) throw new HttpError("not_found", "Sign-in not found");
+    return { body: signInView(view) };
+  });
+
+  router.post("/api/mcp/auth/flows/:id/cancel", ({ params }) => {
+    const view = oauth.cancel(params.id ?? "");
+    if (!view) throw new HttpError("not_found", "Sign-in not found");
+    return { body: signInView(view) };
+  });
+
+  router.delete("/api/mcp/bindings/:id/auth", async ({ url, params }) => {
+    refuseReadOnly();
+    const opened = await known(url.searchParams.get("workspace") ?? "");
+    const { app, binding, key } = signInTarget(opened, params.id ?? "");
+    // Local only: the saved sign-in is removed from this machine; the service is not asked to revoke it.
+    await app.mcpOAuth.forget(key);
+    await app.mcp.requireSignIn(binding.alias);
+    if (binding.scope === "global") await recycler.requestOthers(opened.id);
+    recycler.announce(opened.id, ["mcp"]);
+    return { body: await wire(opened, binding.alias) };
+  });
+
+  // ---- Settings of an installed integration -----------------------------------------------------
+  router.get("/api/mcp/bindings/:id/configuration", async ({ url, params }) => {
+    const opened = await known(url.searchParams.get("workspace") ?? "");
+    const { app } = bindingOf(opened, params.id ?? "");
+    try {
+      const form: McpBindingConfiguration = await installer.configuration(params.id ?? "", {
+        workspacePath: opened.path,
+        sessionTrusted: app.mcpWriteContext().sessionTrusted,
+      });
+      return { body: form };
+    } catch (error) {
+      return toHttp(error);
+    }
+  });
+
+  router.patch("/api/mcp/bindings/:id/configuration", async ({ req, params }) => {
+    const input = validate<{
+      workspace: string;
+      revision: string;
+      values: Record<string, string>;
+      clear?: string[];
+    }>(await readJson(req), {
+      workspace: { check: is.nonEmpty(4096), required: true },
+      revision: { check: is.nonEmpty(100), required: true },
+      values: { check: inputsCheck, required: true },
+      clear: {
+        check: (v) =>
+          Array.isArray(v) &&
+          v.length <= 64 &&
+          v.every((x) => typeof x === "string" && x.length <= 200),
+      },
+    });
+    refuseReadOnly();
+    const opened = await known(input.workspace);
+    const { app, binding } = bindingOf(opened, params.id ?? "");
+    try {
+      const saved = await installer.configure(
+        binding.id,
+        {
+          revision: input.revision,
+          values: input.values,
+          ...(input.clear ? { clear: input.clear } : {}),
+        },
+        { workspacePath: opened.path, sessionTrusted: app.mcpWriteContext().sessionTrusted },
+      );
+      await hooksFor(opened).attach(binding.alias, saved.entry, {
+        scope: binding.scope,
+        ...(binding.workspacePath ? { workspacePath: binding.workspacePath } : {}),
+      });
+      // Saving new settings (often a corrected key) puts an enabled integration back to work.
+      if (app.mcp.info(binding.alias).enabled && app.mcpRuntimePermission() === "granted")
+        await app.mcp.connect(binding.alias, AbortSignal.timeout(20_000)).catch(() => undefined);
+      if (binding.scope === "global") await recycler.requestOthers(opened.id);
+      recycler.announce(opened.id, ["mcp"]);
+      return { body: saved.configuration satisfies McpBindingConfiguration };
+    } catch (error) {
+      return toHttp(error);
+    }
   });
 }

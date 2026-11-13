@@ -106,7 +106,7 @@ export interface BuiltEntry {
 }
 
 /** A bare token for `Authorization` is sent as a bearer token (the convention the catalog shows). */
-const headerValue = (name: string, value: string) =>
+export const headerValue = (name: string, value: string) =>
   name.toLowerCase() === "authorization" && !/\s/.test(value) ? `Bearer ${value}` : value;
 
 export function buildNpmEntry(input: {

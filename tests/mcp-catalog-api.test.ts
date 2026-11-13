@@ -5,15 +5,26 @@
  * real connector, a fake npm and a local fake registry source. No network.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { McpInstallJob, McpInstallPlan, McpOverview, McpUninstallResult } from "@alisio/sdk";
+import type {
+  McpBindingConfiguration,
+  McpConnectionTestResult,
+  McpInstallJob,
+  McpInstallPlan,
+  McpOverview,
+  McpServerWire,
+  McpSignInFlow,
+  McpUninstallResult,
+} from "@alisio/sdk";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { serve } from "../fixtures/http.ts";
 import { makeServer } from "../fixtures/mcp-server.ts";
+import { type FakeOAuth, startFakeOAuth } from "../fixtures/oauth-server.ts";
+import { McpOAuth, oauthSecretIds } from "../packages/core/src/mcp/auth/index.ts";
 import { createCatalogService } from "../packages/core/src/mcp/catalog/service.ts";
 import type { CatalogEntry } from "../packages/core/src/mcp/catalog/source.ts";
 import { createSourceFactory } from "../packages/core/src/mcp/catalog/source-factory.ts";
@@ -47,6 +58,10 @@ interface BootOptions {
   /** Rewrites an entry the installer reads (point a remote at a local fixture, add inputs). */
   tweak?: (entry: CatalogEntry) => CatalogEntry;
   binSource?: string;
+  /** Share the secret store with another component (the sign-in service). */
+  secretsRoot?: string;
+  /** Sign-in service shared by the server and its workspaces (a fake authorization server). */
+  oauth?: McpOAuth;
 }
 
 async function boot(options: BootOptions = {}) {
@@ -66,7 +81,7 @@ async function boot(options: BootOptions = {}) {
   await catalog.idle();
   // Everything the installer owns lives under one temporary root, never the real state home.
   const installRoot = join(tmpdir(), `alisio-api-install-${crypto.randomUUID()}`);
-  const secretsRoot = join(installRoot, "secrets");
+  const secretsRoot = options.secretsRoot ?? join(installRoot, "secrets");
   const secrets = new FileSecretStore(secretsRoot);
   const npm = fakeNpm({ binSource: options.binSource ?? BIN });
   const installer = createMcpInstaller({
@@ -87,6 +102,7 @@ async function boot(options: BootOptions = {}) {
     mcpCatalog: catalog,
     mcpInstaller: installer,
     mcpSecrets: secrets,
+    ...(options.oauth ? { mcpOAuth: options.oauth } : {}),
     ...(options.readOnly || options.granted
       ? {
           app: {
@@ -569,5 +585,359 @@ describe("read-only and project scope", () => {
     expect(done?.state).toBe("completed");
     const file = JSON.parse(await readFile(join(t.workspace, ".alisio", "config.json"), "utf8"));
     expect(Object.keys(file.mcp.servers)).toEqual([p.alias]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Phase 4: sign-in, the isolated connection test and editing an integration (MCP-CAT-11, 19-24).
+// ---------------------------------------------------------------------------------------------
+
+const wireOf = async (t: TestServer, alias: string) =>
+  (await t.api.get(`/api/mcp?workspace=${encodeURIComponent(t.workspace)}`))
+    .json<McpOverview>()
+    .servers.find((s) => s.name === alias);
+
+const withInputs = (inputs: CatalogEntry["packages"][number]["inputs"]) => (entry: CatalogEntry) =>
+  entry.packages.length
+    ? { ...entry, packages: entry.packages.map((pkg) => ({ ...pkg, inputs })) }
+    : entry;
+
+describe("sign in to a remote service from the UI (MCP-CAT-11, UX-05)", () => {
+  async function signInBoot() {
+    const fake: FakeOAuth = await startFakeOAuth();
+    stops.push(() => fake.close());
+    const secretsRoot = join(tmpdir(), `alisio-oauth-secrets-${crypto.randomUUID()}`);
+    const store = new FileSecretStore(secretsRoot);
+    const oauth = new McpOAuth({ store, guard: permissiveUrlGuard });
+    stops.push(() => oauth.close());
+    const t = await boot({
+      granted: true,
+      oauth,
+      secretsRoot,
+      tweak: (entry) =>
+        entry.remotes.length
+          ? { ...entry, remotes: entry.remotes.map((r) => ({ ...r, url: fake.resourceUrl })) }
+          : entry,
+    });
+    return { ...t, fake, oauth, store };
+  }
+
+  it("offers a sign-in when the service asks for one, completes it in the browser and connects", async () => {
+    const t = await signInBoot();
+    const p = await plan(t, { name: "io.example/cloud" });
+    const done = await finish(t, (await startJob(t, p)).json<McpInstallJob>().id);
+    expect(done).toMatchObject({
+      state: "completed",
+      result: { connected: false, status: "needs-authentication", signIn: "available" },
+    });
+    const before = await wireOf(t, p.alias);
+    expect(before).toMatchObject({
+      status: "needs-authentication",
+      auth: { kind: "oauth", signedIn: false },
+    });
+    const bindingId = before?.binding?.id as string;
+
+    const started = await t.api.post(`/api/mcp/bindings/${bindingId}/auth`, {
+      workspace: t.workspace,
+    });
+    expect(started.status).toBe(200);
+    const flow = started.json<McpSignInFlow>();
+    expect(flow.state).toBe("awaiting-browser");
+    expect(new URL(flow.authorizationUrl as string).origin).toBe(t.fake.issuer);
+    // The browser approves; the loopback listener of the server receives the redirect.
+    const redirected = await fetch(flow.authorizationUrl as string, { redirect: "manual" });
+    await fetch(redirected.headers.get("location") as string);
+    const finished = await until(async () => {
+      const view = (await t.api.get(`/api/mcp/auth/flows/${flow.id}`)).json<McpSignInFlow>();
+      return view.state === "completed" ? view : undefined;
+    });
+    expect(finished?.authorizationUrl).toBeUndefined();
+    const after = await until(async () => {
+      const server = await wireOf(t, p.alias);
+      return server?.status === "connected" ? server : undefined;
+    });
+    expect(after?.auth).toEqual({ kind: "oauth", signedIn: true });
+    // No token, code or verifier on any wire answer.
+    const everything = JSON.stringify([before, after, flow, finished]);
+    expect(everything).not.toMatch(/at-[A-Za-z0-9_-]{8}|rt-[A-Za-z0-9_-]{8}|code_verifier/);
+
+    // Sign out forgets the local tokens only: the service is asked for nothing.
+    const requestsBefore = t.fake.requests.length;
+    const out = await t.api.delete(
+      `/api/mcp/bindings/${bindingId}/auth?workspace=${encodeURIComponent(t.workspace)}`,
+    );
+    expect(out.status).toBe(200);
+    expect(t.fake.requests).toHaveLength(requestsBefore);
+    expect(await wireOf(t, p.alias)).toMatchObject({
+      status: "needs-authentication",
+      auth: { kind: "oauth", signedIn: false },
+    });
+  });
+
+  it("removes the saved sign-in with the integration when asked", async () => {
+    const t = await signInBoot();
+    const p = await plan(t, { name: "io.example/cloud" });
+    await finish(t, (await startJob(t, p)).json<McpInstallJob>().id);
+    const bindingId = (await wireOf(t, p.alias))?.binding?.id as string;
+    const flow = (
+      await t.api.post(`/api/mcp/bindings/${bindingId}/auth`, { workspace: t.workspace })
+    ).json<McpSignInFlow>();
+    const redirected = await fetch(flow.authorizationUrl as string, { redirect: "manual" });
+    await fetch(redirected.headers.get("location") as string);
+    await t.oauth.wait(flow.id);
+    const ids = oauthSecretIds({ scope: "global", alias: p.alias });
+    expect(await t.store.has(ids[0] as string)).toBe(true);
+    await t.api.delete(
+      `/api/mcp/bindings/${bindingId}?workspace=${encodeURIComponent(t.workspace)}&scope=global&removeSecrets=true`,
+    );
+    for (const id of ids) expect(await t.store.has(id)).toBe(false);
+  });
+
+  it("refuses to sign in a local (stdio) integration and a made-up flow", async () => {
+    const t = await boot({ granted: true });
+    const p = await plan(t);
+    await finish(t, (await startJob(t, p)).json<McpInstallJob>().id);
+    const bindingId = (await wireOf(t, p.alias))?.binding?.id as string;
+    const res = await t.api.post(`/api/mcp/bindings/${bindingId}/auth`, { workspace: t.workspace });
+    expect(res.status).toBe(400);
+    expect((await wireOf(t, p.alias))?.auth).toBeUndefined();
+    expect((await t.api.get("/api/mcp/auth/flows/nope")).status).toBe(404);
+  });
+
+  it("cancels a pending sign-in and reports it", async () => {
+    const t = await signInBoot();
+    const p = await plan(t, { name: "io.example/cloud" });
+    await finish(t, (await startJob(t, p)).json<McpInstallJob>().id);
+    const bindingId = (await wireOf(t, p.alias))?.binding?.id as string;
+    const flow = (
+      await t.api.post(`/api/mcp/bindings/${bindingId}/auth`, { workspace: t.workspace })
+    ).json<McpSignInFlow>();
+    const cancelled = await t.api.post(`/api/mcp/auth/flows/${flow.id}/cancel`, {});
+    expect(cancelled.json<McpSignInFlow>().state).toBe("cancelled");
+  });
+});
+
+describe("the connection test from the UI (MCP-CAT-20 to MCP-CAT-22)", () => {
+  async function installed(options: BootOptions = {}) {
+    const t = await boot({ granted: true, ...options });
+    const p = await plan(t);
+    await finish(t, (await startJob(t, p)).json<McpInstallJob>().id);
+    const server = await wireOf(t, p.alias);
+    return { ...t, alias: p.alias, bindingId: server?.binding?.id as string };
+  }
+
+  it("runs an isolated check, shows its steps and counts, and keeps the live tools untouched", async () => {
+    const t = await installed();
+    const before = (await wireOf(t, t.alias))?.counts;
+    const res = await t.api.post(`/api/mcp/bindings/${t.bindingId}/test`, {
+      workspace: t.workspace,
+    });
+    expect(res.status).toBe(200);
+    const wire = res.json<McpServerWire>();
+    expect(wire.counts).toEqual(before);
+    expect(wire.status).toBe("connected");
+    const last = await t.api.get(
+      `/api/mcp/bindings/${t.bindingId}/test?workspace=${encodeURIComponent(t.workspace)}`,
+    );
+    const result = last.json<McpConnectionTestResult>();
+    expect(result).toMatchObject({
+      bindingId: t.bindingId,
+      status: "passed",
+      stale: false,
+      artifactVersion: "1.0.0",
+      counts: { tools: 2, resources: 1, prompts: 0 },
+    });
+    expect(result.steps.map((step) => step.id)).toEqual([
+      "prepare",
+      "connect",
+      "authenticate",
+      "discover",
+    ]);
+    expect(JSON.stringify(result)).not.toContain(t.root);
+  });
+
+  it("asks for MCP consent and never switches a disabled integration on", async () => {
+    const t = await boot();
+    const p = await plan(t);
+    await t.api.post(
+      `/api/mcp/install/jobs/${(await startJob(t, p)).json<McpInstallJob>().id}/consent`,
+      {
+        workspace: t.workspace,
+        confirmed: true,
+      },
+    );
+    await until(async () => (await wireOf(t, p.alias))?.status === "connected");
+    const bindingId = (await wireOf(t, p.alias))?.binding?.id as string;
+    await t.api.patch(`/api/mcp/${p.alias}`, { workspace: t.workspace, enabled: false });
+    const res = await t.api.post(`/api/mcp/bindings/${bindingId}/test`, { workspace: t.workspace });
+    expect(res.status).toBe(200);
+    expect(res.json<McpServerWire>()).toMatchObject({ enabled: false, status: "disabled" });
+    expect(
+      (
+        await t.api.get(
+          `/api/mcp/bindings/${bindingId}/test?workspace=${encodeURIComponent(t.workspace)}`,
+        )
+      ).json<McpConnectionTestResult>().status,
+    ).toBe("passed");
+  });
+});
+
+describe("editing an integration (MCP-CAT-19, MCP-CAT-24)", () => {
+  const inputs: CatalogEntry["packages"][number]["inputs"] = [
+    { name: "API_KEY", kind: "env", isRequired: true, isSecret: true, description: "Your key" },
+    { name: "ROOT", kind: "env", isRequired: true, isSecret: false },
+    { name: "MODE", kind: "env", isRequired: false, isSecret: false, choices: ["fast", "safe"] },
+  ];
+  async function installedWithInputs() {
+    const t = await boot({ granted: true, tweak: withInputs(inputs) });
+    const p = await plan(t);
+    expect(p.requiredInputs.map((i) => i.id)).toEqual(["env.API_KEY", "env.ROOT"]);
+    const res = await startJob(t, p, { inputs: { "env.API_KEY": SECRET, "env.ROOT": "/data" } });
+    await finish(t, res.json<McpInstallJob>().id);
+    const server = await wireOf(t, p.alias);
+    const bindingId = server?.binding?.id as string;
+    const url = `/api/mcp/bindings/${bindingId}/configuration`;
+    return {
+      ...t,
+      alias: p.alias,
+      bindingId,
+      url,
+      q: `?workspace=${encodeURIComponent(t.workspace)}`,
+    };
+  }
+
+  it("shows a typed form with public values and only 'saved' for a secret", async () => {
+    const t = await installedWithInputs();
+    const res = await t.api.get(`${t.url}${t.q}`);
+    expect(res.status).toBe(200);
+    const form = res.json<McpBindingConfiguration>();
+    expect(res.text).not.toContain(SECRET);
+    expect(form.fields.map((f) => [f.id, f.secret, f.required])).toEqual([
+      ["env.API_KEY", true, true],
+      ["env.ROOT", false, true],
+      ["env.MODE", false, false],
+    ]);
+    expect(form.fields.find((f) => f.id === "env.API_KEY")).toMatchObject({ configured: true });
+    expect(form.fields.find((f) => f.id === "env.API_KEY")?.value).toBeUndefined();
+    expect(form.fields.find((f) => f.id === "env.ROOT")).toMatchObject({
+      value: "/data",
+      configured: true,
+    });
+    expect(form.fields.find((f) => f.id === "env.MODE")).toMatchObject({ configured: false });
+  });
+
+  it("rejects invalid values on the server by field, keeps the file and never echoes a secret", async () => {
+    const t = await installedWithInputs();
+    const form = (await t.api.get(`${t.url}${t.q}`)).json<McpBindingConfiguration>();
+    const file = await readFile(join(t.root, "config", "config.json"), "utf8");
+    const res = await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: form.revision,
+      values: { "env.ROOT": "", "env.MODE": "reckless", "env.API_KEY": ` ${SECRET} ` },
+    });
+    expect(res.status).toBe(422);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("mcp_input_required");
+    expect(res.json<{ error: { details: { fields: string[] } } }>().error.details.fields).toEqual([
+      "env.API_KEY",
+      "env.MODE",
+      "env.ROOT",
+    ]);
+    expect(res.text).not.toContain(SECRET);
+    expect(await readFile(join(t.root, "config", "config.json"), "utf8")).toBe(file);
+  });
+
+  it("saves public values, replaces a key without returning it, and keeps what was left empty", async () => {
+    const t = await installedWithInputs();
+    const form = (await t.api.get(`${t.url}${t.q}`)).json<McpBindingConfiguration>();
+    const res = await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: form.revision,
+      values: { "env.ROOT": "/other", "env.MODE": "safe", "env.API_KEY": "" },
+    });
+    expect(res.status).toBe(200);
+    const saved = res.json<McpBindingConfiguration>();
+    expect(saved.fields.find((f) => f.id === "env.ROOT")?.value).toBe("/other");
+    expect(saved.fields.find((f) => f.id === "env.MODE")?.value).toBe("safe");
+    // An empty secret means "keep": the stored key is intact.
+    const ids = t.installer.binding(t.bindingId)?.secretIds ?? [];
+    expect(await t.secrets.get(ids[0] as string)).toBe(SECRET);
+    const config = JSON.parse(await readFile(join(t.root, "config", "config.json"), "utf8"));
+    expect(JSON.stringify(config)).not.toContain(SECRET);
+    // Replacing the key stores the new value and never returns it.
+    const replaced = await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: saved.revision,
+      values: { "env.API_KEY": "sk-new-key-0987654321" },
+    });
+    expect(replaced.status).toBe(200);
+    expect(replaced.text).not.toContain("sk-new-key-0987654321");
+    expect(await t.secrets.get(ids[0] as string)).toBe("sk-new-key-0987654321");
+  });
+
+  it("makes the earlier connection test stale after a change", async () => {
+    const t = await installedWithInputs();
+    await t.api.post(`/api/mcp/bindings/${t.bindingId}/test`, { workspace: t.workspace });
+    const q = t.q;
+    expect(
+      (await t.api.get(`/api/mcp/bindings/${t.bindingId}/test${q}`)).json<McpConnectionTestResult>()
+        .stale,
+    ).toBe(false);
+    const form = (await t.api.get(`${t.url}${q}`)).json<McpBindingConfiguration>();
+    await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: form.revision,
+      values: { "env.ROOT": "/elsewhere" },
+    });
+    expect(
+      (await t.api.get(`/api/mcp/bindings/${t.bindingId}/test${q}`)).json<McpConnectionTestResult>()
+        .stale,
+    ).toBe(true);
+    // Replacing a key also invalidates it.
+    await t.api.post(`/api/mcp/bindings/${t.bindingId}/test`, { workspace: t.workspace });
+    const again = (await t.api.get(`${t.url}${q}`)).json<McpBindingConfiguration>();
+    await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: again.revision,
+      values: { "env.API_KEY": "sk-another-0000000000" },
+    });
+    expect(
+      (await t.api.get(`/api/mcp/bindings/${t.bindingId}/test${q}`)).json<McpConnectionTestResult>()
+        .stale,
+    ).toBe(true);
+  });
+
+  it("answers a change made behind its back with a conflict and writes nothing", async () => {
+    const t = await installedWithInputs();
+    const form = (await t.api.get(`${t.url}${t.q}`)).json<McpBindingConfiguration>();
+    const file = join(t.root, "config", "config.json");
+    const raw = JSON.parse(await readFile(file, "utf8"));
+    raw.theme = "changed-by-hand";
+    await writeFile(file, JSON.stringify(raw));
+    const res = await t.api.patch(t.url, {
+      workspace: t.workspace,
+      revision: form.revision,
+      values: { "env.ROOT": "/never" },
+    });
+    expect(res.status).toBe(409);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("mcp_config_conflict");
+    expect(JSON.parse(await readFile(file, "utf8")).theme).toBe("changed-by-hand");
+    expect(JSON.stringify(JSON.parse(await readFile(file, "utf8")))).not.toContain("/never");
+  });
+
+  it("is refused under --read-only and for a made-up integration", async () => {
+    const t = await boot({ readOnly: true });
+    expect(
+      (
+        await t.api.get(
+          `/api/mcp/bindings/nope/configuration?workspace=${encodeURIComponent(t.workspace)}`,
+        )
+      ).status,
+    ).toBe(404);
+    const res = await t.api.patch("/api/mcp/bindings/nope/configuration", {
+      workspace: t.workspace,
+      revision: "absent",
+      values: {},
+    });
+    expect(res.status).toBe(403);
   });
 });

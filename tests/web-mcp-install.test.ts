@@ -200,10 +200,10 @@ describe("job progress without invented percentages (UX-04, UX-10)", () => {
       jobOutcome(
         job({
           state: "completed",
-          result: { connected: false, status: "needs-authentication", signIn: "coming-soon" },
+          result: { connected: false, status: "needs-authentication", signIn: "available" },
         }),
       ).kind,
-    ).toBe("sign-in-soon");
+    ).toBe("sign-in");
     expect(
       jobOutcome(job({ state: "failed", error: { code: "mcp_install_failed", message: "m" } })),
     ).toMatchObject({
@@ -597,17 +597,17 @@ describe("JobView (UX-04, UX-07, UX-08, UX-10)", () => {
     expect(onTest).toHaveBeenCalledOnce();
   });
 
-  it("says a service that needs sign-in is coming soon, and a failure offers retry", () => {
+  it("offers to connect the account when a service needs a sign-in, and a failure offers retry", () => {
     expect(
       text(
         view(
           job({
             state: "completed",
-            result: { connected: false, status: "needs-authentication", signIn: "coming-soon" },
+            result: { connected: false, status: "needs-authentication", signIn: "available" },
           }),
         ),
       ),
-    ).toContain("Signing in is coming soon");
+    ).toContain("needs you to sign in");
     const failed = view(
       job({
         state: "failed",

@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.5 |
+| Versión | 1.6 |
 | Fecha | 2026-11-13 UTC |
 | Proyecto | GustavoGutierrez/alisio |
-| Estado | **Aprobada por el propietario 2026-11-12 para ejecución; fase 0 completada 2026-11-12; fase 1 completada 2026-11-12; fase 2 completada 2026-11-12; fase 3 completada 2026-11-12** (ver §19, §19.9, §19.10 y §19.11). Fases 4–5 no implementadas. Q1–Q3 cerradas por el propietario (O8–O10, §19.9) |
+| Estado | **Aprobada por el propietario 2026-11-12 para ejecución; fase 0 completada 2026-11-12; fase 1 completada 2026-11-12; fase 2 completada 2026-11-12; fase 3 completada 2026-11-12; fase 4 completada 2026-11-12** (ver §19, §19.9–§19.12). Fase 5 no implementada. Q1–Q3 cerradas por el propietario (O8–O10, §19.9) |
 | Base inspeccionada | Commit `179e68694163ea6b2f51013ea4b56a8fe193a64f`, paquete core 0.11.10 |
 | Paquetes afectados | core, sdk, server, web; superficies CLI/TUI existentes para compatibilidad |
 | Paquetes nuevos | Ninguno obligatorio |
@@ -425,6 +425,7 @@ Los enlaces latest/main pueden cambiar. Al ejecutar la fase 0, registrar revisio
 
 ## 18. Historial de cambios
 
+- 1.6 (2026-11-12): fase 4 completada (§19.12): OAuth HTTP con el SDK y el bucle local, comprobación de conexión aislada, formulario de configuración, actualizar, ficha de detalle, UX-02 de servidor y E2E de navegador opcional (O10).
 - 1.5 (2026-11-12): fase 3 completada (§19.11): planificador e instalador npm/stdio y HTTP con clave referenciada, trabajos con diario y reconciliación, almacén de secretos (O8), runtime `node` resuelto al conectar (O9), desinstalación por ámbito con recuento de referencias y UI de instalar y «Conectados».
 - 1.4 (2026-11-12): fase 2 completada (§19.10): catálogo intercambiable (O7), índice SQLite/FTS5, sincronización y Explorar sin instalar.
 - 1.3 (2026-11-12): fase 1 completada (§19.9) y Q1–Q3 cerradas como decisiones O8–O10.
@@ -656,3 +657,48 @@ Alcance: core, sdk, server y web. OAuth HTTP sigue siendo la fase 4.
 - `UX-02` en web/headless: las insignias dicen «En este equipo» sin distinguir el equipo donde corre el servidor. No hay E2E de navegador, capturas ni documentación visual (fase 5).
 - El reemplazo de la copia «temporal + rename» fuera de MCP sigue sin migrarse; `mcp-secrets.json` repite el patrón (fuera del alcance de la fase 3).
 - Honestidad sobre las pruebas: el instalador se escribió y se probó en el mismo ciclo de trabajo (las pruebas se escribieron junto al código, no antes); el único rojo previo verificado fue el de secretos/conector, los de rutas y web, y los fallos que las pruebas destaparon (reversión de una entrada idéntica de otro job concurrente, 401 sin estado `needs-authentication`).
+
+### 19.12 Fase 4 completada (2026-11-12)
+
+Autorización OAuth para Streamable HTTP y el resto de la experiencia. Alcance: core, sdk, server y web, más
+el arnés E2E opcional (O10). Sin cambios en el resto de fases.
+
+| Pieza | Archivo |
+|---|---|
+| `OAuthClientProvider` persistente sobre `SecretStore` (`mcp-oauth:<ámbito>:<alias>:{tokens,client,verifier,discovery}`), tokens unidos al recurso, `fetch` con guardia SSRF y sin redirecciones | `packages/core/src/mcp/auth/oauth-provider.ts` |
+| Servicio de inicio de sesión: `auth()` del SDK + `openLoopback`, un flujo por integración, cancelar, cerrar sesión local | `mcp/auth/oauth-flow.ts`, `index.ts` |
+| Transporte compartido por el conector y la prueba (`createMcpTransport`); estado `needs-authentication` con «Sign in to continue»; `requireSignIn` | `mcp/connector.ts` |
+| Comprobación aislada, resultado, huella de vigencia | `mcp/connection-test.ts` |
+| Historial (migración 2: `connection_tests`, `credential_rev`), `recordTest` con `lastPassedAt`, huella al instalar | `mcp/installation/store.ts`, `installer.ts` |
+| Formulario de configuración (lectura y guardado con revisión) | `mcp/installation/configure.ts` |
+| Rutas `…/bindings/:id/{auth,test,test/cancel,configuration}`, `…/auth/flows/:id[/cancel]`; `auth` y `lastTest.stale` en el wire; `localBrowser` | `server/src/routes/mcp-install.ts`, `management.ts`, `mcp-catalog.ts`, `index.ts` |
+| DTO aditivos (`McpConnectionTestResult`, `McpSignInFlow`, `McpBindingConfiguration`, `McpRecoveryAction`, `McpServerWire.auth`, `McpOverview.localBrowser`) | `packages/sdk/src/index.ts` |
+| Web (chunks perezosos): modelo, textos EN/ES, paneles (comprobar, configurar, iniciar sesión, actualizar), ficha de detalle, filas | `packages/web/src/components/settings/mcp-manage/*`, `mcp-explore/{DetailCard,detail-model}.ts*`, `mcp-install/{MineRows,InstallPanel}.tsx`, `McpPage.tsx` |
+| E2E opcional (`pnpm test:e2e`) | `playwright.config.ts`, `e2e/*`, `fixtures/oauth-server.ts` |
+
+**Diseño OAuth.** El conector solo adjunta el proveedor cuando hay tokens guardados para *ese* recurso; sin tokens, un 401 es
+`needs-authentication` (sin registro dinámico ni efectos remotos al conectar). «Iniciar sesión» arranca `auth()`
+con el redirect al oyente de bucle local (`state` aleatorio, validado por el ayudante), devuelve la dirección de
+autorización a la UI (un enlace real con `rel="noopener noreferrer"`), y al volver canjea el código con `iss`
+(RFC 9207). Verificado con pruebas contra un servidor de autorización y un recurso protegido locales:
+descubrimiento, PKCE S256, `resource`, refresco, emisor de metadatos distinto, recurso distinto, `iss` distinto, `state` falsificado
+(400 sin consumir), rechazo del usuario, cancelación, token no enviado a otro origen, alias global y de proyecto separados,
+servidor de autorización en dirección privada rechazado, cierre de sesión sin llamadas al servicio, ausencia de tokens en
+errores y wire. **No verificado:** interoperabilidad con proveedores reales (solo opt-in, no ejecutado), DPoP, `client_credentials`,
+revocación remota, enlace del DNS del servidor de autorización.
+
+**Cobertura de AC (`tests/`):** MCP-CAT-11 (`mcp-auth.test.ts`, 16 pruebas, más «sign in to a remote service from the UI»
+en `mcp-catalog-api.test.ts`); MCP-CAT-19 (`mcp-catalog-api.test.ts`, «editing an integration»: valida por campos, conserva el archivo, no devuelve
+secretos; `web-mcp-manage.test.ts` cliente; E2E: formulario con foco en el error); MCP-CAT-20 (`mcp-connection-test.test.ts`: «passes with every stage…»,
+«passes for a server that only offers resources», «checks a local (stdio) server»); MCP-CAT-21 («refuses to run without MCP consent», «reports a cancelled test…»,
+«ends with a timeout result…», «never touches a live connection», «does not turn a disabled server on»); MCP-CAT-22 («changes the fingerprint when…»,
+«keeps the date of the last pass…», «keeps at most 20 results per binding», «makes the earlier connection test stale after a change»);
+MCP-CAT-17/18/23/24/25 con `e2e/mcp-catalog.e2e.ts` (5 recorridos) y `web-mcp-manage.test.ts`; MCP-CAT-23: servidor web sin atribuir «este equipo» al navegador (insignia y filtro).
+
+**Desviaciones:**
+- No se añadió una acción propia de «cambiar disponibilidad» (mover un vínculo de ámbito): se consigue instalando en el otro ámbito y quitando el anterior; MCP-CAT-24 cubre editar, actualizar y quitar en navegador y el override mínimo ya existe desde la fase 1.
+- OAuth se ofrece para integraciones con vínculo (instaladas desde el catálogo); una entrada HTTP manual sin vínculo no tiene todavía acción «Iniciar sesión».
+- E2E: servidor construido en el proceso de pruebas con catálogo, npm y servidores falsos inyectados (no hay red ni npm real); no hay gancho de configuración para sustituir la guardia SSRF por CLI, así que no se arranca `alisio serve` como proceso. «Requisito ausente» y «tiempo agotado» se prueban en módulo (`mcp-connection-test`, `mcp-installation`), no en navegador. Sin capturas (fase 5).
+- La comprobación no reutiliza una conexión viva: abre siempre una sesión diagnóstica propia (D12 permitía ambas); así nunca se altera la sesión del usuario.
+- Honestidad sobre las pruebas: las pruebas se escribieron antes que el código y el rojo previo fue «módulo inexistente» (OAuth, comprobación, web) o 404/aserción (rutas); los fallos del E2E eran de selectores y de un defecto real (tras corregir una clave el servidor no se reconectaba: ahora una edición guardada reconecta una integración activada).
+

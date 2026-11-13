@@ -12,6 +12,7 @@ import {
   CommandCatalog,
   configFile,
   configHome,
+  connectionFingerprint,
   cycleableAgents,
   hashProjectConfig,
   isSettableSettingKey,
@@ -56,6 +57,8 @@ export interface ManagementContext {
   broadcast: (frame: ServerFrame) => void;
   /** Reads the installer's bindings to label servers it owns (never opens a missing database). */
   bindings?: () => BindingRecord[];
+  /** The host declared the browser runs on the same computer as the server (desktop). */
+  localBrowser?: boolean;
 }
 
 /** Resolves `?workspace=` / `{workspace}` (an opaque id or an absolute path) to its open app. */
@@ -229,7 +232,9 @@ function skillInfo(skill: ReturnType<OpenWorkspace["app"]["skillCatalog"]>[numbe
 function bindingInfo(
   binding: BindingRecord,
   shadowed: McpShadowedServer[] | undefined,
+  currentFingerprint?: string,
 ): McpBindingInfo {
+  const last = binding.lastTest;
   return {
     id: binding.id,
     scope: binding.scope,
@@ -242,8 +247,31 @@ function bindingInfo(
       ? { revealsGlobal: true }
       : {}),
     hasSavedKeys: binding.secretIds.length > 0,
-    ...(binding.lastTest ? { lastTest: binding.lastTest } : {}),
+    ...(last
+      ? {
+          lastTest: {
+            status: last.status,
+            at: last.at,
+            ...(last.diagnostic ? { diagnostic: last.diagnostic } : {}),
+            ...(last.counts ? { counts: last.counts } : {}),
+            ...(last.capabilities ? { capabilities: last.capabilities } : {}),
+            ...(last.recoveryAction ? { recoveryAction: last.recoveryAction } : {}),
+            ...(last.lastPassedAt ? { lastPassedAt: last.lastPassedAt } : {}),
+            // A result is out of date when the settings, key or version it ran against changed.
+            ...(last.fingerprint && currentFingerprint && last.fingerprint !== currentFingerprint
+              ? { stale: true }
+              : {}),
+          },
+        }
+      : {}),
   };
+}
+
+/** What the wire needs beyond the connector's own view of a server. */
+export interface McpWireExtras {
+  auth?: McpServerWire["auth"];
+  /** The fingerprint a connection test would have now (settings, version, credentials). */
+  fingerprint?: string;
 }
 
 /** MCP server status without the command line, arguments or URL (they may carry tokens). */
@@ -252,6 +280,7 @@ export function mcpWire(
   shadowed: McpShadowedServer[] = [],
   bindings: BindingRecord[] = [],
   workspacePath?: string,
+  extras: McpWireExtras = {},
 ): McpServerWire {
   // Only the binding that owns the entry in force is shown: the same layer, this workspace.
   const owner = bindings.find(
@@ -282,19 +311,65 @@ export function mcpWire(
           })),
         }
       : {}),
-    ...(owner ? { binding: bindingInfo(owner, shadowed) } : {}),
+    ...(owner ? { binding: bindingInfo(owner, shadowed, extras.fingerprint) } : {}),
+    ...(extras.auth ? { auth: extras.auth } : {}),
   };
 }
 
-function mcpOverview(opened: OpenWorkspace, bindings: BindingRecord[]): McpOverview {
+/** The sign-in facts and the test fingerprint of one server of a workspace. */
+export async function mcpExtras(
+  opened: OpenWorkspace,
+  name: string,
+  bindings: BindingRecord[],
+): Promise<McpWireExtras> {
+  const app = opened.app;
+  const server = app.config.mcp.servers[name];
+  const key = app.mcp.oauthKey(name);
+  const extras: McpWireExtras = {};
+  if (server?.transport === "http" && key && app.mcp.oauthCapable(name))
+    extras.auth = { kind: "oauth", signedIn: await app.mcpOAuth.hasTokens(key, server.url) };
+  const owner = bindings.find(
+    (b) =>
+      b.alias === name &&
+      b.scope === app.mcp.info(name).source.kind &&
+      (b.scope === "global" || b.workspacePath === opened.path),
+  );
+  if (server && owner)
+    extras.fingerprint = connectionFingerprint({
+      server,
+      version: owner.registryVersion,
+      credentialRevision: owner.credentialRevision,
+    });
+  return extras;
+}
+
+/** One server's wire with its sign-in state and test freshness. */
+export async function mcpWireFor(
+  opened: OpenWorkspace,
+  name: string,
+  bindings: BindingRecord[],
+): Promise<McpServerWire> {
+  return mcpWire(
+    opened.app.mcp.info(name),
+    opened.app.config.mcpShadowed?.[name],
+    bindings,
+    opened.path,
+    await mcpExtras(opened, name, bindings),
+  );
+}
+
+async function mcpOverview(
+  opened: OpenWorkspace,
+  bindings: BindingRecord[],
+  localBrowser?: boolean,
+): Promise<McpOverview> {
   return {
     permission: opened.app.mcpRuntimePermission(),
     persisted: opened.app.mcpAllowPersisted(),
-    servers: opened.app.mcp
-      .list()
-      .map((info) =>
-        mcpWire(info, opened.app.config.mcpShadowed?.[info.name], bindings, opened.path),
-      ),
+    ...(localBrowser ? { localBrowser: true } : {}),
+    servers: await Promise.all(
+      opened.app.mcp.list().map((info) => mcpWireFor(opened, info.name, bindings)),
+    ),
   };
 }
 
@@ -384,7 +459,7 @@ export function registerManagementRoutes(
   // ---- MCP ----------------------------------------------------------------------------------
   router.get("/api/mcp", async ({ url }) => {
     const opened = await open(url.searchParams.get("workspace"));
-    return { body: mcpOverview(opened, ctx.bindings?.() ?? []) };
+    return { body: await mcpOverview(opened, ctx.bindings?.() ?? [], ctx.localBrowser) };
   });
 
   router.patch("/api/mcp/:name", async ({ req, url, params }) => {
@@ -424,12 +499,7 @@ export function registerManagementRoutes(
     if (global) await recycler.requestSharing(opened.id, name);
     recycler.announce(opened.id, ["mcp"]);
     return {
-      body: mcpWire(
-        opened.app.mcp.info(name),
-        opened.app.config.mcpShadowed?.[name],
-        ctx.bindings?.() ?? [],
-        opened.path,
-      ),
+      body: await mcpWireFor(opened, name, ctx.bindings?.() ?? []),
     };
   });
 
@@ -453,7 +523,7 @@ export function registerManagementRoutes(
       throw new HttpError("mcp_not_permitted", message(error));
     }
     recycler.announce(opened.id, ["mcp"]);
-    return { body: mcpOverview(opened, ctx.bindings?.() ?? []) };
+    return { body: await mcpOverview(opened, ctx.bindings?.() ?? [], ctx.localBrowser) };
   });
 
   // ---- Agent presets ------------------------------------------------------------------------

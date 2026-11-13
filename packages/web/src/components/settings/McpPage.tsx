@@ -6,7 +6,7 @@
  */
 import type { McpServerWire } from "@alisio/sdk";
 import type { ComponentType } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "../../i18n/index.ts";
 import { api, showToast } from "../../store/app.ts";
 import { Icon } from "../icons.tsx";
@@ -15,6 +15,8 @@ import css from "./mcp-explore/explore.module.css";
 import { xs } from "./mcp-explore/strings.ts";
 import { MineRow, RemoveDialog } from "./mcp-install/MineRows.tsx";
 import { ms } from "./mcp-install/strings.ts";
+import type * as ManagePanels from "./mcp-manage/ManagePanels.tsx";
+import { mgs } from "./mcp-manage/strings.ts";
 import styles from "./settings.module.css";
 import { errorMessage, PageIntro, Status, settingsWorkspace, useLoad } from "./shared.tsx";
 
@@ -109,12 +111,17 @@ export function McpPage() {
 
 const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
+type PanelKind = "test" | "configure" | "signin" | "update";
+type PanelState = { kind: PanelKind; name: string; autoRun?: boolean };
+
 function ConnectedServers() {
   const workspace = settingsWorkspace();
   const workspaceName = workspace ? baseName(workspace.path) : "";
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
-  const [testing, setTesting] = useState<string | undefined>();
+  const [panel, setPanel] = useState<PanelState | undefined>();
+  const [Panels, setPanels] = useState<typeof ManagePanels | undefined>();
+  const returnFocus = useRef<HTMLElement | null>(null);
   const [removing, setRemoving] = useState<McpServerWire | undefined>();
   const overview = useLoad(
     workspace ? () => api.mcp(workspace.id) : undefined,
@@ -143,20 +150,90 @@ function ConnectedServers() {
       setBusy(undefined);
     }
   };
-  const test = async (server: McpServerWire) => {
+  // The check, settings, sign-in and update panels are a lazy chunk: nothing here loads before use.
+  const openPanel = (kind: PanelKind, server: McpServerWire, autoRun = false) => {
+    returnFocus.current = document.activeElement as HTMLElement | null;
+    setPanel({ kind, name: server.name, ...(autoRun ? { autoRun: true } : {}) });
+    if (!Panels) void import("./mcp-manage/ManagePanels.tsx").then((m) => setPanels(() => m));
+  };
+  const closePanel = () => {
+    setPanel(undefined);
+    // Focus goes back to where the user was (UX-10).
+    queueMicrotask(() => returnFocus.current?.focus());
+  };
+  const signOut = async (server: McpServerWire) => {
     if (!workspace || !server.binding) return;
-    setTesting(server.name);
+    setBusy(server.name);
     try {
       replace(
-        await api.request<McpServerWire>("POST", `/api/mcp/bindings/${server.binding.id}/test`, {
-          workspace: workspace.id,
-        }),
+        await api.request<McpServerWire>(
+          "DELETE",
+          `/api/mcp/bindings/${server.binding.id}/auth?workspace=${encodeURIComponent(workspace.id)}`,
+        ),
       );
+      showToast(mgs("signin.signOutDone"));
     } catch (error) {
       showToast(errorMessage(error));
     } finally {
-      setTesting(undefined);
+      setBusy(undefined);
     }
+  };
+  const recover = (server: McpServerWire, action: string) => {
+    if (action === "sign-in") openPanel("signin", server);
+    else if (action === "change-key" || action === "configure") openPanel("configure", server);
+    else if (action === "turn-on") void change(server, true, false);
+  };
+  const panelFor = (server: McpServerWire) => {
+    if (!panel || panel.name !== server.name || !Panels || !workspace || !server.binding)
+      return undefined;
+    const binding = server.binding;
+    const common = { workspaceId: workspace.id };
+    if (panel.kind === "test")
+      return (
+        <Panels.TestPanel
+          {...common}
+          bindingId={binding.id}
+          name={server.displayName}
+          {...(panel.autoRun ? { autoRun: true } : {})}
+          onWire={replace}
+          onAction={(action) => recover(server, action)}
+          onClose={closePanel}
+        />
+      );
+    if (panel.kind === "configure")
+      return (
+        <Panels.ConfigurePanel
+          {...common}
+          bindingId={binding.id}
+          name={server.displayName}
+          onClose={closePanel}
+          onSaved={() => {
+            overview.reload();
+            openPanel("test", server, true);
+          }}
+        />
+      );
+    if (panel.kind === "signin")
+      return (
+        <Panels.SignInPanel
+          {...common}
+          bindingId={binding.id}
+          name={server.displayName}
+          autoStart
+          onClose={closePanel}
+          onFinished={() => overview.reload()}
+        />
+      );
+    return (
+      <Panels.UpdatePanel
+        {...common}
+        binding={binding}
+        name={server.displayName}
+        granted={granted}
+        onClose={closePanel}
+        onDone={() => overview.reload()}
+      />
+    );
   };
   const remove = async (server: McpServerWire, removeSecrets: boolean) => {
     if (!workspace || !server.binding) return;
@@ -228,7 +305,14 @@ function ConnectedServers() {
             granted={granted}
             readOnly={data?.permission === "read-only"}
             busy={busy === server.name}
-            testing={testing === server.name}
+            testing={false}
+            hostWording={data?.localBrowser ? undefined : "server"}
+            panelId={`mcp-panel-${server.name}`}
+            panel={panelFor(server)}
+            onConfigure={() => openPanel("configure", server)}
+            onUpdate={() => openPanel("update", server)}
+            onSignIn={() => openPanel("signin", server)}
+            onSignOut={() => void signOut(server)}
             meta={t("mcp.meta", {
               transport: server.transport,
               source: server.source,
@@ -241,7 +325,7 @@ function ConnectedServers() {
             needsGrantHint={t("mcp.needsGrant")}
             onConnect={() => void change(server, true, true)}
             onToggle={(enabled) => void change(server, enabled, false)}
-            onTest={() => void test(server)}
+            onTest={() => openPanel("test", server, true)}
             onRemove={() => setRemoving(server)}
           />
         ))}

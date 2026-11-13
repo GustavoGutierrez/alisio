@@ -277,11 +277,26 @@ describe("ExploreResults", () => {
     const text = textOf(tree);
     expect(text).toContain("1–2 of 150");
     expect(text).toContain("io.example/alpha");
-    expect(text).toContain("On this computer");
+    // A web or headless server runs programs on ITS computer, not the browser's (UX-02).
+    expect(text).toContain("On the computer running Alisio");
+    expect(text).not.toContain("On this computer");
     expect(text).toContain("Remote service");
     expect(text).toContain("Development");
     expect(text).toContain("Not supported yet");
     expect(text).toContain("pypi");
+  });
+
+  it("says this computer only when the host declared the browser is on the same machine", () => {
+    const rows = [item({ name: "io.example/alpha", execution: "local", ready: true })];
+    const local = page({ items: rows, total: 1 });
+    (local as { localBrowser?: boolean }).localBrowser = true;
+    const tree = render({
+      page: local,
+      filters: DEFAULT_FILTERS,
+      view: exploreView({ loading: false, filters: DEFAULT_FILTERS, page: local }),
+    });
+    expect(textOf(tree)).toContain("On this computer");
+    expect(textOf(tree)).not.toContain("running Alisio");
   });
 
   it("offers Install or Connect only for entries that can be installed and explains the others", () => {
@@ -401,7 +416,7 @@ describe("ExploreResults", () => {
       view: exploreView({ loading: false, filters: DEFAULT_FILTERS, page: pg }),
     });
     expect(textOf(tree)).toContain("25–25 de 60");
-    expect(textOf(tree)).toContain("En este equipo");
+    expect(textOf(tree)).toContain("En el equipo donde se ejecuta Alisio");
     const named: string[] = [];
     walk(tree, (n) => {
       const label = n.props?.["aria-label"];

@@ -70,6 +70,7 @@ import { SqliteStateStore } from "./forge/state-store.ts";
 import { GoalService } from "./goal/service.ts";
 import { GoalStore } from "./goal/store.ts";
 import { HerdrBridge } from "./integrations/herdr.ts";
+import { McpOAuth } from "./mcp/auth/index.ts";
 import { setMcpServerEnabled } from "./mcp/config-writer.ts";
 import { McpConnector } from "./mcp/connector.ts";
 import {
@@ -136,6 +137,11 @@ export interface AppOptions {
    * under the config home). The server passes the instance the installer writes to.
    */
   mcpSecretStore?: SecretStore;
+  /**
+   * The OAuth sign-in service of remote MCP servers (default: one over `mcpSecretStore`). The server
+   * passes one instance shared by every workspace, so a sign-in survives a workspace being closed.
+   */
+  mcpOAuth?: McpOAuth;
   readOnly?: boolean;
   /**
    * Document engines supplied by the host (Alisio Desktop prints through Electron, spec 026 D7).
@@ -426,6 +432,7 @@ export async function createApplication(options: AppOptions = {}) {
       config: () => config.semantic,
     }),
     mcpSecretStore = options.mcpSecretStore ?? new FileSecretStore(),
+    mcpOAuth = options.mcpOAuth ?? new McpOAuth({ store: mcpSecretStore }),
     mcp = new McpConnector(
       config.mcp.servers,
       registry,
@@ -433,6 +440,7 @@ export async function createApplication(options: AppOptions = {}) {
       options.readOnly ? "read-only" : options.allowMcp || mcpAllow ? "allowed" : "disabled",
       config.mcpSources,
       (reference) => resolveSecretReference(reference, mcpSecretStore),
+      mcpOAuth,
     );
   let mcpRuntimePermission: "granted" | "not-granted" | "read-only" = options.readOnly
     ? "read-only"
@@ -1735,6 +1743,8 @@ export async function createApplication(options: AppOptions = {}) {
       mcp,
       /** Where this application's MCP secret references are resolved from. */
       mcpSecretStore,
+      /** Sign-in service of remote MCP servers (OAuth); flows live here, tokens in the secret store. */
+      mcpOAuth,
       /**
        * What an installer needs to write this workspace's MCP configuration: the workspace and
        * whether the project is trusted for this run only (it is then written without sealing).

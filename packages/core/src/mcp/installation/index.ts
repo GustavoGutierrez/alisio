@@ -5,6 +5,12 @@ export {
   MIN_INSTALL_TIMEOUT_MS,
   readInstallTimeoutMs,
 } from "./config.ts";
+export type {
+  BindingConfiguration,
+  ConfigurationField,
+  ConfigurationPatch,
+  ConfigurationSaved,
+} from "./configure.ts";
 export type { PlanInput } from "./entry.ts";
 export { McpInstallError, type McpInstallErrorCode, type UnsupportedReason } from "./errors.ts";
 export {

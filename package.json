@@ -34,7 +34,8 @@
     "changeset": "changeset",
     "release": "pnpm build && changeset publish",
     "install:smoke": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/install-smoke.ts",
-    "test:mutation": "stryker run"
+    "test:mutation": "stryker run",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@alisio/alisio-code": "workspace:*",
@@ -47,6 +48,7 @@
     "@biomejs/biome": "2.5.14",
     "@changesets/cli": "3.0.3",
     "@modelcontextprotocol/server": "2.1.0",
+    "@playwright/test": "1.58.0",
     "@stryker-mutator/core": "10.0.0",
     "@types/node": "26.6.2",
     "bun": "1.4.2",

@@ -11,6 +11,8 @@ import type { Router } from "../http/router.ts";
 export interface McpCatalogContext {
   catalog: McpCatalogService;
   readOnly?: boolean;
+  /** The host declared the browser runs on the same computer as the server (desktop). */
+  localBrowser?: boolean;
 }
 
 const invalid = (field: string, message: string) =>
@@ -90,7 +92,13 @@ export function registerMcpCatalogRoutes(router: Router, ctx: McpCatalogContext)
       const page = ctx.catalog.list(query);
       // Keeps the index fresh without blocking this answer; a no-op under --read-only.
       ctx.catalog.ensureFresh();
-      return { body: { ...page, syncStatus: ctx.catalog.status() } };
+      return {
+        body: {
+          ...page,
+          syncStatus: ctx.catalog.status(),
+          ...(ctx.localBrowser ? { localBrowser: true } : {}),
+        },
+      };
     });
   });
 
@@ -104,7 +112,7 @@ export function registerMcpCatalogRoutes(router: Router, ctx: McpCatalogContext)
       if (source && source !== ctx.catalog.sourceId) throw new HttpError("not_found", "Not found");
       const detail = ctx.catalog.detail(name, version);
       if (!detail) throw new HttpError("not_found", "MCP catalog entry not found");
-      return { body: detail };
+      return { body: { ...detail, ...(ctx.localBrowser ? { localBrowser: true } : {}) } };
     });
   });
 

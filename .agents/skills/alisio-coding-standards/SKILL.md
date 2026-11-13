@@ -41,6 +41,8 @@ Spanish. Specs use Spanish prose (see `alisio-specs`). UI text: EN and ES.
   fixtures in `fixtures/`. Runner: Vitest (`resolve.conditions: alisio-source`, 30 s timeout).
 - Slow or real-dependency tests (Docker, network, Pyodide, browsers) sit behind env flags and skip
   by default with a clear message.
+- Browser E2E is optional and outside the delivery checklist: `pnpm build && pnpm test:e2e` (Playwright,
+  `e2e/`, `playwright.config.ts`) drives the built server and web UI with fakes; its homes are temporary.
 - Mutation testing is "lite": Stryker with narrow `mutate`, outside CI, bounded time
   (`pnpm test:mutation`, `stryker.config.mjs`). Add tests only for survivors that expose a real gap.
 - Contract tests exist: `tests/plugin-boundaries.test.ts`, `tests/run-events-contract.test.ts`,

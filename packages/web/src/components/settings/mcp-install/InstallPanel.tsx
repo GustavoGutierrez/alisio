@@ -15,6 +15,7 @@ import type {
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../../../store/app.ts";
 import { Icon } from "../../icons.tsx";
+import { SignInPanel } from "../mcp-manage/SignIn.tsx";
 import styles from "../settings.module.css";
 import { errorMessage } from "../shared.tsx";
 import css from "./install.module.css";
@@ -303,6 +304,8 @@ export interface JobViewProps {
   onRetry: () => void;
   onTest: () => void;
   onConsent: () => void;
+  /** Starts the sign-in of a remote service that asked for one (OAuth). */
+  onSignIn?: () => void;
   action?: { key: InstallStringKey; run: () => void };
 }
 
@@ -330,7 +333,7 @@ export function JobView(props: JobViewProps) {
         })
       : outcome.kind === "needs-attention"
         ? ms("outcome.needsAttention")
-        : outcome.kind === "sign-in-soon"
+        : outcome.kind === "sign-in"
           ? ms("outcome.signIn")
           : outcome.kind === "cancelled"
             ? ms("outcome.cancelled")
@@ -393,6 +396,11 @@ export function JobView(props: JobViewProps) {
         {outcome.actions.includes("test") ? (
           <button type="button" class={styles.primary} onClick={props.onTest}>
             {ms("action.test")}
+          </button>
+        ) : null}
+        {outcome.actions.includes("sign-in") && props.onSignIn ? (
+          <button type="button" class={styles.primary} onClick={props.onSignIn}>
+            {ms("outcome.signInAction")}
           </button>
         ) : null}
         {outcome.actions.includes("retry") ? (
@@ -464,6 +472,7 @@ export function InstallPanel(props: InstallPanelProps) {
     { status: string; diagnostic?: string } | null | undefined
   >();
   const [attempt, setAttempt] = useState(0);
+  const [signingIn, setSigningIn] = useState(false);
   const idempotency = useRef<string>(crypto.randomUUID());
   const drafts = useRef<Record<string, string>>({});
   const root = useRef<HTMLDivElement>(null);
@@ -703,7 +712,19 @@ export function InstallPanel(props: InstallPanelProps) {
           onCancel={props.onClose}
         />
       ) : null}
-      {state.phase === "running" ? (
+      {state.phase === "running" && signingIn && state.job.bindingId && workspace ? (
+        <SignInPanel
+          workspaceId={workspace.id}
+          bindingId={state.job.bindingId}
+          name={title}
+          autoStart
+          onClose={() => {
+            setSigningIn(false);
+            props.onClose();
+          }}
+          onFinished={() => undefined}
+        />
+      ) : state.phase === "running" ? (
         <JobView
           job={state.job}
           title={title}
@@ -717,6 +738,7 @@ export function InstallPanel(props: InstallPanelProps) {
           }}
           onTest={() => void test()}
           onConsent={() => void allowRunning()}
+          onSignIn={() => setSigningIn(true)}
         />
       ) : null}
       {state.phase === "error" ? (

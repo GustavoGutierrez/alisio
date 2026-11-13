@@ -671,8 +671,38 @@ owns in `<state home>/mcp/installations.sqlite`.
 - The initial download has a deadline of 180 seconds; set `"mcp": { "install": { "timeoutSeconds": 300 } }`
   in your **user** configuration (30 to 600; a project value is ignored) to change it. Cancelling stops
   the whole process tree and removes what the job created.
-- Unsupported methods (PyPI, OCI, MCPB, legacy SSE) and services that need to sign in (OAuth arrives in a
-  later phase) are shown honestly with manual guidance.
+- Unsupported methods (PyPI, OCI, MCPB, legacy SSE) are shown honestly with manual guidance.
+
+#### Signing in to a service (OAuth)
+
+A remote service that needs no key may ask you to sign in. The **Connected** row then says **Sign-in
+needed** and offers **Sign in**: Alisio discovers the service's authorization server
+(RFC 9728 and RFC 8414), registers itself, opens the sign-in page in your browser with PKCE and a random
+`state`, and receives the answer on a one-shot listener bound to `127.0.0.1` (the loopback helper of the
+provider sign-in). It checks the issuer of the authorization server and of the answer, binds the token to
+the protected resource it was granted for and refreshes it by itself. Tokens, the registered client and
+the PKCE verifier live in the same `SecretStore` as keys (`mcp-secrets.json`, mode `0600`, **not
+encrypted**); they are never written to the configuration, never returned by the API, never logged and
+only sent to the origin they belong to (redirects are not followed). An authorization server on another
+origin must be public HTTPS, like any address that comes from a catalog. **Sign out** removes the local
+tokens only: the service is **not** asked to revoke them. A local (stdio) server never uses this flow.
+Limits: the sign-in returns to the computer running Alisio, so it cannot finish when your browser is on
+another computer; sign-in applies to servers installed from the catalog.
+
+#### Checking, editing and updating
+
+- **Check connection** runs an isolated diagnostic session (30 seconds, cancellable): it connects and lists
+  what the service announces (tools, resources, prompts) without calling any tool, reading your files or
+  sending anything. It needs the MCP consent, because a local server is a program that runs. It never
+  touches the live connection, never registers tools twice and never switches a disabled integration on.
+  The last 20 results (30 days) are kept; a result is marked **out of date** when the settings, a saved key
+  or the version change. A passed check shows that it connected just now, not that it is safe.
+- **Configure** edits the fields the catalog card asked for. A saved key is shown only as *Key saved*;
+  leaving it empty keeps it, **Replace key** stores a new one, and every value is validated again on the
+  server. If the configuration changed while you were editing, nothing is written and you can reload the
+  changes keeping your non-secret draft.
+- **Update** (installed packages) plans the new version next to the current one, checks it and restores
+  the previous version if it does not connect. Remote services update by themselves.
 
 ### Global consent (`mcp.allow`)
 

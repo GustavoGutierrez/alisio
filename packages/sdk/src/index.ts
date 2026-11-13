@@ -3185,6 +3185,11 @@ export interface McpServerWire {
   execution?: "local" | "remote";
   /** Present when Alisio's installer owns this entry (installed from the catalog). */
   binding?: McpBindingInfo;
+  /**
+   * A remote server with no key or header configured can ask the user to sign in (OAuth).
+   * `signedIn` says whether usable sign-in data is saved on this machine (never the data itself).
+   */
+  auth?: { kind: "oauth"; signedIn: boolean };
 }
 /** The installer's record of an MCP server, without commands, URLs, paths or secrets. */
 export interface McpBindingInfo {
@@ -3201,12 +3206,87 @@ export interface McpBindingInfo {
   /** Keys saved for this integration (never their values). */
   hasSavedKeys: boolean;
   lastTest?: {
-    status: "passed" | "failed" | "needs-authentication";
+    status: "passed" | "failed" | "cancelled" | "needs-authentication";
     at: string;
     diagnostic?: string;
     counts?: { tools: number; resources: number; prompts: number };
     capabilities?: string[];
+    /** The settings, key or version changed after this result: it no longer describes them. */
+    stale?: boolean;
+    /** What the user can do next after a failure. */
+    recoveryAction?: McpRecoveryAction;
+    /** The last time a test passed (kept when a later one fails). */
+    lastPassedAt?: string;
   };
+}
+/** What the user can do after a failed or cancelled connection test. */
+export type McpRecoveryAction =
+  | "retry"
+  | "sign-in"
+  | "change-key"
+  | "install-runtime"
+  | "configure"
+  | "turn-on";
+/** One stage of a connection test; stages that do not apply are `skipped`. */
+export interface McpConnectionTestStep {
+  id: "prepare" | "connect" | "authenticate" | "discover";
+  status: "passed" | "failed" | "skipped";
+}
+/**
+ * `GET /api/mcp/bindings/:id/test`: the last connection test of an integration (specs/030 UX-07).
+ * A passed test proves connection and discovery at that moment; it is not a security audit and
+ * not proof that any tool works. No secret, raw output or URL with a token is ever included.
+ */
+export interface McpConnectionTestResult {
+  testId: string;
+  bindingId: string;
+  /** Hash of the settings, version and credential revision the test ran against. */
+  configRevision: string;
+  artifactVersion: string;
+  status: "passed" | "failed" | "cancelled";
+  steps: McpConnectionTestStep[];
+  startedAt: string;
+  finishedAt: string;
+  safeMessage: string;
+  recoveryAction?: McpRecoveryAction;
+  capabilities: string[];
+  counts: { tools: number; resources: number; prompts: number };
+  /** The integration changed after the test (settings, key or version). */
+  stale: boolean;
+  /** The last time a test passed, kept when a later one fails. */
+  lastPassedAt?: string;
+}
+/** State of a sign-in to a remote MCP service. Never carries a token, code or verifier. */
+export interface McpSignInFlow {
+  id: string;
+  state: "awaiting-browser" | "completing" | "completed" | "failed" | "cancelled";
+  /** The page to open in the browser while the flow waits for the user. */
+  authorizationUrl?: string;
+  error?: { code: string; message: string };
+}
+/** One field of an integration's settings form. A secret is never sent back, only `configured`. */
+export interface McpConfigurationField {
+  id: string;
+  kind: "env" | "header";
+  name: string;
+  description?: string;
+  secret: boolean;
+  required: boolean;
+  format?: string;
+  choices?: string[];
+  /** The current value of a field that is not a secret. */
+  value?: string;
+  /** A value (or a saved key) exists. */
+  configured: boolean;
+}
+/** `GET/PATCH /api/mcp/bindings/:id/configuration`. */
+export interface McpBindingConfiguration {
+  bindingId: string;
+  alias: string;
+  scope: "global" | "project";
+  /** Revision of the configuration file this form was read from; send it back when saving. */
+  revision: string;
+  fields: McpConfigurationField[];
 }
 /** A hidden MCP entry of a lower configuration layer. */
 export interface McpServerShadowWire {
@@ -3274,6 +3354,11 @@ export interface McpOverview {
   permission: "granted" | "not-granted" | "read-only";
   /** Global consent (`mcp.allow`) is persisted for this user. */
   persisted: boolean;
+  /**
+   * The host declared that the browser runs on the same computer as the server (the desktop app).
+   * Without it, "on this computer" really means the computer running Alisio, not the browser's.
+   */
+  localBrowser?: boolean;
   servers: McpServerWire[];
 }
 /** Why a catalog entry cannot be installed automatically (specs/030 phase 2; additive). */
@@ -3340,6 +3425,8 @@ export interface McpCatalogPage {
   pageSize: number;
   /** The text search was applied (two characters or more); otherwise the plain list is shown. */
   queryApplied: boolean;
+  /** The host declared the browser runs on the same computer as the server (see `McpOverview`). */
+  localBrowser?: boolean;
   facets: McpCatalogFacets;
   syncStatus: McpCatalogSyncStatus;
 }
@@ -3356,6 +3443,8 @@ export interface McpCatalogInputInfo {
 }
 /** `GET /api/mcp/catalog/detail`: the public card of one version, without credentials. */
 export interface McpCatalogDetail extends McpCatalogItem {
+  /** The host declared the browser runs on the same computer as the server (see `McpOverview`). */
+  localBrowser?: boolean;
   websiteUrl?: string;
   repositoryUrl?: string;
   packages: Array<{
@@ -3428,8 +3517,8 @@ export interface McpInstallJob {
     connected: boolean;
     status?: string;
     diagnostic?: string;
-    /** The service wants the user to sign in, which is not supported yet. */
-    signIn?: "coming-soon";
+    /** The service wants the user to sign in; `POST /api/mcp/bindings/:id/auth` starts it. */
+    signIn?: "available";
     counts?: { tools: number; resources: number; prompts: number };
     capabilities?: string[];
   };

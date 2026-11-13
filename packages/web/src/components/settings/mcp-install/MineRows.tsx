@@ -5,6 +5,7 @@
  * check connection and a scope-aware removal. Hook-free so the web tests can walk it.
  */
 import type { McpServerWire } from "@alisio/sdk";
+import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { Icon } from "../../icons.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -36,15 +37,28 @@ export interface MineRowProps {
   onToggle: (enabled: boolean) => void;
   onTest: () => void;
   onRemove: () => void;
+  /** Settings, update and sign-in (phase 4); every one is optional so older callers keep working. */
+  onConfigure?: () => void;
+  onUpdate?: () => void;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
+  /** `server`: the page is served by a computer that may not be the browser's (UX-02). */
+  hostWording?: "server";
+  /** The open panel of this row (check, settings, sign-in, update), rendered inside it. */
+  panel?: ComponentChildren;
+  /** Id of the element the panel opens in, for `aria-controls`. */
+  panelId?: string;
 }
 
 export function MineRow(props: MineRowProps) {
   const { server } = props;
-  const badges = badgesOf(server, props.workspaceName);
+  const badges = badgesOf(server, props.workspaceName, {
+    serverHost: props.hostWording === "server",
+  });
   const removal = removalOf(server, props.workspaceName);
   const diagnostic = server.diagnostic ?? server.binding?.lastTest?.diagnostic;
   return (
-    <li class={styles.row}>
+    <li class={`${styles.row} ${css.rowWrap}`}>
       <div class={styles.rowMain}>
         <div class={styles.rowTitle}>
           <span class={styles.cardName}>{server.displayName}</span>
@@ -86,7 +100,27 @@ export function MineRow(props: MineRowProps) {
         {diagnostic ? <p class={styles.diagnostic}>{diagnostic}</p> : null}
         {!removal && server.editable ? <p class={css.checked}>{ms("mine.manual")}</p> : null}
       </div>
-      <div class={styles.rowActions}>
+      <div class={`${styles.rowActions} ${css.actionsWrap}`}>
+        {server.auth && !server.auth.signedIn && props.onSignIn ? (
+          <button
+            type="button"
+            class={styles.primary}
+            disabled={props.readOnly || props.busy}
+            onClick={props.onSignIn}
+          >
+            {ms("action.signIn")}
+          </button>
+        ) : null}
+        {server.auth?.signedIn && props.onSignOut ? (
+          <button
+            type="button"
+            class={styles.secondary}
+            disabled={props.readOnly || props.busy}
+            onClick={props.onSignOut}
+          >
+            {ms("action.signOut")}
+          </button>
+        ) : null}
         {server.enabled && server.status !== "connected" ? (
           <button
             type="button"
@@ -109,6 +143,26 @@ export function MineRow(props: MineRowProps) {
             {ms("action.test")}
           </button>
         ) : null}
+        {server.binding && props.onConfigure ? (
+          <button
+            type="button"
+            class={styles.secondary}
+            disabled={props.readOnly || props.busy}
+            onClick={props.onConfigure}
+          >
+            {ms("action.configure")}
+          </button>
+        ) : null}
+        {server.binding?.method === "npm" && props.onUpdate ? (
+          <button
+            type="button"
+            class={styles.secondary}
+            disabled={props.readOnly || props.busy}
+            onClick={props.onUpdate}
+          >
+            {ms("action.update")}
+          </button>
+        ) : null}
         {removal ? (
           <button
             type="button"
@@ -127,6 +181,11 @@ export function MineRow(props: MineRowProps) {
           onChange={props.onToggle}
         />
       </div>
+      {props.panel ? (
+        <div class={css.panelSlot} id={props.panelId}>
+          {props.panel}
+        </div>
+      ) : null}
     </li>
   );
 }

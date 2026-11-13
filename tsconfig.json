@@ -9,6 +9,8 @@
     "apps/*/src/**/*.ts",
     "tests/**/*.ts",
     "fixtures/**/*.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts",
     "scripts/**/*.ts",
     "examples/**/*.ts",
     "vitest.config.ts",

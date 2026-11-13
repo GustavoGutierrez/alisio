@@ -492,6 +492,14 @@ export {
 export * from "./goal/index.ts";
 export { HerdrBridge } from "./integrations/herdr.ts";
 export { type McpIdentity, mcpIdentity } from "./mcp/alias.ts";
+export {
+  McpOAuth,
+  McpOAuthError,
+  type McpOAuthOptions,
+  type OAuthKey,
+  oauthSecretIds,
+  type SignInView,
+} from "./mcp/auth/index.ts";
 export { assessEntry } from "./mcp/catalog/availability.ts";
 export { CATEGORY_IDS, CATEGORY_LABELS, type CategoryId } from "./mcp/catalog/categories.ts";
 export { type CategoryClassifier, createRuleClassifier } from "./mcp/catalog/classifier.ts";
@@ -529,6 +537,13 @@ export {
   writeMcpServer,
 } from "./mcp/config-writer.ts";
 export {
+  type ConnectionRecoveryAction,
+  type ConnectionTestOutcome,
+  connectionFingerprint,
+  McpConnectionTestError,
+  runConnectionTest,
+} from "./mcp/connection-test.ts";
+export {
   McpConnector,
   type McpServerInfo,
   type McpStatus,
@@ -536,6 +551,7 @@ export {
 } from "./mcp/connector.ts";
 export {
   type AttachContext,
+  type BindingConfiguration,
   type BindingRecord,
   type BindingTestRecord,
   type ConnectResult,
@@ -553,6 +569,7 @@ export {
   type PlanInput,
   type PlanRequest,
   type ReconcileReport,
+  resolveSecretReference,
   type SecretStore,
   type StartRequest,
   type UninstallResult,

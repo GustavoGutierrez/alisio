@@ -1,12 +1,20 @@
 import { createHash } from "node:crypto";
 import { textResult } from "@alisio/sdk";
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import {
+  Client,
+  OAuthClientFlowError,
+  StreamableHTTPClientTransport,
+  type Transport,
+  UnauthorizedError,
+} from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type { McpServerSource, ServerConfig } from "../config.ts";
 import type { ToolRegistry } from "../core/registry.ts";
 import { trackProcess } from "../runtime/process-registry.ts";
 import { objectSchema } from "../tools/standard.ts";
 import { loadVersion } from "../version.ts";
+import type { McpOAuthPort } from "./auth/oauth-flow.ts";
+import { type OAuthKey, SignInRequiredError } from "./auth/oauth-provider.ts";
 import type { SecretReference } from "./installation/secrets.ts";
 import { mapMcpCallResult, mapMcpResourceResult } from "./rich.ts";
 import { resolveNodeRuntime } from "./runtime.ts";
@@ -160,11 +168,19 @@ const readable = (value: string, limit = 160) =>
     .trim()
     .slice(0, limit);
 
-const safeFailure = (error: unknown): string => {
+const SIGN_IN_FAILURE = "Sign in to continue";
+const safeFailure = (error: unknown, canSignIn = false): string => {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (
+    error instanceof SignInRequiredError ||
+    error instanceof UnauthorizedError ||
+    error instanceof OAuthClientFlowError
+  )
+    return canSignIn ? SIGN_IN_FAILURE : "Authentication is required or was rejected";
   // The SDK reports an HTTP refusal as `SdkHttpError` with the status in `data`, not in the text.
   const status = (error as { data?: { status?: unknown } } | undefined)?.data?.status;
-  if (status === 401 || status === 403) return "Authentication is required or was rejected";
+  if (status === 401 || status === 403)
+    return canSignIn ? SIGN_IN_FAILURE : "Authentication is required or was rejected";
   if (message.includes("timeout") || message.includes("timed out")) return "Connection timed out";
   if (message.includes("abort")) return "Connection cancelled";
   if (message.includes("auth") || message.includes("token") || message.includes("401"))
@@ -172,6 +188,117 @@ const safeFailure = (error: unknown): string => {
   if (message.includes("enoent")) return "Server command could not be started";
   return "Connection failed; inspect the server separately for details";
 };
+
+/** The env and headers of one server with every reference resolved; `undefined` if one is missing. */
+async function resolveSecrets(
+  config: ServerConfig,
+  secrets?: McpSecretResolver,
+): Promise<{ env: Record<string, string>; headers: Record<string, string> } | undefined> {
+  const resolve: McpSecretResolver =
+    secrets ?? (async (reference) => ("env" in reference ? process.env[reference.env] : undefined));
+  const env: Record<string, string> = {};
+  const headers: Record<string, string> = {};
+  const wanted =
+    config.transport === "stdio"
+      ? Object.entries(config.secretEnv ?? {}).map(([key, ref]) => ["env", key, ref] as const)
+      : Object.entries(config.headers ?? {}).map(([key, ref]) => ["header", key, ref] as const);
+  for (const [kind, key, reference] of wanted) {
+    const value = await resolve(reference as SecretReference).catch(() => undefined);
+    if (!value) return undefined;
+    (kind === "env" ? env : headers)[key] = value;
+  }
+  return { env, headers };
+}
+
+export interface McpTransportRequest {
+  name: string;
+  config: ServerConfig;
+  workspace: string;
+  secrets?: McpSecretResolver;
+  /** Present only for a remote server that may ask the user to sign in (never stdio). */
+  oauth?: McpOAuthPort;
+  oauthKey?: OAuthKey;
+}
+
+/**
+ * Builds the transport of one server, shared by the live connector and the isolated connection
+ * test so both resolve credentials the same way: secret references only now and never through
+ * `process.env`, a saved sign-in only for the resource it was granted for, `node` resolved to a
+ * real runtime. A missing credential stops here, before any process or request starts.
+ */
+export async function createMcpTransport(
+  request: McpTransportRequest,
+): Promise<{ transport: Transport } | { blocked: { diagnostic: string; reason: string } }> {
+  const { config } = request;
+  if (config.transport === "http" && config.bearerTokenEnv && !process.env[config.bearerTokenEnv])
+    return {
+      blocked: {
+        diagnostic: `Set the ${config.bearerTokenEnv} environment variable, then reconnect`,
+        reason: `set ${config.bearerTokenEnv}`,
+      },
+    };
+  const resolved = await resolveSecrets(config, request.secrets);
+  if (!resolved)
+    return {
+      blocked: {
+        diagnostic: "A saved key is missing: open its settings and enter it again",
+        reason: "a saved key is missing",
+      },
+    };
+  if (config.transport === "stdio") {
+    const env = Object.fromEntries(
+      ["PATH", "HOME", "SystemRoot", ...config.envAllow].flatMap((key) =>
+        process.env[key] ? [[key, process.env[key] as string]] : [],
+      ),
+    );
+    Object.assign(env, config.env, resolved.env);
+    // `node` is resolved to the system Node or Alisio's own runtime (O9).
+    const runtime = config.command === "node" ? resolveNodeRuntime() : undefined;
+    if (runtime) Object.assign(env, runtime.env);
+    return {
+      transport: new TrackedStdioTransport({
+        command: runtime?.command ?? config.command,
+        args: config.args,
+        cwd: request.workspace,
+        env,
+        stderr: "pipe" as const,
+        maxBufferSize: 1_048_576,
+      }),
+    };
+  }
+  // A saved sign-in is used for the resource it was granted for and only for it.
+  const signedIn =
+    request.oauth && request.oauthKey
+      ? await request.oauth.forConnection(request.oauthKey, config.url)
+      : undefined;
+  return {
+    transport: new StreamableHTTPClientTransport(new URL(config.url), {
+      ...(signedIn
+        ? { authProvider: signedIn.authProvider, fetch: signedIn.fetch }
+        : Object.keys(resolved.headers).length
+          ? {
+              requestInit: { headers: resolved.headers },
+              fetch: sameOriginFetch(new URL(config.url).origin),
+            }
+          : {}),
+      reconnectionOptions: {
+        maxRetries: 0,
+        maxReconnectionDelay: 1000,
+        initialReconnectionDelay: 100,
+        reconnectionDelayGrowFactor: 1,
+      },
+      ...(config.bearerTokenEnv
+        ? {
+            authProvider: {
+              token: async () => process.env[config.bearerTokenEnv as string] as string,
+            },
+          }
+        : {}),
+    }),
+  };
+}
+
+export { SIGN_IN_FAILURE, safeFailure };
 
 export class McpConnector {
   private clients = new Map<string, Connected>();
@@ -190,6 +317,7 @@ export class McpConnector {
     private availability: "allowed" | "disabled" | "read-only" = "allowed",
     private sources: Record<string, McpServerSource> = {},
     private secrets?: McpSecretResolver,
+    private oauth?: McpOAuthPort,
   ) {
     for (const [name, server] of Object.entries(servers))
       this.statuses.set(name, server.enabled ? "disconnected" : "disabled");
@@ -288,25 +416,28 @@ export class McpConnector {
     if (this.availability === "disabled")
       throw new Error("MCP is configured but disabled; restart with --allow-mcp");
   }
-  /** The env and headers of one server with every reference resolved; `undefined` if one is missing. */
-  private async resolveSecrets(
-    config: ServerConfig,
-  ): Promise<{ env: Record<string, string>; headers: Record<string, string> } | undefined> {
-    const resolve: McpSecretResolver =
-      this.secrets ??
-      (async (reference) => ("env" in reference ? process.env[reference.env] : undefined));
-    const env: Record<string, string> = {};
-    const headers: Record<string, string> = {};
-    const wanted =
-      config.transport === "stdio"
-        ? Object.entries(config.secretEnv ?? {}).map(([key, ref]) => ["env", key, ref] as const)
-        : Object.entries(config.headers ?? {}).map(([key, ref]) => ["header", key, ref] as const);
-    for (const [kind, key, reference] of wanted) {
-      const value = await resolve(reference as SecretReference).catch(() => undefined);
-      if (!value) return undefined;
-      (kind === "env" ? env : headers)[key] = value;
-    }
-    return { env, headers };
+  /**
+   * Identity of this server's sign-in (scope, workspace, alias). Only global and project entries
+   * have one: an explicit file, a plugin or a built-in is managed by its owner.
+   */
+  oauthKey(name: string): OAuthKey | undefined {
+    const kind = this.sources[name]?.kind;
+    if (kind !== "global" && kind !== "project") return undefined;
+    return {
+      scope: kind,
+      alias: name,
+      ...(kind === "project" ? { workspacePath: this.workspace } : {}),
+    };
+  }
+  /** A remote server with no key or header configured can ask the user to sign in (OAuth). */
+  oauthCapable(name: string): boolean {
+    const config = this.servers[name];
+    return (
+      config?.transport === "http" &&
+      !config.bearerTokenEnv &&
+      !Object.keys(config.headers ?? {}).length &&
+      this.oauthKey(name) !== undefined
+    );
   }
   private client(name: string): Client {
     const item = this.clients.get(name);
@@ -355,26 +486,21 @@ export class McpConnector {
     if (!config) throw new Error(`Unknown MCP server: ${name}`);
     if (!config.enabled) throw new Error(`MCP server "${name}" is disabled; enable it in /mcps`);
     if (this.clients.has(name)) return this.registeredNames(name);
-    if (
-      config.transport === "http" &&
-      config.bearerTokenEnv &&
-      !process.env[config.bearerTokenEnv]
-    ) {
+    const prepared = await createMcpTransport({
+      name,
+      config,
+      workspace: this.workspace,
+      ...(this.secrets ? { secrets: this.secrets } : {}),
+      ...(this.oauth && this.oauthCapable(name)
+        ? { oauth: this.oauth, oauthKey: this.oauthKey(name) as OAuthKey }
+        : {}),
+    });
+    if ("blocked" in prepared) {
       this.statuses.set(name, "needs-authentication");
-      this.diagnostics.set(
-        name,
-        `Set the ${config.bearerTokenEnv} environment variable, then reconnect`,
-      );
-      throw new Error(`MCP server "${name}" needs authentication; set ${config.bearerTokenEnv}`);
+      this.diagnostics.set(name, prepared.blocked.diagnostic);
+      throw new Error(`MCP server "${name}" needs authentication; ${prepared.blocked.reason}`);
     }
-    // Secret references (D17) are resolved only now, only for this connection, and never through
-    // `process.env`: a missing one stops the connection before any process or request starts.
-    const resolved = await this.resolveSecrets(config);
-    if (!resolved) {
-      this.statuses.set(name, "needs-authentication");
-      this.diagnostics.set(name, "A saved key is missing: open its settings and enter it again");
-      throw new Error(`MCP server "${name}" needs authentication; a saved key is missing`);
-    }
+    const { transport } = prepared;
     this.statuses.set(name, "connecting");
     this.diagnostics.delete(name);
     const client = new Client(
@@ -383,50 +509,6 @@ export class McpConnector {
     );
     const undo: Array<() => void> = [];
     const generation = Symbol(name);
-    const transport =
-      config.transport === "stdio"
-        ? new TrackedStdioTransport(
-            (() => {
-              const env = Object.fromEntries(
-                ["PATH", "HOME", "SystemRoot", ...config.envAllow].flatMap((key) =>
-                  process.env[key] ? [[key, process.env[key] as string]] : [],
-                ),
-              );
-              Object.assign(env, config.env, resolved.env);
-              // `node` is resolved to the system Node or Alisio's own runtime (O9).
-              const runtime = config.command === "node" ? resolveNodeRuntime() : undefined;
-              if (runtime) Object.assign(env, runtime.env);
-              return {
-                command: runtime?.command ?? config.command,
-                args: config.args,
-                cwd: this.workspace,
-                env,
-                stderr: "pipe" as const,
-                maxBufferSize: 1_048_576,
-              };
-            })(),
-          )
-        : new StreamableHTTPClientTransport(new URL(config.url), {
-            ...(Object.keys(resolved.headers).length
-              ? {
-                  requestInit: { headers: resolved.headers },
-                  fetch: sameOriginFetch(new URL(config.url).origin),
-                }
-              : {}),
-            reconnectionOptions: {
-              maxRetries: 0,
-              maxReconnectionDelay: 1000,
-              initialReconnectionDelay: 100,
-              reconnectionDelayGrowFactor: 1,
-            },
-            ...(config.bearerTokenEnv
-              ? {
-                  authProvider: {
-                    token: async () => process.env[config.bearerTokenEnv as string] as string,
-                  },
-                }
-              : {}),
-          });
     try {
       await client.connect(transport, { signal, timeout: 15000 });
       if (transport instanceof StdioClientTransport) transport.stderr?.on("data", () => {});
@@ -530,13 +612,15 @@ export class McpConnector {
       this.catalogs.delete(name);
       this.details.delete(name);
       // A service that refuses the credentials (or asks for a sign-in) needs attention, not a retry.
-      const failure = safeFailure(error);
+      const failure = safeFailure(error, this.oauthCapable(name));
       this.statuses.set(
         name,
-        failure.startsWith("Authentication") ? "needs-authentication" : "failed",
+        failure.startsWith("Authentication") || failure === SIGN_IN_FAILURE
+          ? "needs-authentication"
+          : "failed",
       );
       this.diagnostics.set(name, failure);
-      throw new Error(`MCP server "${name}" failed to connect: ${safeFailure(error)}`);
+      throw new Error(`MCP server "${name}" failed to connect: ${failure}`);
     }
   }
   /**
@@ -561,6 +645,13 @@ export class McpConnector {
     this.diagnostics.delete(name);
     this.catalogs.delete(name);
     this.details.delete(name);
+  }
+  /** Marks a server as waiting for the user to sign in (after a sign-out): nothing is connected. */
+  async requireSignIn(name: string): Promise<void> {
+    await this.disconnect(name);
+    if (!this.servers[name]?.enabled) return;
+    this.statuses.set(name, "needs-authentication");
+    this.diagnostics.set(name, SIGN_IN_FAILURE);
   }
   async disconnect(name: string): Promise<void> {
     const connected = this.clients.get(name);

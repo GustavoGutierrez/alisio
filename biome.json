@@ -8,6 +8,8 @@
       "!apps/desktop/release",
       "!**/node_modules",
       "!pnpm-lock.yaml",
+      "!test-results",
+      "!playwright-report",
       "!docs/.vitepress/cache",
       "!docs/.vitepress/dist",
       "!packs",

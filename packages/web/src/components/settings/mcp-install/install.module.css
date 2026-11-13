@@ -246,3 +246,26 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+/* A row of "Connected" can open a panel under itself and wraps on narrow screens (UX-10). */
+.rowWrap {
+  flex-wrap: wrap;
+}
+.panelSlot {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.actionsWrap {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.actionsWrap button,
+.actions button {
+  min-height: 44px;
+  min-width: 44px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step[data-state="active"] * {
+    animation: none;
+  }
+}

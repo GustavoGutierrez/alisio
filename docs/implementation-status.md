@@ -361,8 +361,8 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   (selector «Solo este proyecto»/«Todos mis proyectos», formulario único con validación cliente y
   servidor, consentimiento integrado sin marcar, progreso con cancelar) y «Conectados» muestra insignias
   de ejecución y ámbito por separado, resultado de la última comprobación y quitar/desconectar según el
-  ámbito, todo en chunks perezosos (el JS inicial no cambia). Límites: la actualización (`update-plan`)
-  existe en la API pero la UI aún no la ofrece; la comprobación de conexión es el conector existente (la
+  ámbito, todo en chunks perezosos (el JS inicial no cambia). Límites (varios superados por la fase 4,
+  ver abajo): la actualización (`update-plan`) existe en la API pero la UI aún no la ofrece; la comprobación de conexión es el conector existente (la
   sesión diagnóstica aislada, MCP-CAT-20–22, es de la fase 4); OAuth HTTP no existe (un servicio que lo
   pide se muestra como «iniciar sesión llegará pronto»); `awaiting-input` se resuelve en el plan (el job
   solo se crea con las entradas completas); un fallo del proceso entre escribir una actualización y
@@ -371,6 +371,36 @@ la derecha en el sitio o la búsqueda de su navegador en GitHub.
   «En este equipo» sin distinguir el equipo servidor (UX-02 pendiente). Verificado con pruebas de
   comportamiento con un npm falso y un servidor MCP stdio/HTTP reales en local (`mcp-installation`,
   `mcp-secrets`, `mcp-catalog-api`, `web-mcp-install`), sin red.
+- Catálogo MCP, fase 4 (spec 030): autorización OAuth para Streamable HTTP y el resto de la experiencia.
+  OAuth (`mcp/auth/`) usa las utilidades mantenidas de `@modelcontextprotocol/client` 2.1.0 (`auth()`,
+  descubrimiento RFC 9728/8414, PKCE S256, indicador de recurso RFC 8707, comprobación del emisor RFC 8414 y
+  RFC 9207, renovación) con un `OAuthClientProvider` propio sobre el puerto `SecretStore` (`mcp-oauth:<ámbito>:<alias>`:
+  tokens, cliente registrado, verificador y descubrimiento; nunca en configuración, API, logs ni errores) y el
+  ayudante de bucle local de la spec 025 (`127.0.0.1`, `state` en tiempo constante, un solo uso). El token se
+  guarda unido al recurso para el que se concedió y no se ofrece a otro origen; un servidor de autorización
+  en otro origen que el del recurso debe ser HTTPS público (guardia D20) y no se siguen redirecciones; stdio
+  nunca usa este flujo. «Cerrar sesión» borra solo los tokens locales (sin revocación remota). Rutas
+  `POST/DELETE /api/mcp/bindings/:id/auth`, `GET/POST /api/mcp/auth/flows/:id[/cancel]`. Comprobación de
+  conexión aislada (`mcp/connection-test.ts`: sesión diagnóstica de 30 s cancelable, etapas preparar →
+  conectar → autenticar → descubrir, solo lista capacidades anunciadas, sin llamar herramientas, necesita el
+  consentimiento MCP, no toca la conexión activa ni activa un vínculo desactivado), resultado tipado
+  (`McpConnectionTestResult`, `GET/POST /api/mcp/bindings/:id/test`, `…/test/cancel`), historial de 20 resultados
+  / 30 días en `installations.sqlite` y marca de «desactualizado» por huella (entrada, versión, revisión de
+  credenciales). Configuración editable (`GET/PATCH /api/mcp/bindings/:id/configuration`: formulario tipado,
+  validación de servidor, clave solo como «guardada», vacío = conservar, conflicto de revisión). Web (chunks
+  perezosos; el JS inicial sigue en 94,9 KB / 95 KB): ficha de detalle en Explorar, panel de comprobación con
+  recuperación, formulario de configuración, inicio/cierre de sesión, botón Actualizar (con restauración si no
+  conecta) y, en un servidor web o sin interfaz, «En el equipo donde se ejecuta Alisio» en lugar de «En este
+  equipo» (UX-02). E2E de navegador (`pnpm test:e2e`, Playwright, **fuera** del checklist por defecto):
+  búsqueda → instalar con clave → comprobar → cambiar la clave → quitar; inicio de sesión OAuth contra un
+  servidor de autorización local; instalación local/actualización; recuperación, teclado y 360 px; EN/ES.
+  Límites: el inicio de sesión vuelve al equipo donde corre Alisio (no termina si el navegador está en otro);
+  OAuth solo para integraciones instaladas desde el catálogo (no entradas manuales); sin DPoP, sin
+  `client_credentials` y sin revocación remota; no se fija la resolución DNS del servidor de autorización
+  (ventana de rebinding abierta, como D20); el E2E usa un npm falso y un catálogo falso (no hay red);
+  «cambiar la disponibilidad» entre ámbitos como acción propia no existe (se logra instalándolo en el otro
+  ámbito y quitando el anterior); la cobertura E2E de «requisito ausente» (sin npm) y de tiempo agotado
+  se prueba en pruebas de módulo, no en navegador; sin capturas de pantalla (fase 5).
 - Herdr custom: reportes de lifecycle, sesión y herramientas de comunicación entre agentes.
 
 ### CLI, runtime y empaquetado

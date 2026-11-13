@@ -253,3 +253,57 @@
   color: var(--muted);
   font-size: 13px;
 }
+
+.detail {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  border-radius: 8px;
+}
+.detailTitle {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.detailTitle:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+.detailList {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+.detailRow {
+  display: grid;
+  grid-template-columns: minmax(7rem, 9rem) 1fr;
+  gap: 0.5rem;
+}
+.detailTerm {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.detailText {
+  margin: 0;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.detailItems {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.detailMuted {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+@media (max-width: 480px) {
+  .detailRow {
+    grid-template-columns: 1fr;
+  }
+}
