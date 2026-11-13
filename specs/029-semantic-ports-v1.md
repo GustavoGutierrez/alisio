@@ -5,7 +5,7 @@
 | Versión | 0.1 |
 | Origen | Análisis de arquitectura del 2026-11-10 (núcleo frente a plugin) con referencias externas: Continue.dev (rol de modelo `embed` en la configuración del núcleo), Obsidian Smart Connections (`smart-embed-model` y `smart-env` como infraestructura compartida entre plugins) y el coste medido de `onnxruntime-node` (~210 MB con binarios de todas las plataformas, issues plur-ai #1193 y #1194) **(no verificado: fuentes externas)** |
 | Proyecto | Alisio |
-| Estado | **Aprobada por el propietario (2026-11-10).** Fases 1-2 implementadas, sin commit ni publicar; ver `docs/implementation-status.md`. Sin preguntas abiertas (Q1 cerrada por O3) |
+| Estado | **Aprobada por el propietario (2026-11-10).** Fases 1-2 implementadas, sin commit ni publicar; ver `apps/website/implementation-status.md`. Sin preguntas abiertas (Q1 cerrada por O3) |
 | Fecha | 2026-11-10 |
 | Paquetes afectados | `@alisio/sdk` (tipos aditivos opcionales: `EmbeddingProvider`, `VectorStoreProvider`, `SemanticApi`, `ToolSemantic`, `SemanticError`, `SemanticErrorCode`, `PluginAPI.semantic?`, `ToolContext.semantic?`) · `@alisio/core` (nuevo `packages/core/src/semantic/{registry,service,validate,namespace,index}.ts`; cambios en `config.ts`, `plugins/host.ts`, `application.ts`, `commands/builtins.ts`) · **repositorio externo `alisio-plugins`**: `packages/plugin-semantic` (Anexo A, entregable separado, NO se ejecuta en este repo; spec completa en `alisio-plugins/specs/alisio-plugin-semantic-v1.md`) |
 | Paquetes nuevos | Ninguno en este repo. **Ninguna dependencia nueva de producción en el host**: LanceDB, `onnxruntime-node`, `@huggingface/transformers` y los modelos viven solo en el plugin externo (D2) |
@@ -19,7 +19,7 @@
 2. Etiquetas: **(verificado 2026-11-10)** = leído en el repositorio (rama `develop`, commit `cf49cde`, árbol limpio); **(no verificado)** = deducido o externo; **(nuevo)** = no existe.
 3. Palabras clave **MUST, MUST NOT, SHOULD, SHOULD NOT, MAY** según RFC 2119 (aclarado por RFC 8174), solo donde importan para interoperabilidad, seguridad o pruebas; todo SHOULD indica su excepción. Comportamiento en forma EARS (`WHEN <disparador>, el <sistema> MUST <respuesta>`).
 4. **TDD estricto Rojo → Verde → Refactor** (§7). Pruebas en `tests/*.test.ts` de cada paquete, sobre comportamiento en límites de módulo; sin instantáneas.
-5. **Orden obligatorio**: Fases 1 → 2 en este repo (§9). El Anexo A se ejecuta en el repo `alisio-plugins` con sus propias reglas y **no forma parte de la definición de terminado de esta spec**. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. **No hagas commit hasta que el propietario lo pida.**
+5. **Orden obligatorio**: Fases 1 → 2 en este repo (§9). El Anexo A se ejecuta en el repo `alisio-plugins` con sus propias reglas y **no forma parte de la definición de terminado de esta spec**. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. **No hagas commit hasta que el propietario lo pida.**
 6. **Asignación de modelos**: §8.
 7. Reglas que no se rompen: solo pnpm; Node >=22.16 y Bun; solo APIs portables de Node; **ningún binario nativo, runtime de inferencia, base vectorial ni modelo en `@alisio/sdk`, `@alisio/core`, `@alisio/server`, `@alisio/web` ni `@alisio/alisio-code`** (D2); los plugins dependen solo de `@alisio/sdk`; un manifiesto o un subproceso no es un sandbox.
 8. Idioma: identificadores, claves de configuración y códigos de error en inglés; textos de UI en EN y ES; esta spec en español; documentación EN/ES en paridad.
@@ -47,7 +47,7 @@ Dar a Alisio una **capacidad semántica compartida** (embeddings + almacén vect
 - Clave de configuración global `semantic` (§6).
 - Comando `/semantic` de estado (solo lectura).
 - Doble de prueba en memoria (solo en `tests/`) que implementa ambos puertos.
-- Documentación EN/ES y `docs/implementation-status.md`.
+- Documentación EN/ES y `apps/website/implementation-status.md`.
 
 ### 1.4 Fuera de alcance
 
@@ -349,7 +349,7 @@ Getters triviales, reexportaciones, la forma del esquema de configuración repet
 
 ### Fase 2: superficie, guardia de paquete y documentación
 
-- Archivos: `packages/core/src/commands/builtins.ts` (`/semantic`), i18n EN/ES de la Web si el comando muestra texto en la Web, guardia D2 en el script de `pack:check`, `docs/plugins.md` + `docs/es/plugins.md` (sección «Semantic search providers and consumers» con un ejemplo mínimo de consumidor y de proveedor), `docs/configuration.md` + `docs/es/configuration.md` (clave `semantic`), `docs/implementation-status.md` (límites: sin motor incluido; espacios de nombres no son aislamiento; reindexar es tarea del consumidor).
+- Archivos: `packages/core/src/commands/builtins.ts` (`/semantic`), i18n EN/ES de la Web si el comando muestra texto en la Web, guardia D2 en el script de `pack:check`, `apps/website/plugins.md` + `apps/website/es/plugins.md` (sección «Semantic search providers and consumers» con un ejemplo mínimo de consumidor y de proveedor), `apps/website/configuration.md` + `apps/website/es/configuration.md` (clave `semantic`), `apps/website/implementation-status.md` (límites: sin motor incluido; espacios de nombres no son aislamiento; reindexar es tarea del consumidor).
 - Cierra: SE-AC-16, SE-AC-17.
 - Captura de pantalla de la Web: solo si `/semantic` cambia la Web visiblemente (ver `alisio-docs-screenshots`).
 - Termina verde.
@@ -360,7 +360,7 @@ Getters triviales, reexportaciones, la forma del esquema de configuración repet
 
 - SE-AC-01..17 verdes, con el repo verde en los 9 comandos de §0.
 - Ninguna dependencia nueva de producción en paquetes publicados del host (D2, SE-AC-16).
-- Documentación EN/ES en paridad (`plugins`, `configuration`) y `docs/implementation-status.md` actualizado con límites y alcance verificado.
+- Documentación EN/ES en paridad (`plugins`, `configuration`) y `apps/website/implementation-status.md` actualizado con límites y alcance verificado.
 - Versión de parche 0.11.x preparada según `alisio-publish`; **sin publicar ni hacer commit hasta que el propietario lo pida**.
 - El Anexo A NO forma parte de esta definición de terminado.
 

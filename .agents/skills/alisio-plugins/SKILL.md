@@ -5,7 +5,7 @@ description: "How to create, change, test and publish an Alisio plugin: Plugin o
 
 # Alisio plugins
 
-Reference page: `docs/plugins.md` (+ `docs/es/plugins.md`). Contract: `packages/sdk/src/index.ts`
+Reference page: `apps/website/plugins.md` (+ `apps/website/es/plugins.md`). Contract: `packages/sdk/src/index.ts`
 (`Plugin`, `PluginAPI`, `ToolDefinition`, `ToolContext`). Host: `packages/core/src/plugins/host.ts`.
 Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 
@@ -44,7 +44,7 @@ Related: `alisio-pkg-sdk`, `alisio-coding-standards`.
 | Compaction, session hooks | `api.compaction.register`, `api.session.onStart/onEnd` (timeouts `pluginHooks.*`) |
 | Small state, private SQLite | `api.state.get/set`, `api.storage.sqlite(path)` (0600, FTS5), `api.paths` |
 | Read-only data for web | `api.views?.register({ id, description, params, handler })` |
-| Full-page app (web) | `api.apps?.register({ id, label, html, actions, busy?, dispose? })`: HTML with `nonce="__ALISIO_NONCE__"` scripts in a sandboxed iframe, actions `{ effect, inputSchema, handler }` gated like tools (an ask in the chat raises the same approval over the app, never the input; denied/unanswered/read-only = `app_action_denied` with `details.effect`), session from the route; see `docs/plugins.md#plugin-apps` and `examples/plugins/hello-app` |
+| Full-page app (web) | `api.apps?.register({ id, label, html, actions, busy?, dispose? })`: HTML with `nonce="__ALISIO_NONCE__"` scripts in a sandboxed iframe, actions `{ effect, inputSchema, handler }` gated like tools (an ask in the chat raises the same approval over the app, never the input; denied/unanswered/read-only = `app_action_denied` with `details.effect`), session from the route; see `apps/website/plugins.md#plugin-apps` and `examples/plugins/hello-app` |
 | Model access | `api.model.complete`, `api.models.list/resolve`, `api.providers.register` |
 | Child sessions | `api.sessions.*` (narrowed permissions; see `plugin-subagents`) |
 | UI | `api.ui.status/panel/select/askQuestions` (no-op or `undefined` when headless) |
@@ -138,5 +138,5 @@ not internals.
 
 Repo packages release together via `alisio-publish` (never `npm publish` directly). External
 plugins: set `peerDependencies["@alisio/sdk"]` to the current minor (`^0.x`: caret accepts only that
-minor), build to JS, `npm publish`. Docs for a plugin-facing change go in `docs/plugins.md` and
-`docs/es/plugins.md` (parity).
+minor), build to JS, `npm publish`. Docs for a plugin-facing change go in `apps/website/plugins.md` and
+`apps/website/es/plugins.md` (parity).

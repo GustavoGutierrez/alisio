@@ -11,7 +11,7 @@ language: es-CO
 > **Propósito de este documento:** transformar la investigación de arXiv en grupos de funcionalidades autocontenidos que puedan evolucionar, cada uno, hacia una especificación técnica independiente. El contenido propone capacidades, no afirma que ya estén implementadas.
 
 **Fecha:** 13 de octubre de 2026
-**Proyecto:** [Alisio](https://gustavogutierrez.github.io/alisio/) · [Repositorio](https://github.com/GustavoGutierrez/alisio) · [Documentación](https://github.com/GustavoGutierrez/alisio/tree/main/docs)
+**Proyecto:** [Alisio](https://alisioair.com/) · [Repositorio](https://github.com/GustavoGutierrez/alisio) · [Documentación](https://github.com/GustavoGutierrez/alisio/tree/main/docs)
 
 ## 1. Visión y criterio de investigación
 

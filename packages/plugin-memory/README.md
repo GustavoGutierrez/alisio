@@ -63,8 +63,8 @@ Under `builtinPlugins.memory`:
 
 ## Docs
 
-[Memory plugin](https://gustavogutierrez.github.io/alisio/memory) ·
-[Configuration](https://gustavogutierrez.github.io/alisio/configuration).
+[Memory plugin](https://alisioair.com/memory) ·
+[Configuration](https://alisioair.com/configuration).
 
 ## Requirements
 

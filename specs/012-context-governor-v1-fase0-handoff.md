@@ -26,9 +26,9 @@
 | `scripts/eval-record-bundled.ts` | modificado | Scripts de referencia de las 4 tareas; `configOverrides` y `answerCompactions` |
 | `tests/eval-bundled-suites.test.ts`, `tests/eval-ci.test.ts` | modificados | Validan la suite nueva |
 | `package.json` | modificado | Script `eval:gen-stress` |
-| `docs/eval.md`, `docs/es/eval.md`, `docs/limitations.md`, `docs/implementation-status.md` | modificados | Suite nueva y límites (EN/ES) |
+| `apps/website/eval.md`, `apps/website/es/eval.md`, `apps/website/limitations.md`, `apps/website/implementation-status.md` | modificados | Suite nueva y límites (EN/ES) |
 
-Verificación que reportó el agente escritor: `pnpm test` (313 archivos, 4520 pruebas, 1 saltado), `pnpm typecheck`, `pnpm lint`, `pnpm docs:check` en verde. **No se ejecutaron** `pnpm build` completo tras los cambios, `test:cli`, `test:compiled`, `pack:check` ni `docs:build`. Antes de confirmar hay que correr la lista completa de `alisio-coding-standards`.
+Verificación que reportó el agente escritor: `pnpm test` (313 archivos, 4520 pruebas, 1 saltado), `pnpm typecheck`, `pnpm lint`, `pnpm website:check` en verde. **No se ejecutaron** `pnpm build` completo tras los cambios, `test:cli`, `test:compiled`, `pack:check` ni `website:build`. Antes de confirmar hay que correr la lista completa de `alisio-coding-standards`.
 
 La suite `long-context` (v1.0.0) **no se modificó** a propósito, para conservar su línea base comparable.
 

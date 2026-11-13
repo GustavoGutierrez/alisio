@@ -116,7 +116,7 @@ Pendientes abiertos: resultados de la Fase 0 (§16.1), verificación de Google d
 | Web: carga perezosa con `import()` en `app.tsx` (Settings, Agents, Memory…); presupuesto inicial **90 KB gzip JS / 20 KB CSS** (`scripts/web-size.ts`) | `packages/web/src/app.tsx`, `scripts/web-size.ts` | verificado; tamaño actual (~80 KB) no verificado |
 | Etiquetas de ajustes: **`SETTING_LABELS` en `packages/web/src/components/settings/labels.ts`**; `tests/web-i18n.test.ts` exige etiqueta EN y ES por cada clave de `settableSettings()` y prohíbe etiquetas huérfanas. Corrige el análisis previo, que hablaba de claves `setting.*` | ídem | verificado |
 | Claves ajustables: `SETTABLE_KEYS` en `core/src/config.ts` | ídem | verificado |
-| Capturas de la web en `docs/assets/web-ui/*.webp` | `docs/assets/web-ui/` | verificado |
+| Capturas de la web en `apps/website/assets/web-ui/*.webp` | `apps/website/assets/web-ui/` | verificado |
 | Versión actual de todos los paquetes: 0.1.1 | `packages/*/package.json` | verificado |
 
 ---
@@ -837,7 +837,7 @@ El navegador no llega al loopback del servidor: la UI muestra el plan B desde el
 - **TUI**: `/source` (menú: status, sync, add files, review changes, disconnect); `alisio source connect [--provider google-drive] [--access read|propose]` (imprime URL, abre navegador si puede, acepta la URL pegada), `alisio source status [--json]`, `alisio source sync <id>`, `alisio source disconnect <id> [--delete-local]`; pie de estado con `api.ui.status`-equivalente interno: `☁ synced` / `☁ 3 to send`.
 - **Accesibilidad**: foco gestionado en cada paso, `aria-live="polite"` para el progreso, todos los controles con teclado, contraste WCAG AA.
 - **Carga perezosa**: el asistente, la revisión y la página de Ajustes son `import()`; los textos viven en `components/sources/strings.ts` (EN/ES, perezoso, como `memory/strings.ts`). El chunk inicial solo gana el store y la insignia (≤ 1,5 KB gzip). `pnpm web:size` debe seguir ≤ 90 KB.
-- **Ayuda**: `docs/cloud-folders.md` y `docs/es/cloud-folders.md`, enlazadas desde «What will Alisio see?».
+- **Ayuda**: `apps/website/cloud-folders.md` y `apps/website/es/cloud-folders.md`, enlazadas desde «What will Alisio see?».
 
 ---
 
@@ -899,7 +899,7 @@ El proveedor en memoria pasa todos los casos y alimenta las pruebas de core sin 
 | web | `src/components/sources/{SourceWizard,CloudFoldersPage,PushReview,SyncBadge}.tsx`, `strings.ts`, `sources.module.css`, `src/store/sources.ts` | `src/net/api.ts`, `src/components/sidebar/Sidebar.tsx`, `src/components/settings/{SettingsModal.tsx,labels.ts}`, `src/store/events.ts` (tramas) |
 | cli | `src/tui/sources.ts`, `src/source-command.ts` | `src/main.ts` (subcomando), `src/builtin.ts`, `src/tui/app.ts` (`/source`), `package.json` |
 | nuevo | `packages/plugin-google-drive/**` | `scripts/pack-check.ts` (enumera los paquetes publicados, verificado); `pnpm-workspace.yaml` no cambia (`packages/*`, verificado) |
-| docs | `docs/cloud-folders.md`, `docs/es/cloud-folders.md`, `docs/assets/web-ui/cloud_folder_wizard_web_ui.webp`, `…/cloud_folder_review_web_ui.webp` | `docs/.vitepress/config.ts`, `docs/{plugins,configuration,web,tui,tools}.md` + ES, `docs/implementation-status.md`, `docs/limitations.md`, `CHANGELOG.md` |
+| docs | `apps/website/cloud-folders.md`, `apps/website/es/cloud-folders.md`, `apps/website/assets/web-ui/cloud_folder_wizard_web_ui.webp`, `…/cloud_folder_review_web_ui.webp` | `apps/website/.vitepress/config.ts`, `docs/{plugins,configuration,web,tui,tools}.md` + ES, `apps/website/implementation-status.md`, `apps/website/limitations.md`, `CHANGELOG.md` |
 
 ---
 
@@ -948,7 +948,7 @@ CI nunca usa red: Google se simula siempre.
 - **Entregables:** tipos SDK (§5.1), `@alisio/sdk/testing/sources`, v9, `core/src/sources/*` (salvo OAuth real y vault de SO: stub en memoria), regla de raíz exacta, exclusión de `.alisio/`/`.agents/agents/`, `projectInstructions`, prefijo de contenido no confiable, `RunGate`, `alisio source status --json` contra el proveedor en memoria (bandera oculta de prueba).
 - **Aceptación core/server:** el kit de conformidad pasa con el proveedor en memoria; las propiedades de §15 pasan con 500 secuencias por semilla; un workspace local existente no cambia (prueba de regresión de `workspaces()` y `openPath`); la migración v9 conserva todos los datos de una base v8.
 - **Web/TUI:** sin UI visible (solo el campo opcional `source` en `WorkspaceInfo`).
-- **Docs:** `docs/implementation-status.md` (estado «motor sin proveedor real»).
+- **Docs:** `apps/website/implementation-status.md` (estado «motor sin proveedor real»).
 
 ### 16.3 Fase 2 — Google Drive solo lectura + OAuth + asistente (L)
 
@@ -958,7 +958,7 @@ CI nunca usa red: Google se simula siempre.
   - web: un usuario de prueba no técnico conecta en ≤ 4 pasos sin ayuda; `pnpm web:size` ≤ 90 KB; lector de pantalla anuncia el progreso.
   - TUI: conexión por SSH con plan B pegar URL.
   - headless: `alisio source sync <id>` devuelve código 0/≠0 y JSON estable.
-- **Docs:** `cloud-folders.md` EN/ES (con las instrucciones BYO), `configuration.md`, `plugins.md` (`api.sources`), `web.md`, `tui.md`, `implementation-status.md`; capturas reales `docs/assets/web-ui/cloud_folder_wizard_web_ui.webp` y `cloud_folders_settings_web_ui.webp`.
+- **Docs:** `cloud-folders.md` EN/ES (con las instrucciones BYO), `configuration.md`, `plugins.md` (`api.sources`), `web.md`, `tui.md`, `implementation-status.md`; capturas reales `apps/website/assets/web-ui/cloud_folder_wizard_web_ui.webp` y `cloud_folders_settings_web_ui.webp`.
 - **Release:** entrada en `CHANGELOG.md` bajo **0.2.0** (Added: Cloud folders (Google Drive, read-only)); changesets de sdk, core, server, cli y plugin-google-drive.
 
 ### 16.4 Fase 3 — Proponer y enviar con aprobaciones (L)
@@ -983,7 +983,7 @@ CI nunca usa red: Google se simula siempre.
 
 ### 17.1 Definición de terminado (por fase)
 
-`pnpm check` verde; pruebas nuevas primero (TDD); kit de conformidad verde; paridad EN/ES (`pnpm docs:check`); `docs/implementation-status.md` actualizado con alcance de verificación y limitaciones; capturas reales cuando haya UI; `pnpm web:size` dentro del presupuesto; changeset y entrada de CHANGELOG; ninguna regresión en workspaces locales; revisión manual del asistente con una persona no técnica (Fase 2).
+`pnpm check` verde; pruebas nuevas primero (TDD); kit de conformidad verde; paridad EN/ES (`pnpm website:check`); `apps/website/implementation-status.md` actualizado con alcance de verificación y limitaciones; capturas reales cuando haya UI; `pnpm web:size` dentro del presupuesto; changeset y entrada de CHANGELOG; ninguna regresión en workspaces locales; revisión manual del asistente con una persona no técnica (Fase 2).
 
 ### 17.2 Riesgos
 

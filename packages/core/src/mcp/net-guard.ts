@@ -7,7 +7,7 @@
  * Limits: the DNS answer is checked at planning time, not pinned to the later connection, so a
  * hostile resolver could still answer differently later (rebinding). Redirects are not followed at
  * connection time for bindings with secret headers (see the connector), which closes the redirect
- * route; the rebinding window remains and is documented in `docs/implementation-status.md`.
+ * route; the rebinding window remains and is documented in `apps/website/implementation-status.md`.
  */
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";

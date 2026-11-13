@@ -783,7 +783,7 @@ Reglas:
 
 [^3]: https://www.azion.com/en/documentation/products/store/sql-database/vector-search/
 
-[^4]: https://github.com/7xuanlu/wenlan/blob/main/docs/technical-foundations.md
+[^4]: https://github.com/7xuanlu/wenlan/blob/main/apps/website/technical-foundations.md
 
 [^5]: https://www.anygen.io/showcase/libsql/index.html
 
@@ -801,7 +801,7 @@ Reglas:
 
 [^12]: https://github.com/notrab/libsql-vector
 
-[^13]: https://github.com/tursodatabase/turso/blob/main/docs/manual.md
+[^13]: https://github.com/tursodatabase/turso/blob/main/apps/website/manual.md
 
 [^14]: https://docs.turso.tech/features/ai-and-embeddings
 

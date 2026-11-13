@@ -11,4 +11,4 @@ alisio --plugin ./dist/index.js
 ```
 
 Enable the plugin for the project, then open **Apps > Hello app** in the left panel. See
-`docs/plugins.md` ("Plugin apps") for the contract, the sandbox and its limits.
+`apps/website/plugins.md` ("Plugin apps") for the contract, the sandbox and its limits.

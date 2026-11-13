@@ -111,7 +111,7 @@ export function shouldCompact(used: number, window: number | undefined, threshol
  * Declared context windows above this many tokens are treated as unknown for auto-compaction and
  * for the context bar: a `window * threshold` trigger would dwarf the char-budget fallback and
  * hide real pressure (e.g. an 8M-token window with a default 160k-char budget would never even
- * reach 2% before running out of space). Documented in docs/compaction.md.
+ * reach 2% before running out of space). Documented in apps/website/compaction.md.
  */
 export const MAX_TRUSTED_WINDOW = 2_000_000;
 

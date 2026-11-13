@@ -18,11 +18,11 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 sobre `main` (0.6.0, `2e867c7`); **(no verificado)** = deducido o externo sin prueba ejecutada aquí; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts` (vitest), sobre comportamiento en límites de módulo. Sin pruebas de instantánea.
-4. **Orden obligatorio**: Fase 0 (medición con el laboratorio) → el propietario revisa → Fases 1..7. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (medición con el laboratorio) → el propietario revisa → Fases 1..7. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: §14. Por defecto Sonnet; Opus solo en los puntos listados.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y debe funcionar en Bun; solo `node:fs`, `node:child_process`, `node:sqlite`; ningún SDK de proveedor ni import específico de runtime en `@alisio/sdk` ni en los contratos del core; los plugins dependen solo de `@alisio/sdk` (peer) y **no importan internals de `@alisio/core`**; preservar IDs de llamadas a herramientas, datos de continuación del proveedor y consistencia de sesión persistida; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Contratos **aditivos**: las uniones solo ganan variantes; `RunEvent.schemaVersion` sigue en 1; ningún `RunStatus` existente cambia de semántica.
-8. Idioma: identificadores, eventos, claves y mensajes de error en inglés; UI en inglés y español (`src/i18n/en.ts` y `es.ts`, `packages/web/src/i18n/es.ts`); esta especificación en español. Docs EN/ES en paridad; límites en `docs/implementation-status.md`; capturas Web UI en `docs/assets/web-ui/<feature>_web_ui.webp` (§AGENTS.md).
+8. Idioma: identificadores, eventos, claves y mensajes de error en inglés; UI en inglés y español (`src/i18n/en.ts` y `es.ts`, `packages/web/src/i18n/es.ts`); esta especificación en español. Docs EN/ES en paridad; límites en `apps/website/implementation-status.md`; capturas Web UI en `apps/website/assets/web-ui/<feature>_web_ui.webp` (§AGENTS.md).
 9. Esta especificación **no crea permisos ni modifica el gate** (`permissions/decide.ts`, `permissions/modes.ts`). La estrategia y la guardia **informan y detienen el bucle**; nunca aprueban ni deniegan una herramienta.
 
 ## 1. Objetivo, usuarios y principio rector
@@ -127,7 +127,7 @@ Selector de estrategia determinista con override y registro; guardia de progreso
 | D16 | **Feature-detect en plugins**: `plugin-subagents` no importa internals del core; consulta capacidades por el SDK (`context.decisions?`, presencia de los campos nuevos en `ChildRunResult`). Con un core antiguo el plugin funciona sin contrato ni agregación (degradación a texto). |
 | D17 | **Con un único modelo todo funciona igual**: la estrategia no requiere varios modelos; `task` con `model` por hijo sigue siendo opcional. |
 | D18 | Persistencia: la estrategia elegida y los eventos de estancamiento se guardan como eventos de sesión (el almacén de eventos existente). **No se crea tabla nueva** en la v1; si más adelante hace falta consultar estadísticas históricas, se usa «la siguiente migración libre (v11 si es la primera en ejecutarse)» y se coordina con las demás specs. |
-| D19 | Cada fase actualiza `docs/implementation-status.md`. |
+| D19 | Cada fase actualiza `apps/website/implementation-status.md`. |
 
 ## 4. Concepto
 
@@ -299,7 +299,7 @@ Pruebas (Rojo primero): `tests/progress-guard.test.ts`, y las existentes de goal
 - Superficies: texto localizado de la razón en TUI (`src/i18n`), Web (`packages/web/src/i18n`, tarjeta en el hilo) y JSONL (`alisio run --json`). SSE ya transporta los eventos.
 
 Criterios de aceptación:
-1. Un bucle de llamadas idénticas se detiene con razón visible en TUI/Web/JSONL (criterio clave 5), con captura Web en `docs/assets/web-ui/adaptive_stalled_web_ui.webp` en ES y EN según `AGENTS.md`.
+1. Un bucle de llamadas idénticas se detiene con razón visible en TUI/Web/JSONL (criterio clave 5), con captura Web en `apps/website/assets/web-ui/adaptive_stalled_web_ui.webp` en ES y EN según `AGENTS.md`.
 2. El nudge se inyecta exactamente una vez por síntoma (O7); el segundo disparo termina el run.
 3. La sesión sigue utilizable tras `stalled`: un mensaje nuevo del usuario arranca un run normal.
 4. IDs de tool calls y datos de continuación del proveedor se conservan en el run terminado por la guardia (prueba sobre el historial persistido).
@@ -360,10 +360,10 @@ Pruebas: `tests/delegation-minscope.test.ts`.
 ### Fase 7 — Puerta de promoción, documentación y cierre (Sonnet)
 
 - Ejecutar con el laboratorio la comparación `shadow` vs `suggest/enforce` y `progress` activo vs inactivo; reportar según §11. **Solo el propietario decide** qué pasa a default.
-- `docs/adaptive-execution.md` y `docs/es/adaptive-execution.md` en paridad; capturas Web de la tarjeta de estrategia y del panel de subagentes con contrato (reutilizar capturas existentes si ya muestran la función).
-- `docs/implementation-status.md`: qué quedó activo, qué quedó en `shadow`, límites (sin elección de modelo, heurística no aprendida, sin garantía de ausencia de falsos positivos).
+- `apps/website/adaptive-execution.md` y `apps/website/es/adaptive-execution.md` en paridad; capturas Web de la tarjeta de estrategia y del panel de subagentes con contrato (reutilizar capturas existentes si ya muestran la función).
+- `apps/website/implementation-status.md`: qué quedó activo, qué quedó en `shadow`, límites (sin elección de modelo, heurística no aprendida, sin garantía de ausencia de falsos positivos).
 
-Criterios de aceptación: informe de la puerta adjunto; docs EN/ES en paridad; `pnpm docs:check` y `pnpm docs:build` verdes.
+Criterios de aceptación: informe de la puerta adjunto; docs EN/ES en paridad; `pnpm website:check` y `pnpm website:build` verdes.
 
 ## 8. Pruebas (mapa)
 

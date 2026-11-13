@@ -16,7 +16,7 @@ for scripts and CI.
 - **Source repository**: <https://github.com/GustavoGutierrez/alisio>.
 - **Developer profile**: <https://github.com/GustavoGutierrez> ·
   LinkedIn: <https://www.linkedin.com/in/gustavo-gutierrez-mercado>.
-- **Documentation** (EN/ES): <https://gustavogutierrez.github.io/alisio/>.
+- **Documentation** (EN/ES): <https://alisioair.com/>.
 
 ## Skills index (`.agents/skills/`)
 
@@ -36,6 +36,7 @@ relevant package or plugin skill.**
 | `alisio-docs-screenshots` | Documenting or changing a Web UI feature (screenshot rule) |
 | `alisio-specs` | Writing, executing or archiving a spec under `specs/`; test strategy |
 | `alisio-publish` | Publishing, releasing or bumping versions on npm |
+| `alisio-website` | Building, checking or deploying the website (`apps/website`, alisioair.com) |
 
 ## Publishing
 
@@ -61,8 +62,8 @@ test strategy). Load it before writing or executing one.
   treat a plugin manifest or a subprocess as a sandbox.
 - Preserve tool call IDs, provider continuation data and persisted session consistency.
 - Keep the English and Spanish documentation pages in parity (see CONTRIBUTING.md); document
-  limitations and verification scope in `docs/implementation-status.md`.
+  limitations and verification scope in `apps/website/implementation-status.md`.
 - Test behavior at module boundaries; no snapshot tests that merely restate implementation.
 - Before delivery run the checklist in `alisio-coding-standards` (`pnpm typecheck`, `lint`, `test`,
-  `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`).
+  `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check`, `website:build`).
 - Web UI features need a real screenshot in the EN and ES docs: see `alisio-docs-screenshots`.

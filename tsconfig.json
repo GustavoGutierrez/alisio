@@ -14,7 +14,7 @@
     "scripts/**/*.ts",
     "examples/**/*.ts",
     "vitest.config.ts",
-    "docs/.vitepress/**/*.ts"
+    "apps/website/.vitepress/**/*.ts"
   ],
   "exclude": ["packages/web/**", "tests/fixtures/eval/**"]
 }

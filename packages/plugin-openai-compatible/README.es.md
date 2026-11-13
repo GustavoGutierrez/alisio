@@ -51,8 +51,8 @@ Mientras está registrado, el proveedor también aparece en `/model` y en `alisi
 
 ## Documentación
 
-[Configuración](https://gustavogutierrez.github.io/alisio/configuration) ·
-[Plugins](https://gustavogutierrez.github.io/alisio/plugins).
+[Configuración](https://alisioair.com/configuration) ·
+[Plugins](https://alisioair.com/plugins).
 
 ## Requisitos
 

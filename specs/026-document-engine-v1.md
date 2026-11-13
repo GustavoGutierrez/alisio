@@ -21,8 +21,8 @@
 2. Language: this spec is written in English at the owner's request (2026-11-08), which overrides the Spanish-prose precedent of `specs/`. Identifiers, error codes and generated strings are English; UI text is EN and ES.
 3. Labels: **(verificado 2026-11-08)** = read in the repo that day; **(no verificado)** = assumption to confirm, usually in Phase 0; **(nuevo)** = introduced by this spec.
 4. RFC 2119 keywords (MUST, MUST NOT, SHOULD, SHOULD NOT, MAY) are used in capitals only where behavior matters for safety, interoperation or tests.
-5. Strict TDD (Red → Green → Refactor, §6.1). Phases run in order; Phase 0 has a gate (§8). Each phase ends green: `pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`.
-6. Never break: pnpm only; Node ≥ 22.16 and Bun compatible, portable Node APIs only; no provider SDK or runtime-specific import in `@alisio/sdk` or the agent-core contracts; one permission gate (`permissions/decide.ts`); EN/ES docs parity; `docs/implementation-status.md` records limits and verification scope.
+5. Strict TDD (Red → Green → Refactor, §6.1). Phases run in order; Phase 0 has a gate (§8). Each phase ends green: `pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check`, `website:build`.
+6. Never break: pnpm only; Node ≥ 22.16 and Bun compatible, portable Node APIs only; no provider SDK or runtime-specific import in `@alisio/sdk` or the agent-core contracts; one permission gate (`permissions/decide.ts`); EN/ES docs parity; `apps/website/implementation-status.md` records limits and verification scope.
 7. Do not commit or publish until the owner asks. Never revert or reformat files you did not create.
 8. Model assignment: §7.
 9. The owner's temporary reference documents are NOT part of the repository and MUST NOT be committed, copied or referenced by path.
@@ -339,7 +339,7 @@ A theme defines, as tokens in `manifest.json` turned into CSS custom properties:
 
 ### 5.5 Fonts (D10)
 
-- Bundled WOFF2 fonts under SIL OFL 1.1 with their license files; subsets Latin, Latin Extended, Greek and Cyrillic. Proposed set (Q1): Inter (sans), Source Serif 4 (serif), JetBrains Mono (mono). Font versions are recorded in `docs/implementation-status.md` for reproducibility.
+- Bundled WOFF2 fonts under SIL OFL 1.1 with their license files; subsets Latin, Latin Extended, Greek and Cyrillic. Proposed set (Q1): Inter (sans), Source Serif 4 (serif), JetBrains Mono (mono). Font versions are recorded in `apps/website/implementation-status.md` for reproducibility.
 - `scripts/document-fonts.ts` generates `coverage.json` (Unicode ranges per family). Before rendering, `qa.ts` scans every text codepoint; WHEN a codepoint is not covered, the tool MUST add `glyphs_missing` (with up to 10 sample characters) and follow Q2 (CJK, emoji).
 - Theme CSS MUST NOT use `local()` or generic families as fallback, except the final `sans-serif`/`serif`/`monospace` keyword required by CSS, which is never reached for covered text.
 
@@ -602,9 +602,9 @@ Release notes (CHANGELOG + `packages/core/src/changelog/data.ts`) are drafted pe
 
 ## 9. Definition of done
 
-- DOC-AC rows of each delivered phase pass (env-flagged rows run at least once on Linux and Windows and are recorded with date in `docs/implementation-status.md`).
-- Docs EN/ES in parity: new `docs/documents.md` + `docs/es/documents.md` (themes, blocks, engines, capability matrix, security limits, setup per OS for Chromium and WeasyPrint/Pango), and updates to `tools.md`, `forja.md` (routing change), `analysis.md` (`documents` extras), `limitations.md`, `desktop.md`, `web.md` (Phase 4 card with EN/ES screenshots), `configuration.md`, plus `docs/.vitepress/config.ts` navigation.
-- `docs/implementation-status.md`: engines verified per OS, font versions, degraded features, no PDF/A/UA/PDF-X claim, verification scope.
+- DOC-AC rows of each delivered phase pass (env-flagged rows run at least once on Linux and Windows and are recorded with date in `apps/website/implementation-status.md`).
+- Docs EN/ES in parity: new `apps/website/documents.md` + `apps/website/es/documents.md` (themes, blocks, engines, capability matrix, security limits, setup per OS for Chromium and WeasyPrint/Pango), and updates to `tools.md`, `forja.md` (routing change), `analysis.md` (`documents` extras), `limitations.md`, `desktop.md`, `web.md` (Phase 4 card with EN/ES screenshots), `configuration.md`, plus `apps/website/.vitepress/config.ts` navigation.
+- `apps/website/implementation-status.md`: engines verified per OS, font versions, degraded features, no PDF/A/UA/PDF-X claim, verification scope.
 - Delivery checklist green; `pack:check` within the size budget of Q1.
 - Phase 0 results recorded as D-21+; Opus invocations 1 and 2 recorded.
 
@@ -650,7 +650,7 @@ Release notes (CHANGELOG + `packages/core/src/changelog/data.ts`) are drafted pe
 
 ## 12. Phase 1 implementation notes (2026-11-08)
 
-Implemented: DOC-AC-01..10, 13..16, 18..22 and 31 (fast tests, fake engine), DOC-AC-11, 12 and 17 on system Chrome 154 behind `ALISIO_TEST_CHROMIUM=1`. DOC-AC-35 does not apply (no settings labels, see below). `pnpm typecheck`, `test` (full suite), `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check` and `docs:build` pass; `lint` passes except for the owner's untracked temporary folder. Real renders (Linux, Chrome 154, A4, 10-12 pages, three themes): cold first call about 400 ms, warm 120-140 ms per render, 0 QA errors, tagged PDF, `pdffonts` lists bundled families only. The same render also works with the loopback transport and under Bun 1.2.
+Implemented: DOC-AC-01..10, 13..16, 18..22 and 31 (fast tests, fake engine), DOC-AC-11, 12 and 17 on system Chrome 154 behind `ALISIO_TEST_CHROMIUM=1`. DOC-AC-35 does not apply (no settings labels, see below). `pnpm typecheck`, `test` (full suite), `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check` and `website:build` pass; `lint` passes except for the owner's untracked temporary folder. Real renders (Linux, Chrome 154, A4, 10-12 pages, three themes): cold first call about 400 ms, warm 120-140 ms per render, 0 QA errors, tagged PDF, `pdffonts` lists bundled families only. The same render also works with the loopback transport and under Bun 1.2.
 
 Deviations from the spec text (all deliberate):
 

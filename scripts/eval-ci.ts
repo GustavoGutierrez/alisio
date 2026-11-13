@@ -12,7 +12,7 @@
  *
  * Replay measures the HARNESS, not the model: the model answers come from a recording. The lab
  * informs; this script is not part of the default CI and promoting it to a required check is the
- * owner's decision (see "Using replay in CI" in docs/eval.md). It runs from a source checkout only:
+ * owner's decision (see "Using replay in CI" in apps/website/eval.md). It runs from a source checkout only:
  * the suites, the cassettes and this script are not shipped in any npm package.
  *
  * Runs with `node --conditions=alisio-source --experimental-transform-types` (see the package.json

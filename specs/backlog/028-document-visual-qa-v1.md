@@ -19,7 +19,7 @@
 
 1. Read `AGENTS.md` and `CONTRIBUTING.md`; load `alisio-architecture`, `alisio-coding-standards`, `alisio-pkg-core`, `alisio-pkg-sdk` and `alisio-plugins`. Also read `specs/026-document-engine-v1.md` §5.8, §12 and §13 first.
 2. Labels: **(verificado)** = read in the repo or measured; **(nuevo)** = introduced here. RFC 2119 keywords in capitals only where behavior matters. Strict TDD. Language: English prose (as 026); identifiers, codes and generated strings in English; UI text EN and ES.
-3. Green command list at the end of the phase: `pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`.
+3. Green command list at the end of the phase: `pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check`, `website:build`.
 4. Do not commit or publish until the owner asks. Never revert files you did not create.
 5. On resume, re-verify every "(verificado 2026-11-08)" claim against the repo: 026 shipped and the code moved since.
 
@@ -120,9 +120,9 @@ Files: `documents/raster.ts` (pdf.js in Chromium/Electron; pypdfium2 for WeasyPr
 
 ## 6. Definition of done
 
-- DOC-AC-32..34 pass (the env-flagged row runs at least once on Linux and Windows and is recorded with its date in `docs/implementation-status.md`).
-- Docs EN/ES (`docs/documents.md`, `docs/es/documents.md`, `docs/configuration.md`) describe the two config keys and the skip reasons, in parity.
-- `docs/implementation-status.md` records verification scope and the vendored pdf.js version.
+- DOC-AC-32..34 pass (the env-flagged row runs at least once on Linux and Windows and is recorded with its date in `apps/website/implementation-status.md`).
+- Docs EN/ES (`apps/website/documents.md`, `apps/website/es/documents.md`, `apps/website/configuration.md`) describe the two config keys and the skip reasons, in parity.
+- `apps/website/implementation-status.md` records verification scope and the vendored pdf.js version.
 - Delivery checklist green; `pack:check` stays within the 026 size budget (Q1).
 
 ## 7. Risks and known limits

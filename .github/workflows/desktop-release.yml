@@ -102,7 +102,7 @@ jobs:
           Verify your download with \`SHA256SUMS-desktop.txt\`, attached to this release once every build has finished
           (\`sha256sum -c SHA256SUMS-desktop.txt --ignore-missing\`).
 
-          Full guide: https://gustavogutierrez.github.io/alisio/desktop
+          Full guide: https://alisioair.com/desktop
           NOTES
           case "$VERSION" in
             *-*) flags=(--prerelease --latest=false) ;;

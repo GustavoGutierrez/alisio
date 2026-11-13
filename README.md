@@ -3,13 +3,13 @@
 **English** · [Español](README.es.md)
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Alisio — AI that works with you" width="720">
+  <img src="apps/website/assets/banner.png" alt="Alisio — AI that works with you" width="720">
 </p>
 
 [![CI](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoGutierrez/alisio/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@alisio/alisio-code?label=npm)](https://www.npmjs.com/package/@alisio/alisio-code)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-EN%20%7C%20ES-8A2BE2)](https://gustavogutierrez.github.io/alisio/)
+[![Docs](https://img.shields.io/badge/docs-EN%20%7C%20ES-8A2BE2)](https://alisioair.com/)
 
 **Alisio — AI that works with you. Your work, with more possibilities.** Alisio is a desktop app
 with artificial intelligence that helps you with tasks from your work, your studies and your daily
@@ -20,15 +20,15 @@ describing what you need, and connect tools and services from the MCP catalog. I
 teachers, students, office staff, accountants and the home, and it works with the model you choose.
 Programming is still possible, as an [advanced use](#advanced-use).
 
-**[Download Alisio](https://gustavogutierrez.github.io/alisio/#download)** ·
-[See how it works](https://gustavogutierrez.github.io/alisio/#how-it-works) ·
-[Documentation (EN/ES)](https://gustavogutierrez.github.io/alisio/)
+**[Download Alisio](https://alisioair.com/#download)** ·
+[See how it works](https://alisioair.com/#how-it-works) ·
+[Documentation (EN/ES)](https://alisioair.com/)
 
 ## What can it help you with?
 
 - **Turn a spreadsheet into a report.** Attach a CSV or Excel table and ask for a summary with
   charts. You get a dashboard or a report you can open, check and share
-  ([Smart Dashboard](https://gustavogutierrez.github.io/alisio/smart-dashboard)).
+  ([Smart Dashboard](https://alisioair.com/smart-dashboard)).
 - **Prepare a printable exam.** With the Evalúa plugin, a teacher prepares a school **math** exam as
   a printable document, reviews it and reuses its format. Today it covers school math only.
 - **Make certificates and cards.** With the Cardsmith plugin, office staff prepare certificates,
@@ -69,7 +69,7 @@ the file you keep.
    then save, print or share it. You keep the final word.
 
 <p align="center">
-  <img src="docs/assets/alisio-harness-web-ui.webp" alt="The Alisio interface showing the project list, an active conversation and the file explorer" width="860">
+  <img src="apps/website/assets/alisio-harness-web-ui.webp" alt="The Alisio interface showing the project list, an active conversation and the file explorer" width="860">
 </p>
 
 The desktop app shows this interface in its own window; it also opens in your browser.
@@ -84,11 +84,11 @@ Plugins add tools and apps for a profession.
   [plugin catalog](https://gustavogutierrez.github.io/alisio-plugins/) online.
 - **Build a helper made for you.** Open **Plugin creator** and describe a task you repeat. It builds
   the plugin, checks it and lets you decide when to install it, even with its own screen in the
-  **Apps** menu ([Plugin creator](https://gustavogutierrez.github.io/alisio/plugin-creator)).
+  **Apps** menu ([Plugin creator](https://alisioair.com/plugin-creator)).
 - **Connect a tool or service.** **Settings → MCP servers → Explore** lists tools and services you
   can connect, with guided sign-in, a connection check and one-click removal. Appearing in that list
   is not a security review, and some services still need manual setup
-  ([MCP catalog](https://gustavogutierrez.github.io/alisio/mcp-catalog)).
+  ([MCP catalog](https://alisioair.com/mcp-catalog)).
 
 | What you want to do | What it uses | Status |
 | --- | --- | --- |
@@ -111,7 +111,7 @@ decision, Alisio supports your work; it does not replace your professional judgm
 - **You choose the folder.** Alisio works with the folder you open. In the **Ask** permission mode
   it asks before it changes a file, runs a program or uses the internet; other modes let more run
   without asking, and you can switch at any time. See
-  [Permission modes](https://gustavogutierrez.github.io/alisio/tools#permission-modes).
+  [Permission modes](https://alisioair.com/tools#permission-modes).
 - **Working with local files is not the same as keeping everything on your computer.** Your
   conversations and settings are saved on your computer, but what Alisio reads to answer you is sent
   to the model you configured. With an online service, that service receives it; connected tools
@@ -128,8 +128,8 @@ decision, Alisio supports your work; it does not replace your professional judgm
 - **Evalúa covers school math only.**
 - **The desktop app has no automatic update yet**: you install a new version with its installer,
   and the installers are not signed. See the
-  [desktop app limits](https://gustavogutierrez.github.io/alisio/desktop#limitations) and
-  [Known limitations](https://gustavogutierrez.github.io/alisio/limitations).
+  [desktop app limits](https://alisioair.com/desktop#limitations) and
+  [Known limitations](https://alisioair.com/limitations).
 - **Checks help, they do not guarantee.** Review every result before you use it.
 
 ## Download and requirements
@@ -142,7 +142,7 @@ Download the desktop app from the
 - Linux: [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb)
 
 The installers are not signed, so Windows SmartScreen and macOS Gatekeeper ask for one extra step the
-first time (see [docs/desktop.md](docs/desktop.md)). Then connect a model in **Settings → Models**,
+first time (see [apps/website/desktop.md](apps/website/desktop.md)). Then connect a model in **Settings → Models**,
 open a folder and describe the task.
 
 **Is it free?** Alisio is free and open source, under the MIT license. The model you connect may
@@ -156,8 +156,8 @@ refreshing the catalogs, web search and online services need a connection.
 > **Status: stable, tested and documented, still pre-1.0.** Until 1.0.0 the usual 0.x semver rules
 > apply: fixes ship as patch releases and a new minor release may include breaking changes. The npm
 > badge above always shows the latest published version; see the
-> [limitations](https://gustavogutierrez.github.io/alisio/limitations) and
-> [Stability and versioning](https://gustavogutierrez.github.io/alisio/publishing#stability-and-versioning).
+> [limitations](https://alisioair.com/limitations) and
+> [Stability and versioning](https://alisioair.com/publishing#stability-and-versioning).
 
 ## Advanced use
 
@@ -197,21 +197,21 @@ technical details.
   and custom dashboards in a container (`oci`) or a restricted Pyodide process (`wasm`) when
   available, and `analysis.isolation: required` keeps it off your host. Guides load on demand with
   `forge_guide`, and each session gets a private scratchpad. See the
-  [Forja docs](https://gustavogutierrez.github.io/alisio/forja) for the isolation limits.
+  [Forja docs](https://alisioair.com/forja) for the isolation limits.
 - **Dashboards and charts**: Python analysis publishes dashboards, reports and spreadsheets as
   artifacts, with interactive charts from an embedded Chart.js that works offline.
 - **Reliability Lab**: `alisio eval` runs task suites k times with deterministic verifiers, reports
   pass rates with Wilson intervals, compares reports and config variants, and replays recorded
   cassettes to catch harness regressions without a model (replay measures the harness, not the
-  model). See the [Reliability Lab docs](https://gustavogutierrez.github.io/alisio/eval).
+  model). See the [Reliability Lab docs](https://alisioair.com/eval).
 - **Proof**: acceptance criteria whose status comes from evidence Alisio captured from the commands,
   file reads and data queries the agent really ran, not from what the model says. Shown in the web UI,
   the terminal and `alisio run --proof` (exit codes 0/10/11, `proof/v1` JSON). It does not prove the
-  code is correct. See the [Proof docs](https://gustavogutierrez.github.io/alisio/proof).
+  code is correct. See the [Proof docs](https://alisioair.com/proof).
 - **Typed plugin SDK**: tools, commands, context, compaction and session hooks, provider-agnostic
   completions and a storage port. Load plugins from a path or an npm package — install them
   globally with `alisio install npm:<package>` (or let the agent do it via the permissioned
-  `plugin_install` tool). See [Writing plugins](https://gustavogutierrez.github.io/alisio/plugins).
+  `plugin_install` tool). See [Writing plugins](https://alisioair.com/plugins).
 - **Also**: headless JSONL mode, subagents, MCP servers (with an optional persistent global
   `mcp.allow` consent that auto-connects enabled servers on every start, or per-session grants from
   the TUI), AGENTS.md scopes, Agent Skills, Herdr integration.
@@ -269,7 +269,7 @@ separately: `alisio install npm:@alisio/plugin-deepseek`,
 `alisio install npm:@alisio/plugin-opencode`, `alisio install npm:@alisio/plugin-opencode-go`.
 
 The desktop app is built from this repository and is not published to npm; see
-[docs/desktop.md](docs/desktop.md) to run it from a checkout or build the installers.
+[apps/website/desktop.md](apps/website/desktop.md) to run it from a checkout or build the installers.
 
 ### Development
 
@@ -277,23 +277,23 @@ The desktop app is built from this repository and is not published to npm; see
 pnpm install --frozen-lockfile
 pnpm dev                 # run the CLI from source (Bun)
 pnpm check               # typecheck, lint, tests, build, CLI e2e (Node and binary), packs, docs
-pnpm publish -- --all --dry-run   # preview the publishable packages; see docs/publishing.md
+pnpm publish -- --all --dry-run   # preview the publishable packages; see apps/website/publishing.md
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [Publishing](https://gustavogutierrez.github.io/alisio/publishing).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [Publishing](https://alisioair.com/publishing).
 
 Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability, and follow
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) when participating.
 
 ## Documentation
 
-- [English docs](https://gustavogutierrez.github.io/alisio/)
-- [Documentación en español](https://gustavogutierrez.github.io/alisio/es/)
-- [Product specification](docs/specification.md): the product direction, kept in the repository.
-- [Validation log](docs/validation.txt) and [benchmark data](docs/benchmark.json): raw validation output.
+- [English docs](https://alisioair.com/)
+- [Documentación en español](https://alisioair.com/es/)
+- [Product specification](apps/website/specification.md): the product direction, kept in the repository.
+- [Validation log](apps/website/validation.txt) and [benchmark data](apps/website/benchmark.json): raw validation output.
 
 The documentation site is bilingual (English and Spanish). The detailed implementation status
-([docs/implementation-status.md](docs/implementation-status.md)) is maintained in Spanish.
+([apps/website/implementation-status.md](apps/website/implementation-status.md)) is maintained in Spanish.
 
 ## Author and license
 

@@ -76,6 +76,6 @@ provider response never leaves a tool call without a result; retries do not appe
   one concern per file, domain folders under `core/src/` (e.g. `goal/`, `plan/`, `forge/`).
 - Public API of a package = its `src/index.ts` exports; new core exports go there.
 - Tests live in root `tests/` (flat, `<area>-<topic>.test.ts`), not next to sources.
-- Specs live in `specs/` (see `alisio-specs`); user docs in `docs/` (EN) and `docs/es/` (ES).
+- Specs live in `specs/` (see `alisio-specs`); user docs in `apps/website/` (EN) and `apps/website/es/` (ES).
 - Generated files (embedded Python/data-engine/Pyodide sources) are rebuilt by scripts listed in
   `CONTRIBUTING.md`; tests fail when stale. Never hand-edit them.

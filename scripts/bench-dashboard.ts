@@ -8,7 +8,7 @@
  *
  * The key is read by Alisio itself (the provider's `apiKeyEnv`); this script never reads, prints or
  * stores it. Every variant of one results file uses the same model; results go to
- * `docs/benchmark-dashboard.json` (model and endpoint HOST only).
+ * `apps/website/benchmark-dashboard.json` (model and endpoint HOST only).
  */
 
 import { spawnSync } from "node:child_process";
@@ -53,7 +53,7 @@ Options:
   --plugin <path>      Plugin loaded by variant C (repeatable or comma list), e.g. the extracted
                        @alisio/plugin-laya/dist/index.js; C requires it. Share one Laya runtime between runs
                        with ALISIO_LAYA_HOME=<abs dir> (already set up with /laya:setup)
-  --out <file>         Results file (default docs/benchmark-dashboard.json)
+  --out <file>         Results file (default apps/website/benchmark-dashboard.json)
   --command <cmd>      How to start Alisio (default: node packages/cli/dist/main.js)
   --timeout-min <n>    Per-run limit in minutes (default 15)
   --keep               Keep the temp folder
@@ -127,7 +127,7 @@ async function main(): Promise<number> {
     throw new BenchUsageError(
       "Variant C needs --plugin <path to the entry file of @alisio/plugin-laya (dist/index.js)>: the isolated config home sees no global plugins.",
     );
-  const out = resolve(values.out ?? "docs/benchmark-dashboard.json");
+  const out = resolve(values.out ?? "apps/website/benchmark-dashboard.json");
 
   const probeDir = mkdtempSync(join(tmpdir(), "alisio-bench-probe-"));
   const supportsSmartDashboard = await probeSmartDashboardSupport({

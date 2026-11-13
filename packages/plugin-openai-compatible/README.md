@@ -46,8 +46,8 @@ While registered, the provider also appears in `/model` and `alisio doctor`.
 
 ## Docs
 
-[Configuration](https://gustavogutierrez.github.io/alisio/configuration) ·
-[Plugins](https://gustavogutierrez.github.io/alisio/plugins).
+[Configuration](https://alisioair.com/configuration) ·
+[Plugins](https://alisioair.com/plugins).
 
 ## Requirements
 

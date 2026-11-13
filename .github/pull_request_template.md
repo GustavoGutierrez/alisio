@@ -10,7 +10,7 @@
 - [ ] `pnpm build` passes
 - [ ] `pnpm test:cli` and `pnpm test:compiled` pass
 - [ ] `pnpm pack:check` passes
-- [ ] `pnpm docs:build` passes
+- [ ] `pnpm website:build` passes
 - [ ] English and Spanish documentation are in parity where the change is user-visible
 - [ ] Commit messages are Conventional Commits and describe the outcome, not the file list
 - [ ] Only `pnpm-lock.yaml` is kept for dependencies (no npm/yarn lockfiles)

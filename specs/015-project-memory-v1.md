@@ -18,11 +18,11 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 (`main`, 0.6.0, `2e867c7`); **(no verificado)** = deducido o externo sin prueba ejecutada aquí; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts` (vitest; las existentes son `tests/memory.test.ts`, `tests/memory-views.test.ts` y `tests/web-memory.test.ts`), sobre comportamiento en límites de módulo. Sin pruebas de instantánea.
-4. **Orden obligatorio**: Fase 0 (medición con memoria real y migración en seco) → el propietario revisa → Fases 1..6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (medición con memoria real y migración en seco) → el propietario revisa → Fases 1..6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: Sonnet por defecto; Opus solo en los puntos de §12.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y Bun; solo APIs portables de Node; **el plugin depende solo de `@alisio/sdk` (peer) y no importa internos de `@alisio/core`**; sin SDK de proveedor en contratos; preservar IDs de tool calls y consistencia de sesión; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Contratos **aditivos**: migraciones forward-only, columnas con `DEFAULT`, ninguna fila existente se reescribe ni se pierde.
-8. Idioma: identificadores, claves y textos de herramientas en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts`); esta spec en español; docs EN/ES en paridad (`docs/memory.md`); límites en `docs/implementation-status.md`; captura Web UI en `docs/assets/web-ui/memory_provenance_web_ui.webp` (reglas de `AGENTS.md`; reutilizar una captura existente de Memory si ya muestra la función).
+8. Idioma: identificadores, claves y textos de herramientas en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts`); esta spec en español; docs EN/ES en paridad (`apps/website/memory.md`); límites en `apps/website/implementation-status.md`; captura Web UI en `apps/website/assets/web-ui/memory_provenance_web_ui.webp` (reglas de `AGENTS.md`; reutilizar una captura existente de Memory si ya muestra la función).
 
 ## 1. Objetivo y principio rector
 
@@ -49,7 +49,7 @@ Columnas aditivas de procedencia y estado en `observations`, tabla `observation_
 
 | Excluido | Motivo |
 | --- | --- |
-| Memoria vectorial o semántica (embeddings) | Ya excluida en `docs/memory.md` (sin embeddings, sin red). |
+| Memoria vectorial o semántica (embeddings) | Ya excluida en `apps/website/memory.md` (sin embeddings, sin red). |
 | RAG de documentos del usuario | Es `specs/research/023-knowledge-vault-research.md`. |
 | Resolución automática de contradicciones por modelo | Violaría el principio rector; solo se detectan y se muestran. |
 | Sincronización entre máquinas | Local-first; el export/import de Perímetro cubre el intercambio manual. |
@@ -77,7 +77,7 @@ Columnas aditivas de procedencia y estado en `observations`, tabla `observation_
 
 - **O1 — Estados de vigencia.** **Recomendación:** `observed | verified | obsolete | contradicted` (cuatro valores; `may_be_stale` es calculado en lectura y no se persiste).
 - **O2 — Quién puede marcar `verified`.** **Recomendación:** solo el usuario (UI/herramienta con confirmación) o una evidencia referenciable (`evidence_ref` de `specs/archive/011-proof-v1.md` cuando exista); el modelo no se autopromueve a `verified`.
-- **O3 — Cambio de semántica del upsert por `topic_key`.** **Recomendación:** pasar a «nueva revisión + enlace `supersedes` + fila anterior conservada (`obsolete`)»; es el único cambio de comportamiento visible y se documenta en `docs/memory.md`.
+- **O3 — Cambio de semántica del upsert por `topic_key`.** **Recomendación:** pasar a «nueva revisión + enlace `supersedes` + fila anterior conservada (`obsolete`)»; es el único cambio de comportamiento visible y se documenta en `apps/website/memory.md`.
 - **O4 — Conflicto al guardar `decision|architecture`.** **Recomendación:** si hay similitud FTS alta con otra observación vigente sin el mismo `topic_key`, **devolver candidatos** y no guardar hasta que el modelo/usuario elija (`replace`, `link`, `keep_both`); umbral configurable, con default conservador.
 - **O5 — Chequeo de frescura por `git`.** **Recomendación:** activo por defecto solo en lectura de `memory_get`/`memory_context`/vista web (no en cada `memory_search`), con caché por `HEAD` y presupuesto de tiempo corto; `memory.freshness: "off" | "on"`.
 - **O6 — Abstención.** **Recomendación:** `memory_search` devuelve `{ evidence: "none", results: [] }` cuando ningún resultado vigente supera un umbral de rango BM25; el umbral se calibra en Fase 0.
@@ -286,8 +286,8 @@ En `api.session.onEnd`, `proposals.ts` genera candidatos desde los recuerdos de 
 
 ### Fase 6 — Export/import, medición y documentación
 
-- Extender el formato de export/import de `specs/018-perimeter-v1.md` (coordinar el orden con esa spec; si Perímetro no se ha ejecutado, definir el esquema aquí y que Perímetro lo adopte); suite de abstención/obsolescencia en el laboratorio; docs EN/ES (`docs/memory.md`), `docs/implementation-status.md` (límites: frescura es heurística por archivos, no semántica), captura web en EN/ES.
-- **Aceptación:** AC6 (round-trip export/import sin pérdida de estado, procedencia ni enlaces) y batería completa verde (`pnpm typecheck|lint|test|build|test:cli|test:compiled|pack:check|docs:check|docs:build`).
+- Extender el formato de export/import de `specs/018-perimeter-v1.md` (coordinar el orden con esa spec; si Perímetro no se ha ejecutado, definir el esquema aquí y que Perímetro lo adopte); suite de abstención/obsolescencia en el laboratorio; docs EN/ES (`apps/website/memory.md`), `apps/website/implementation-status.md` (límites: frescura es heurística por archivos, no semántica), captura web en EN/ES.
+- **Aceptación:** AC6 (round-trip export/import sin pérdida de estado, procedencia ni enlaces) y batería completa verde (`pnpm typecheck|lint|test|build|test:cli|test:compiled|pack:check|website:check|website:build`).
 
 ## 11. Criterios de aceptación globales
 

@@ -18,11 +18,11 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 (`main`, 0.6.0, `2e867c7`); **(no verificado)** = deducido o externo sin prueba ejecutada aquí; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts` (vitest), sobre comportamiento en límites de módulo. Sin pruebas de instantánea que restablezcan la implementación.
-4. **Orden obligatorio**: Fase 0 (medición del gate actual y del corpus) → el propietario revisa → Fases 1..6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (medición del gate actual y del corpus) → el propietario revisa → Fases 1..6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: Sonnet por defecto para ejecución; Opus solo en los puntos de §12.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y debe funcionar en Bun; solo `node:fs`, `node:child_process`, `node:sqlite`; ningún SDK de proveedor ni import de runtime en `@alisio/sdk` ni en los contratos del core; los plugins dependen solo de `@alisio/sdk` (peer) y no importan internos de `@alisio/core`; preservar IDs de tool calls, datos de continuación del proveedor y consistencia de sesión persistida; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Los contratos son **aditivos**: las uniones solo ganan variantes; `RunEvent.schemaVersion` sigue en 1.
-8. Idioma: identificadores, eventos, claves de configuración y textos de UI en inglés (más ES en `packages/web/src/i18n/es.ts`); esta especificación en español; documentación EN/ES en paridad; límites en `docs/implementation-status.md`; capturas Web UI en `docs/assets/web-ui/trust_web_ui.webp` (reglas de `AGENTS.md`).
+8. Idioma: identificadores, eventos, claves de configuración y textos de UI en inglés (más ES en `packages/web/src/i18n/es.ts`); esta especificación en español; documentación EN/ES en paridad; límites en `apps/website/implementation-status.md`; capturas Web UI en `apps/website/assets/web-ui/trust_web_ui.webp` (reglas de `AGENTS.md`).
 9. **Esto es política, no aislamiento.** Ninguna sección de esta spec puede presentarse en docs, UI o mensajes como sandbox, garantía de seguridad ni defensa completa contra inyección.
 
 ## 1. Objetivo y principio rector
@@ -196,7 +196,7 @@ Tabla nueva `trust_audit(id, session_id, run_id, call_id, tool, reason, decision
 - **Comandos:** `/trust` (TUI/web) lista orígenes taintados y escaladas del run; `alisio run --json` emite los eventos `trust_*`.
 - **`/stats`:** contadores de escaladas, bloqueos y señales.
 - **Perímetro:** su reporte añade la sección «data-flow» con el modo `trust.taint` efectivo (solo lectura; ver `specs/018-perimeter-v1.md`).
-- **Web:** tarjeta de aprobación con motivo; captura `docs/assets/web-ui/trust_web_ui.webp` en EN y ES.
+- **Web:** tarjeta de aprobación con motivo; captura `apps/website/assets/web-ui/trust_web_ui.webp` en EN y ES.
 
 ## 9. Pruebas (estrategia)
 
@@ -251,8 +251,8 @@ Por módulo, en `tests/trust-*.test.ts`, sin snapshots:
 ### Fase 6 — Medición, promoción y documentación
 
 - Ejecutar el corpus con el laboratorio (S3), reportar tasa de bloqueo y falsos positivos; el propietario decide si `shadow` pasa a `enforce` por defecto (no automático).
-- Docs EN/ES (`docs/permissions`/seguridad según estructura existente), `docs/implementation-status.md` con límites («política, no sandbox; heurísticas evadibles»), captura web en EN/ES, sección «data-flow» de Perímetro.
-- **Aceptación:** AC5 y toda la batería de entrega (`pnpm typecheck|lint|test|build|test:cli|test:compiled|pack:check|docs:check|docs:build`) verde.
+- Docs EN/ES (`apps/website/permissions`/seguridad según estructura existente), `apps/website/implementation-status.md` con límites («política, no sandbox; heurísticas evadibles»), captura web en EN/ES, sección «data-flow» de Perímetro.
+- **Aceptación:** AC5 y toda la batería de entrega (`pnpm typecheck|lint|test|build|test:cli|test:compiled|pack:check|website:check|website:build`) verde.
 
 ## 11. Criterios de aceptación globales
 
@@ -272,7 +272,7 @@ Sonnet por defecto. **Opus solo en:** (a) diseño de la matriz `evaluateTrust` y
 | Riesgo | Mitigación |
 | --- | --- |
 | **Fatiga de aprobaciones** tras cualquier `webfetch` | Default `shadow`; medir en S3 antes de `enforce`; aprobación «confiar en este origen para este run» (O8); `trustedMcpServers` opt-in. |
-| Presentarlo como sandbox o garantía | Regla 9 y revisión Opus de docs; texto fijo en `docs/implementation-status.md`. |
+| Presentarlo como sandbox o garantía | Regla 9 y revisión Opus de docs; texto fijo en `apps/website/implementation-status.md`. |
 | Heurísticas evadibles / falsos positivos | Solo marcan (D6); documentadas como señal; corpus con casos benignos. |
 | Propagación incompleta (nuevas rutas de llamada que esquivan `executeCall`) | Prueba de contrato que enumera los puntos de entrada de herramientas (core, MCP, Forja, subagentes). |
 | Romper la caché de prompt con el envoltorio | Envoltorio determinista y estable; `wrapExternal` desactivado por defecto; medir `cachedInput`. |

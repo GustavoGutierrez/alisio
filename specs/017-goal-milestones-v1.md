@@ -18,11 +18,11 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 (`main`, 0.6.0); **(no verificado)** = deducido o externo; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Pruebas en `tests/*.test.ts` (vitest), en límites de módulo, **sin snapshots**. La máquina de estados (`goal/machine.ts`) se prueba con funciones puras, como hoy en `tests/goal-machine.test.ts`.
-4. **Orden obligatorio**: Fase 0 (piloto de medición con goals largos actuales) → el propietario revisa → Fases 1–6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (piloto de medición con goals largos actuales) → el propietario revisa → Fases 1–6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: §13. Sonnet por defecto; Opus solo en los puntos listados.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y Bun; solo `node:fs`, `node:child_process`, `node:sqlite`; sin SDK de proveedor ni imports de runtime en `@alisio/sdk` ni en contratos del core; los plugins dependen solo de `@alisio/sdk` (peer); preservar IDs de llamadas a herramientas, continuación del proveedor y consistencia de sesión; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Contratos **aditivos**: `RunEvent.schemaVersion` sigue en 1; las uniones solo ganan variantes; las columnas nuevas llevan valor por defecto; migraciones forward-only.
-8. Idioma: identificadores, eventos, claves y mensajes de error en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts` y el i18n de la TUI); esta especificación en español; docs EN/ES en paridad; límites en `docs/implementation-status.md`.
+8. Idioma: identificadores, eventos, claves y mensajes de error en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts` y el i18n de la TUI); esta especificación en español; docs EN/ES en paridad; límites en `apps/website/implementation-status.md`.
 9. Esta especificación **no crea permisos ni cambia el gate**: un hito no concede ninguna autorización; la reanudación **preserva** exactamente la política vigente (§4.6).
 
 ## 1. Objetivo, no-objetivos y principio rector
@@ -50,7 +50,7 @@ Reglas derivadas: sin hitos, nada cambia; el modelo **propone** y el usuario **a
 | Planificación automática de hitos sin aprobación del usuario | Decisión O2: aprobación humana obligatoria. |
 | Orquestar varios goals en paralelo por sesión | `session_goals` es un goal por sesión (**verificado**); no cambia. |
 | Rollback automático de efectos externos (deshacer un POST, un correo) | Imposible en general. El ledger **informa** y **frena**; no deshace. |
-| Reescribir la historia de git del usuario (commits, ramas) | `docs/specification.md` §9 prohíbe commits como efecto colateral. Los checkpoints son refs ligeras en un espacio de nombres propio (§4.4), no commits en ramas del usuario. |
+| Reescribir la historia de git del usuario (commits, ramas) | `apps/website/specification.md` §9 prohíbe commits como efecto colateral. Los checkpoints son refs ligeras en un espacio de nombres propio (§4.4), no commits en ramas del usuario. |
 | Commit/PR automático al cerrar un hito | Mismo motivo. |
 | Evaluación con un modelo «juez» sobre criterios subjetivos | Solo criterios con verificador determinista (de Proof) cierran un hito; los subjetivos requieren confirmación humana (`needs_review`). |
 
@@ -237,9 +237,9 @@ Cada fase: pruebas primero (Rojo), mínimo para verde, refactor.
 
 ### Fase 6 — Presupuestos por hito, superficies, docs y medición
 
-- Presupuesto por hito (O7), `no_progress` por hito, panel Web/TUI, CLI headless (`alisio run --goal … --resume-review`), docs EN/ES (`docs/…` sobre goals), límites en `docs/implementation-status.md`, capturas Web UI en `docs/assets/web-ui/goal_milestones_web_ui.webp` (EN y ES, datos sintéticos) según `AGENTS.md`.
+- Presupuesto por hito (O7), `no_progress` por hito, panel Web/TUI, CLI headless (`alisio run --goal … --resume-review`), docs EN/ES (`docs/…` sobre goals), límites en `apps/website/implementation-status.md`, capturas Web UI en `apps/website/assets/web-ui/goal_milestones_web_ui.webp` (EN y ES, datos sintéticos) según `AGENTS.md`.
 - Repetir la Fase 0 con hitos y comparar con el umbral.
-- **Aceptación**: `pnpm docs:check` pasa con paridad; informe A/B publicado (resultado negativo válido: queda opt-in); sin hitos, `/goal` idéntico a 0.6.x.
+- **Aceptación**: `pnpm website:check` pasa con paridad; informe A/B publicado (resultado negativo válido: queda opt-in); sin hitos, `/goal` idéntico a 0.6.x.
 - **Pruebas**: paridad de superficies; prueba de equivalencia de las suites existentes de goal sin modificar.
 
 ## 6. Pruebas transversales

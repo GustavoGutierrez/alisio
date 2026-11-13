@@ -17,12 +17,12 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio o ejecutando una prueba el 2026-10-12; **(no verificado)** = deducido o externo sin prueba ejecutada en este repositorio; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor** (mismo criterio que Forja, §12). Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts`, sobre comportamiento en límites de módulo. Sin pruebas de instantánea.
-4. **Orden obligatorio**: Fase 0 (si el propietario la pide: medición de overhead y sondeo) → el propietario revisa → Fases 1–6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (si el propietario la pide: medición de overhead y sondeo) → el propietario revisa → Fases 1–6. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: §13. Por defecto Sonnet 5.5; Opus 5.5 solo en los tres puntos listados.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y debe funcionar en Bun; solo APIs portables de Node en los paquetes; ningún SDK de proveedor ni import específico de runtime en `@alisio/sdk` ni en los contratos del core; los plugins dependen solo de `@alisio/sdk`; preservar IDs de llamadas a herramientas, datos de continuación del proveedor y consistencia de sesión persistida; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Los contratos son **aditivos**: ninguna ruta, evento ni columna existente cambia de semántica, salvo lo indicado explícitamente.
 8. Idioma: identificadores, claves, mensajes de error y textos generados en inglés; textos de UI en inglés y español (`src/i18n/en.ts` y `es.ts`); esta especificación en español.
-9. Esta especificación **no crea permisos nuevos ni cambia el gate**: todo lo declarado depende de la política de permisos existente (`docs/tools.md`), que no se modifica en las Fases 1–3 ni 5–6.
+9. Esta especificación **no crea permisos nuevos ni cambia el gate**: todo lo declarado depende de la política de permisos existente (`apps/website/tools.md`), que no se modifica en las Fases 1–3 ni 5–6.
 
 ## 1. Objetivo, usuarios y principio rector
 
@@ -78,10 +78,10 @@ La comparativa verificada de la §2 muestra dónde gana Claude Code por escala, 
 | Integración en IDEs (VS Code, JetBrains, Cursor) | Alcance de distribución; no es gobernanza. Claude Code ya lo tiene. No competir. |
 | App de escritorio, web/móvil, Slack/Discord/Telegram/webhooks, Chrome | Superficies de alcance masivo; no es gobernanza. No competir. |
 | Scheduling (cron, routines, `/loop`) | No es gobernanza. `bg_run` ya cubre tareas de fondo locales. |
-| Commit/PR automático | **Decisión de diseño ya tomada**: `docs/specification.md` §9 prohíbe commits como efecto colateral; las tools de git son read-only (`git_status`, `git_diff`). Claude Code hace commits/PRs; Alisio no, por principio, no por falta de tiempo. |
+| Commit/PR automático | **Decisión de diseño ya tomada**: `apps/website/specification.md` §9 prohíbe commits como efecto colateral; las tools de git son read-only (`git_status`, `git_diff`). Claude Code hace commits/PRs; Alisio no, por principio, no por falta de tiempo. |
 | GitHub Actions / GitLab CI «actions» | Requiere cuenta de plataforma y mantenimiento externo; contradice el arnés local sin cuenta. El atestado `perimeter --json` cubre el caso de auditoría sin dependencias de plataforma (Fase 6). |
 | SSO, RBAC, managed settings organizacionales, compliance API, CMEK | Capa enterprise de Claude Code; Alisio es single-user consciente. La configuración que decide es global-only (D12). |
-| Memoria vectorial / semántica | Ya excluida (`docs/memory.md`: sin embeddings, sin red). Perímetro hace la memoria **legible**, no semántica. |
+| Memoria vectorial / semántica | Ya excluida (`apps/website/memory.md`: sin embeddings, sin red). Perímetro hace la memoria **legible**, no semántica. |
 | OAuth interactivo de MCP | Ya excluido (pendientes 1.0.0). No se arrastra a esta especificación. |
 | Sandbox completo de herramientas del host (Fase 4 incluida) | Hereda el límite explícito de forja-v1 §1.5: «Sandbox de herramientas del host (shell, MCP, plugins): no los vuelve aisladas». La Fase 4 **reduce y declara**, nunca promete aislamiento OS. |
 | Windows/macOS certificados | CI sigue cubriendo solo Linux (pendiente 1.0.0). El reporte declara `platform: linux` y las probes se marcan como no verificadas en plataformas no cubiertas (D7). |
@@ -106,12 +106,12 @@ Comparativa contra la documentación oficial de Claude Code, **verificada el 202
 
 | Hecho de Alisio (verificado en repo) | Cita | Implicación |
 | --- | --- | --- |
-| Efectos por tool: `read`/`write`/`process`/`external`/`internal`, con `--read-only` que gana a todo | `docs/tools.md` | La materia prima del reporte existe; no hay un artefacto que la exponga. |
+| Efectos por tool: `read`/`write`/`process`/`external`/`internal`, con `--read-only` que gana a todo | `apps/website/tools.md` | La materia prima del reporte existe; no hay un artefacto que la exponga. |
 | Escalera de aislamiento declarada por motor | `specs/archive/009-forja-v1.md` §5.1: `os-container > wasm-isolate > wasm-process > none`, con `EngineDescriptor.isolation` y `ready` | El nivel **ya es un dato** en el SDK; Perímetro lo agrega por superficie. |
 | Fail-closed de Forja | forja-v1 D17: si `quickjs-wasi` no carga o el hash no coincide, `js_run` no se registra | El precedente de la política que la Fase 4 extiende a `shell`. |
-| Máquina de MCP: `mcp list`, `alisio mcp doctor`, consent `mcp.allow` global | `docs/tools.md`, `docs/configuration.md` | El inventario de servidores existe; el reporte solo lo declara. |
-| Memoria: SQLite FTS5 + BM25 + trigram, topic upserts, `memory_*` con efecto `internal` | `docs/memory.md` | La consulta existe y es superior en escala a Claude Code (que trunca); falta la legibilidad. |
-| Telemetría: Alisio no recoge ninguna | `docs/tui.md` §Settings | La honestidad ya es un valor del producto; el reporte la hace visible. |
+| Máquina de MCP: `mcp list`, `alisio mcp doctor`, consent `mcp.allow` global | `apps/website/tools.md`, `apps/website/configuration.md` | El inventario de servidores existe; el reporte solo lo declara. |
+| Memoria: SQLite FTS5 + BM25 + trigram, topic upserts, `memory_*` con efecto `internal` | `apps/website/memory.md` | La consulta existe y es superior en escala a Claude Code (que trunca); falta la legibilidad. |
+| Telemetría: Alisio no recoge ninguna | `apps/website/tui.md` §Settings | La honestidad ya es un valor del producto; el reporte la hace visible. |
 
 ### 2.3 La conclusión que justifica O3–O8
 
@@ -152,13 +152,13 @@ Comparativa contra la documentación oficial de Claude Code, **verificada el 202
 | D10 | **Cierre opt-in con política inversa a Claude Code.** Config `perimeter.closure.shell: "declare" \| "shadow" \| "limit" \| "os-container"` (§7), default `declare` = sin cambio de comportamiento, reporte veraz. `shadow` registra qué se habría bloqueado sin bloquear; `limit` aplica restricciones sin sandbox OS (scrub de env, capacidades de recursos, red denegada donde el SO lo permite y la sonda lo confirma); `os-container` reutiliza `OciBackend` de Forja Python. Y `perimeter.closure.failBehavior: "warn" \| "disable-surface"` (default `warn`): `disable-surface` es la **única** política fail-closed, y solo bloquea la superficie si la restricción no puede aplicarse. La promoción de `limit`/`os-container` a default **nunca** ocurre sin puerta de benchmark (D13). |
 | D11 | La matriz `declared` se construye desde estado existente, no desde un modelo que lo infiera: flags `--allow-*`, modos de permiso, `mcp.allow`/manifiesto de servidores, plugins cargados, motores Forja (`EngineDescriptor.ready/isolation`), tamaños de memoria. El reporte es un **render** del estado, y el código que lo renderiza es determinista. |
 | D12 | La configuración que decide es **global-only** (`perimeter.*`): los proyectos solo pueden **reducir** niveles (p. ej. forzar `shadow` cuando el global dice `limit`), nunca ampliarlos. Misma regla que la §1.2 de `workspace-sources` y D16 de forja. Un valor de proyecto que intenta ampliar produce diagnóstico y se ignora. |
-| D13 | Presupuestos y puertas (§11): overhead del render ≤ 5 ms p99; sonda completa ≤ 2 s (default) con `--fast` ≤ 200 ms; export/import biyectivo (round-trip 100 %); la Fase 4 se promueve solo con paridad en shadow (éxito de tareas no cae > 2 puntos frente a baseline sin cierre). Si una puerta no se cumple, la fase entrega con la feature `off`/experimental y el resultado queda en `docs/benchmark-perimeter.json`. |
+| D13 | Presupuestos y puertas (§11): overhead del render ≤ 5 ms p99; sonda completa ≤ 2 s (default) con `--fast` ≤ 200 ms; export/import biyectivo (round-trip 100 %); la Fase 4 se promueve solo con paridad en shadow (éxito de tareas no cae > 2 puntos frente a baseline sin cierre). Si una puerta no se cumple, la fase entrega con la feature `off`/experimental y el resultado queda en `apps/website/benchmark-perimeter.json`. |
 | D14 | Al modelo se le expone una tool **`perimeter_check`** (efecto `internal`, familia `core` en el futuro routing): devuelve el reporte renderizado corto (≤ 4 KB) a petición. El reporte completo nunca se incrusta en el prompt. La tool existe para que el modelo pueda responder «¿puedo tocar X?» con el render, no para que decida nada. |
 | D15 | Memoria legible (§8): `memory_export` y `memory_import` (efecto `internal`, disponibles en `--read-only` para export). El export es markdown plano con frontmatter YAML (análogo al formato auditable de Claude Code) y round-trip con FTS5 garantizado por prueba (B3). `memory_import` es idempotente y nunca borra: solo agrega o actualiza por `topic_key` + `id`. |
 | D16 | La Fase 5 añade al reporte la sección `memory`: número de observaciones, distribución por tipo, últimas `k` escrituras con `topic_key`, tamaño del archivo SQLite y un aviso textual cuando la memoria contiene contenido que el usuario podría querer exportar antes de compartir una sesión. |
 | D17 | El panel TUI `/perimeter` y la tarjeta web reutilizan los patrones de Forja (badges de motor, lista de llamadas, tarjeta) sin duplicar componentes: los badges de ejecución muestran `isolation` de `EngineDescriptor` y los de superficie muestran `declaredLevel` + `status`. |
 | D18 | Sin dependencias nuevas de producción. Las auto-pruebas usan herramientas existentes (`run_process` con `--read-only` equivalencia, `read_file`, `list_files`, `git`); la Fase 4 reutiliza backends existentes. Cualquier propuesta de dependencia nueva se discute con el propietario antes de entrar en una fase. |
-| D19 | Cada fase actualiza `docs/implementation-status.md` (la fuente de verdad de límites) con lo entregado y con lo que sigue sin aislamiento. El reporte y ese archivo nunca se contradicen. |
+| D19 | Cada fase actualiza `apps/website/implementation-status.md` (la fuente de verdad de límites) con lo entregado y con lo que sigue sin aislamiento. El reporte y ese archivo nunca se contradicen. |
 
 ## 4. Concepto
 
@@ -260,7 +260,7 @@ export interface PerimeterSnapshot {
 | P-FORGE | execution | Por motor: `EngineDescriptor.ready` e `isolation` declarado (forja) | `EngineSelector`/`describe()` contra el estado real; sin arrancar motores |
 | P-XT | external | Cosecha de approvals `session`/`once` que amplían superfícies | estado del consent store |
 
-Reglas: cada probe corre con timeout propio (total ≤ 2 s default, ≤ 200 ms con `--fast`, D13); ninguna probe dispara un prompt (en modo headless sin consent, la probe declara `unverified` con motivo en vez de esperar); el conjunto de probes es extensible con `probeId` versionado y la lista vive en `docs/benchmark-perimeter.json` + un fixture de pruebas.
+Reglas: cada probe corre con timeout propio (total ≤ 2 s default, ≤ 200 ms con `--fast`, D13); ninguna probe dispara un prompt (en modo headless sin consent, la probe declara `unverified` con motivo en vez de esperar); el conjunto de probes es extensible con `probeId` versionado y la lista vive en `apps/website/benchmark-perimeter.json` + un fixture de pruebas.
 
 ## 7. Cierre opt-in de `shell` (Fase 4)
 
@@ -275,13 +275,13 @@ Hereda explícitamente el límite de forja-v1 §1.5: **no es un sandbox de herra
 
 Regla de fallo (D10): si `limit` prometido no puede aplicarse (sin sonda de confirmación, sin permiso del SO), el default es `warn` y el reporte cambia a `status: "drift"` con el motivo. `failBehavior: "disable-surface"` es opt-in y la única política que bloquea `shell`/`bg_run` por completo cuando no se puede cumplir la restricción.
 
-**Puerta de promoción (B4):** `limit` o `os-container` solo pasan de opt-in a configurable-por-defecto si, en `shadow` durante al menos una minor completa, el éxito de tareas de referencia no cae más de 2 puntos frente al baseline sin cierre (mismo arnés de referencia que forja). Si no cumple: se quedan experimentales y `declare` sigue siendo el default. El resultado queda en `docs/benchmark-perimeter.json`.
+**Puerta de promoción (B4):** `limit` o `os-container` solo pasan de opt-in a configurable-por-defecto si, en `shadow` durante al menos una minor completa, el éxito de tareas de referencia no cae más de 2 puntos frente al baseline sin cierre (mismo arnés de referencia que forja). Si no cumple: se quedan experimentales y `declare` sigue siendo el default. El resultado queda en `apps/website/benchmark-perimeter.json`.
 
 ## 8. Memoria legible (Fase 5)
 
 - `memory_export <format=markdown> [--filter type|topic]` → un directorio o archivo markdown con una observación por archivo (frontmatter YAML: `id`, `topic_key`, `type`, `title`, `created`, `updated`) y contenido `What/Why/Where/Learned`. Cobertura: 100 % de las observaciones.
 - `memory_import <path> [--dry-run]` → agregar o actualizar por `id`/`topic_key`; **nunca borra**; idempotente; `--dry-run` lista el diff sin tocar.
-- La búsqueda sigue siendo FTS5 (sin embeddings, sin red; no se toca `docs/memory.md`).
+- La búsqueda sigue siendo FTS5 (sin embeddings, sin red; no se toca `apps/website/memory.md`).
 - El export está disponible bajo `--read-only` (D15); el import no.
 - El reporte gana la sección `memory` (D16) con aviso honesto cuando el contenido podría contener datos personales («export before sharing a session»).
 
@@ -322,11 +322,11 @@ Los valores que deciden (closure, failBehavior) son `GLOBAL_ONLY`; un proyecto q
 | B4 | Cierre de `shell` (`limit`/`os-container`) | Paridad en `shadow` durante una minor: éxito de tareas no cae > 2 puntos vs baseline | Si no cumple: experimental, `declare` sigue default. |
 | B5 | Atestado JSON | `perimeter/v1` estable entre dos ejecuciones en la misma sesión para las mismas entradas; cero prompts generados | |
 
-Cada benchmark es **manual y reproducible** (scripts en `scripts/bench-*.ts`, siguiendo el patrón de capability-routing), y el resultado va a `docs/benchmark-perimeter.json`. Los benchmarks nunca se ejecutan en CI como puerta; se ejecutan en las fases y la decisión es del propietario.
+Cada benchmark es **manual y reproducible** (scripts en `scripts/bench-*.ts`, siguiendo el patrón de capability-routing), y el resultado va a `apps/website/benchmark-perimeter.json`. Los benchmarks nunca se ejecutan en CI como puerta; se ejecutan en las fases y la decisión es del propietario.
 
 ## 12. Fases y orden
 
-Cada fase deja el repo verde con la suite completa y actualiza `docs/implementation-status.md` (D19). **Fase 0 es opcional**: el propietario puede pedirla para medir overhead y sondeo antes de comprometer los contratos.
+Cada fase deja el repo verde con la suite completa y actualiza `apps/website/implementation-status.md` (D19). **Fase 0 es opcional**: el propietario puede pedirla para medir overhead y sondeo antes de comprometer los contratos.
 
 | Fase | Entregable | Puerta mínima |
 | --- | --- | --- |
@@ -336,7 +336,7 @@ Cada fase deja el repo verde con la suite completa y actualiza `docs/implementat
 | 3 | Superficies: panel TUI `/perimeter`, tarjeta web, cabecera/JSONL headless, tool `perimeter_check` | Paridad TUI/web/headless; capturas `perimeter_*_web_ui.webp` (< 150 KB cada una, regla AGENTS.md) |
 | 4 | Cierre opt-in de `shell`: `shadow` → `limit` → `os-container` (reuso `OciBackend`), `failBehavior`, B4 | B4 en shadow durante una minor; `declare` sigue default si no se cumple |
 | 5 | Memoria legible: `memory_export`/`memory_import`, sección `memory` del reporte | B3; export disponible en `--read-only` |
-| 6 | Atestado y cierre: `perimeter --json` final, docs `perimeter.md` EN/ES, `docs/implementation-status.md`, capturas restantes, release 0.8.0 | B5; docs:check y docs:build verdes |
+| 6 | Atestado y cierre: `perimeter --json` final, docs `perimeter.md` EN/ES, `apps/website/implementation-status.md`, capturas restantes, release 0.8.0 | B5; website:check y website:build verdes |
 
 ## 13. Asignación de modelos (mismo criterio que forja §13)
 
@@ -355,16 +355,16 @@ Cada fase deja el repo verde con la suite completa y actualiza `docs/implementat
 - **Memoria legible expone datos.** El export la hace copiable fuera del store 0600: la UI advierte antes de exportar (Fase 5, D16) y el import nunca borra.
 - **Windows/macOS sin certificar.** Las probes de plataformas no cubiertas producen `unverified` con motivo (D7); nunca se marcan como verificadas por analogía.
 - **Riesgo de ceremonia.** Si el reporte no se usa (ni por humanos ni por `perimeter_check`), es peso muerto. Mitigación: B1 presupuesta overhead; la tool `perimeter_check` le da uso de modelo; `/perimeter` le da uso de humano; el atestado le da uso de CI.
-- **Nada aquí es una puerta de seguridad nueva.** Esta especificación no añade un approvals nuevo ni cambia el gate. Si alguien necesita «el agente no puede X» hoy, la respuesta sigue siendo `--read-only` y las políticas de permisos existentes (verificadas en `docs/tools.md`).
+- **Nada aquí es una puerta de seguridad nueva.** Esta especificación no añade un approvals nuevo ni cambia el gate. Si alguien necesita «el agente no puede X» hoy, la respuesta sigue siendo `--read-only` y las políticas de permisos existentes (verificadas en `apps/website/tools.md`).
 
 ## 15. Cierre y entrega
 
 - Documentación `perimeter.md` EN y ES con paridad estricta (regla AGENTS.md), situada junto a `security`/`tools` en el sitio.
 - Capturas de UI en WebP (< 150 KB) con proveedor de fachada y datos ficticios, nunca sesiones reales: `perimeter_panel_web_ui.webp`, `perimeter_attestation_web_ui.webp`, `perimeter_memory_export_web_ui.webp`.
-- `docs/implementation-status.md` actualizado en cada fase (D19) y reconciliado en el cierre.
+- `apps/website/implementation-status.md` actualizado en cada fase (D19) y reconciliado en el cierre.
 - Commit, push, PR y release: decisiones del propietario (regla del repo).
 
 ## 16. Fuentes
 
 - Claude Code (oficial, verificado 2026-10-12): `code.claude.com/docs/en/sandboxing`, `/memory`, `/overview`, `/third-party-integrations` (enterprise).
-- Repo: `specs/archive/009-forja-v1.md` (§1.2, §2, §5.1, D7, D17), `specs/archive/008-forja-python-v1.md` (P0, `OciBackend`, `wasm-process`), `specs/021-workspace-sources-v1.md` (§1.2, ADR-1), `specs/019-capability-routing-v1.md` (§1.1, ADR-4), `docs/tools.md`, `docs/memory.md`, `docs/limitations.md`, `docs/implementation-status.md`, `docs/specification.md` (§6, §9).
+- Repo: `specs/archive/009-forja-v1.md` (§1.2, §2, §5.1, D7, D17), `specs/archive/008-forja-python-v1.md` (P0, `OciBackend`, `wasm-process`), `specs/021-workspace-sources-v1.md` (§1.2, ADR-1), `specs/019-capability-routing-v1.md` (§1.1, ADR-4), `apps/website/tools.md`, `apps/website/memory.md`, `apps/website/limitations.md`, `apps/website/implementation-status.md`, `apps/website/specification.md` (§6, §9).

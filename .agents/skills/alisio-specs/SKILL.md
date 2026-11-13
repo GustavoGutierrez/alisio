@@ -18,7 +18,7 @@ no prior context can implement them without guessing. **Do not commit** unless t
 | `specs/archive/` | Implemented or completed specs | No (history) |
 
 When a spec is fully implemented: (1) set `Estado` to `**Implementada (fases X-Y)**. Ver
-`docs/implementation-status.md``, (2) make sure that file records limitations and verification
+`apps/website/implementation-status.md``, (2) make sure that file records limitations and verification
 scope, (3) move the spec to `specs/archive/`, (4) fix every reference to the old path
 (`grep -rn "specs/<name>" specs docs AGENTS.md README.md`). Moving a spec between folders never
 changes its number.
@@ -81,7 +81,7 @@ Minimize Opus invocations; name each one in the spec (section "Asignación de mo
 - **Traceability**: each decision maps to at least one acceptance row; each phase lists the AC
   IDs it closes; each AC maps to a test file.
 - **Phases leave the repo green**: the delivery checklist of `alisio-coding-standards`
-  (typecheck, lint, test, build, test:cli, test:compiled, pack:check, docs:check, docs:build).
+  (typecheck, lint, test, build, test:cli, test:compiled, pack:check, website:check, website:build).
 - Language: specs follow the repo precedent (Spanish prose); identifiers, error codes and
   generated strings in English; UI text in EN and ES.
 - Architecture claims name patterns and their reason (hexagonal ports, strategy, etc.) only when
@@ -113,7 +113,7 @@ Minimize Opus invocations; name each one in the spec (section "Asignación de mo
 11. **Fases**: phase 0 (experiments and measurements, no production code) then a gate (owner
     review), then numbered phases, each: files, tests, AC IDs closed, ends green.
 12. **Definición de terminado**: bullet list tied to AC IDs, docs EN/ES with screenshots when
-    the Web UI changes, `docs/implementation-status.md` updated.
+    the Web UI changes, `apps/website/implementation-status.md` updated.
 13. **Riesgos y límites conocidos**: table Riesgo / Decisión (mitigation or accepted limit).
 
 Smaller specs may merge sections but MUST keep: header table, objective, non-goals, decisions
@@ -129,7 +129,7 @@ with IDs, verified current state, acceptance matrix, phases, definition of done,
 3. Run phase 0 and its gate first if the spec has one.
 4. One `sonnet` writer per phase, TDD (section 8), one phase at a time, repo green at the end.
    `opus` only where the spec names an Opus gate.
-5. Update `docs/implementation-status.md` (limitations, verification scope) and the docs EN/ES.
+5. Update `apps/website/implementation-status.md` (limitations, verification scope) and the docs EN/ES.
 6. When all phases close: `haiku` archives (section 1). Do not commit until the owner asks.
 
 ## 8. Test strategy (for specs and implementation)
@@ -175,7 +175,7 @@ edge case at the boundary. Low (cosmetic, thin glue): no test, rely on typecheck
 - [ ] Test strategy names mutation scope (or says none) and env-flagged slow tests.
 - [ ] Phase 0 / gates defined where uncertainty is high; each phase lists files, AC IDs and ends green.
 - [ ] Model assignment lists Opus gates; the rest is Sonnet; bookkeeping is Haiku.
-- [ ] Definition of done includes docs EN/ES parity and `docs/implementation-status.md`.
+- [ ] Definition of done includes docs EN/ES parity and `apps/website/implementation-status.md`.
 - [ ] Risks table lists accepted limits honestly (no absolute security claims).
 
 ## References

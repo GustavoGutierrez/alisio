@@ -41,7 +41,7 @@ export default definePlugin({
 ```
 
 Load it with `alisio --plugin ./dist/index.js` (path) or `alisio install npm:acme-hello` (npm
-package). See [Writing plugins](https://gustavogutierrez.github.io/alisio/plugins) for the full
+package). See [Writing plugins](https://alisioair.com/plugins) for the full
 walkthrough including tool permissions, naming/prefix rules and an example package.
 
 ## The PluginAPI
@@ -70,7 +70,7 @@ returns an unregister function.
 - **categories** — declare `categories` on `Plugin`/`PluginMetadata` from the accepted set:
   `model-provider`, `methodology-harness`, `memory`, `subagents`, `search`, `tools`, `security`,
   `analytics`, `mcp`, `storage`, `ui` (see the
-  [plugin categories table](https://gustavogutierrez.github.io/alisio/plugins#plugin-categories)).
+  [plugin categories table](https://alisioair.com/plugins#plugin-categories)).
   The TUI groups `/plugins` rows by the first category, falling back to "General"; the host
   derives `model-provider` automatically when a plugin registers providers.
 - **storage** — `storage.sqlite(path)` opens a private (0600) SQLite file (FTS5 available); the
@@ -122,8 +122,8 @@ Precedence: built-in < plugin < user (`~/.config/alisio/prompts`) < trusted proj
 
 Publish plugins as JavaScript with the `alisio-plugin` keyword and `@alisio/sdk` as a peer
 dependency; the entry resolves from `exports["."]`, then `main`, then `./index.js`. Guide:
-[Writing plugins](https://gustavogutierrez.github.io/alisio/plugins) ·
-[Publishing](https://gustavogutierrez.github.io/alisio/publishing).
+[Writing plugins](https://alisioair.com/plugins) ·
+[Publishing](https://alisioair.com/publishing).
 
 ## Requirements
 

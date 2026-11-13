@@ -26,7 +26,7 @@ breaking it is expensive to undo (published contracts, user sessions, trust clai
 
 ## Language
 
-Code, comments, identifiers, tests, error messages: English. `docs/implementation-status.md` is
+Code, comments, identifiers, tests, error messages: English. `apps/website/implementation-status.md` is
 Spanish. Specs use Spanish prose (see `alisio-specs`). UI text: EN and ES.
 
 ## TDD and tests
@@ -76,16 +76,16 @@ code cannot make. Before adding one, answer in order: closed outcome set? freque
 tokens/cost/latency/variability? safe fallback? The PR must also state: which decision, what LLM
 work it removes, which metric improves, fallback, behavior without a provider, output validation,
 why deterministic code is insufficient, and what goes into `state` (a remote provider may receive
-it). If unclear, do not use it. Details: `docs/decision-intelligence.md`.
+it). If unclear, do not use it. Details: `apps/website/decision-intelligence.md`.
 
 ## Docs
 
-- English `docs/<page>.md`, Spanish `docs/es/<page>.md`, both in the sidebar of
-  `docs/.vitepress/config.ts`. Same headings in the same order, same code blocks; commands, flags
+- English `docs/<page>.md`, Spanish `apps/website/es/<page>.md`, both in the sidebar of
+  `apps/website/.vitepress/config.ts`. Same headings in the same order, same code blocks; commands, flags
   and config keys identical; translate faithfully, update both in the same change.
-- `docs/es/limitations.md` includes `docs/implementation-status.md`; keep the English
-  `docs/limitations.md` aligned with it.
-- Duty: record limitations and verification scope in `docs/implementation-status.md` (Spanish)
+- `apps/website/es/limitations.md` includes `apps/website/implementation-status.md`; keep the English
+  `apps/website/limitations.md` aligned with it.
+- Duty: record limitations and verification scope in `apps/website/implementation-status.md` (Spanish)
   whenever they change. Do not claim absolute security.
 - Web UI feature docs need a real screenshot: load `alisio-docs-screenshots`.
 
@@ -103,9 +103,9 @@ it). If unclear, do not use it. Details: `docs/decision-intelligence.md`.
 ```sh
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm test:cli && pnpm test:compiled && pnpm pack:check
-pnpm docs:check && pnpm docs:build
+pnpm website:check && pnpm website:build
 ```
 
-`pnpm check` runs everything above except `pnpm docs:check` (it is part of `pnpm docs:build`, but run
-it explicitly to see its report). `pnpm docs:check` validates internal links, `#anchors`, local
+`pnpm check` runs everything above except `pnpm website:check` (it is part of `pnpm website:build`, but run
+it explicitly to see its report). `pnpm website:check` validates internal links, `#anchors`, local
 images and EN/ES parity.

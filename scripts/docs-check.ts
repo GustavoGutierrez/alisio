@@ -2,15 +2,15 @@
  * Checks the documentation sources before VitePress builds them: every internal link resolves to
  * a page, every `#anchor` exists on that page, local images exist, and the English and Spanish
  * pages keep the same structure. VitePress's dead-link check validates pages but not fragments,
- * so this runs first (`pnpm docs:build`).
+ * so this runs first (`pnpm website:build`).
  * Usage: node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/docs-check.ts
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DOCS = resolve("docs");
-/** Mirrors `srcExclude` in docs/.vitepress/config.ts; keep both lists in sync. */
+const DOCS = resolve("apps/website");
+/** Mirrors `srcExclude` in apps/website/.vitepress/config.ts; keep both lists in sync. */
 const SITE_EXCLUDE = new Set([
   "specification.md",
   "herdr.md",
@@ -24,7 +24,7 @@ const SITE_EXCLUDE = new Set([
 const PARITY_EXEMPT = new Map([
   [
     "limitations.md",
-    "docs/es/limitations.md includes docs/implementation-status.md verbatim, so it is a stub",
+    "apps/website/es/limitations.md includes apps/website/implementation-status.md verbatim, so it is a stub",
   ],
 ]);
 
@@ -103,7 +103,8 @@ function markdownFiles(dir: string): string[] {
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name.startsWith(".") || entry.name === "public") continue;
+      if (entry.name.startsWith(".") || entry.name === "public" || entry.name === "node_modules")
+        continue;
       out.push(...markdownFiles(full));
     } else if (entry.name.endsWith(".md")) {
       out.push(full);
@@ -245,7 +246,7 @@ function main(): void {
         problems.push({
           file,
           line: link.line,
-          message: `anchor not found: ${raw} (${target.replace(`${DOCS}/`, "docs/")} has no such heading)`,
+          message: `anchor not found: ${raw} (${target.replace(`${DOCS}/`, "apps/website/")} has no such heading)`,
         });
       }
     }
@@ -331,7 +332,11 @@ function main(): void {
     if (isEs) {
       const en = join(DOCS, name);
       if (!existsSync(en) && !SITE_EXCLUDE.has(name)) {
-        problems.push({ file, line: 1, message: `parity: docs/es/${name} has no docs/${name}` });
+        problems.push({
+          file,
+          line: 1,
+          message: `parity: apps/website/es/${name} has no apps/website/${name}`,
+        });
       }
       continue;
     }
@@ -346,20 +351,20 @@ function main(): void {
       problems.push({
         file,
         line: 1,
-        message: `parity: headings differ from docs/es/${name} (${enLevels} vs ${esLevels})`,
+        message: `parity: headings differ from apps/website/es/${name} (${enLevels} vs ${esLevels})`,
       });
     }
     if (enPage.fences !== esPage.fences) {
       problems.push({
         file,
         line: 1,
-        message: `parity: code fences differ from docs/es/${name} (${enPage.fences} vs ${esPage.fences})`,
+        message: `parity: code fences differ from apps/website/es/${name} (${enPage.fences} vs ${esPage.fences})`,
       });
     }
   }
 
   for (const problem of problems) {
-    const where = problem.file.replace(`${DOCS}/`, "docs/");
+    const where = problem.file.replace(`${DOCS}/`, "apps/website/");
     console.log(`FAIL ${where}:${problem.line} ${problem.message}`);
   }
   if (problems.length > 0) {

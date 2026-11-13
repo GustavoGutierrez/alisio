@@ -2,8 +2,8 @@
 
 Alisio is a coding-agent harness. It runs your local tools and model requests with
 **your user privileges**, and plugins and subprocesses execute in your process — they are
-**not sandboxes** (see [Tools & permissions](https://gustavogutierrez.github.io/alisio/tools)
-and `docs/tools.md`). Please read the scope below before reporting.
+**not sandboxes** (see [Tools & permissions](https://alisioair.com/tools)
+and `apps/website/tools.md`). Please read the scope below before reporting.
 
 ## Supported versions
 

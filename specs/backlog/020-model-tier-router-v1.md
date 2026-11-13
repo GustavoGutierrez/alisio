@@ -16,7 +16,7 @@
 
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento. TDD estricto, pruebas en `tests/*.test.ts` (vitest) en los límites de módulo, sin instantáneas que repitan la implementación.
 2. **(verificado)** = abrí el archivo el 2026-10-03; **(no verificado)** = deducido o externo; **(nuevo)** = no existe.
-3. **La Fase 0 es obligatoria y puede cancelar esta especificación** (§12.1): si cambiar de modelo entre ejecuciones de una misma sesión no conserva datos de continuación válidos, no se implementa nada más. Cada fase deja el repo verde (`pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`). Sin commit hasta que lo pida el propietario.
+3. **La Fase 0 es obligatoria y puede cancelar esta especificación** (§12.1): si cambiar de modelo entre ejecuciones de una misma sesión no conserva datos de continuación válidos, no se implementa nada más. Cada fase deja el repo verde (`pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check`, `website:build`). Sin commit hasta que lo pida el propietario.
 4. Reglas del repo: solo pnpm; Node >=22.16 y Bun; solo APIs portables; sin SDK de proveedor en SDK/core; plugins solo dependen de `@alisio/sdk`; **preservar IDs de llamadas a herramientas, datos de continuación del proveedor y consistencia de sesión persistida**; un manifiesto de plugin o un subproceso no es un sandbox.
 5. Idioma: identificadores, claves y UI en inglés (más ES); esta especificación en español.
 6. Aditivo y apagado por defecto: con los valores por defecto el comportamiento es idéntico al de 0.5.0.
@@ -78,7 +78,7 @@ Fuera de alcance solo de esta entrega: cambiar de modelo **a mitad de una ejecuc
 | O5 | **Benchmarks**: endpoint y modelo son parámetros por variables de entorno que entrega el propietario al ejecutar; todas las variantes de un benchmark usan el mismo modelo; el modelo y el *host* del endpoint se registran en el JSON (**nunca** la clave de API). Particularidad de esta entrega en §11. |
 | O6 | **Alcance de configuración**: `modelTiers`, `decisions.routing.*`, `decisions.provider` y `decisions.telemetry` solo del config global; un proyecto (aunque tenga confianza) no puede fijarlos; se ignoran con diagnóstico (§8; mecanismo en `specs/006-decision-intelligence-v1.md` §8.2). |
 | O7 | **Privacidad**: el `state` de los proveedores nunca lleva valores de datos; aquí solo el mensaje del usuario truncado (D12). |
-| O8 | **Documentación**: una página por release; en 0.6.0, `docs/model-tiers.md` + `docs/es/model-tiers.md`. |
+| O8 | **Documentación**: una página por release; en 0.6.0, `apps/website/model-tiers.md` + `apps/website/es/model-tiers.md`. |
 
 ### 2.2 Decisiones de diseño de la especificación
 
@@ -287,7 +287,7 @@ Si **cualquiera** de las tres claves fue rechazada o falta, o `tryDecide` devolv
 | web / cli | — | estadísticas (`store/stats.ts`, `tui/state.ts`, `tui/app.ts`), etiquetas EN/ES |
 | scripts | `scripts/bench-model-tier.ts` | `scripts/bench/lib.ts` |
 | tests | `model-tier-pack.test.ts`, `model-tier-router.test.ts`, `model-tier-runner.test.ts`, `model-tier-security.test.ts`, `model-tier-config.test.ts` | `run-events-contract.test.ts`, `config-layers.test.ts` |
-| docs | `docs/model-tiers.md`, `docs/es/model-tiers.md`, `docs/benchmark-model-tier.json` | `docs/.vitepress/config.ts`, `docs/{configuration,decision-intelligence,limitations}.md` + ES, `docs/implementation-status.md`, `scripts/docs-check.ts`, `CHANGELOG.md` |
+| docs | `apps/website/model-tiers.md`, `apps/website/es/model-tiers.md`, `apps/website/benchmark-model-tier.json` | `apps/website/.vitepress/config.ts`, `docs/{configuration,decision-intelligence,limitations}.md` + ES, `apps/website/implementation-status.md`, `scripts/docs-check.ts`, `CHANGELOG.md` |
 
 ---
 
@@ -308,7 +308,7 @@ Si **cualquiera** de las tres claves fue rechazada o falta, o `tryDecide` devolv
 - **Regla de modelo único:** `off` y `suggest` usan solo `ALISIO_BENCH_MODEL`; la condición `on` usa los tres modelos porque **es la variable medida** (la única excepción a «mismo modelo» de O5, por definición del benchmark; el modelo base y el endpoint son los mismos en todas las condiciones). El arnés comprueba contra `runs.model` y `turn_completed.model` que `off`/`suggest` no usaron otro modelo.
 - **Registro:** el JSON lleva `model`, `modelFast`, `modelDeep` y `endpointHost` (solo `URL.host`; nunca la clave).
 - **Métricas:** tasa de éxito por perfil, tokens por modelo (`runs.model` y `turn_completed.model` + `usage`), coste con la tabla de precios, cambios de modelo por sesión, `cachedInput` y acierto de perfil en `suggest`.
-- **Regla de promoción (O4, confirmada):** se retira la etiqueta «experimental» solo si (a) el ahorro de coste de `on` frente a `off` es **≥ 30 %**, (b) la caída de la tasa de éxito es **≤ 2 puntos** y (c) el acierto de perfil en `suggest` es **≥ 85 %**. Si no, la función sigue experimental y `off`. El resultado (cumple / no cumple) se escribe en `docs/benchmark-model-tier.json` (excluido del sitio).
+- **Regla de promoción (O4, confirmada):** se retira la etiqueta «experimental» solo si (a) el ahorro de coste de `on` frente a `off` es **≥ 30 %**, (b) la caída de la tasa de éxito es **≤ 2 puntos** y (c) el acierto de perfil en `suggest` es **≥ 85 %**. Si no, la función sigue experimental y `off`. El resultado (cumple / no cumple) se escribe en `apps/website/benchmark-model-tier.json` (excluido del sitio).
 
 ---
 
@@ -340,18 +340,18 @@ Si **cualquiera** de las tres claves fue rechazada o falta, o `tryDecide` devolv
 - **Aceptación:** `model-tier-runner` y `-security` verdes; `session.model` intacto; `providerData` y IDs de llamada intactos.
 
 ### 12.5 Fase 4 — Benchmark y decisión (M)
-- **Entregables:** `bench-model-tier.ts`, `docs/benchmark-model-tier.json` (con `model`, `modelFast`, `modelDeep`, `endpointHost`).
+- **Entregables:** `bench-model-tier.ts`, `apps/website/benchmark-model-tier.json` (con `model`, `modelFast`, `modelDeep`, `endpointHost`).
 - **Aceptación:** resultados registrados; la regla O4 queda evaluada en el JSON (cumple / no cumple) y fija si la documentación conserva o retira la etiqueta «experimental».
 
 ### 12.6 Fase 5 — Documentación, capturas y release (M)
-- **Entregables:** `docs/model-tiers.md` + ES (marcada **experimental** mientras no se cumpla la regla O4, con avisos de coste, privacidad y límites), actualización de páginas y `docs/implementation-status.md` (en español), captura real con Playwright de `/stats` con la línea «Model tiers» (`docs/assets/web-ui/model_tiers_web_ui.webp`, proveedor falso con datos de ejemplo, < 150 KB, EN y ES con alt y pie; borrar temporales y `.playwright-mcp/`); bump manual de los 7 paquetes publicados (+ `packages/web` privado y raíz) a la siguiente minor (esperada 0.6.0); `CHANGELOG.md` en inglés (`### Added`: «Model tier router (experimental, off by default)»); `pnpm changelog:data`; gate completo verde; publicación según `.agents/skills/alisio-publish/SKILL.md`.
+- **Entregables:** `apps/website/model-tiers.md` + ES (marcada **experimental** mientras no se cumpla la regla O4, con avisos de coste, privacidad y límites), actualización de páginas y `apps/website/implementation-status.md` (en español), captura real con Playwright de `/stats` con la línea «Model tiers» (`apps/website/assets/web-ui/model_tiers_web_ui.webp`, proveedor falso con datos de ejemplo, < 150 KB, EN y ES con alt y pie; borrar temporales y `.playwright-mcp/`); bump manual de los 7 paquetes publicados (+ `packages/web` privado y raíz) a la siguiente minor (esperada 0.6.0); `CHANGELOG.md` en inglés (`### Added`: «Model tier router (experimental, off by default)»); `pnpm changelog:data`; gate completo verde; publicación según `.agents/skills/alisio-publish/SKILL.md`.
 - **Compatibilidad con `alisio-plugins`:** el contrato de decisiones y `api.options`/`api.paths` deben seguir siendo compatibles hacia atrás; **ejecutar el *smoke test* de `plugin-laya` contra la versión candidata antes de publicar**; cualquier cambio incompatible exige avisar antes a `alisio-plugins` (el plugin declara peer `>=0.3.0 <0.7.0`; 0.6.0 es la última minor cubierta).
 
 ---
 
 ## 13. Definición de terminado y registro de riesgos
 
-**Definición de terminado:** gate completo verde; pruebas primero; `off` equivale a 0.5.0; permisos intactos; continuación del proveedor intacta; paridad EN/ES; documentación marcada experimental; `docs/implementation-status.md` actualizado.
+**Definición de terminado:** gate completo verde; pruebas primero; `off` equivale a 0.5.0; permisos intactos; continuación del proveedor intacta; paridad EN/ES; documentación marcada experimental; `apps/website/implementation-status.md` actualizado.
 
 | Riesgo | Impacto | Cómo y cuándo se verifica |
 |---|---|---|

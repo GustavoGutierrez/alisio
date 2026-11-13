@@ -4,7 +4,7 @@ export default {
   productName: "Alisio",
   executableName: "alisio",
   // Fallback only: every target below sets its own stable, human-friendly name, which the download
-  // links on the docs home page depend on (docs/.vitepress/theme/desktop-release.ts).
+  // links on the docs home page depend on (apps/website/.vitepress/theme/desktop-release.ts).
   artifactName: "Alisio-${version}-${arch}.${ext}",
   asar: true,
   directories: { output: "release", buildResources: "build-resources" },

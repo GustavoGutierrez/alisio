@@ -92,10 +92,10 @@ Git and search tools; `alisio doctor` reports what it detects.
 
 ## Docs
 
-Documentation (EN/ES): <https://gustavogutierrez.github.io/alisio/> — [quick start](https://gustavogutierrez.github.io/alisio/quick-start),
-[configuration](https://gustavogutierrez.github.io/alisio/configuration), [plugins](https://gustavogutierrez.github.io/alisio/plugins),
-[subagents](https://gustavogutierrez.github.io/alisio/subagents), [memory](https://gustavogutierrez.github.io/alisio/memory),
-[TUI](https://gustavogutierrez.github.io/alisio/tui).
+Documentation (EN/ES): <https://alisioair.com/> — [quick start](https://alisioair.com/quick-start),
+[configuration](https://alisioair.com/configuration), [plugins](https://alisioair.com/plugins),
+[subagents](https://alisioair.com/subagents), [memory](https://alisioair.com/memory),
+[TUI](https://alisioair.com/tui).
 
 ## License
 

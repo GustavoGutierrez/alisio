@@ -65,8 +65,8 @@ En `builtinPlugins.memory`:
 
 ## Documentación
 
-[Plugin de memoria](https://gustavogutierrez.github.io/alisio/memory) ·
-[Configuración](https://gustavogutierrez.github.io/alisio/configuration).
+[Plugin de memoria](https://alisioair.com/memory) ·
+[Configuración](https://alisioair.com/configuration).
 
 ## Requisitos
 

@@ -414,10 +414,10 @@ Terminado cuando los AC aplicables están verificados, no hay regresiones de MCP
 ## 17. Fuentes y trazabilidad
 
 - Repositorio revisado: https://github.com/GustavoGutierrez/alisio/tree/179e68694163ea6b2f51013ea4b56a8fe193a64f
-- Registro, API: https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/api/official-registry-api.md
-- Consumo por agregadores: https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/registry-aggregators.mdx
-- Formato server.json: https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/server-json/generic-server-json.md
-- Confianza y límites: https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/about.mdx
+- Registro, API: https://github.com/modelcontextprotocol/registry/blob/main/apps/website/reference/api/official-registry-api.md
+- Consumo por agregadores: https://github.com/modelcontextprotocol/registry/blob/main/apps/website/modelcontextprotocol-io/registry-aggregators.mdx
+- Formato server.json: https://github.com/modelcontextprotocol/registry/blob/main/apps/website/reference/server-json/generic-server-json.md
+- Confianza y límites: https://github.com/modelcontextprotocol/registry/blob/main/apps/website/modelcontextprotocol-io/about.mdx
 - Transportes: https://modelcontextprotocol.io/specification/latest/basic/transports
 - Autorización: https://modelcontextprotocol.io/specification/latest/basic/authorization
 

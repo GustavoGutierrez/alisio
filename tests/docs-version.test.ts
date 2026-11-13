@@ -6,7 +6,7 @@ import {
   substituteTokens,
   substituteVersion,
   VERSION_TOKEN,
-} from "../docs/.vitepress/version.ts";
+} from "../apps/website/.vitepress/version.ts";
 
 const CLI_VERSION = (
   JSON.parse(readFileSync(resolve("packages/cli/package.json"), "utf8")) as {
@@ -20,7 +20,8 @@ const STALE_STATUS = /0\.1\.0-alpha\.1\b/;
 function markdownFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name.startsWith(".") ? [] : markdownFiles(full);
+    if (entry.isDirectory())
+      return entry.name.startsWith(".") || entry.name === "node_modules" ? [] : markdownFiles(full);
     return entry.name.endsWith(".md") ? [full] : [];
   });
 }
@@ -67,16 +68,25 @@ describe("docs version helper", () => {
 
 describe("stable release wording", () => {
   it("states the 0.x policy in both publishing pages and no page calls the project alpha", () => {
-    expect(readFileSync("docs/publishing.md", "utf8")).toContain("## Stability and versioning");
-    expect(readFileSync("docs/es/publishing.md", "utf8")).toContain("## Estabilidad y versionado");
-    for (const file of ["docs/index.md", "docs/es/index.md", "docs/limitations.md", "SECURITY.md"])
+    expect(readFileSync("apps/website/publishing.md", "utf8")).toContain(
+      "## Stability and versioning",
+    );
+    expect(readFileSync("apps/website/es/publishing.md", "utf8")).toContain(
+      "## Estabilidad y versionado",
+    );
+    for (const file of [
+      "apps/website/index.md",
+      "apps/website/es/index.md",
+      "apps/website/limitations.md",
+      "SECURITY.md",
+    ])
       expect(readFileSync(file, "utf8"), file).not.toMatch(
         /\b(is|es) (a|an|una)( functional)? \*{0,2}alpha\b/i,
       );
   });
 
   it("keeps plugin and example SDK ranges on the current ^0.2.0", () => {
-    for (const file of ["docs/plugins.md", "docs/es/plugins.md"])
+    for (const file of ["apps/website/plugins.md", "apps/website/es/plugins.md"])
       expect(readFileSync(file, "utf8"), file).not.toMatch(/@alisio\/sdk": "\^0\.1\.0-alpha/);
     for (const name of ["custom-mascot", "custom-websearch"]) {
       const manifest = JSON.parse(
@@ -89,7 +99,7 @@ describe("stable release wording", () => {
 });
 
 describe("no stale hardcoded versions in docs", () => {
-  const files = [resolve("README.md"), ...markdownFiles(resolve("docs"))];
+  const files = [resolve("README.md"), ...markdownFiles(resolve("apps/website"))];
 
   it("status lines and headings use the version token, never a literal 0.1.0-alpha.1", () => {
     for (const file of files) {
@@ -99,7 +109,7 @@ describe("no stale hardcoded versions in docs", () => {
         // Intentional: SDK dependency examples in the plugins guides show a concrete range.
         const sdkExample =
           line.includes("@alisio/sdk") &&
-          (file.endsWith("docs/plugins.md") || file.endsWith("docs/es/plugins.md"));
+          (file.endsWith("apps/website/plugins.md") || file.endsWith("apps/website/es/plugins.md"));
         expect(sdkExample, `${file}: ${line}`).toBe(true);
       }
     }
@@ -107,10 +117,10 @@ describe("no stale hardcoded versions in docs", () => {
 
   it("uses the version token in the status pages", () => {
     for (const file of [
-      "docs/limitations.md",
-      "docs/index.md",
-      "docs/es/index.md",
-      "docs/implementation-status.md",
+      "apps/website/limitations.md",
+      "apps/website/index.md",
+      "apps/website/es/index.md",
+      "apps/website/implementation-status.md",
     ]) {
       expect(readFileSync(file, "utf8"), file).toContain(VERSION_TOKEN);
     }

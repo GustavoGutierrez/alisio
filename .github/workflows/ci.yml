@@ -1,10 +1,10 @@
 name: CI
 # Runs once per push to main only (no develop or pull request runs). Docs-only and spec-only pushes
-# skip it (the Docs site workflow builds and checks the docs), and a newer push cancels an older run.
+# skip it (the Website workflow builds and checks the site), and a newer push cancels an older run.
 on:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "specs/**", "*.md"]
+    paths-ignore: ["apps/website/**", "specs/**", "*.md"]
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -136,8 +136,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm install:smoke
-  docs:
-    name: Docs build
+  website:
+    name: Website build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -147,4 +147,4 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docs:build
+      - run: pnpm website:build

@@ -17,3 +17,10 @@ apps/desktop/release/
 apps/desktop/dist/
 test-results/
 playwright-report/
+
+# Website (apps/website): Cloudflare/Wrangler local state and credentials
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+.cloudflare/

@@ -93,7 +93,7 @@ Los rangos entre paquetes (`workspace:*` / `workspace:^`) los reescribe `pnpm pa
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
-pnpm test:cli && pnpm test:compiled && pnpm pack:check && pnpm docs:build
+pnpm test:cli && pnpm test:compiled && pnpm pack:check && pnpm website:build
 git add -A
 git diff --cached --check
 git commit -m "chore: release <V>"
@@ -155,8 +155,8 @@ publica). Empujar un tag `v<V>` a mano o `workflow_dispatch` siguen funcionando 
 El script de publish nunca etiqueta ni hace push. El workflow `release.yml` (changesets/npm) está
 deshabilitado: npm se publica en local.
 
-Al terminar el release, actualiza los enlaces de descarga de Desktop (README, `docs/desktop.md`,
-`docs/installation.md`, sus versiones `docs/es/` y `docs/.vitepress/theme/desktop-release.ts`).
+Al terminar el release, actualiza los enlaces de descarga de Desktop (README, `apps/website/desktop.md`,
+`apps/website/installation.md`, sus versiones `apps/website/es/` y `apps/website/.vitepress/theme/desktop-release.ts`).
 
 ### 6. Aviso al mantenedor de los plugins externos
 

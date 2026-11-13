@@ -66,8 +66,8 @@ read-only, and approvals bubble up to the TUI labeled with the agent path.
 
 ## Docs
 
-[Subagents](https://gustavogutierrez.github.io/alisio/subagents) ·
-[Configuration](https://gustavogutierrez.github.io/alisio/configuration).
+[Subagents](https://alisioair.com/subagents) ·
+[Configuration](https://alisioair.com/configuration).
 
 ## Requirements
 

@@ -1,0 +1,719 @@
+# Known limitations
+
+This page is an English translation of the limitations and pending work recorded in
+[`apps/website/implementation-status.md`](https://github.com/GustavoGutierrez/alisio/blob/main/apps/website/implementation-status.md).
+That Spanish file in the repository is the source of truth; the
+[Spanish version of this page](/es/limitations) includes it verbatim.
+
+Alisio `__ALISIO_VERSION__` is a stable release (pre-1.0: minor versions may include breaking changes). The original specification sets the product direction;
+it is not a statement that all of its release criteria are met.
+
+## Pending to reach 1.0.0
+
+- Run and tune a Windows/macOS matrix; current CI covers Linux and does not certify other systems.
+- Validate real providers and models with the user's credentials.
+- Validate Herdr with a real server/PTY; add a native launcher/resumer if Herdr allows it.
+- Session checkpoints/rewind and vector memory: they do not exist.
+- Interactive onboarding; configurable color themes; expandable reasoning view.
+- Stable release with binaries: the `pnpm publish` script (`scripts/publish.ts`, see
+  [Publishing](/publishing)) published the earlier alpha versions and the stable `0.1.0` (dist-tag
+  `latest`); SemVer ranges for plugins (`@alisio/sdk` as a `^0.2.0` peer) and reload in an idle
+  session.
+- Automatic discovery of Pi paths and incremental watch.
+- Interactive MCP OAuth and MCP multimedia capabilities. `/mcps` supports explicit reconnect and
+  environment-referenced bearer tokens, but not browser authentication flows.
+  Configured servers connect lazily and stdio runs with the user's privileges; neither MCP nor its
+  subprocess transport is a sandbox. Semantic names and descriptions improve model routing but do
+  not guarantee automatic tool selection; explicitly name `server/tool` when the call is required.
+  Repeated-consent behavior is now configurable: the global `mcp.allow` preference grants MCP
+  consent persistently and auto-connects enabled servers at every start; a per-session TUI grant is
+  the alternative when `mcp.allow` is unset. Granting persists across sessions: a server that
+  auto-connects at startup runs unsandboxed under your user privileges whenever enabled.
+  Large tool catalogs are a deployment choice: a server exposing dozens of tools inflates every
+  request and is not counted against the post-compaction context budget (see
+  [the tool catalog is not counted](/compaction#the-tool-catalog-is-not-counted)), so manage
+  oversized catalogs with `/plugins` (disable the
+  server) rather than expecting the runner to shrink them.
+- Remote OpenTelemetry, memory metrics and large-repository benchmarks.
+- Hardening against hostile processes and filesystem races. No OS sandbox is offered.
+- **Persistent MCP consent**: `mcp.allow: true` grants MCP process/network consent for this user
+  across sessions and auto-connects enabled servers at every start (TUI and headless). It is only
+  read from the global configuration layer and is never overridden by a project value; `--read-only`
+  still hard-blocks MCP. TUI grants ("session only") never touch the configuration file.
+
+## Known limits
+
+**Designed PDFs (`document_create`, phases 1 and 2).** Alisio Desktop prints with its built-in
+Chromium; the CLI, `serve` and the standalone binary need an installed Chromium-family browser (131
+or newer). Chapter headers, footnotes, WeasyPrint and visual checks are not implemented yet; the
+table of contents falls back to plain links when its page numbers cannot be stabilized. Latin, Greek
+and Cyrillic text only (no bundled CJK, Arabic or emoji); output is RGB, never print-shop CMYK or
+PDF/X, with no PDF/A or PDF/UA claim. Verified on Linux x64 only. See
+[Designed PDFs](/documents#limits).
+
+**Permission modes, `/reload` and `/changelog` (modes spec, phase 1).** A permission mode only
+chooses which effects run without asking: it is not a sandbox, it does not change path confinement
+(directories outside the workspace still ask) or the `--allow-analysis` pre-grant, and `auto` uses
+fixed rules with no AI classifier. In the TUI the initial mode is only a label derived from the
+launch flags (if plugins or MCP already allowed `external`, `/permission status` shows the real
+policy); changing it resets "allow for this session" approvals and is refused during a turn and
+under `--read-only`. Shift+Tab needs a terminal that reports it as a separate key and, in the web,
+it intercepts a navigation key, so the agent selector is the accessible path; cycling never applies
+the model an agent declares (use `/agents`). `/reload` rebuilds the whole application: MCP servers
+and plugins restart, plugin code that was already imported is not reloaded (the report says so),
+launch flags keep their startup values and it is refused during a turn, with running subagents, with
+running background tasks or with a pending approval. The changelog is English-only and curated by
+hand. `alisio run` has neither command.
+
+**Web Memory tab and plugin data views.** Views are read-only by contract, not by isolation: the
+host only controls the method, validated parameters, time (5 s) and size (1 MiB), cannot stop a
+plugin's code from writing, and a synchronous handler that blocks the event loop is not interrupted
+by the timeout; a plugin is not a sandbox. The tab does not update live (use Refresh); a memory
+updated or pinned while you page can jump to the top, and a memory with a `topic_key` that another
+chat updates moves to that chat. Subagent sessions have their own session id and do not appear in
+the parent chat's tab. **Context loaded** is what the plugin returned when the chat started, kept
+by the plugin: it does not prove the runner persisted it, chats from before this version have none
+and the context recovered after a compaction is not recorded. Memory can hold sensitive project
+data and is shown to anyone with the server's session cookie.
+
+**Plan review (`exit_plan`).** The plan agent is read-only because its run policy allows no write,
+process or network effect: no permission mode widens it. `exit_plan` is offered only to the built-in
+plan agent's run. The decision is recorded while that run is still going; the switch to `build` and
+the single implementation turn happen after the plan run ends (the model first gets the `approved`
+result and answers once). State lives in `sessions.options.plan` with compare-and-set transitions,
+so approving twice starts one turn. Cancelling the run withdraws a pending review and drops an
+approval that had not started. The run time limit (`limits.timeoutMs`) counts active time, so the
+time you spend on the review is not counted; in the terminal the review stays open as long as you
+want, while in the web a review nobody answers for 60 minutes (30 s with no client connected) is
+withdrawn and counts as Skip for now. A run that ends with a review open keeps the plan artifact and
+the next message works normally; a read call interrupted by a stop or a limit is closed in the
+journal instead of asking you to recover it. Without an interactive UI (`alisio run`, `--json`) or
+under `--read-only` the tool returns `unavailable` and asks the model for the plan as its final reply
+(Alisio does not print it itself). The terminal edits the context on one line and its turn flow is
+verified through the shared pure logic and the panel, not in a real terminal; the web was checked in
+Chromium only. To make room in the web initial bundle (it had about 100 bytes left) the Spanish
+dictionary is now its own chunk, loaded before the first render when Spanish is the stored language
+or when it is chosen in Settings; English stays in the bundle and is the fallback.
+
+**Plan diagrams and the plan viewer.** Diagrams are Mermaid text written by the plan model, and Mermaid
+only draws inside the web app (it needs a DOM): the terminal shows the source, and there is no standalone
+HTML viewer yet. The server validates them **without drawing**, so the check is lightweight: size (8 KB), an
+allowlist of diagram types, an estimate of the node count (40), and a text scan for `click`/`link`
+statements, `href`, `javascript:`/`data:` URLs, `url()`, HTML tags and `%%{init}` or front matter that touches
+security settings. It is not a Mermaid parser: a diagram can pass and still fail to draw, and then the web
+shows its source and the error. The model can also misrepresent the plan; the instructions forbid adding
+information that is not in it, and each diagram names the section it illustrates, but nothing verifies it.
+`plan.json` is extracted from the Markdown sections the plan agent is asked to write (Goal, Steps, Decisions,
+Risks, Verification, plus a few English and Spanish aliases); other headings only feed the full plan. Only
+plans that carry diagrams (or removed some) are published as a folder. The viewer was checked in Chromium
+only, and the terminal side through its pure logic, not in a real terminal. User guide:
+[Plan mode and plan review](/plan).
+
+**Background tasks (`bg_run`, modes spec phase 3).** A task is an ordinary child process of
+Alisio, not a sandbox: it runs with your permissions, and a subprocess or a permission mode is not
+isolation. All four tools (`bg_run`, `bg_list`, `bg_output`, `bg_stop`) are `process` effects, so
+`--read-only` and the plan agent deny the set, and in `ask`/`auto` mode each call asks. Tasks are
+**not detached**: they die when Alisio exits (the process group is killed; `taskkill /T /F` on
+Windows, which was not verified on a real Windows machine) and they do not survive a restart. After
+an abrupt death of Alisio (SIGKILL, power loss) no code can run, so the next start marks the
+unfinished tasks `lost` by owner pid (a live Alisio process's tasks are never touched; a reused pid
+could hide a lost task until that process ends) and their processes may still be running. Output goes
+to a log file with offsets; it keeps the first `tasks.maxOutputBytes` bytes and the last 32 KiB, so a
+very long output loses its middle. The finished-task notification is coalesced, rate limited and
+retried while the session is busy, and goes only to root sessions for a task that ended on its own:
+`alisio run` never sends it (tasks end with the process and the CLI says so), a TUI whose open session
+is another one holds it until you are back, and a notification of a task that finished while the
+server was down is not sent. The unified `/tasks` list shows subagents read-only through their panel;
+their own manager, tools and `<task-notification>` are unchanged. The panels were checked in
+Chromium (web) and as pure logic plus a fake terminal (TUI), not in a real terminal, and not on
+Windows or macOS. A workspace with running tasks is not evicted by the web server and a `/reload`
+is refused until they end or are stopped.
+
+**Session goals (`/goal`, modes spec phase 4).** There is **no token budget by default**: a goal
+without `budget=` is stopped only by `goal.maxTurns` and `goal.maxMinutes`. The budget is hard but
+checked per request, so spending can pass it by one request (more where the provider reports no
+`usage` and characters are used as an estimate); there is no closing turn, and it counts the input and
+output of every request, so a long context is paid again each turn. There is **no evaluator model**: the
+agent decides when it is done or blocked, and its evidence is stored and shown but **not verified**. A
+"turn" is one run, not one model step, and the time limit counts the active time of runs (a wait for
+you inside a run, such as an approval, does not count). The breakers
+fingerprint the final reply (a model that varies a sentence avoids the first) and count tool calls
+(`get_goal` and `update_goal` count). A goal that was active when Alisio stopped comes back paused
+(`restart`, decided by the driving process id, so a reused pid could hide an orphan until it ends) and
+never resumes by itself. The terminal does not continue while the editor holds unsent text; the web
+does not see a TUI's live changes to a goal; `alisio run` has no `/goal` in v1. A goal never widens
+permissions and never runs in plan mode, but in `full` mode the agent acts without asking for as long as
+the limits allow: that is not a sandbox, and the objective is quoted as data, which reduces but does not
+remove prompt injection from text you paste. The terminal was verified through pure logic and a fake
+terminal, the web in Chromium; not on a real terminal, other browsers, Windows or macOS.
+
+- **Python analysis (phases 1–4)**: managed Python is not a sandbox (it runs with your
+  permissions, can read files, use the network and change the repository). The optional container
+  runtime (`analysis.runtime: "oci"`, Docker or Podman, a digest-pinned image) blocks the network,
+  mounts only the job folders and limits memory, CPU and processes, but a container is not a
+  boundary against a kernel or engine vulnerability; it was verified on Linux with Docker only
+  (Podman, Docker Desktop on macOS and Windows are untested) and `--user` is left out on macOS and
+  Windows on the assumption that Docker Desktop maps the file owner. The container image must
+  bring its own packages (the extras environment is not used there). The optional Python extras
+  need the network to install, have no wheel for `science` on Alpine (musl) or on Windows on Arm
+  before Python 3.13 (`analysis` needs 3.12 there), and cannot be installed offline: the failure is
+  clean and the standard library keeps working. Retention runs at most once a day, only while
+  Alisio is running and writable; a dataset's "last use" is the modification time of its file, and
+  the retention values are global only. A rerun uses the inputs copied into the original job
+  (checked by sha256), so it cannot pick up newer versions of a workspace file, and it is refused
+  once retention removed the script. The web artifact panel previews Markdown, dashboards (isolated
+  viewer: no network, no storage, no module scripts or file fonts; Esc inside a dashboard does not
+  reach Alisio; links expire after 10 minutes), images, PDFs (browser viewer without `sandbox`),
+  JSON, text, and spreadsheets (CSV, TSV, XLSX) in the table viewer. Saved "Allow for this session"
+  permissions belong to the root session; `execute` reaches `python_run` only through
+  `--allow-analysis` or `--allow-process`. A separate origin for the viewer, a Node XLSX reader,
+  artifact templates and XLS, ODS and Parquet files were left out (spec §21 lists them as optional).
+  The owner confirmed the recommended decisions of the spec (§23.2) on 2026-10-01. Verified on
+  Linux with Python 3.10 and Docker; Windows and macOS rely on the CI portability job.
+- **Tabular data (phase 3)**: datasets are SQLite files built with `node:sqlite` (still marked
+  experimental in Node 22; the warning is silenced) and read in a separate process, because
+  `node:sqlite` has no `interrupt()`, progress handler or authorizer and a worker thread cannot be
+  stopped inside a native call: a slow `data_query` is stopped by killing that process. `prepare()`
+  ignores text after the first statement, so the single-statement check is lexical. The files have
+  no indexes (they are read-only): sorting and filtering scan the sheet and are disabled above
+  `analysis.data.maxInteractiveRows`; complex analysis belongs in `python_run`. An XLSX needs
+  Python 3.10+ (the standard-library helper; empty rows are skipped and merged cells keep only their
+  top-left value); legacy XLS, ODS and Parquet are not read. Cell text is stored exactly, but the
+  grid cuts cells longer than 4 096 characters and the model sees 2 KiB per cell. A JSON document
+  is parsed in memory up to 50 MiB (use JSON Lines beyond that). Verified on Linux; Windows and
+  macOS rely on the CI portability job.
+- **Runtime**: Node does not load `.env` automatically (Bun does); use environment variables or
+  `node --env-file=.env`. Local `.ts` plugins require Bun or Node >= 22.18; npm plugin packages must
+  be published as JavaScript. The `alisio-source` export condition is only used in development
+  inside the monorepo and is not published.
+- **Provider credentials**: `credentials.json` is local plaintext protected with mode `0600`, not
+  encrypted and not an OS keychain. Provider/model changes start a fresh session; compatible old
+  sessions remain stored, but opaque continuation state is never transplanted across providers.
+  Cross-provider selectors only see global profiles created through `/connect`; legacy root
+  configuration is not a hidden catalog. Catalog discovery is cached for up to 15 seconds per
+  process.
+- **License**: MIT.
+- **User agents**: only the `.agents/agents` scopes (project and global) are written and listed by
+  the Agents window and `/agents manage`; agents in `.alisio/agents`, `<config>/agents`,
+  `.claude/agents` or `.opencode/agent(s)` still load but are not edited there, and agents cannot be
+  moved between scopes. `reasoning.summary`, `text.format.type` and `text.verbosity` are stored and
+  shown but not sent to providers yet (the `ModelProvider.stream` contract has no fields for them);
+  `reasoning.effort` applies as the agent's default effort. The `task` tool's advertised subagent
+  list is fixed at startup: a new agent can be delegated to right after the reload, but the model
+  only sees it advertised after a restart. The subagents plugin's published state is global to the
+  database, so with several workspaces open in `alisio serve` the last one reloaded defines the
+  catalog. There is no file watcher: outside edits are picked up when the agents list opens or with
+  `/agents reload`. TUI instructions are edited on one line (`\n` for line breaks). Activating an
+  agent whose model belongs to another provider keeps the chat's model (and says so).
+- **Memory**: search uses the trigram tokenizer, so terms shorter than 3 characters are ignored. No
+  semantic search. The automatic end-of-session summary only runs in the TUI (not in headless `run`)
+  and is bounded by `pluginHooks.sessionEndTimeoutMs`; if it expires, exit continues without a
+  summary. The end-of-session summary replaces the archived checkpoint of the same session (one
+  summary per session). User prompts are copied to the memory database (with `<private>` redacted)
+  on compaction and on exit; the database is local with 0600 permissions.
+- **Memory implementation details**: the sessions table is named `memory_sessions` (the database may
+  share a file with Alisio's sessions); there is no FTS over prompts; a `topic_key` in `personal` scope
+  upserts across projects (so preferences are truly personal); context lines include `#id` for
+  `memory_get`; the compaction checkpoint is archived as a session summary rather than as a
+  `session/compaction-recovery` observation, and recovery is injected deterministically without
+  asking the model to call tools. There is no cloud sync, relations, conflict judgment or review
+  cycle.
+- **`internal` effect**: memory tools do not modify the workspace or the network and are allowed even
+  with `--read-only`. If you prefer a strictly write-free mode, use `--disable-plugin memory`.
+- **Plugins**: `model.complete` uses the configured provider (the session model when the plugin passes
+  it) and does not count against the `limits.maxTokens` budget. Hooks run in-process: the timeout
+  aborts the wait and signals the `AbortSignal`, but it cannot stop blocking synchronous code.
+  `/plugins` persists enable/disable overrides but intentionally requires a restart; reverting the
+  desired state to the original runtime state clears that requirement. Hot removal cannot yet
+  guarantee cleanup of every live registration and provider/session resource. External management
+  requires project trust. A model-provider retained by the active provider or any live routed
+  session, and plugins with live session-owned resources, are protected from disable actions.
+- **Plugin installation** (`alisio install`, host tool `plugin_install`): npm-only and GLOBAL —
+  packages land in `<config home>/plugins` via `npm install --prefix`, and their npm names are
+  persisted in the global `plugins` array. Installing is a per-user action; loading follows the
+  existing executable-plugin policy (a project's own config/plugins need project trust;
+  `--read-only` disables loading entirely). There is no script sandboxing: `npm install` may run
+  lifecycle scripts with your privileges and Alisio only warns/asks (headless runs require
+  `--yes`/`--trust-plugin`). Registry/git/file URLs are not supported, and Alisio does no own
+  dependency resolution — the package must declare the `alisio-plugin` keyword to be loadable.
+- **Startup screen**: the TUI chrome itself (header, bars) still uses Unicode glyphs under
+  `TERM=dumb`; only the startup screen falls back to ASCII. Width counting treats every code point as
+  one column, so wide East Asian or emoji glyphs in custom mascots may misalign.
+- **Subagents**: messages sent with `send_message` wait in an in-memory inbox and are lost if the
+  process exits; a background completion is delivered with the parent's next turn (with your next
+  message when the parent is idle); `skills` in a definition are loaded through a `skill_load`
+  instruction, not pre-injected; `/agents merge` needs a clean working tree; worktrees are only
+  created when write-capable children actually overlap; the agent panel and `/agents` show the tasks
+  started in the current process.
+- **Prompt templates**: no template includes or partials, no shell execution or file injection in
+  templates, `$10` and higher are not supported, and positional arguments are plain text only.
+- **Clipboard**: OSC 52 cannot be confirmed; the TUI reports it as unverified.
+- **Paste and attachments**: image clipboard access needs a native platform helper (or `wl-paste`
+  on Wayland); it is commonly unavailable over plain SSH. There is no capability check before
+  sending an image to a model: an unsupported model's own rejection surfaces as a normal inline
+  error. Attachments are capped at 4 per message and 5 MB raw bytes each, enforced by the TUI, not
+  by `@alisio/core` (an embedder calling the runner directly can send larger or more attachments).
+  Multi-line paste in `--no-tui` (readline) mode is not atomic: Node's `readline` has no
+  bracketed-paste support, so each embedded newline submits its own message instead of one
+  combined message; single-line paste is unaffected. Images are not supported at all in `--no-tui`
+  mode.
+- **TUI**: `/stats` covers only the current TUI process for the active session; it is not rebuilt from
+  persisted events. The TUI needs a terminal with an alternate screen; otherwise use `--no-tui` or
+  `run`.
+- `provider.contextWindow` applies only to the configured model; after `/model`, the window comes
+  from the active `/connect` profile's `values.contextWindow` override (asked in `/connect` when
+  the catalog does not report the selected model's window, meant for local servers like llama.cpp
+  that omit `context_window`; it wins over the catalog by user intent), from
+  `GET /models` (the catalog loads lazily at startup and refreshes after every provider/model
+  switch), or stays unknown. Auto-compaction uses ONE effective budget: with a known window it
+  triggers at `threshold` of that window only; with an unknown window (or one declared beyond
+  `2_000_000` tokens) it falls back to `limits.maxContextChars` (est. tokens at `maxContextChars / 4`),
+  which also stays as the post-compaction hard limit. The hard limit measures only **reducible
+  content** (instructions + transcript): the fixed tool catalog is not counted against it, so a
+  huge MCP catalog can never corrupt or fake-fail a small transcript — manage oversized catalogs
+  with `/plugins` instead. The TUI context bar reflects the same budget.
+  Coverage uses saved profiles and `/connect` activation with fake catalogs; the interactive
+  `/connect` input is verified by types and manually, not by UI tests.
+- **Compaction** uses the current provider; its token usage is not added to the `limits.maxTokens`
+  budget. Before/after estimates are approximate (about 4 characters per token). Responses opaque
+  items of the summarized span are discarded; kept ones do not change. A session with uncertain tool
+  results is not compacted until it is recovered.
+- **Truncated responses**: when a response is cut by `limits.maxOutputTokens` (or the compaction
+  summary by `compaction.maxOutputTokens`), the produced text is kept as-is. A cut response completes
+  the run with a warning and a `truncated` flag; a cut summary becomes a **partial checkpoint** —
+  information produced before the cut is preserved, but a truncated summary may omit later context.
+  The summarizer independently estimates tokens (≈4 characters per token), so a summary near its
+  budget can be cut even when the model itself is not near *its* limit; the exact budget consumed is
+  provider-reported and cannot be checked in advance.
+- **Approvals**: only for `write` and `process` effects and only in the TUI; "allow for the session"
+  lasts while the process lives. The wait is not counted by `limits.timeoutMs` (active time, see below). The `Policy` contract did
+  not change: approval is an additional `RunnerOptions` option.
+- A `resume` with a different model no longer fails: the session is the source of the model and
+  `--model` switches it explicitly for the following turns.
+- In-process plugins can block the event loop or bypass mediated services. Only trusted code; engine
+  timeouts cannot stop hostile synchronous code.
+- The SQLite lock by PID is designed for local processes on one host, not for a database shared over a
+  network. PID reuse may require user intervention.
+- Path validation is not OS isolation. The shell and plugins have the user's permissions.
+- Statistics depend on the provider. If it does not send usage, the token limit is not exact; the
+  limits on turns, time, context length and per-request output still apply.
+- The chat adapter supports text and function tools; private reasoning blocks from third-party
+  providers are not normalized. For OpenAI continuation, use Responses.
+- The session restores the active history (compacted history stays archived). Migrations are forward
+  and idempotent (v1 → v2); there are no backward migrations.
+- Text reading/editing is limited to 1 MiB. Large searches/outputs are truncated explicitly.
+- The Herdr integration allows exchanges through terminals; it does not promise full multi-agent
+  autonomy or distributed planning.
+- **Web server (`alisio serve`)**: single-host session locks (a session another process uses answers
+  `409 session_locked`, and the web does not see a TUI's changes live); no TLS (`--allow-remote` is
+  meant for SSH tunnels; a wildcard bind also accepts IP-literal `Host` headers); the provider is per
+  workspace, so only the model changes per session; idempotency of prompts queued while a run is
+  active is in memory; every SSE reconnection receives a full snapshot; the standalone binary serves
+  only the API and a placeholder page. Activating a provider profile from the web changes one
+  workspace application and is refused while it has runs; a plugin switch applies when the
+  workspace next has no runs (its application is reloaded); plugins cannot be installed from the
+  web. The files panel browses the workspace only (no `--add-dir`
+  roots, symbolic links never followed) and uploaded images are not garbage-collected. The UI does not watch the stream with a 45 s
+  timer (the server heartbeat is an SSE comment that `EventSource` does not expose); command output,
+  notices and reasoning exist only while the page is open. `Ctrl+K` focuses the sidebar search
+  (there is no separate session palette) and finished turns are not folded into an "N steps"
+  summary.
+
+**Decision Intelligence.** No provider is bundled: without a provider plugin named in
+`decisions.provider` nothing happens, and the only built-in feature that consumes decisions is Smart
+Dashboard (plugins can also use `ctx.decisions` in their tools). `confidence` is
+not calibrated (a threshold of 0.6 did not reliably separate clear from ambiguous cases in a small
+hand-labelled sample), so `decisions.minConfidence` is a heuristic filter. `dispose()` is not called
+when a plugin is disabled or on `/reload` (both need a restart), only when Alisio closes; a sudden
+death is not covered, and a `dispose()` over `pluginHooks.disposeTimeoutMs` is abandoned and logged.
+Provider `activate`/`deactivate` errors are visible only in `/decisions`. The terminal `/stats`
+counts only the current terminal process; the web shows decision statistics only in the tooltip of
+the session totals. `pluginHooks.disposeTimeoutMs` and the `decisions.*` keys are not in the terminal
+`/settings` menu (they are in the web Settings → General). A provider's `state` can leave the
+process if its adapter decides so; Alisio only guarantees that events and metrics never contain it.
+
+**Smart Dashboard.** `dashboard_generate` is not available with `--read-only` (it publishes an
+artifact, like `artifact_create`) and is removed by `analysis.smartDashboard: false` or
+`analysis.enabled: false`; the switch applies at the next start, and a global `false` cannot be undone
+by a project layer. One dataset per call, no joins between sheets or files, no interactive filters
+and no incremental regeneration (each call is independent). Only ISO 8601 dates are treated as time
+columns (other formats give no trend), and zoned timestamps are read in UTC. The widget catalog is
+closed (KPI, line, area, bar, horizontal bar, pie, donut, scatter, table; at most 12 components and
+6 KPIs); anything else needs `python_run`. Currency is not inferred from the data. Dashboard colors follow the browser's `prefers-color-scheme`, like the Python ones. A
+decision provider receives only the goal and column metadata, never values, but Alisio does not
+decide where an adapter sends it.
+
+**Forja (`js_run`, `python_run` backends and the scratchpad).** `js_run` is isolated by the QuickJS-WebAssembly
+VM, but on Node the worker is a thread of the Alisio process, so a flaw that escaped the engine would
+compromise it (Bun and the standalone binary use a child process). The Python `wasm` backend does not block
+the network on Node 22 and 24, its memory limit is soft (sampled every 250 ms) and a hostile script can reach
+the runner's JavaScript through the FFI (it can also read `os.homedir()`, `os.hostname()` and `os.userInfo()`, and host paths show in `process.argv`; failure output is redacted); the backend needs Node 22.22, 24.13 or 25.3+ (CVE-2025-55130) and gets a link-free copy of the scratchpad; stored grants do not apply to nested calls; `managed` is not a sandbox, and the read-only `ALISIO_SCRATCH_DIR` is
+not enforceable there. Scripts cannot ask for approval: a nested call that needs one fails with
+`APPROVAL_REQUIRED`. The per-call list of a `js_run` card is not persisted, so after reloading the page only the
+call counters remain. The scratchpad lives in the temporary folder, is removed after seven idle days and is not
+backed up. The benchmark of five tasks with a real model is still pending and informative only. See
+[Forja](/forja#isolation).
+
+Per-session routing was verified with fake provider profiles and concurrent parent/child runs,
+including canonical, unique, missing and ambiguous selectors, continuation isolation, agent/task
+overrides and stable/distinct OpenCode session headers. No real credentials were used.
+
+**Reliability Lab (`alisio eval`).** There is no LLM judge, no third-party benchmark, no result
+upload (`eval export` writes a local bundle whose scrubbing of paths and secrets is pattern-based, not a guarantee), and no interactive UI. `live` runs are not deterministic (the seed only
+orders runs), and replay measures the harness, not the model. Runs use a temporary copy of the
+fixture, but a subprocess or policy is not a sandbox: with `process` granted, or with a `command`
+verifier, code runs with your privileges. Repetitions are assumed independent, with no correction for
+multiple comparisons; with `k = 5` only 0/5 against 5/5 yields a verdict. Headless `ask` mode denies
+approvals, unlike `alisio run`. The bundled suites and cassettes exist only in a source checkout. The
+optional `pnpm eval:ci` gate replays them and exits non-zero on a divergence or a failing task; it is
+opt-in and not part of the default CI. User guide: [Reliability Lab](/eval).
+
+**Proof (acceptance criteria).** Proof records operational evidence; it does not prove that the code
+is correct. Claim-versus-evidence detection is a heuristic signal, and `treeFingerprint` is a bounded
+audit anchor (1 MiB of diff, 3 s, 200 files). Edits through `shell`, `run_process`, `js_run` or nested
+Forja do not expire evidence, and nested `js_run` calls produce none; a `file` criterion without
+`scope` expires on any workspace edit. The terminal plan review is all-or-nothing (the web UI decides
+per criterion). The reason a `coverage` criterion is disabled is not stored in the ledger (only
+`alisio run` stderr, the `--proof` brief and `verifyCriterion` show it). `verifyCriterion` has no route
+or button yet, and a plugin verification outside a run emits no `proof_updated`. Criteria created over
+HTTP are optional by default, those from the command line required. The counter of refused `complete`
+attempts that pauses a goal as `no_progress` lives in memory. User guide: [Proof](/proof#limits).
+
+### Plugin catalog, install from file and updates
+
+The Web UI and the desktop app install, update and remove plugins (see
+[Plugin catalog, install and updates](/web#plugin-catalog)). Plugins are still not sandboxed: an
+install runs npm with your privileges and may run the package's install scripts, so the UI asks for
+confirmation first. Limits: the catalog is remote data (validated and cached 24 hours, a catalog can
+list a version npm does not serve yet, so the registry's latest is installed instead); update
+information exists only for catalog plugins (no registry lookup for other npm plugins, no source for
+local files); Node keeps the code of a plugin it already loaded, so an update of a loaded plugin
+needs a restart (the desktop app restarts itself, `alisio serve` does not); installs and uninstalls
+run one at a time. Peer conflicts between installed plugins that need different `@alisio/sdk`
+ranges make npm fail and roll back; update the older plugin first.
+
+### Plugin creator (Web UI)
+
+The [plugin creator](/plugin-creator) builds a plain-ESM plugin from a plain-language request, with
+`node:test` checks, validation against the installed `@alisio/sdk` and a `.tgz` package. Building
+runs the plugin's code with your privileges and `node --test` is not a sandbox. Approvals of a creator
+session only show while its page is open. The data diagram is read heuristically from the plugin's
+SQL. Verified with Vitest and a visual run against `alisio serve` with a scripted provider; not
+verified live: a real-model build with its progress and approvals, the install job end to end,
+deleting a plugin and read-only mode. Plugins have no dependencies and no build step, and their
+quality depends on the model you choose.
+When the plan declares that the request needs a screen in the Apps menu, the build fails if the
+plugin registers no app; each app's page is checked statically (nonce scripts, no inline handlers,
+no outside scripts or stylesheets, at most 8 MiB), not run in a browser, and each `read`/`write`
+action is called once. Whether a request needs a screen is the model's judgment.
+
+On Alisio Desktop, interface preferences live in the browser storage of the host's loopback origin;
+the host reuses its saved port, but when another program holds it that launch uses another port and
+those preferences are not visible until a later launch gets the saved port back.
+
+When Alisio Desktop quits, it asks its host to shut down over IPC; the host ends every command and
+background task it started (SIGTERM, then SIGKILL after one second; `taskkill /T /F` on Windows)
+within a 9-second cap, and the app kills the host's tree if it is still running after 10 seconds.
+Verified with Vitest on Linux, including a process group that ignores SIGTERM; the Windows
+`taskkill` path was checked only with a fake runner, and macOS was not run. Not covered yet: after
+an abrupt kill of Alisio, leftover tasks and OCI containers are not swept at the next start;
+programs that MCP servers start through `npx`/`uvx` depend on the MCP server; a plugin creator check
+in progress is not cancelled cleanly; on Windows a program whose launching command already ended
+cannot be found and survives.
+
+### Provider sign-in (contract, core, server API, Web UI and TUI, phases 1 to 4)
+
+Plugins can declare sign-in methods and receive `request.oauth`; the host stores, renews, locks and
+redacts the session, and the Web UI (Settings → Models) can start, show, answer and cancel a sign-in
+(`/api/providers/:profile/auth/...`, with a loopback listener on `127.0.0.1` for the redirect); the
+terminal `/connect` screen offers the same sign-in and a sign-out. No provider offers it yet, and
+headless `alisio run` never starts one. Flows live in memory: restarting the server loses them, and
+the page then says the sign-in was interrupted.
+
+- **Plain text storage.** Sessions are stored in plain text in `credentials.json` (`0600`), readable
+  by any process of the same user and by any loaded plugin; this is session convenience, not
+  encryption or isolation. On Alisio Desktop the default workspace is your home directory, so file
+  tools could read it with your approval.
+- **A plugin is trusted code.** It runs in the host process and can read the session through its
+  handle; a plugin manifest or a subprocess is not a sandbox.
+- **Preview status and eligibility.** A sign-in a provider offers as a preview can change or stop
+  working without notice, and eligibility rules (for example for hosted or commercial use, or a
+  server on a remote machine) belong to the provider and its plugin; read the plugin's own notes.
+  Methods the provider has not officially authorized are marked unofficial in the Web UI.
+- Redaction (of SSE frames, API errors, server logs, `alisio run --json` lines and the desktop host's
+  output) is best effort: it does not see a token split across two chunks of streamed text.
+- The file lock protects only between versions that take it: an older core writes without it and can
+  overwrite a newer file with a stale copy.
+- The loopback listener is offered when the server listens on loopback even if the browser is on
+  another machine (an SSH tunnel), so the UI keeps the paste field of the plugin; the TUI offers it
+  unless `SSH_CONNECTION` or `SSH_TTY` is set (a heuristic). There is no TLS with `--allow-remote`:
+  the pasted value and the authorization link travel in the clear.
+- **No device code for the first planned provider; remote use only through an SSH tunnel.** A remote
+  Alisio needs `ssh -L` with the loopback port forwarded, or pasting the URL; copying the credential
+  to another machine is not supported (the refresh token rotates).
+- **Signing out only removes the local session.** The provider keeps listing the app as authorized
+  until you revoke it in its account settings. `DELETE /api/providers/:profile/credentials`
+  ignores `--read-only` (an earlier gap) and now also deletes sign-in sessions and cancels flows.
+- **Downgrading.** Alisio 0.10 or older keeps the stored session but neither uses it nor takes the
+  lock, and it can rewrite a stale copy of `credentials.json`; signing in again recovers.
+
+**MCP catalog (spec 030).** The catalog is a list of metadata from the official registry, which checks who owns
+a name and does not audit code: installing an npm package or connecting a service runs or contacts third-party
+code with your privileges, with no sandbox (exact version, `--ignore-scripts` and a private folder reduce the
+risk, not remove it). Only npm programs (stdio) and public Streamable HTTP services install by themselves; PyPI,
+OCI, MCPB, legacy SSE, packages with install scripts and ambiguous programs need manual setup. Keys and sign-in
+tokens are stored in `<config home>/mcp-secrets.json` (mode `0600`): protected by file permissions, not
+encrypted. The sign-in returns to the computer running Alisio, only for servers installed from the catalog, and
+signing out removes the local tokens only. The catalog refreshes at most once an hour while Alisio is open and a
+source change needs a restart. There is no UI yet for advanced options (alias, program, version), a folder picker,
+copyable technical details, a recommended list or moving a server between scopes. Verified without network
+against fake catalogs, a fake npm, local MCP servers and a local authorization server; real OAuth providers,
+real npm packages, screen readers, Firefox and Safari, Windows and macOS were not verified. See
+[MCP catalog](/mcp-catalog#security-and-limits).
+
+## Verification scope
+
+The source file records a dedicated verification-scope section for each area below; the summary
+here links to it with an absolute GitHub URL (the file is excluded from this site):
+
+- **Runtime and packaging** — tests under Node and Bun, the built CLI, the standalone binary, packs.
+- **Subagents, AGENTS.md and skills** — precedence, limits, cascade cancellation, git worktrees.
+- **Prompt templates and `/init`** — sources, arguments, trust and diagnostics.
+- **Startup screen and extensions** — mascot, extension points and `TERM=dumb`/`NO_COLOR`.
+- **TUI and compaction** — pseudo-terminal runs, manual and automatic compaction.
+- **Agent output-token budget** — truncation handling across the four adapters.
+- **Context limit versus tool catalog and output speed** — what the post-compaction budget counts.
+- **Memory and plugins** — FTS5 search, end-of-session summary, plugin install.
+- **MCP catalog (spec 030)** — fake catalogs, a fake npm, local MCP servers and a local authorization server; the optional browser E2E (`pnpm test:e2e`) covers keyboard, focus and 360 px; real OAuth providers and screen readers were not verified.
+- **Paste and image attachments** — clipboard helpers per platform and limits.
+- **`ask_user_question`** — the shared interactive queue and stepped prompts.
+- **Network tools (webfetch, websearch, execute)** — mocked providers and no network sandbox.
+- **Project trust and default permissions** — trust store, approvals and `--read-only`.
+- **Event and UI block contracts** — typed run events, `eventId`, new `ui` block fallbacks.
+- **v4 persistence, blobs and command catalog** — v3 → v4 migration, run journal, blob store, TUI
+  command parity.
+- **User agents** — `.agents/agents` CRUD, foreign-key round-trip, hot-reload with the real
+  subagents plugin and the restart notice without it, HTTP API, drafts with the bundled and a
+  discovered `create-agent` skill, create → new session, `/agent:<id>` activation and its collision
+  rule, TUI manager logic and the web Agents state; the web window was checked in Chromium.
+- **Web server (`alisio serve`)** — auth, workspaces, prompts, SSE, approvals, commands, models,
+  context, export and shutdown against a real server on an ephemeral port; zero-overhead startup
+  traced under Node; serve smoke in the Node CLI and the Bun binary. The web UI's reducers, SSE
+  client, incremental Markdown and EN/ES key parity are unit-tested without a DOM, and the UI was
+  exercised manually in Chromium (Playwright) with a simulated provider: streaming, tool rows,
+  approvals by keyboard, the `/` palette, light and dark themes and a 390 px width, and in phase 5
+  Mermaid and KaTeX (valid and malformed), every Settings page, a write-only credential, provider
+  activation and plugin/skill switches refreshing the palette. Screen readers,
+  Firefox/Safari and real network drops were not verified.
+
+The full detail (in Spanish) is in the source file linked at the top of this page, which the
+[Spanish version of this page](/es/limitations) includes verbatim.
+
+Runtime and packaging: unit and integration tests run under Node (a subset also on Bun); `test:cli`
+runs the built CLI on Node (verified on 22.19 and the 22.16.0 minimum) and `test:compiled` runs the
+Bun binary, both against a simulated provider; `pack:check` validates the nine publishable packages; a real
+global npm install from local tarballs was smoke-tested; `scripts/install.sh` was tested against a
+local mirror (checksum install and rejection of a tampered binary). No npm publication or release
+was executed, the release and Pages workflows were not run on GitHub, and macOS/Windows/arm64
+binaries (Bun cross-compilation) were not tested.
+
+The expanded DeepSeek/OpenCode Console/OpenCode Go integrations were verified with fake keys and
+mocked/local inference only; no live credential inference or live OpenCode account was used. The
+public unauthenticated Zen and Go catalogs were checked separately. Provider tests use a
+deterministic local HTTP server, not an external account. MCP is tested with the
+real server SDK over local processes/HTTP. The Linux binary runs a full cycle, loads an external
+plugin with a dependency and keeps the session. The TUI was verified manually in a pseudo-terminal on
+Linux against a simulated provider, but not on Windows/macOS or in other real terminal
+emulators (kitty, iTerm2, Windows Terminal). Real copies through `xclip`/`wl-copy`/`pbcopy`/Windows
+and an automatic compaction with a real provider were not verified. The full detail is in the
+source file linked above.
+
+Truncation handling was verified with mocked providers only (Vitest, no network):
+the four adapters (the built-in OpenAI-compatible adapter and the DeepSeek, OpenCode Console and
+OpenCode Go plugin adapters) emit
+`completed` with `truncated: true` when a cut (`finish_reason` `length`, `response.incomplete`
+or `stop_reason` `max_tokens`) left usable text with complete tool calls, and still throw on
+empty text, partial tool calls or an abrupt end; the runner completes a cut no-tool-call turn
+with the `response_truncated` event and `truncated: true` in `run_completed`, executes tool calls
+from a cut turn and continues, accepts a cut-but-usable summary as a partial checkpoint
+(`partial: true` in `compaction_completed`), fails with an actionable `compaction.maxOutputTokens`
+message when the summary produced nothing usable, and uses `compaction.maxOutputTokens` (default
+16000 in the config schema, 4096 when the runner is built without configuration), never the agent
+loop budget; the TUI shows the warning notice and the `partial` marker (event-reduction Vitest);
+and the config schema accepts the new field with its default.
+
+Since the truncation recovery (`limits.truncationRecoveries`) the built-in OpenAI-compatible
+adapter no longer throws when a cut response has no text or a partial tool call: it yields
+`completed` with `truncated: true` and the runner recovers (see the architecture page). The
+DeepSeek, OpenCode Console and OpenCode Go plugin adapters live in other repositories and keep
+throwing the generic error on empty text; the runner recognises it by its message and recovers
+the same way. Verified with mocked providers only; no live model was cut off.
+
+The coherent context metric was verified with mocked providers (Vitest, no network): the runner
+auto-compacts on the char-budget fallback when the window is unknown, does NOT compact early when a
+large window is known (the DeepSeek ~1M-window vs 800k-char mismatch), compacts at `window ×
+threshold`, and treats declared windows beyond 2M tokens as unknown; `app.contextBudget` reports
+the model window when the catalog exposes it (lazily loaded, refreshed on model switch) and an
+honest `basis: "unknown"` with no fabricated total otherwise, and the TUI bar renders `~9.9k / ?`
+for that case (formatting Vitest). The publish script is covered by focused
+unit tests (ordering, leak check, dry-run side effects, version bump, unknown package) with temp
+dirs and no network; `apps/website/assets/Flujo de Ejecución de Herramientas y Modelo de Permisos.webp`
+(the tool-flow diagram referenced from the tools pages) is an untracked binary asset that must be
+added to git before committing.
+
+**Active agent and effort.** The effort is resolved against the ACTIVE model's catalog in the TUI
+(async `GET /models` load): until the catalog arrives — or when the query fails — no effort is sent
+(honest degradation, never a fabricated level) and the effort segment is omitted; a repaint happens
+when the catalog lands. Headless modes (`run`, `resume`, `--no-tui`) never send effort (it is a TUI
+feature); the active agent itself IS applied there (system prompt and read-only narrowing).
+Switching agents persists `agents.active` in the user layer, but an agent-declared model follows
+`/model` semantics (a fresh session), and an explicit later `/model` choice wins until the agent is
+re-selected. `reasoning_effort`/`reasoning.effort` are sent verbatim (validated against the active
+model's `supportedLevels`); the remote provider is the final authority and may reject a level its
+catalog no longer advertises — acceptance per level was verified against the test server, not the
+public API. The reserved `agents` name was previously owned by the subagents plugin command: the
+task-management verbs (with an argument) still route to the plugin, but the editor autocomplete and
+`/help` show only the TUI command; task management stays reachable as `/agents <verb>` and
+`/command agents <verb>`. The picker interactions of `/agents` and `/effort` were not verified in a
+pseudo-terminal (their pure logic and status-line parts were).
+
+**Permission modes, `/reload` and `/changelog`.** Verified with mocked providers and real
+temporary workspaces (Vitest, no network): the mode table against the web presets and the real
+runner policy, the agent cycle order and its Shift+Tab guards, mode transitions including the
+`--read-only` lock, validate-then-apply reloads with a broken configuration (the application and its
+session survive), the idle-only guard, the changelog parser, `lastSeenVersion` in both interfaces,
+the HTTP routes and their auth rules, and a Chromium run against `alisio serve` with a fake
+OpenAI-compatible provider. Not verified: a real terminal for the TUI (Shift+Tab, the changelog
+panel and the mode menu were tested as pure logic), terminals that do not report Shift+Tab, other
+browsers, screen readers and Windows or macOS.
+
+**Web Memory tab and plugin data views.** Verified with Vitest (no network): view registration and
+validation, a plugin set up without `api.views`, the HTTP route (auth, Host, Origin, unknown
+session or workspace, disabled plugin including `restart-required`, unknown view, invalid
+parameters without echoing values, size cap, timeout, generic errors, nothing sensitive in the
+logs), the three memory views against a temporary SQLite store (one chat only, pinned first,
+filter, literal-wildcard search, cursor paging without duplicates or gaps, read-only, summary,
+context equal to what the start hook returned), an end-to-end run with the real plugin on a real
+server, the 101 schema migration and the web logic. Checked in Chromium against `alisio serve` with
+a fake OpenAI-compatible provider: the tab appears only with the plugin enabled, the three
+sections, filter, search and Load more, chat switching, disabling the plugin in Settings → Plugins
+(tab removed, back to Conversation, route answers 404) and a 390 px width without horizontal
+scroll. Not verified: Firefox, Safari, screen readers, Windows or macOS, very large memory stores
+and several workspaces open at once.
+
+**Dashboard charts.** Chart.js 4.5.1 (MIT) is bundled in `@alisio/core` as a generated string module
+and inlined once into each dashboard that uses `alisio_runtime.charts` (about 215 KB more per
+page); it is the only chart engine, and Plotly remains an optional heavy extra. Dashboard colors
+follow the browser's `prefers-color-scheme`, not the theme chosen in Alisio, because the isolated
+iframe cannot read it. The chart quality gate only warns (hand-written SVG pie arcs, fixed-size SVG
+charts, remote scripts) and works on the HTML text, so it can miss or over-report. Verified with
+Vitest (pure pie geometry with the three reported datasets, helper output, the gate, a real Python
+run) and in Chromium through `alisio serve` with the real CSP at 1280 px and 390 px, light and dark,
+with no console errors. Not verified: other browsers, Windows or macOS, a real model using the new
+guidance, screen readers and PDF printing. User guide: [Charts](/analysis#charts).
+
+**Decision Intelligence.** Verified with Vitest and an in-memory fake provider (no network): partial
+results and fallbacks by reason, the timeout with a hung provider, request and answer validation, the
+circuit breaker with an injected clock, events with a sentinel-string privacy test, the core
+boundary, global-only configuration layers, provider `activate`/`deactivate`, per-plugin paths and
+options, parallel bounded plugin shutdown, `alisio run` disposing plugins on `SIGTERM`, `SIGHUP` and
+`SIGINT`, the `/decisions` command and the three `/stats` calculations agreeing. Checked in Chromium
+against a built `alisio serve` with a fake OpenAI-compatible model and a temporary local plugin with a
+fake provider (completed decisions, a fallback and `/decisions`). Not verified: a real provider (none
+is bundled or published), a real terminal for the TUI, other browsers, Windows or macOS, screen
+readers, a remote provider, load with many concurrent decisions, and the quality of any engine's
+decisions. User guide: [Decision Intelligence](/decision-intelligence).
+
+**Smart Dashboard.** Verified with Vitest (profiling, candidates, the decision pack with a
+sentinel-string privacy test, planner, validator and repair table, query planner on a real SQLite
+dataset, renderer, the tool, golden specs of a few small datasets and the configuration layers) and
+in Chromium against a built `alisio serve` with a fake OpenAI-compatible model: the dashboard in the
+isolated viewer and the progress row. The tool's guidance to the model and the benchmark against the
+Python flow are still pending, so no claim is made about how often a real model chooses it. Not
+verified: a real decision provider, a real terminal for the TUI progress line, other browsers,
+Windows or macOS, screen readers and very large datasets in the browser. User guide:
+[Smart Dashboard](/smart-dashboard).
+
+**Reliability Lab.** Verified with Vitest without network or credentials (loader, verifiers,
+statistics, engine, reports and comparison, cassettes and replay with the real engine, the CLI and its
+exit codes, and the bundled suites replayed in `pnpm test`), plus `pnpm test:cli` and
+`pnpm test:compiled` on the real binary. Measured live (2026-10-14) with two models: `smoke-coding` 1.2.0 saturates on a strong cheap model and
+discriminates only partly (through latency) on a weaker one, so its power to tell models apart is not
+established. Not verified with a real model: `long-context` and `long-context-stress`; the bundled cassettes were recorded with a
+scripted provider and pin harness behavior only. Only an OpenAI-compatible provider from a config
+file was exercised. User guide: [Reliability Lab](/eval).
+
+**Proof.** Verified with Vitest without network or credentials: ledger derivation, migrations v11 to
+v13, the recorder with the real runner, permission gate and SQLite and a scripted provider (command,
+file, data-check, coverage and plugin verifiers; harmless tool-result text; read-only), staleness,
+divergence corpus in English and Spanish, plan drafts and goal gate and override, the HTTP routes, the
+exports, the web and terminal views, and a parity test that checks the same statuses in the terminal,
+web, JSONL, JSON and Markdown; plus the `run --proof` scenario of `pnpm test:cli`. Not verified:
+browser behavior (components are tested as VNode trees and the screenshot is manual), mutation
+testing, and the cost with a real model. With a scripted provider and on-disk SQLite, capturing
+command evidence added about 16 to 19 ms per captured call. User guide: [Proof](/proof).
+
+**Provider sign-in (phases 1 to 4).** Verified with Vitest on a temporary configuration directory: the
+credentials store (unknown keys, `oauth` without `providers`, generation counter, provider binding,
+conditional writes), file locks (stale at 31 s, not at 29 s, owner-only release), the renewal manager
+(single flight, per-caller abort, conditional write after a delete or a new sign-in, permanent and
+transient failures, `invalidate`), redaction and its feed to cassette and export scans, and, with real
+child processes, no lost writes, a single holder of a stale lock and one shared renewal. Phase 2 adds
+the flow state machine with an injected clock, URL validation, the real loopback listener, the HTTP
+routes against a real server with a fake provider plugin, and redaction of SSE frames, API errors,
+logs, `--json` lines and the output of a real desktop host process. Phase 4 tests the TUI sign-in
+conductor without a terminal (method picker, prompts, `Esc` cancel, unofficial notice, sign out,
+redaction of printed errors, and that only the TUI drives flows). Not verified: Windows, macOS and
+network file systems, a real provider plugin, a real browser or SSH tunnel against the listener,
+the picker and input dialog in a real terminal, and any behavior of a real sign-in service (the
+random loopback port, eligibility and remote use stay unmeasured). Details live in
+`apps/website/implementation-status.md`.
+
+### Desktop app (Electron)
+
+`apps/desktop` wraps the local `alisio serve` server in an Electron window; it is private and not
+published to npm. Verified on Linux x64 only: unit and integration tests (the real host under Node
+and under the Electron binary with `ELECTRON_RUN_AS_NODE=1`), the real GUI launched from the
+development tree and from the unpacked build, and `AppImage` and `deb` builds. Not verified:
+Windows and macOS builds, running the `AppImage` or installing the `deb`, and Python or Forja
+workers inside Electron beyond the inherited environment. Known limits: the app bundles npm for
+plugin installs (about 17 MB more in the runtime), Git features need `git`, global plugin discovery derives its prefix from
+`process.execPath` (meaningless inside Electron), there is no auto-update, and the installers are
+unsigned, so SmartScreen and Gatekeeper warn. User guide: [Desktop app](/desktop).
+
+## Plugin apps
+
+Plugins register full-page apps with `api.apps?.register` (SDK, core registry, three server routes and
+a web outlet with the Apps group above Projects). Verified: unit tests of the registry, the action
+gate and the frame protocol; server tests of auth, CSP, nonce, size and timeout limits; a real
+browser run of the example `hello-app` (Chromium, Linux) in English and Spanish. Limits: backend
+plugins are trusted in-process code and the sandboxed iframe is not a Node sandbox; mounted frames
+stay in memory until the page is reloaded; disabling a plugin blocks new actions at once but does
+not revoke an already open port or cancel jobs the plugin started; a promise timeout does not stop
+CPU-bound handlers; actions that ask in the chat (write, process) ask the same way through the approval dialog, and are rejected when denied, unanswered or forbidden by a read-only session; the approval was verified with server and store tests plus one browser run, not on Windows or macOS; there is
+no generic job API, service broker or browser SDK, and apps have no deep links or declarative
+navigation.
+
+## Web scrollbars
+
+Overlay scrollbars (OverlayScrollbars, MIT) load as a lazy chunk after the first paint. Until then,
+if it fails, and in containers that keep native scrolling on purpose (code blocks, tables, diffs,
+terminal, the composer, menus), thin CSS-only native scrollbars apply; where the OS does not overlay
+native scrollbars they take ~10 px, so a panel can widen slightly when the overlay takes over.
+Devices with overlaid native scrollbars (phones, macOS) keep the native ones. Verified with
+Playwright on Chromium (Linux) in light and dark, desktop and 390 px; not verified on Firefox,
+Safari, Windows, macOS or real touch screens.
+
+## Semantic Ports (spec 029)
+
+The SDK defines two optional ports (`EmbeddingProvider`, `VectorStoreProvider`) and the core a
+service that composes them (`api.semantic`, `context.semantic`, the global `semantic` key and the
+read-only `/semantic` command). Verified: unit and boundary tests with an in-memory double of both
+ports (namespacing, model and dimension checks, limits, timeouts, abort, error wrapping, activation,
+global-only configuration, `/semantic` health timeout) and a `pack:check` guard that fails when a
+published host package lists `@lancedb/*`, `onnxruntime-*` or `@huggingface/transformers` in
+`dependencies`. Limits: Alisio ships no engine, so without a provider plugin semantic search does not
+exist (consumers fall back through `available()` and `trySearch`); namespaces prevent accidental
+collisions and are not isolation between plugins; changing the model invalidates existing
+collections and reindexing is the consumer's task because only it keeps the source text; `minScore`
+is not comparable across models; no real provider (LanceDB, ONNX) was exercised in this repository.

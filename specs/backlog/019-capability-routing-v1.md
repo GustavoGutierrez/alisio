@@ -16,7 +16,7 @@
 
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento. TDD estricto (pruebas en `tests/*.test.ts`, vitest, en los límites de módulo, sin instantáneas que repitan la implementación).
 2. **(verificado)** = abrí el archivo el 2026-10-03; **(no verificado)** = deducido o externo; **(nuevo)** = no existe.
-3. **Orden obligatorio**: Fase 0 (arnés de tareas, línea base «catálogo completo», experimentos) → el propietario confirma → Fases 1-8. Cada fase deja el repo verde (`pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `docs:check`, `docs:build`). Sin commit hasta que lo pida el propietario.
+3. **Orden obligatorio**: Fase 0 (arnés de tareas, línea base «catálogo completo», experimentos) → el propietario confirma → Fases 1-8. Cada fase deja el repo verde (`pnpm typecheck`, `lint`, `test`, `build`, `test:cli`, `test:compiled`, `pack:check`, `website:check`, `website:build`). Sin commit hasta que lo pida el propietario.
 4. Reglas del repo: solo pnpm; Node >=22.16 y Bun; solo APIs portables de Node; ningún SDK de proveedor ni import específico de runtime en el SDK o en los contratos del core; los plugins dependen solo de `@alisio/sdk`; preservar IDs de llamadas a herramientas, continuación del proveedor y consistencia de sesión; **un manifiesto de plugin o un subproceso no es un sandbox**.
 5. Idioma: identificadores, claves, eventos y UI en inglés (más traducción ES); esta especificación en español.
 6. Todo es aditivo y **apagado por defecto** (`"off"`): con el valor por defecto el comportamiento es idéntico al de 0.4.0.
@@ -77,7 +77,7 @@ Fuera de alcance solo de esta entrega: enrutado por turno (§2 D3), enrutado de 
 | O4 | **Benchmarks**: endpoint y modelo son parámetros que el propietario entrega por variables de entorno al ejecutar; **todas las variantes de un benchmark usan el mismo modelo**; el modelo y el *host* del endpoint se registran en el JSON de resultados (**nunca** la clave de API). |
 | O5 | **Puerta de entrada** (desde 0.4.0): la variante B de Smart Dashboard debe lograr ≥ 50 % menos tokens de salida y ≥ 40 % menos turnos LLM que A, 100 % de specs válidos y 0 avisos de `chart-lint`. |
 | O6 | **Alcance de configuración**: `decisions.routing.*` (y `decisions.provider`, `decisions.telemetry`, `modelTiers`) solo del config global; un proyecto, aunque tenga confianza, no puede fijarlos; se ignoran con diagnóstico (§8, mecanismo en `specs/006-decision-intelligence-v1.md` §8.2). |
-| O7 | **Documentación**: una página por release; en 0.5.0, `docs/capability-routing.md` + ES. |
+| O7 | **Documentación**: una página por release; en 0.5.0, `apps/website/capability-routing.md` + ES. |
 
 ### 2.2 Decisiones de diseño de la especificación
 
@@ -90,7 +90,7 @@ Fuera de alcance solo de esta entrega: enrutado por turno (§2 D3), enrutado de 
 | D5 | **Bandas de confianza**: `high` → familias seleccionadas; `medium` → seleccionadas + adyacentes (tabla §6.3); `low`, sin proveedor o **cualquier rechazo/ambigüedad** → catálogo completo (comportamiento actual). |
 | D6 | **Conjunto siempre activo** (decisión técnica cerrada: la familia de lectura `workspace-read` es siempre activa porque leer ficheros es el retroceso más barato y excluirla causa los peores fallos): herramientas de interacción y aprobación, herramientas opt-in de plan/objetivo, puente MCP, `tools_expand`, skills, `workspace-read` y todo lo que el ejecutor necesita (§6.2). El enrutador **solo estrecha** lo que `toolFilter`, `optInTools` y la política ya permiten; permisos y aprobaciones no se tocan y se aplican después. |
 | D7 | **Enrutado de MCP = el mismo mecanismo** (familias `mcp:<server>`), restringido a servidores ya conectados y autorizados; **el enrutador nunca abre una conexión**. Una familia que no estaba entre las candidatas al decidir (p. ej. un servidor conectado a mitad de la ejecución) se muestra siempre. |
-| D8 | **Modos**: `decisions.routing.tools: "off" \| "shadow" \| "on"`. El valor por defecto del esquema es `"off"` y **solo pasa a `"on"` si el benchmark cumple la regla O3** (§11.2); la regla se aplica mecánicamente en la Fase 7 y el resultado queda en `docs/benchmark-routing.json`. `shadow` calcula la selección, expone igualmente el catálogo completo y registra si **todas** las herramientas realmente usadas estaban dentro de la selección (mide la exclusión errónea sin riesgo). Sin proveedor el modo efectivo es siempre catálogo completo. |
+| D8 | **Modos**: `decisions.routing.tools: "off" \| "shadow" \| "on"`. El valor por defecto del esquema es `"off"` y **solo pasa a `"on"` si el benchmark cumple la regla O3** (§11.2); la regla se aplica mecánicamente en la Fase 7 y el resultado queda en `apps/website/benchmark-routing.json`. `shadow` calcula la selección, expone igualmente el catálogo completo y registra si **todas** las herramientas realmente usadas estaban dentro de la selección (mide la exclusión errónea sin riesgo). Sin proveedor el modo efectivo es siempre catálogo completo. |
 | D9 | **Selección «pegajosa» de sesión que solo se amplía** (mitigación de la caché, ADR-2): las ejecuciones siguientes de la misma sesión empiezan con la unión de las selecciones anteriores; el orden de las herramientas es siempre el del registro. Las ejecuciones con un objetivo `/goal` activo (herramientas de objetivo opt-in) reutilizan la selección sin nueva decisión. |
 | D10 | **Eventos aditivos** emitidos por el core: `capability_routed` (al inicio, solo metadatos) y `capability_routing_checked` (al final de la ejecución en `shadow`/`on`). `/stats` y `/decisions` muestran el ahorro y la tasa de exclusión errónea. |
 | D11 | **Riesgo crítico analizado explícitamente** (§4.2): una lista de herramientas distinta entre ejecuciones de la misma sesión rompe la caché entre ejecuciones del prefijo de herramientas y puede **cancelar** el ahorro. La métrica de la puerta O3 es el **coste efectivo de entrada** `uncachedInput + w·cachedInput`, no los tokens crudos de esquema; el benchmark informa ambos. |
@@ -356,7 +356,7 @@ Alcance global-only (O6): se añade `"routing"` a `GLOBAL_ONLY_DECISIONS` (cread
 | cli | — | `src/tui/state.ts`, `src/tui/app.ts` (`statsReport`) |
 | scripts | `scripts/bench-routing.ts` | — (reutiliza `scripts/bench/lib.ts`, creado en la especificación de Smart Dashboard) |
 | tests | `routing-families.test.ts`, `routing-pack.test.ts`, `routing-router.test.ts`, `routing-runner.test.ts`, `routing-expand.test.ts`, `routing-security.test.ts`, `routing-config.test.ts`, `routing-stats.test.ts` | `run-events-contract.test.ts` (nuevos eventos), `config-layers.test.ts`, `registry.test.ts` |
-| docs | `docs/capability-routing.md`, `docs/es/capability-routing.md`, `docs/assets/web-ui/capability_routing_web_ui.webp`, `docs/benchmark-routing.json` | `docs/.vitepress/config.ts`, `docs/{configuration,tools,plugins,limitations,decision-intelligence}.md` + ES, `docs/implementation-status.md`, `CHANGELOG.md`, `docs/.vitepress/config.ts` y `scripts/docs-check.ts` (`srcExclude` de `benchmark-routing.json`) |
+| docs | `apps/website/capability-routing.md`, `apps/website/es/capability-routing.md`, `apps/website/assets/web-ui/capability_routing_web_ui.webp`, `apps/website/benchmark-routing.json` | `apps/website/.vitepress/config.ts`, `docs/{configuration,tools,plugins,limitations,decision-intelligence}.md` + ES, `apps/website/implementation-status.md`, `CHANGELOG.md`, `apps/website/.vitepress/config.ts` y `scripts/docs-check.ts` (`srcExclude` de `benchmark-routing.json`) |
 
 ---
 
@@ -384,7 +384,7 @@ Alcance global-only (O6): se añade `"routing"` a `GLOBAL_ONLY_DECISIONS` (cread
 - **Métricas** (derivadas de lo persistido): tokens de esquema antes/después (`capability_routed`), `input`, `output`, `cachedInput` por `turn_completed.usage`, **coste efectivo de entrada** (`uncachedInput + w·cachedInput`, `w` = `ALISIO_BENCH_CACHE_WEIGHT`, por defecto 0,1, registrado en el JSON), tasa de éxito de las tareas, `capability_routing_checked.outside` y tasa de exclusión errónea, número de `tools_expand`, llamadas a herramientas, tiempo total.
 - **Parámetros y registro (O4):** `ALISIO_BENCH_MODEL`, `ALISIO_BENCH_BASE_URL` (y la clave por el mecanismo ya existente del proveedor, que el arnés no lee ni guarda); **mismo modelo en `off`, `shadow` y `on`** (comprobado contra `turn_completed.model`); el JSON registra `model` y `endpointHost`, nunca la clave.
 - **Regla de activación por defecto (O3, confirmada):** el esquema se publica con `decisions.routing.tools = "on"` por defecto **solo si**, en el benchmark, (a) la condición `on` reduce **≥ 20 %** el coste efectivo de entrada frente a `off`, agregando la suite en el tamaño de catálogo grande (+20 herramientas de plugin y +3 servidores MCP) y el escenario de sesión larga, **y** (b) en `shadow` la exclusión errónea es **≤ 2 % de las ejecuciones** (ejecuciones con `capability_routing_checked.insideSelection = false` / ejecuciones de `shadow`, sobre todas las condiciones). Si cualquiera falla, se publica `"off"`. **Métricas secundarias informadas, sin puerta:** caída de la tasa de éxito, `tools_expand` por ejecución, tokens de salida y tiempo. Estructuralmente, el modo `on` sigue disponible como opt-in en ambos casos.
-- Resultados en `docs/benchmark-routing.json` (excluido del sitio).
+- Resultados en `apps/website/benchmark-routing.json` (excluido del sitio).
 
 ---
 
@@ -429,13 +429,13 @@ Crear `scripts/bench-routing.ts` sobre la biblioteca común `scripts/bench/lib.t
 
 ### 12.6 Fase 5 — Benchmark (M)
 
-- **Entregables:** `bench-routing.ts` completo, resultados en `docs/benchmark-routing.json`, informe con coste efectivo de entrada y la evaluación de la regla O3.
+- **Entregables:** `bench-routing.ts` completo, resultados en `apps/website/benchmark-routing.json`, informe con coste efectivo de entrada y la evaluación de la regla O3.
 - **Aceptación:** resultados registrados con `model` y `endpointHost`; el resultado de la regla O3 (cumple / no cumple) queda escrito en el JSON y fija el valor por defecto del esquema.
 
 ### 12.7 Fase 6 — Documentación y capturas (M)
 
-- **Entregables:** `docs/capability-routing.md` + ES (qué hace, cómo activar, privacidad, límites, resultados del benchmark), actualización de `docs/{configuration,tools,plugins,limitations,decision-intelligence}.md` + ES, `docs/implementation-status.md` (en español), captura real con Playwright de `/stats` con la sección de enrutado en la web (`docs/assets/web-ui/capability_routing_web_ui.webp`, contra un `alisio serve` construido y un proveedor falso con datos de ejemplo; < 150 KB; EN y ES con texto alternativo y pie; borrar temporales y `.playwright-mcp/`).
-- **Aceptación:** `pnpm docs:check` y `docs:build` verdes; paridad EN/ES.
+- **Entregables:** `apps/website/capability-routing.md` + ES (qué hace, cómo activar, privacidad, límites, resultados del benchmark), actualización de `docs/{configuration,tools,plugins,limitations,decision-intelligence}.md` + ES, `apps/website/implementation-status.md` (en español), captura real con Playwright de `/stats` con la sección de enrutado en la web (`apps/website/assets/web-ui/capability_routing_web_ui.webp`, contra un `alisio serve` construido y un proveedor falso con datos de ejemplo; < 150 KB; EN y ES con texto alternativo y pie; borrar temporales y `.playwright-mcp/`).
+- **Aceptación:** `pnpm website:check` y `website:build` verdes; paridad EN/ES.
 
 ### 12.8 Fase 7 — Release (S)
 
@@ -444,13 +444,13 @@ Crear `scripts/bench-routing.ts` sobre la biblioteca común `scripts/bench/lib.t
 
 ### 12.9 Fase 8 — Aplicación de la regla de activación
 
-Sin decisión adicional del propietario: si el JSON de la Fase 5 marca «cumple» (O3), el esquema, `docs/capability-routing.md` y `docs/configuration.md` (+ ES) reflejan `"on"` por defecto; si marca «no cumple», `"off"` y la documentación lo presenta como opt-in. Se aplica antes del release de la Fase 7.
+Sin decisión adicional del propietario: si el JSON de la Fase 5 marca «cumple» (O3), el esquema, `apps/website/capability-routing.md` y `apps/website/configuration.md` (+ ES) reflejan `"on"` por defecto; si marca «no cumple», `"off"` y la documentación lo presenta como opt-in. Se aplica antes del release de la Fase 7.
 
 ---
 
 ## 13. Definición de terminado y registro de riesgos
 
-**Definición de terminado (por fase):** gate completo verde; pruebas primero; `off` equivale exactamente a 0.4.0; permisos intactos; paridad EN/ES; capturas reales; `docs/implementation-status.md` actualizado.
+**Definición de terminado (por fase):** gate completo verde; pruebas primero; `off` equivale exactamente a 0.4.0; permisos intactos; paridad EN/ES; capturas reales; `apps/website/implementation-status.md` actualizado.
 
 | Riesgo | Impacto | Cómo y cuándo se verifica |
 |---|---|---|

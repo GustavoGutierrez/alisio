@@ -40,7 +40,7 @@ Plugins are not sandboxed: a trusted project's plugins run inside the server pro
 operating-system permissions. Remote access (`--host` other than loopback) requires
 `--allow-remote` and has no TLS; prefer an SSH tunnel.
 
-Documentation: <https://gustavogutierrez.github.io/alisio/web>.
+Documentation: <https://alisioair.com/web>.
 
 ## License
 

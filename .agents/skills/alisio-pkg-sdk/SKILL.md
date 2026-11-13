@@ -28,7 +28,7 @@ plugins and (types only) web. Plugin authoring guide: `alisio-plugins`.
   plugins feature-detect on older cores.
 - Consumers must ignore unknown fields/event types; document that in the type's comment.
 - A type change usually needs: core implementation, server schema/route if on the wire, web
-  store/i18n if shown, docs EN/ES, changeset (`pnpm changeset`), `docs/implementation-status.md`.
+  store/i18n if shown, docs EN/ES, changeset (`pnpm changeset`), `apps/website/implementation-status.md`.
 - Peer range: plugins pin `@alisio/sdk` to the current 0.x minor; a breaking change forces
   plugin republish, so keep the surface stable.
 

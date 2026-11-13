@@ -23,7 +23,7 @@ describe("docs-check slugify", () => {
   });
 
   it("prefixes a leading digit and trims separators (matches VitePress output)", () => {
-    // Built site: docs/.vitepress/dist/quick-start.html has id="_1-create-a-configuration-file".
+    // Built site: apps/website/.vitepress/dist/quick-start.html has id="_1-create-a-configuration-file".
     expect(slugify("1. Create a configuration file")).toBe("_1-create-a-configuration-file");
     expect(slugify("  spaced  ")).toBe("spaced");
   });
@@ -42,7 +42,7 @@ describe("docs-check anchorKey", () => {
 
 describe("docs-check parseMarkdown", () => {
   const page = parseMarkdown(
-    "docs/sample.md",
+    "apps/website/sample.md",
     [
       "# Title",
       "",

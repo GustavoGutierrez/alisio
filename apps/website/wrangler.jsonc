@@ -1,0 +1,23 @@
+// Cloudflare Workers configuration for the Alisio website (landing page and documentation).
+// The site is static: VitePress builds it into .vitepress/dist and Workers serves those files.
+//
+// No account ID, zone ID or API token lives here. Wrangler reads them from the environment:
+// CLOUDFLARE_ACCOUNT_ID and, optionally, CLOUDFLARE_API_TOKEN from the untracked
+// apps/website/.env file (see .env.example). Deploys run locally (`pnpm website:deploy`), not in
+// CI; see .agents/skills/alisio-website/SKILL.md. A custom domain route only
+// needs the hostname: Cloudflare finds the zone in the account and creates the DNS record.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "alisio-website",
+  "compatibility_date": "2026-11-13",
+  "assets": {
+    "directory": "./.vitepress/dist",
+    // VitePress emits 404.html; cleanUrls pages are served without the .html extension.
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash"
+  },
+  "routes": [{ "pattern": "alisioair.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true }
+}

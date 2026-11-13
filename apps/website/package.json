@@ -1,0 +1,17 @@
+{
+  "name": "@alisio/website",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Alisio landing page and documentation site (VitePress), deployed to Cloudflare.",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev .",
+    "build": "vitepress build .",
+    "preview": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.161.0"
+  }
+}

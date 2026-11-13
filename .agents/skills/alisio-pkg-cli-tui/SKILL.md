@@ -32,7 +32,7 @@ Binary `alisio` (`dist/main.js`). Depends on core, server, sdk, the three built-
 - Runs on Node >= 22.16 and Bun; no Bun globals. `pnpm dev` runs from source with Bun
   (`--conditions=alisio-source`); `pnpm build:binary` builds the standalone binary.
 - TUI text: English; width-aware, no assumptions about color/unicode (use terminal capabilities).
-- New flag or command: update `--help`, `docs/` EN/ES (`docs/tui.md`, `docs/configuration.md`...).
+- New flag or command: update `--help`, `apps/website/` EN/ES (`apps/website/tui.md`, `apps/website/configuration.md`...).
 
 ## Proof
 `src/proof.ts` (`run --proof`: flags, `finishProof`, exit 0/10/11, final `proof_ledger` JSONL line) and

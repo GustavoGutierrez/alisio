@@ -33,7 +33,7 @@ Wire types come from `@alisio/sdk` (web protocol v1). Related: `alisio-pkg-web`,
 - Approvals fail closed: no connected client means deny, never auto-allow.
 - Add a route: create/extend `routes/<area>.ts`, register it in `index.ts`, add the wire type to
   the SDK if the web consumes it, add the call to `packages/web/src/net/api.ts`, docs EN/ES
-  (`docs/web.md`), and a `tests/server-*.test.ts`.
+  (`apps/website/web.md`), and a `tests/server-*.test.ts`.
 - SSE frames are additive; clients ignore unknown frames.
 - Added server work must stay free of runtime-specific APIs (Node and Bun).
 

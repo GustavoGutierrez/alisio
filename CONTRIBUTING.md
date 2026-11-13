@@ -1,8 +1,8 @@
 # Contributing to Alisio
 
 Thanks for your interest in Alisio. The full guide is published at
-<https://gustavogutierrez.github.io/alisio/contributing> (Spanish:
-<https://gustavogutierrez.github.io/alisio/es/contributing>).
+<https://alisioair.com/contributing> (Spanish:
+<https://alisioair.com/es/contributing>).
 
 ## Setup
 
@@ -27,8 +27,8 @@ pnpm build
 pnpm test:cli
 pnpm test:compiled
 pnpm pack:check
-pnpm docs:check
-pnpm docs:build
+pnpm website:check
+pnpm website:build
 ```
 
 ## Rules
@@ -42,7 +42,7 @@ pnpm docs:build
 - Keep provider SDKs and runtime-specific imports out of `@alisio/sdk` and the agent-core contracts.
 - Preserve tool call IDs, provider continuation data and persisted session consistency.
 - Never treat a plugin manifest or a subprocess as a sandbox.
-- Code, comments and tests are in English. `docs/implementation-status.md` is in Spanish and records
+- Code, comments and tests are in English. `apps/website/implementation-status.md` is in Spanish and records
   limitations and verification scope; update it when those change.
 
 ## Decision Intelligence
@@ -58,7 +58,7 @@ work it removes; (3) which metric improves; (4) its fallback; (5) what happens w
 (6) how its output is validated; (7) why deterministic code would not be enough; (8) what goes into
 `state` and why a remote provider could receive it. If they cannot be answered clearly, the
 feature does not use the decision engine. Deterministic code comes first. See
-[Decision Intelligence](https://gustavogutierrez.github.io/alisio/decision-intelligence#admission-rule).
+[Decision Intelligence](https://alisioair.com/decision-intelligence#admission-rule).
 
 ## Versioning
 
@@ -73,20 +73,20 @@ and attaches standalone binaries to a GitHub Release.
 
 ## Documentation
 
-The VitePress site lives in `docs/` (`pnpm docs:dev`, `pnpm docs:build`). English pages are
-`docs/<page>.md`; Spanish pages are `docs/es/<page>.md`.
+The VitePress site lives in `apps/website/` (`pnpm website:dev`, `pnpm website:build`). English pages are
+`docs/<page>.md`; Spanish pages are `apps/website/es/<page>.md`.
 
 ### Docs parity checklist
 
-- [ ] Every page exists in both locales (`docs/<page>.md` and `docs/es/<page>.md`) and both are in
-      the sidebar of `docs/.vitepress/config.ts`.
+- [ ] Every page exists in both locales (`docs/<page>.md` and `apps/website/es/<page>.md`) and both are in
+      the sidebar of `apps/website/.vitepress/config.ts`.
 - [ ] Same headings in the same order and the same code blocks; commands, flags and configuration
       keys are identical.
 - [ ] Prose is translated faithfully; neither side summarizes the other.
 - [ ] English and Spanish are updated in the same pull request.
-- [ ] `docs/es/limitations.md` still includes `docs/implementation-status.md`, and the English
-      `docs/limitations.md` reflects its current content.
-- [ ] `pnpm docs:build` passes with no dead links (`pnpm docs:check` validates `#anchors` and EN/ES
+- [ ] `apps/website/es/limitations.md` still includes `apps/website/implementation-status.md`, and the English
+      `apps/website/limitations.md` reflects its current content.
+- [ ] `pnpm website:build` passes with no dead links (`pnpm website:check` validates `#anchors` and EN/ES
       parity).
 
 ## Generated files

@@ -71,8 +71,8 @@ del agente.
 
 ## Documentación
 
-[Subagentes](https://gustavogutierrez.github.io/alisio/subagents) ·
-[Configuración](https://gustavogutierrez.github.io/alisio/configuration).
+[Subagentes](https://alisioair.com/subagents) ·
+[Configuración](https://alisioair.com/configuration).
 
 ## Requisitos
 

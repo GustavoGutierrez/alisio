@@ -1,0 +1,34 @@
+name: Website
+# Builds and checks the Alisio website (landing page and documentation, apps/website). It does not
+# deploy: the site is published to Cloudflare from a maintainer's machine with `pnpm website:deploy`
+# (see .agents/skills/alisio-website/SKILL.md).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/website/**"
+      - "scripts/docs-check.ts"
+      - ".github/workflows/website.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    name: Website build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # lastUpdated timestamps
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm website:build

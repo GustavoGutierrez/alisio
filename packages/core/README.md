@@ -57,8 +57,8 @@ Built-in plugins are opt-in for embedders: pass `builtins` (the `alisio` CLI wir
 
 ## Docs
 
-Architecture: <https://gustavogutierrez.github.io/alisio/architecture> ·
-Configuration: <https://gustavogutierrez.github.io/alisio/configuration>.
+Architecture: <https://alisioair.com/architecture> ·
+Configuration: <https://alisioair.com/configuration>.
 
 ## Requirements
 

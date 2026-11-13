@@ -18,11 +18,11 @@
 1. Lee primero `AGENTS.md` y `CONTRIBUTING.md`; prevalecen sobre este documento.
 2. Etiquetas: **(verificado)** = comprobado leyendo el repositorio el 2026-10-13 (`main`, 0.6.0); **(no verificado)** = deducido o externo; **(nuevo)** = no existe.
 3. **TDD estricto Rojo → Verde → Refactor.** Ninguna línea de producción sin una prueba que falle antes. Pruebas en `tests/*.test.ts` (vitest), sobre comportamiento en límites de módulo, **sin pruebas de instantánea**. Los parsers se prueban con fixtures de salida real recortada, no con snapshots de su propio resultado.
-4. **Orden obligatorio**: Fase 0 (medición base con el Lab o, si aún no existe, con un arnés mínimo propio) → el propietario revisa → Fases 1–5. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm docs:check` y `pnpm docs:build`. No hagas commit hasta que lo pida el propietario.
+4. **Orden obligatorio**: Fase 0 (medición base con el Lab o, si aún no existe, con un arnés mínimo propio) → el propietario revisa → Fases 1–5. Cada fase deja el repo verde con `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:cli`, `pnpm test:compiled`, `pnpm pack:check`, `pnpm website:check` y `pnpm website:build`. No hagas commit hasta que lo pida el propietario.
 5. **Asignación de modelos**: §13. Sonnet por defecto; Opus solo en los puntos listados.
 6. Reglas del repo que no se rompen: solo pnpm; Node >=22.16 y debe funcionar en Bun; solo `node:fs`, `node:child_process`, `node:sqlite`; ningún SDK de proveedor ni import específico de runtime en `@alisio/sdk` ni en contratos del core; los plugins dependen solo de `@alisio/sdk` (peer); preservar IDs de llamadas a herramientas, datos de continuación del proveedor y consistencia de sesión; **un manifiesto de plugin o un subproceso no es un sandbox**.
 7. Contratos **aditivos**: `RunEvent.schemaVersion` sigue en 1; las uniones solo ganan variantes.
-8. Idioma: identificadores, claves, mensajes de error y textos generados en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts`, `src/i18n`); esta especificación en español; docs EN/ES en paridad; límites en `docs/implementation-status.md`.
+8. Idioma: identificadores, claves, mensajes de error y textos generados en inglés; UI en inglés y español (`packages/web/src/i18n/es.ts`, `src/i18n`); esta especificación en español; docs EN/ES en paridad; límites en `apps/website/implementation-status.md`.
 9. Esta especificación **no crea permisos nuevos ni modifica el gate**: toda ejecución pasa por `decideEffect` (`packages/core/src/permissions/decide.ts`) con el efecto declarado (§4.4).
 
 ## 1. Objetivo, no-objetivos y principio rector
@@ -52,7 +52,7 @@ Reglas derivadas: toda salida es acotada y dice cuándo fue recortada; la ausenc
 | Análisis estático propio de TypeScript/Python (AST completo) | Ya existe `code_ast_explorer` fuera de Alisio, pero aquí sería una dependencia nueva; las heurísticas sobre ripgrep bastan para ubicar. |
 | Instalar analizadores o dependencias del proyecto | Alisio ejecuta lo que el proyecto ya trae; nunca instala. |
 | Reducir el catálogo de herramientas por tarea | Es el backlog `specs/backlog/019-capability-routing-v1.md`. |
-| Windows/macOS certificados | CI cubre solo Linux (`docs/implementation-status.md`). Los parsers son portables, pero la detección de capacidades se marca `unverified` fuera de Linux. |
+| Windows/macOS certificados | CI cubre solo Linux (`apps/website/implementation-status.md`). Los parsers son portables, pero la detección de capacidades se marca `unverified` fuera de Linux. |
 
 ## 2. Base verificada
 
@@ -176,7 +176,7 @@ Cada fase: pruebas primero (Rojo), mínimo para verde, refactor. Criterios de ac
 ### Fase 0 — Medición base (sin código de producto)
 
 - Con el Lab (si existe) o un script en `scripts/bench/` que reutilice `readBenchParams`/`mulberry32` de `scripts/bench/lib.ts`: definir 12–15 tareas sintéticas deterministas sobre un repo semilla (errores de tipos sembrados, símbolos conocidos, cambios con prueba asociada) y medir el baseline con las herramientas genéricas: turnos, tokens, aciertos de ubicación (archivo:línea correcto), éxito.
-- **Aceptación**: informe de baseline reproducible (semilla fija) comprometido en `docs/`; el propietario fija la **umbral de promoción** (propuesta: ≥20 % menos tokens **o** ≥15 puntos más de acierto de ubicación, sin caer el éxito).
+- **Aceptación**: informe de baseline reproducible (semilla fija) comprometido en `apps/website/`; el propietario fija la **umbral de promoción** (propuesta: ≥20 % menos tokens **o** ≥15 puntos más de acierto de ubicación, sin caer el éxito).
 - **Pruebas**: determinismo del generador del repo semilla (misma semilla → mismo árbol).
 
 ### Fase 1 — Capacidades y parsers
@@ -200,13 +200,13 @@ Cada fase: pruebas primero (Rojo), mínimo para verde, refactor. Criterios de ac
 ### Fase 4 — Puerta de promoción con el Lab
 
 - Repetir la Fase 0 con `code.enabled: true`; comparar con el baseline.
-- **Aceptación**: informe A/B con el umbral de la Fase 0. **Si se cumple**, proponer al propietario cambiar el valor por defecto en la siguiente minor; **si no**, las herramientas quedan opt-in y se documenta el resultado en `docs/implementation-status.md` (resultado negativo válido).
+- **Aceptación**: informe A/B con el umbral de la Fase 0. **Si se cumple**, proponer al propietario cambiar el valor por defecto en la siguiente minor; **si no**, las herramientas quedan opt-in y se documenta el resultado en `apps/website/implementation-status.md` (resultado negativo válido).
 - **Pruebas**: el arnés ejecuta ambas variantes con proveedor guionado; verifica que el informe contiene ambas columnas y semilla.
 
 ### Fase 5 — Superficies y documentación
 
-- `alisio code capabilities [--json]`, ruta `GET /api/code/capabilities` (solo lectura), ajuste `code.enabled` en Settings (Web/TUI, EN/ES), docs EN/ES en paridad (`docs/tools.md`, `docs/configuration.md`), límites en `docs/implementation-status.md`. Captura Web UI de la herramienta en una sesión (`docs/assets/web-ui/code_intelligence_web_ui.webp`, EN y ES) según `AGENTS.md`.
-- **Aceptación**: `pnpm docs:check` pasa con paridad; la configuración es global-only o por proyecto según la política existente de ajustes (O: confirmar en revisión); paridad CLI/TUI/Web verificada.
+- `alisio code capabilities [--json]`, ruta `GET /api/code/capabilities` (solo lectura), ajuste `code.enabled` en Settings (Web/TUI, EN/ES), docs EN/ES en paridad (`apps/website/tools.md`, `apps/website/configuration.md`), límites en `apps/website/implementation-status.md`. Captura Web UI de la herramienta en una sesión (`apps/website/assets/web-ui/code_intelligence_web_ui.webp`, EN y ES) según `AGENTS.md`.
+- **Aceptación**: `pnpm website:check` pasa con paridad; la configuración es global-only o por proyecto según la política existente de ajustes (O: confirmar en revisión); paridad CLI/TUI/Web verificada.
 - **Pruebas**: `tests/server-code.test.ts`, prueba de CLI `--json`.
 
 ## 6. Pruebas transversales
