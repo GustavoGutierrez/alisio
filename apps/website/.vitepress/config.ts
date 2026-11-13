@@ -236,7 +236,7 @@ export default defineConfig({
           { text: "Plugins", link: "/plugins" },
           {
             text: "Complete plugin catalog",
-            link: "https://gustavogutierrez.github.io/alisio-plugins/",
+            link: "https://plugins.alisioair.com/",
           },
           { text: "Configuration", link: "/configuration" },
         ],
@@ -263,7 +263,7 @@ export default defineConfig({
           { text: "Complementos", link: "/es/plugins" },
           {
             text: "Catálogo de complementos",
-            link: "https://gustavogutierrez.github.io/alisio-plugins/",
+            link: "https://plugins.alisioair.com/",
           },
           { text: "Configuración", link: "/es/configuration" },
         ],

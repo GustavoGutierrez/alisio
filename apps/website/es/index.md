@@ -95,7 +95,7 @@ técnicos nuevos; programar sigue siendo posible, como uso avanzado.
 
 Explora el catálogo de complementos e instala lo que necesitas con un clic: redacción de tesis, investigación bibliográfica, exámenes de matemáticas imprimibles, certificados y tarjetas. Desde la misma pantalla puedes actualizar o quitar los complementos instalados.
 
-[Catálogo de complementos en la aplicación](/es/web#plugin-catalog) · [Explora el catálogo de complementos](https://gustavogutierrez.github.io/alisio-plugins/)
+[Catálogo de complementos en la aplicación](/es/web#plugin-catalog) · [Explora el catálogo de complementos](https://plugins.alisioair.com/)
 
 </div>
 <figure class="offer-shot">

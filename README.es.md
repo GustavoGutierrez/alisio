@@ -85,7 +85,7 @@ Los complementos (plugins) añaden herramientas y aplicaciones para cada profesi
 - **Encuentra herramientas para tu trabajo.** Abre **Ajustes → Complementos → Catálogo de complementos** e
   instala lo que necesitas con un clic. Desde la misma pantalla puedes actualizar o quitar los
   complementos instalados, e instalar uno privado desde un archivo. También puedes explorar el
-  [catálogo de complementos](https://gustavogutierrez.github.io/alisio-plugins/) en línea.
+  [catálogo de complementos](https://plugins.alisioair.com/) en línea.
 - **Crea una ayuda a tu medida.** Abre **Creador de complementos** y describe una tarea que repites.
   Construye el complemento, lo comprueba y te deja decidir cuándo instalarlo, incluso con su propia
   pantalla en el menú **Aplicaciones**

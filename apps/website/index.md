@@ -94,7 +94,7 @@ without learning new technical terms; programming is still possible, as an advan
 
 Explore the plugin catalog and install what you need in one click: thesis writing, literature research, printable math exams, certificates and cards. Installed plugins can be updated or removed from the same screen.
 
-[Plugin catalog in the app](/web#plugin-catalog) · [Browse the plugin catalog](https://gustavogutierrez.github.io/alisio-plugins/)
+[Plugin catalog in the app](/web#plugin-catalog) · [Browse the plugin catalog](https://plugins.alisioair.com/)
 
 </div>
 <figure class="offer-shot">

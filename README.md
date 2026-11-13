@@ -81,7 +81,7 @@ Plugins add tools and apps for a profession.
 - **Find tools for your work.** Open **Settings → Plugins → Plugin catalog** and install what you
   need in one click. Installed plugins can be updated or removed from the same screen, and you can
   install a private plugin from a file. Browse the
-  [plugin catalog](https://gustavogutierrez.github.io/alisio-plugins/) online.
+  [plugin catalog](https://plugins.alisioair.com/) online.
 - **Build a helper made for you.** Open **Plugin creator** and describe a task you repeat. It builds
   the plugin, checks it and lets you decide when to install it, even with its own screen in the
   **Apps** menu ([Plugin creator](https://alisioair.com/plugin-creator)).

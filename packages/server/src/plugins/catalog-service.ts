@@ -17,7 +17,7 @@ import {
   sanitizeCatalog,
 } from "./catalog-schema.ts";
 
-export const DEFAULT_CATALOG_URL = "https://gustavogutierrez.github.io/alisio-plugins/catalog.json";
+export const DEFAULT_CATALOG_URL = "https://plugins.alisioair.com/catalog.json";
 export const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 export const CATALOG_TIMEOUT_MS = 10_000;
 export const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
