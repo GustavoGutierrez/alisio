@@ -142,11 +142,11 @@ cualquier decisión delicada, Alisio apoya tu trabajo; no sustituye tu criterio 
 ## Descarga y requisitos
 
 Descarga la aplicación de escritorio desde la
-[versión 0.11.11 de Alisio](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11):
+[versión 0.11.12 de Alisio](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.12):
 
-- Windows 10/11 (x64): [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe)
-- macOS Apple Silicon: [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) · Intel: [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg)
-- Linux: [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb)
+- Windows 10/11 (x64): [`Alisio-Setup-0.11.12-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-Setup-0.11.12-x64.exe)
+- macOS Apple Silicon: [`Alisio-0.11.12-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-arm64.dmg) · Intel: [`Alisio-0.11.12-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x64.dmg)
+- Linux: [`Alisio-0.11.12-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x86_64.AppImage) · Debian/Ubuntu: [`Alisio-0.11.12-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-amd64.deb)
 
 Los instaladores no están firmados, así que Windows SmartScreen y macOS Gatekeeper piden un paso
 extra la primera vez (consulta [apps/website/es/desktop.md](apps/website/es/desktop.md)). Después conecta un modelo

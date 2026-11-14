@@ -23,16 +23,16 @@ son los mismos que usa la CLI.
 
 ## Descargar e instalar
 
-Descarga el archivo de tu sistema desde la [versión Alisio 0.11.11](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11) (los mismos
+Descarga el archivo de tu sistema desde la [versión Alisio 0.11.12](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.12) (los mismos
 enlaces están en la [página de inicio](/es/)):
 
 | Sistema | Descarga | Cómo instalar |
 | --- | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe) | Ejecútalo y sigue el asistente |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
-| macOS Intel (x64) | [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
-| Linux, cualquier distribución | [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) | Hazlo ejecutable (`chmod +x`) y ejecútalo |
-| Debian y Ubuntu | [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb) | Instálalo con tu gestor de paquetes |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.12-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-Setup-0.11.12-x64.exe) | Ejecútalo y sigue el asistente |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.12-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-arm64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
+| macOS Intel (x64) | [`Alisio-0.11.12-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x64.dmg) | Ábrela y arrastra Alisio a Aplicaciones |
+| Linux, cualquier distribución | [`Alisio-0.11.12-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x86_64.AppImage) | Hazlo ejecutable (`chmod +x`) y ejecútalo |
+| Debian y Ubuntu | [`Alisio-0.11.12-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-amd64.deb) | Instálalo con tu gestor de paquetes |
 
 Cada versión incluye también `SHA256SUMS-desktop.txt`, para que puedas verificar una descarga. Para
 construir los instaladores tú mismo, consulta [Construir los instaladores](#construir-los-instaladores).

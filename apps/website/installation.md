@@ -8,13 +8,13 @@ your system:
 
 | System | Download |
 | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe) (assisted NSIS wizard, per user, no administrator rights) |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) |
-| macOS Intel (x64) | [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg) |
-| Linux, any distribution | [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) |
-| Debian and Ubuntu | [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb) |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.12-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-Setup-0.11.12-x64.exe) (assisted NSIS wizard, per user, no administrator rights) |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.12-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-arm64.dmg) |
+| macOS Intel (x64) | [`Alisio-0.11.12-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x64.dmg) |
+| Linux, any distribution | [`Alisio-0.11.12-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x86_64.AppImage) |
+| Debian and Ubuntu | [`Alisio-0.11.12-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-amd64.deb) |
 
-All files are on the [release page](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11). The installers are not signed, so Windows SmartScreen and
+All files are on the [release page](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.12). The installers are not signed, so Windows SmartScreen and
 macOS Gatekeeper show a warning the first time. [Desktop app](/desktop) explains each step and how
 to proceed past the warnings.
 

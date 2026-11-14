@@ -8,13 +8,13 @@ Elige el instalador de tu sistema:
 
 | Sistema | Descarga |
 | --- | --- |
-| Windows 10/11 (x64) | [`Alisio-Setup-0.11.11-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-Setup-0.11.11-x64.exe) (asistente NSIS, por usuario, sin derechos de administrador) |
-| macOS Apple Silicon (arm64) | [`Alisio-0.11.11-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-arm64.dmg) |
-| macOS Intel (x64) | [`Alisio-0.11.11-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x64.dmg) |
-| Linux, cualquier distribución | [`Alisio-0.11.11-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-x86_64.AppImage) |
-| Debian y Ubuntu | [`Alisio-0.11.11-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.11/Alisio-0.11.11-amd64.deb) |
+| Windows 10/11 (x64) | [`Alisio-Setup-0.11.12-x64.exe`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-Setup-0.11.12-x64.exe) (asistente NSIS, por usuario, sin derechos de administrador) |
+| macOS Apple Silicon (arm64) | [`Alisio-0.11.12-arm64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-arm64.dmg) |
+| macOS Intel (x64) | [`Alisio-0.11.12-x64.dmg`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x64.dmg) |
+| Linux, cualquier distribución | [`Alisio-0.11.12-x86_64.AppImage`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-x86_64.AppImage) |
+| Debian y Ubuntu | [`Alisio-0.11.12-amd64.deb`](https://github.com/GustavoGutierrez/alisio/releases/download/v0.11.12/Alisio-0.11.12-amd64.deb) |
 
-Todos los archivos están en la [página de la versión](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.11). Los instaladores no están firmados, así
+Todos los archivos están en la [página de la versión](https://github.com/GustavoGutierrez/alisio/releases/tag/v0.11.12). Los instaladores no están firmados, así
 que Windows SmartScreen y macOS Gatekeeper muestran un aviso la primera vez.
 [Aplicación de escritorio](/es/desktop) explica cada paso y cómo continuar tras los avisos.
 
