@@ -2,6 +2,7 @@
 import { useData } from "vitepress";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { prefersReducedMotion } from "../motion";
+import { playWindGust } from "../wind-sound";
 
 /**
  * Home showcase carousel (WAI-ARIA carousel pattern). Slide texts live in each page's front matter
@@ -133,6 +134,12 @@ watch(autoplaying, (on, was) => {
 function go(next: number) {
   show(next, true);
   schedule(DWELL);
+}
+
+/** The previous/next buttons, and only they, also play a short wind gust (never on autoplay). */
+function step(delta: 1 | -1) {
+  playWindGust(delta === 1 ? "forward" : "back");
+  go(index.value + delta);
 }
 
 function togglePlay() {
@@ -272,7 +279,7 @@ const current = computed(() => slides.value[index.value]);
           <svg v-if="playing" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14M16 5v14" /></svg>
           <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path class="fill" d="M8 5l11 7-11 7z" /></svg>
         </button>
-        <button type="button" class="showcase-btn" :aria-label="t.prev" @click="go(index - 1)">
+        <button type="button" class="showcase-btn" :aria-label="t.prev" @click="step(-1)">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
         <div class="showcase-dots">
@@ -286,7 +293,7 @@ const current = computed(() => slides.value[index.value]);
             @click="go(i)"
           ><span aria-hidden="true" /></button>
         </div>
-        <button type="button" class="showcase-btn" :aria-label="t.next" @click="go(index + 1)">
+        <button type="button" class="showcase-btn" :aria-label="t.next" @click="step(1)">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
         </button>
       </div>
